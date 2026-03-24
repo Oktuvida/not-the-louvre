@@ -1,0 +1,739 @@
+# Not The Louvre — Product Requirements Document
+
+> A community-driven art party game where anyone can paint, publish, fork, and
+> vote on artwork — all from the browser.
+
+**Version**: 0.1.0 (MVP)
+**Last Updated**: 2026-03-24
+
+---
+
+## Table of Contents
+
+1. [Overview](#1-overview)
+2. [Goals & Non-Goals](#2-goals--non-goals)
+3. [User Personas](#3-user-personas)
+4. [Core User Flows](#4-core-user-flows)
+5. [Feature Specification](#5-feature-specification)
+6. [Technical Architecture](#6-technical-architecture)
+7. [Data Model](#7-data-model)
+8. [Content Moderation](#8-content-moderation)
+9. [Animation & Polish](#9-animation--polish)
+10. [Art Direction](#10-art-direction)
+11. [Milestones & Phases](#11-milestones--phases)
+12. [Open Questions](#12-open-questions)
+
+---
+
+## 1. Overview
+
+**Not The Louvre** is a web-based party game where users create minimalist
+artwork on a canvas, publish it to a shared feed, and let the community react
+with upvotes/downvotes and comments. Artworks can be forked — creating a visible
+lineage chain — and every piece displays the creator's hand-drawn avatar.
+
+The experience is rendered through **Threlte** (Three.js for Svelte), giving the
+entire UI a polished 2.5D feel with shaders, particle effects, and fluid
+transitions — while the actual painting interaction remains 2D.
+
+**Inspiration**: Passpartout.
+
+### Core Loop
+
+```
+Create Avatar → Paint Artwork → Publish to Feed → Community Votes & Comments
+                     ↑                                      |
+                     └──── Fork someone else's artwork ──────┘
+```
+
+---
+
+## 2. Goals & Non-Goals
+
+### Goals
+
+- **G1**: Frictionless creative experience — from open browser to published
+  artwork in under 2 minutes.
+- **G2**: Visually polished. Animations, transitions, and micro-interactions
+  should feel like part of the game, not decorations on a website.
+- **G3**: Community-driven curation through voting and forking.
+- **G4**: Safe enough. Content moderation that isn't oppressive but catches the
+  obvious stuff.
+- **G5**: Self-hostable from day one. No vendor lock-in on critical infra.
+
+### Non-Goals
+
+- Not a professional art tool. Constraints are intentional.
+- Not a multiplayer real-time drawing session (no shared canvas).
+- No monetization, ads, or premium tiers.
+- No mobile app (PWA is not a goal for MVP either).
+- No algorithmic feed — sorting is explicit and user-controlled.
+
+---
+
+## 3. User Personas
+
+### The Doodler
+
+Casual user. Opens the app, draws something silly in 30 seconds, publishes it,
+scrolls the feed, votes on things, leaves. Comes back when bored.
+
+### The Forker
+
+Finds an interesting piece, forks it, adds their twist. Enjoys the creative
+chain. Tracks how their forks perform vs the original.
+
+### The Lurker
+
+Browses the feed, votes, comments, never paints. Still valuable — they're the
+audience.
+
+### The Moderator
+
+Trusted user with additional permissions. Reviews flagged content, can hide or
+remove artworks and comments.
+
+---
+
+## 4. Core User Flows
+
+### 4.1 Onboarding (First Visit)
+
+```
+Landing Page → "Pick a nickname" → Set password → Receive recovery key
+→ Create avatar (template + draw) → Done → Redirected to feed
+```
+
+- Nickname must be unique (validated in real-time as user types).
+- Password: minimum 8 characters. No complexity rules.
+- Recovery key: single UUID-v4 displayed once. User must copy/save it. Show a
+  confirmation dialog: _"Did you save your recovery key? You cannot recover your
+  account without it."_
+- Avatar creation is mandatory before first publish but can be skipped during
+  sign-up and prompted later.
+
+### 4.2 Painting
+
+```
+Feed → "New Artwork" button → Canvas opens (fullscreen-ish)
+→ Draw with tools → Preview → Publish (with optional title)
+→ Artwork appears in feed
+```
+
+### 4.3 Forking
+
+```
+Viewing an artwork → "Fork" button → Canvas opens with original as
+locked background layer → Draw on top → Publish as fork
+→ Fork appears in feed with "forked from @user" attribution
+```
+
+### 4.4 Browsing & Voting
+
+```
+Feed (tabs: Recent / Hot / Top) → Scroll artworks → Upvote / Downvote
+→ See score update in real-time → Click artwork for detail view
+→ See avatar, comments, fork info → Comment / Fork / Share
+```
+
+### 4.5 Account Recovery
+
+```
+Login page → "Forgot password?" → Enter nickname + recovery key
+→ Set new password → New recovery key generated & displayed
+```
+
+---
+
+## 5. Feature Specification
+
+### 5.1 Authentication
+
+| Aspect           | Detail                                                      |
+| ---------------- | ----------------------------------------------------------- |
+| Identity         | Unique nickname (3-20 chars, alphanumeric + underscores)    |
+| Credential       | Password (min 8 chars, hashed with bcrypt/argon2)           |
+| Recovery         | Single recovery key (UUID-v4), generated at signup          |
+| Session          | JWT stored in httpOnly cookie, 7-day expiry, refresh token  |
+| Recovery flow    | Nickname + recovery key → set new password + new key        |
+| Rate limiting    | Max 5 failed login attempts per 15 min per IP               |
+
+### 5.2 Avatar System
+
+- **Template**: A circular frame with a faint face silhouette (head outline,
+  eye placement dots, mouth line) as a guide. The template is purely visual and
+  not part of the final avatar.
+- **Tools**: Same minimalist toolset as the main canvas (see 5.3).
+- **Output**: Rasterized to 256x256 PNG, stored in Supabase Storage.
+- **Display**: Shown next to every artwork, comment, and in the feed.
+- **Edit**: Users can re-draw their avatar at any time from settings.
+
+### 5.3 Canvas / Drawing Engine
+
+The canvas is a 2D drawing surface rendered as a texture on a 3D plane in
+Threlte. The user interacts in 2D; Threlte provides the surrounding scene
+(easel, ambient particles, lighting).
+
+#### Tools
+
+| Tool       | Behavior                                               |
+| ---------- | ------------------------------------------------------ |
+| Brush      | Single round brush. Variable size (3 presets: S/M/L).  |
+| Eraser     | Same as brush but erases to transparent.               |
+| Color      | Palette of 12-16 curated colors + a free color picker. |
+| Undo/Redo  | Stack-based. Min 30 steps.                             |
+
+No fill tool, no shapes, no text, no layers. The constraint is the game.
+
+#### Canvas Specs
+
+| Property      | Value                                        |
+| ------------- | -------------------------------------------- |
+| Resolution    | 1024x1024 internal, responsive display       |
+| Format        | Exported as PNG (lossless)                    |
+| Max file size | ~500KB after compression                     |
+| Stroke data   | Stored as vector paths for replay (optional) |
+
+#### Drawing Experience
+
+- Brush follows cursor/touch with slight smoothing (catmull-rom interpolation)
+  for a hand-drawn feel.
+- The surrounding 3D scene reacts subtly while drawing (see Section 9).
+- Canvas sits on a virtual easel/surface within the Threlte scene.
+
+### 5.4 Artwork Publishing
+
+- **Title**: Optional, max 100 chars. Defaults to "Untitled" with a random
+  suffix (e.g., "Untitled #4827").
+- **Preview**: Before publishing, show a preview of how it will look in the
+  feed (with frame, avatar, title).
+- **Publish**: Uploads PNG to Supabase Storage, creates DB record.
+- **Edit**: Title can be edited post-publish. Artwork image cannot be changed
+  (fork instead).
+- **Delete**: Author can delete their own artwork. Forks remain but show
+  "original deleted" in attribution.
+- **Rate limit**: Max 20 publishes per hour per user (prevent storage abuse).
+
+### 5.5 Fork System
+
+- **Fork action**: Creates a new canvas pre-loaded with the parent artwork as
+  a locked, semi-transparent background layer. User draws on top.
+- **Attribution**: Every fork displays "forked from @username" linking to the
+  parent artwork.
+- **Navigation**: From any artwork, you can see:
+  - Its immediate parent (1 level up)
+  - Its direct forks (1 level down), displayed as a horizontal scroll
+  - Clicking parent/fork navigates to that artwork (jump between forks)
+- **Deleted parents**: If the parent is deleted, attribution shows
+  "forked from [deleted]" — the fork remains intact.
+- **Metadata**: Each artwork stores `parent_id` (nullable). The tree is
+  inferred from these relationships.
+
+### 5.6 Voting
+
+- **Type**: Upvote / Downvote, one vote per user per artwork.
+- **Change**: Users can change or remove their vote at any time.
+- **Score**: Displayed as `score = upvotes - downvotes` (Reddit-style).
+- **Real-time**: Vote count updates live via Supabase Realtime (Postgres
+  changes broadcast). No page reload needed.
+- **Own artwork**: Users can vote on their own artwork (no restriction).
+- **Rate limit**: Max 60 votes per minute per user (prevent bot spam).
+
+### 5.7 Comments
+
+- **Text only**: Max 500 characters per comment.
+- **Flat structure**: No threading/replies. Simple chronological list.
+- **Display**: Show commenter avatar + nickname + timestamp + text.
+- **Delete**: Authors can delete their own comments. Moderators can delete any.
+- **Real-time**: New comments appear live for users viewing the same artwork.
+- **Rate limit**: Max 10 comments per minute per user.
+
+### 5.8 Feed
+
+Three tabs, each showing a paginated grid of artwork cards:
+
+| Tab      | Sort Logic                                                        |
+| -------- | ----------------------------------------------------------------- |
+| Recent   | `created_at DESC`                                                 |
+| Hot      | Score weighted by recency. `score / (hours_since_publish + 2)^G`  |
+|          | where G = gravity factor (start with 1.5, tune later).            |
+| Top      | Sub-tabs: Today / This Week / All Time. Pure `score DESC`.        |
+
+#### Artwork Card (Feed Item)
+
+```
+┌──────────────────────────────────┐
+│           [Artwork Image]        │
+│                                  │
+├──────────────────────────────────┤
+│  (avatar) @nickname              │
+│  "Title of the artwork"          │
+│  ▲ 42 ▼    💬 7    🔀 3          │
+│  (score)  (comments) (forks)     │
+└──────────────────────────────────┘
+```
+
+- Infinite scroll with intersection observer.
+- Cards animate in with a stagger effect (see Section 9).
+
+### 5.9 Artwork Detail View
+
+Full-screen view of a single artwork:
+
+- Large artwork image (centered, with decorative frame).
+- Author avatar + nickname.
+- Score with live-updating vote buttons.
+- Fork attribution (if applicable) with link to parent.
+- Direct forks carousel (horizontal scroll).
+- Comments section below.
+- Action buttons: Fork, Share (copy link), Report.
+
+---
+
+## 6. Technical Architecture
+
+### 6.1 Stack
+
+| Layer          | Technology                                        |
+| -------------- | ------------------------------------------------- |
+| Framework      | SvelteKit                                         |
+| 3D / Effects   | Threlte (Three.js for Svelte)                     |
+| Drawing Engine | HTML5 Canvas 2D API (rendered as Threlte texture)  |
+| Backend        | Supabase (self-hosted)                            |
+| Database       | PostgreSQL (via Supabase)                         |
+| Auth           | Custom auth on Supabase (nickname/password)       |
+| Real-time      | Supabase Realtime (Postgres changes + broadcast)  |
+| Storage        | Supabase Storage (artwork PNGs, avatars)          |
+| NSFW Filter    | NSFWJS (client-side pre-publish check)            |
+| Hosting        | TBD (any Node-compatible host)                    |
+
+### 6.2 Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────┐
+│                  Browser (Client)                │
+│                                                  │
+│  ┌───────────┐  ┌──────────┐  ┌──────────────┐  │
+│  │ SvelteKit │  │  Threlte  │  │ Canvas 2D    │  │
+│  │  (Router,  │  │  (Scene,  │  │  (Drawing    │  │
+│  │   SSR,     │  │  Effects, │  │   Engine)    │  │
+│  │   Pages)   │  │  Shaders) │  │              │  │
+│  └─────┬─────┘  └─────┬────┘  └──────┬───────┘  │
+│        │              │               │          │
+│        └──────────┬───┘───────────────┘          │
+│                   │                              │
+│         ┌─────────▼──────────┐                   │
+│         │    NSFWJS          │                   │
+│         │  (pre-publish      │                   │
+│         │   client filter)   │                   │
+│         └─────────┬──────────┘                   │
+└───────────────────┼──────────────────────────────┘
+                    │  HTTPS + WebSocket
+┌───────────────────▼──────────────────────────────┐
+│              Supabase (Self-Hosted)               │
+│                                                   │
+│  ┌──────────┐  ┌───────────┐  ┌───────────────┐  │
+│  │ PostgREST│  │ Realtime  │  │   Storage     │  │
+│  │  (API)   │  │ (WS)      │  │ (S3-compat)   │  │
+│  └────┬─────┘  └─────┬─────┘  └───────┬───────┘  │
+│       │              │                │           │
+│  ┌────▼──────────────▼────────────────▼────────┐  │
+│  │              PostgreSQL                      │  │
+│  │  (users, artworks, votes, comments, flags)   │  │
+│  └──────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────┘
+```
+
+### 6.3 Key Technical Decisions
+
+**Drawing as Canvas2D texture in Threlte**: The drawing engine uses the standard
+HTML5 Canvas 2D API. The resulting canvas element is mapped as a `CanvasTexture`
+onto a 3D plane in the Threlte scene. This gives us:
+
+- Full Canvas 2D API performance for drawing (no WebGL overhead on strokes).
+- The ability to wrap the canvas in a 3D scene with lighting, particles, and
+  camera effects.
+- Easy PNG export via `canvas.toDataURL()`.
+
+**Custom auth instead of Supabase Auth**: Supabase Auth requires email or OAuth
+providers. Since we use nickname + password only, we implement auth as a thin
+layer using Supabase's database + Edge Functions:
+
+- `users` table with nickname, hashed password, recovery key hash.
+- SvelteKit server hooks for session management (JWT in httpOnly cookie).
+- Supabase RLS policies keyed on the JWT's `user_id` claim.
+
+**NSFWJS client-side**: Running the NSFW check on the client before upload
+avoids server-side image processing infra for MVP. The model (~3MB) is loaded
+once and cached. If the image is flagged above a threshold, the publish button
+is blocked with a message. This is the first line of defense — moderators
+handle the rest.
+
+### 6.4 Real-time Strategy
+
+Supabase Realtime is used for two features:
+
+1. **Vote updates**: Subscribe to `INSERT/UPDATE/DELETE` on the `votes` table
+   filtered by `artwork_id`. On change, re-fetch the aggregated score (or
+   compute delta client-side).
+
+2. **New comments**: Subscribe to `INSERT` on the `comments` table filtered by
+   `artwork_id`. Append new comments to the local list.
+
+Subscriptions are only active when the user is viewing an artwork detail page.
+Feed-level real-time updates are not needed for MVP (pull on tab switch).
+
+---
+
+## 7. Data Model
+
+### 7.1 Entity Relationship
+
+```
+users
+  ├── artworks (1:N)
+  │     ├── votes (1:N)
+  │     ├── comments (1:N)
+  │     ├── reports (1:N)
+  │     └── artworks (self-ref: parent_id for forks)
+  └── comments (1:N)
+```
+
+### 7.2 Tables
+
+#### `users`
+
+| Column          | Type         | Notes                                    |
+| --------------- | ------------ | ---------------------------------------- |
+| id              | uuid PK      | Default `gen_random_uuid()`             |
+| nickname        | varchar(20)  | UNIQUE, lowercase enforced              |
+| password_hash   | text         | Argon2id hash                           |
+| recovery_hash   | text         | Argon2id hash of recovery key           |
+| avatar_url      | text         | Path in Supabase Storage                |
+| role            | enum         | `user` \| `moderator` \| `admin`        |
+| created_at      | timestamptz  | Default `now()`                         |
+
+#### `artworks`
+
+| Column       | Type         | Notes                                       |
+| ------------ | ------------ | ------------------------------------------- |
+| id           | uuid PK      | Default `gen_random_uuid()`                |
+| author_id    | uuid FK      | References `users.id`                      |
+| parent_id    | uuid FK      | Nullable. References `artworks.id` (fork)  |
+| title        | varchar(100) | Default "Untitled #XXXX"                   |
+| image_url    | text         | Path in Supabase Storage                   |
+| score        | int          | Denormalized. Default 0. Updated by trigger|
+| comment_count| int          | Denormalized. Default 0. Updated by trigger|
+| fork_count   | int          | Denormalized. Default 0. Updated by trigger|
+| is_hidden    | boolean      | Default false. Set by moderation           |
+| created_at   | timestamptz  | Default `now()`                            |
+
+Indexes: `(author_id)`, `(parent_id)`, `(created_at DESC)`,
+`(score DESC, created_at DESC)`.
+
+#### `votes`
+
+| Column     | Type         | Notes                                        |
+| ---------- | ------------ | -------------------------------------------- |
+| id         | uuid PK      |                                             |
+| user_id    | uuid FK      | References `users.id`                       |
+| artwork_id | uuid FK      | References `artworks.id`                    |
+| value      | smallint     | `1` (upvote) or `-1` (downvote)             |
+| created_at | timestamptz  |                                              |
+
+Constraints: `UNIQUE(user_id, artwork_id)`.
+
+#### `comments`
+
+| Column     | Type         | Notes                                        |
+| ---------- | ------------ | -------------------------------------------- |
+| id         | uuid PK      |                                             |
+| user_id    | uuid FK      | References `users.id`                       |
+| artwork_id | uuid FK      | References `artworks.id`                    |
+| body       | varchar(500) |                                              |
+| is_hidden  | boolean      | Default false. Set by moderation            |
+| created_at | timestamptz  |                                              |
+
+#### `reports`
+
+| Column     | Type         | Notes                                        |
+| ---------- | ------------ | -------------------------------------------- |
+| id         | uuid PK      |                                             |
+| reporter_id| uuid FK      | References `users.id`                       |
+| artwork_id | uuid FK      | Nullable. Target artwork                    |
+| comment_id | uuid FK      | Nullable. Target comment                    |
+| reason     | varchar(200) |                                              |
+| status     | enum         | `pending` \| `reviewed` \| `actioned`       |
+| reviewed_by| uuid FK      | Nullable. Moderator who reviewed            |
+| created_at | timestamptz  |                                              |
+
+Constraint: At least one of `artwork_id` or `comment_id` must be non-null.
+
+### 7.3 Database Functions & Triggers
+
+- **`update_artwork_score()`**: Trigger on `votes` INSERT/UPDATE/DELETE.
+  Recalculates `artworks.score` as `SUM(value)` for the affected artwork.
+- **`update_artwork_comment_count()`**: Trigger on `comments` INSERT/DELETE.
+- **`update_artwork_fork_count()`**: Trigger on `artworks` INSERT/DELETE where
+  `parent_id` is set.
+
+### 7.4 Row-Level Security (RLS)
+
+| Table    | SELECT                        | INSERT                     | UPDATE         | DELETE         |
+| -------- | ----------------------------- | -------------------------- | -------------- | -------------- |
+| users    | Own row only                  | Public (signup)            | Own row only   | —              |
+| artworks | All (where not hidden)        | Authenticated              | Own row only   | Own row only   |
+| votes    | All                           | Authenticated              | Own row only   | Own row only   |
+| comments | All (where not hidden)        | Authenticated              | Own row only   | Own row only   |
+| reports  | Moderators only               | Authenticated              | Moderators     | —              |
+
+Moderators/admins bypass `is_hidden` filter on SELECT.
+
+---
+
+## 8. Content Moderation
+
+### 8.1 Automated (First Line)
+
+**NSFWJS** runs client-side before publish:
+
+- Model categories: `Porn`, `Hentai`, `Sexy` (flag), `Drawing`, `Neutral`.
+- Threshold: Block if `Porn > 0.7` or `Hentai > 0.7`. Warn (but allow) if
+  `Sexy > 0.6`.
+- This is a soft gate — it catches obvious cases. Users can bypass if
+  determined (it's client-side). That's acceptable.
+
+### 8.2 Community Reporting
+
+- Any authenticated user can report an artwork or comment.
+- Report requires selecting a reason (predefined list + optional free text).
+- Reports go into the `reports` table with `status = pending`.
+- After N reports (configurable, start with 3), auto-hide the content pending
+  moderator review.
+
+### 8.3 Moderator Actions
+
+Moderators (assigned by admins) can:
+
+- View a moderation queue (pending reports sorted by count).
+- **Hide** an artwork or comment (sets `is_hidden = true`). Content is not
+  deleted — it's hidden from public but visible to author with a "hidden by
+  moderator" notice.
+- **Unhide** (false positive).
+- **Delete** (permanent removal from DB + storage).
+- **Warn** user (future: notification system, for now just a log).
+
+### 8.4 Moderation Principles
+
+- Err on the side of leniency. This is an art game, not a corporate platform.
+- Obvious NSFW/hate content: remove.
+- Edgy but not harmful: leave it. Let votes handle it.
+- Moderators should be active community members who understand the vibe.
+
+---
+
+## 9. Animation & Polish
+
+This is a core differentiator. The entire experience should feel alive, not
+like a static web app. Threlte is the primary engine for all of this.
+
+### 9.1 Canvas / Painting Scene
+
+| Element                   | Behavior                                                  |
+| ------------------------- | --------------------------------------------------------- |
+| Easel / Surface           | Subtle idle sway. A slight parallax on mouse move.        |
+| Ambient particles         | Floating paint specks / dust motes in the scene.          |
+| Brush stroke feedback     | Small particle burst on stroke start. Trail particles     |
+|                           | along stroke path that fade out.                          |
+| Color change              | Scene ambient light subtly shifts to match selected color.|
+| Eraser                    | "Dust" particles fly off the erased area.                 |
+| Undo                      | Quick "rewind" visual — strokes fade back on.             |
+| Publish                   | Canvas "flies off" the easel into a picture frame.        |
+
+### 9.2 Feed & Navigation
+
+| Element                   | Behavior                                                  |
+| ------------------------- | --------------------------------------------------------- |
+| Page transitions          | Crossfade with slight depth shift (z-axis).               |
+| Artwork cards enter       | Staggered scale-up + fade-in as they scroll into view.    |
+| Hover on card             | Card lifts (translateZ), subtle shadow grows, slight tilt |
+|                           | toward cursor (3D transform).                             |
+| Vote button press         | Upvote: confetti burst upward. Downvote: a single         |
+|                           | tomato/splat falls down.                                  |
+| Score change              | Number rolls/ticks to new value (animated counter).       |
+| Tab switch                | Cards slide out, new cards slide in from opposite side.   |
+
+### 9.3 Avatar Creation
+
+| Element                   | Behavior                                                  |
+| ------------------------- | --------------------------------------------------------- |
+| Template appear           | Face outline draws itself in (path animation).            |
+| Drawing                   | Same particle effects as main canvas.                     |
+| Confirm                   | Avatar "stamps" into a circular frame with a satisfying   |
+|                           | pop + ripple effect.                                      |
+
+### 9.4 General UI
+
+| Element                   | Behavior                                                  |
+| ------------------------- | --------------------------------------------------------- |
+| Buttons                   | Springy press animation (scale down → bounce back).       |
+| Tooltips                  | Fade in with slight upward drift.                         |
+| Modals                    | Backdrop blur + modal scales from center.                 |
+| Loading states            | Animated paint brush or dripping paint indicator.          |
+| Toast notifications       | Slide in from top with gentle bounce.                     |
+
+### 9.5 Performance Budget
+
+- Target 60fps on mid-range devices.
+- Threlte scene complexity: keep draw calls under 50 for the painting scene.
+- Use `requestAnimationFrame` throttling for particle systems.
+- Particle counts: max ~100 concurrent particles.
+- Disable heavy effects if `prefers-reduced-motion` is set.
+- Consider LOD: reduce effects on low-end devices (detect via GPU tier
+  library or frame rate monitoring).
+
+---
+
+## 10. Art Direction
+
+### 10.1 Visual Identity
+
+**Vibe**: Colorful indie game meets satirical art gallery. Think: a children's
+museum that takes itself too seriously, or a prestigious gallery where all the
+art is crayon drawings.
+
+**Key tension**: The _frame_ is fancy, the _content_ is absurd. The UI should
+look like it belongs in a real gallery app — ornate frames, elegant typography —
+but everything inside those frames is user-generated chaos.
+
+### 10.2 Color Palette
+
+| Role       | Color                  | Usage                              |
+| ---------- | ---------------------- | ---------------------------------- |
+| Background | Deep gallery wall      | `#1a1a2e` or `#2d1b3d`            |
+| Surface    | Rich velvet            | `#3d2c5e` or `#4a2040`            |
+| Primary    | Gold / champagne       | `#d4af37` — frames, accents, CTAs |
+| Secondary  | Cream / ivory          | `#f5f0e1` — text, cards           |
+| Accent 1   | Warm coral             | `#ff6b6b` — downvotes, warnings   |
+| Accent 2   | Teal / aqua            | `#4ecdc4` — upvotes, success      |
+| Text       | Off-white              | `#e8e0d0`                          |
+
+### 10.3 Typography
+
+| Element    | Font                          | Notes                       |
+| ---------- | ----------------------------- | --------------------------- |
+| Display    | Serif (e.g., Playfair Display)| Headings, titles, frames    |
+| Body       | Sans-serif (e.g., Inter)      | UI text, comments, labels   |
+| Monospace  | For scores/counters           | JetBrains Mono or similar   |
+
+The contrast between the elegant serif and the doodled artwork reinforces the
+satirical tone.
+
+### 10.4 Iconography
+
+Hand-drawn / sketch-style icons that match the art game vibe. Consider a set
+like [Phosphor Icons](https://phosphoricons.com/) in the "duotone" style with
+custom tweaks, or commission/draw a bespoke icon set.
+
+### 10.5 Artwork Frames
+
+Each artwork in the feed is displayed inside a decorative frame. Start with 1-2
+frame styles (ornate gold, minimalist wood). Potentially expand to unlockable
+frame styles as a future feature.
+
+---
+
+## 11. Milestones & Phases
+
+### Phase 0 — Foundation (Weeks 1-2)
+
+- [ ] SvelteKit project setup + Threlte integration
+- [ ] Supabase self-hosted deployment (Docker Compose)
+- [ ] Database schema + migrations + RLS policies
+- [ ] Custom auth (signup, login, logout, recovery)
+- [ ] Basic layout shell (nav, routes)
+
+### Phase 1 — Core Canvas (Weeks 3-4)
+
+- [ ] Drawing engine (brush, eraser, color picker, undo/redo)
+- [ ] Canvas-to-Threlte texture pipeline
+- [ ] Avatar creation (template + draw)
+- [ ] Artwork publish flow (preview → upload → save)
+- [ ] Basic painting scene (easel, minimal 3D environment)
+
+### Phase 2 — Feed & Social (Weeks 5-6)
+
+- [ ] Feed page with artwork cards (Recent tab)
+- [ ] Artwork detail page
+- [ ] Upvote / Downvote system
+- [ ] Real-time vote updates
+- [ ] Comments (create, list, delete)
+- [ ] Real-time comment updates
+- [ ] Hot / Top tabs with sorting logic
+
+### Phase 3 — Forks & Lineage (Week 7)
+
+- [ ] Fork flow (load parent as background, draw on top)
+- [ ] Fork attribution display
+- [ ] Parent/children navigation on artwork detail
+- [ ] Fork count on cards
+
+### Phase 4 — Moderation (Week 8)
+
+- [ ] NSFWJS integration (client-side pre-publish gate)
+- [ ] Report system (create report, auto-hide threshold)
+- [ ] Moderator dashboard (queue, hide/unhide/delete)
+- [ ] Moderator role assignment (admin only)
+
+### Phase 5 — Polish & Animation (Weeks 9-10)
+
+- [ ] Painting scene animations (particles, ambient effects, color reactivity)
+- [ ] Feed animations (card entrance, hover, transitions)
+- [ ] Vote animations (confetti/tomato)
+- [ ] Avatar creation animations
+- [ ] Page transitions
+- [ ] Loading states
+- [ ] `prefers-reduced-motion` support
+
+### Phase 6 — QA & Launch (Week 11-12)
+
+- [ ] Cross-browser testing (Chrome, Firefox, Safari)
+- [ ] Performance profiling (60fps target, lighthouse)
+- [ ] Security review (auth, RLS, XSS, CSRF)
+- [ ] Accessibility pass (keyboard nav, screen readers, contrast)
+- [ ] Soft launch with friends/testers
+- [ ] Feedback iteration
+
+---
+
+## 12. Open Questions
+
+These are decisions that don't need to be made now but should be resolved before
+or during implementation:
+
+1. **Stroke replay**: Should we store stroke data (vector paths + timestamps)
+   to enable artwork creation replay? Cool feature but adds storage/complexity.
+   Decision can wait until Phase 3.
+
+2. **Frame unlock system**: Should users earn different frame styles based on
+   score/activity? Fun gamification but scope creep. Park for v2.
+
+3. **Notification system**: Should users be notified when their art is forked,
+   commented on, or reaches a score milestone? Nice to have, not MVP.
+
+4. **Export/Share**: Beyond copy-link, should users be able to download their
+   artwork as an image with the frame + attribution baked in? Good for social
+   sharing.
+
+5. **Hosting target**: The SvelteKit app itself needs a host. Options include a
+   VPS (alongside Supabase), Vercel/Netlify (SSR adapter), or Coolify/Dokku on
+   the same machine. Decide in Phase 0.
+
+6. **Canvas library abstraction**: Raw Canvas 2D API is fine for the minimalist
+   toolset, but if we want pressure sensitivity or better touch handling later,
+   consider wrapping with [perfect-freehand](https://github.com/steveruizok/perfect-freehand)
+   for stroke rendering.
+
+7. **Gallery-style browsing**: A future mode where artworks are displayed on
+   walls in a 3D gallery you can "walk" through. Natural fit for Threlte but
+   significant scope. v2 candidate.
