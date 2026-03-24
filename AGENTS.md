@@ -1,3 +1,11 @@
+## Project Configuration
+
+- **Language**: TypeScript
+- **Package Manager**: bun
+- **Add-ons**: prettier, eslint, vitest, playwright, tailwindcss, drizzle, better-auth
+
+---
+
 # AGENTS.md
 
 ## Commit Convention
