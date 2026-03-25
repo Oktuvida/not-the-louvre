@@ -98,6 +98,8 @@ Skills live in `.agents/skills/` and provide domain-specific knowledge to AI age
 | --- | --- |
 | `brainstorming` | Before any creative work — creating features, building components, adding functionality, or modifying behavior. Explores intent and design before implementation. |
 | `drizzle-orm` | When working with Drizzle ORM — schema definitions, queries, migrations, or related TypeScript database code. |
+| `frontend-design` | When building web components, pages, dashboards, or styling/beautifying any web UI. Produces distinctive, production-grade interfaces. |
+| `rest-api-design` | When creating new APIs, designing endpoints, or improving existing API architecture. Covers resource modeling, HTTP methods, status codes, and versioning. |
 | `supabase-postgres-best-practices` | When writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations. |
 | `svelte-code-writer` | When creating, editing, or analyzing any Svelte component (`.svelte`) or Svelte module (`.svelte.ts` / `.svelte.js`). |
 | `threlte-official-docs` | When answering Threlte-specific questions or locating Threlte APIs, guides, or package docs. Restricts evidence to official Threlte docs and the official `threlte/threlte` repo. |
