@@ -100,6 +100,7 @@ Skills live in `.agents/skills/` and provide domain-specific knowledge to AI age
 | `drizzle-orm` | When working with Drizzle ORM — schema definitions, queries, migrations, or related TypeScript database code. |
 | `supabase-postgres-best-practices` | When writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations. |
 | `svelte-code-writer` | When creating, editing, or analyzing any Svelte component (`.svelte`) or Svelte module (`.svelte.ts` / `.svelte.js`). |
+| `threlte-official-docs` | When answering Threlte-specific questions or locating Threlte APIs, guides, or package docs. Restricts evidence to official Threlte docs and the official `threlte/threlte` repo. |
 
 ---
 
