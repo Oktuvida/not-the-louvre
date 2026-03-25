@@ -1,14 +1,58 @@
 services:
   db:
-    image: postgres
-    restart: always
+    container_name: supabase-db
+    image: supabase/postgres:15.8.1.085
+    restart: unless-stopped
     ports:
       - 5432:5432
     environment:
-      POSTGRES_USER: root
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: mysecretpassword
       POSTGRES_DB: local
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'postgres', '-h', 'localhost', '-d', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
     volumes:
-      - pgdata:/var/lib/postgresql
+      - supabase-db-data:/var/lib/postgresql/data
+
+  meta:
+    container_name: supabase-meta
+    image: supabase/postgres-meta:v0.95.2
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: local
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: mysecretpassword
+      CRYPTO_KEY: dev-only-pg-meta-crypto-key-32b
+
+  studio:
+    container_name: supabase-studio
+    image: supabase/studio:2026.03.16-sha-5528817
+    restart: unless-stopped
+    depends_on:
+      meta:
+        condition: service_started
+    ports:
+      - 3000:3000
+    environment:
+      HOSTNAME: 0.0.0.0
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: local
+      POSTGRES_PASSWORD: mysecretpassword
+      PG_META_CRYPTO_KEY: dev-only-pg-meta-crypto-key-32b
+      DEFAULT_ORGANIZATION_NAME: Not The Louvre
+      DEFAULT_PROJECT_NAME: local-supabase
+      NEXT_PUBLIC_ENABLE_LOGS: 'false'
+
 volumes:
-  pgdata:
+  supabase-db-data:
