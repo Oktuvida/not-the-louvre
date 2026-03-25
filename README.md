@@ -33,6 +33,23 @@ Because even a joke needs plumbing:
 - **Realtime:** Supabase Realtime.
 - **Moderation:** NSFWJS in the browser.
 
+## 📦 Repository layout
+
+The repository now uses a small Bun workspace so the root stays focused on shared docs and infra.
+
+```text
+.
+├── apps/
+│   └── web/        # SvelteKit app
+├── docs/           # Product and project docs
+├── compose.yaml    # Local Postgres
+└── package.json    # Workspace scripts
+```
+
+- Run the app from the repository root with `bun run dev`, `bun run check`, `bun run build`, etc.
+- App-specific configuration now lives in `apps/web`.
+- Environment files for the app now live in `apps/web/.env` and `apps/web/.env.example`.
+
 ## 📜 The philosophy
 
 The whole idea is to get people from "I opened the browser" to "I published a ridiculous drawing" in under two minutes. No long onboarding, no solemn creative process, no paywall pretending to be a feature. Just draw, laugh, judge, repeat.

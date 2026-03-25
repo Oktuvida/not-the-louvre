@@ -33,6 +33,23 @@ Porque hasta las bromas necesitan infraestructura:
 - **Tiempo real:** Supabase Realtime.
 - **Moderación:** NSFWJS en el navegador.
 
+## 📦 Estructura del repositorio
+
+Ahora el repo usa un workspace pequeño de Bun para que la raíz quede centrada en documentación e infraestructura compartida.
+
+```text
+.
+├── apps/
+│   └── web/        # App SvelteKit
+├── docs/           # Documentación de producto y proyecto
+├── compose.yaml    # Postgres local
+└── package.json    # Scripts del workspace
+```
+
+- Puedes seguir ejecutando la app desde la raíz con `bun run dev`, `bun run check`, `bun run build`, etc.
+- La configuración específica de la app vive ahora en `apps/web`.
+- Los archivos de entorno de la app pasan a estar en `apps/web/.env` y `apps/web/.env.example`.
+
 ## 📜 La idea
 
 La idea era que cualquiera pudiera pasar de "abro el navegador" a "acabo de subir esta cosa lamentable" en un par de minutos. Sin registros eternos, sin tutoriales plomizos, sin muros de pago disfrazados de experiencia premium. Entras, dibujas, te ríes, juzgas y a otra cosa.

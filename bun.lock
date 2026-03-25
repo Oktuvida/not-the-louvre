@@ -4,6 +4,10 @@
   "workspaces": {
     "": {
       "name": "not-the-louvre",
+    },
+    "apps/web": {
+      "name": "@not-the-louvre/web",
+      "version": "0.0.1",
       "devDependencies": {
         "@better-auth/cli": "~1.4.21",
         "@eslint/compat": "^2.0.3",
@@ -228,6 +232,8 @@
     "@noble/ciphers": ["@noble/ciphers@2.1.1", "", {}, "sha512-bysYuiVfhxNJuldNXlFEitTVdNnYUc+XNJZd7Qm2a5j1vZHgY+fazadNFWFaMK/2vye0JVlxV3gHmC0WDfAOQw=="],
 
     "@noble/hashes": ["@noble/hashes@2.0.1", "", {}, "sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw=="],
+
+    "@not-the-louvre/web": ["@not-the-louvre/web@workspace:apps/web"],
 
     "@playwright/test": ["@playwright/test@1.58.2", "", { "dependencies": { "playwright": "1.58.2" }, "bin": { "playwright": "cli.js" } }, "sha512-akea+6bHYBBfA9uQqSYmlJXn61cTa+jbO87xVLCWbTqbWadRVmhxlXATaOjOgcBaWU4ePo0wB41KMFv3o35IXA=="],
 

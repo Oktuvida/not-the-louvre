@@ -6,5 +6,5 @@ bun.lock
 bun.lockb
 
 # Miscellaneous
-/static/
-/drizzle/
+/apps/web/static/
+/apps/web/drizzle/
