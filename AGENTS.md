@@ -90,6 +90,19 @@ This outputs to `apps/web/src/lib/server/db/auth.schema.ts`. Do not edit that fi
 
 ---
 
+## Skills Index
+
+Skills live in `.agents/skills/` and provide domain-specific knowledge to AI agents working on this codebase.
+
+| Skill | When to use |
+| --- | --- |
+| `brainstorming` | Before any creative work — creating features, building components, adding functionality, or modifying behavior. Explores intent and design before implementation. |
+| `drizzle-orm` | When working with Drizzle ORM — schema definitions, queries, migrations, or related TypeScript database code. |
+| `supabase-postgres-best-practices` | When writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations. |
+| `svelte-code-writer` | When creating, editing, or analyzing any Svelte component (`.svelte`) or Svelte module (`.svelte.ts` / `.svelte.js`). |
+
+---
+
 ## Commit Convention
 
 This repository uses Angular-style Conventional Commits with a required emoji prefix.
