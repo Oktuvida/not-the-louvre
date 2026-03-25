@@ -1,8 +1,5 @@
-# 🖼️ Not The Louvre
-
-
 <p align="center">
-  <img width="256" height="256" src="assets/images/logo.svg">
+  <img width="420" src="./assets/images/logo.svg" alt="Not The Louvre logo">
 </p>
 
 
