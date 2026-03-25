@@ -3,7 +3,7 @@
 > A community-driven art party game where anyone can paint, publish, fork, and
 > vote on artwork — all from the browser.
 
-**Version**: 0.1.0 (MVP)
+**Version**: 0.2.0 (MVP)
 **Last Updated**: 2026-03-24
 
 ---
@@ -20,8 +20,9 @@
 8. [Content Moderation](#8-content-moderation)
 9. [Animation & Polish](#9-animation--polish)
 10. [Art Direction](#10-art-direction)
-11. [Milestones & Phases](#11-milestones--phases)
-12. [Open Questions](#12-open-questions)
+11. [Delivery Constraints](#11-delivery-constraints)
+12. [Milestones & Phases](#12-milestones--phases)
+13. [Open Questions](#13-open-questions)
 
 ---
 
@@ -60,6 +61,8 @@ Create Avatar → Paint Artwork → Publish to Feed → Community Votes & Commen
 - **G4**: Safe enough. Content moderation that isn't oppressive but catches the
   obvious stuff.
 - **G5**: Self-hostable from day one. No vendor lock-in on critical infra.
+- **G6**: Reproducible delivery. Local setup, schema state, and validation must
+  be automated and consistent across developers and CI.
 
 ### Non-Goals
 
@@ -154,9 +157,13 @@ Login page → "Forgot password?" → Enter nickname + recovery key
 | Identity         | Unique nickname (3-20 chars, alphanumeric + underscores)    |
 | Credential       | Password (min 8 chars, hashed with bcrypt/argon2)           |
 | Recovery         | Single recovery key (UUID-v4), generated at signup          |
-| Session          | JWT stored in httpOnly cookie, 7-day expiry, refresh token  |
+| Session          | Better Auth session in secure httpOnly cookie               |
 | Recovery flow    | Nickname + recovery key → set new password + new key        |
 | Rate limiting    | Max 5 failed login attempts per 15 min per IP               |
+
+Implementation note: build authentication on **Better Auth** and extend it for
+nickname-first identity plus recovery-key flows, rather than maintaining a
+fully custom session system.
 
 ### 5.2 Avatar System
 
@@ -207,7 +214,8 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
   suffix (e.g., "Untitled #4827").
 - **Preview**: Before publishing, show a preview of how it will look in the
   feed (with frame, avatar, title).
-- **Publish**: Uploads PNG to Supabase Storage, creates DB record.
+- **Publish**: Uploads PNG to object storage and creates the DB record through
+  the application server.
 - **Edit**: Title can be edited post-publish. Artwork image cannot be changed
   (fork instead).
 - **Delete**: Author can delete their own artwork. Forks remain but show
@@ -299,9 +307,9 @@ Full-screen view of a single artwork:
 | Framework      | SvelteKit                                         |
 | 3D / Effects   | Threlte (Three.js for Svelte)                     |
 | Drawing Engine | HTML5 Canvas 2D API (rendered as Threlte texture)  |
-| Backend        | Supabase (self-hosted)                            |
-| Database       | PostgreSQL (via Supabase)                         |
-| Auth           | Custom auth on Supabase (nickname/password)       |
+| Backend        | SvelteKit server + self-hosted supporting services |
+| Database       | PostgreSQL with Drizzle ORM (code-first)          |
+| Auth           | Better Auth with nickname-first UX                |
 | Real-time      | Supabase Realtime (Postgres changes + broadcast)  |
 | Storage        | Supabase Storage (artwork PNGs, avatars)          |
 | NSFW Filter    | NSFWJS (client-side pre-publish check)            |
@@ -355,13 +363,15 @@ onto a 3D plane in the Threlte scene. This gives us:
   camera effects.
 - Easy PNG export via `canvas.toDataURL()`.
 
-**Custom auth instead of Supabase Auth**: Supabase Auth requires email or OAuth
-providers. Since we use nickname + password only, we implement auth as a thin
-layer using Supabase's database + Edge Functions:
+**Better Auth instead of Supabase Auth**: The product uses nickname + password
+and a recovery-key flow, which do not fit Supabase Auth's email/OAuth-first
+model cleanly. Better Auth should own session lifecycle and generated auth
+schema, while product-specific identity data stays in the application schema.
 
-- `users` table with nickname, hashed password, recovery key hash.
-- SvelteKit server hooks for session management (JWT in httpOnly cookie).
-- Supabase RLS policies keyed on the JWT's `user_id` claim.
+- Auth configuration lives in `apps/web/src/lib/server/auth.ts`.
+- Generated auth tables are written to
+  `apps/web/src/lib/server/db/auth.schema.ts` via `bun run auth:schema`.
+- Product tables live in `apps/web/src/lib/server/db/schema.ts`.
 
 **NSFWJS client-side**: Running the NSFW check on the client before upload
 avoids server-side image processing infra for MVP. The model (~3MB) is loaded
@@ -383,6 +393,26 @@ Supabase Realtime is used for two features:
 Subscriptions are only active when the user is viewing an artwork detail page.
 Feed-level real-time updates are not needed for MVP (pull on tab switch).
 
+### 6.5 Engineering Constraints
+
+The implementation plan must respect repository delivery rules in addition to
+product behavior.
+
+- **Code-first database**: Structural database changes start in
+  `apps/web/src/lib/server/db/schema.ts`, then move through
+  `bun run db:generate` and `bun run db:migrate`. Manual schema drift is not an
+  acceptable workflow.
+- **Generated auth schema**: `apps/web/src/lib/server/db/auth.schema.ts` is
+  owned by Better Auth and regenerated with `bun run auth:schema`; it should not
+  be hand-edited.
+- **Reproducible setup**: `compose.yaml`, `bun install`, and `.env.example` are
+  first-class deliverables for the product.
+- **Automated quality gates**: `bun run format`, `bun run lint`,
+  `bun run check`, `bun run test:unit`, and `bun run test:e2e` define release
+  readiness.
+- **Test-first workflow**: New behavior should begin with a failing automated
+  test before implementation.
+
 ---
 
 ## 7. Data Model
@@ -400,6 +430,10 @@ users
 ```
 
 ### 7.2 Tables
+
+These entities describe the product's required data model. Their concrete
+implementation must be expressed in Drizzle schema files and shipped through
+generated migrations.
 
 #### `users`
 
@@ -476,6 +510,10 @@ Constraint: At least one of `artwork_id` or `comment_id` must be non-null.
 - **`update_artwork_comment_count()`**: Trigger on `comments` INSERT/DELETE.
 - **`update_artwork_fork_count()`**: Trigger on `artworks` INSERT/DELETE where
   `parent_id` is set.
+
+These behaviors should be introduced through migrations generated from the
+code-first schema workflow. Small deterministic backfills may be bundled with
+the same migration; seed or non-deterministic data work should stay outside it.
 
 ### 7.4 Row-Level Security (RLS)
 
@@ -643,18 +681,53 @@ frame styles as a future feature.
 
 ---
 
-## 11. Milestones & Phases
+## 11. Delivery Constraints
+
+### 11.1 Quality Gates
+
+Every phase is only complete when the standard repository scripts pass:
+
+| Script              | Purpose                                 |
+| ------------------- | --------------------------------------- |
+| `bun run format`    | Prettier formatting                     |
+| `bun run lint`      | ESLint + formatting validation          |
+| `bun run check`     | Svelte/TypeScript static validation     |
+| `bun run test:unit` | Unit and component coverage             |
+| `bun run test:e2e`  | End-to-end validation of critical flows |
+
+### 11.2 Reproducibility
+
+- Local development from a clean clone must work with `bun install` and the
+  documented environment.
+- Required services must be defined in `compose.yaml` and started with
+  `bun run db:start`.
+- `.env.example` must document every required variable before launch.
+- CI should execute the same scripts used locally; no hidden release steps.
+
+### 11.3 Testing Expectations By Area
+
+- **Auth**: signup, login, logout, recovery-key reset, and session expiry.
+- **Canvas flows**: publish, fork, undo/redo, and title validation.
+- **Social flows**: vote transitions, comments, feed sorting, and moderation
+  permissions.
+- **Infrastructure-sensitive features**: migrations, storage integration, and
+  realtime subscriptions should have automated validation where practical.
+
+## 12. Milestones & Phases
 
 ### Phase 0 — Foundation (Weeks 1-2)
 
 - [ ] SvelteKit project setup + Threlte integration
 - [ ] Supabase self-hosted deployment (Docker Compose)
-- [ ] Database schema + migrations + RLS policies
-- [ ] Custom auth (signup, login, logout, recovery)
+- [ ] `.env.example` covering all required variables
+- [ ] Database schema in Drizzle + generated migrations + RLS policies
+- [ ] Better Auth setup (signup, login, logout, recovery)
 - [ ] Basic layout shell (nav, routes)
+- [ ] CI/local scripts aligned on format → lint → check → test
 
 ### Phase 1 — Core Canvas (Weeks 3-4)
 
+- [ ] Failing tests for canvas and avatar core flows before implementation
 - [ ] Drawing engine (brush, eraser, color picker, undo/redo)
 - [ ] Canvas-to-Threlte texture pipeline
 - [ ] Avatar creation (template + draw)
@@ -663,6 +736,7 @@ frame styles as a future feature.
 
 ### Phase 2 — Feed & Social (Weeks 5-6)
 
+- [ ] Failing tests for feed sorting, votes, and comments before implementation
 - [ ] Feed page with artwork cards (Recent tab)
 - [ ] Artwork detail page
 - [ ] Upvote / Downvote system
@@ -673,6 +747,7 @@ frame styles as a future feature.
 
 ### Phase 3 — Forks & Lineage (Week 7)
 
+- [ ] Failing tests for parent/child relationships and attribution rules
 - [ ] Fork flow (load parent as background, draw on top)
 - [ ] Fork attribution display
 - [ ] Parent/children navigation on artwork detail
@@ -680,6 +755,7 @@ frame styles as a future feature.
 
 ### Phase 4 — Moderation (Week 8)
 
+- [ ] Failing tests for report thresholds and moderator permissions
 - [ ] NSFWJS integration (client-side pre-publish gate)
 - [ ] Report system (create report, auto-hide threshold)
 - [ ] Moderator dashboard (queue, hide/unhide/delete)
@@ -687,6 +763,7 @@ frame styles as a future feature.
 
 ### Phase 5 — Polish & Animation (Weeks 9-10)
 
+- [ ] Visual polish verified without regressing quality gates
 - [ ] Painting scene animations (particles, ambient effects, color reactivity)
 - [ ] Feed animations (card entrance, hover, transitions)
 - [ ] Vote animations (confetti/tomato)
@@ -697,6 +774,7 @@ frame styles as a future feature.
 
 ### Phase 6 — QA & Launch (Week 11-12)
 
+- [ ] Full gate pass: format, lint, check, unit, e2e
 - [ ] Cross-browser testing (Chrome, Firefox, Safari)
 - [ ] Performance profiling (60fps target, lighthouse)
 - [ ] Security review (auth, RLS, XSS, CSRF)
@@ -706,7 +784,7 @@ frame styles as a future feature.
 
 ---
 
-## 12. Open Questions
+## 13. Open Questions
 
 These are decisions that don't need to be made now but should be resolved before
 or during implementation:
