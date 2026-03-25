@@ -4,7 +4,7 @@
 > vote on artwork — all from the browser.
 
 **Version**: 0.2.0 (MVP)
-**Last Updated**: 2026-03-24
+**Last Updated**: 2026-03-25
 
 ---
 
@@ -712,6 +712,49 @@ Every phase is only complete when the standard repository scripts pass:
   permissions.
 - **Infrastructure-sensitive features**: migrations, storage integration, and
   realtime subscriptions should have automated validation where practical.
+
+### 11.4 Backend Development
+
+The backend has its own roadmap within product delivery, but this project is
+not organized as a backend-first program. Frontend and backend are expected to
+advance in parallel around shared product slices, while the backend focuses on
+stabilizing domain behavior, persistence rules, authorization, and operational
+guarantees.
+
+For MVP, the backend does not require a separate contract-first initiative or a
+formal public API specification. Because the product runs as a SvelteKit
+application with internal server boundaries, alignment should come from:
+
+- **Drizzle schema + migrations** as the source of truth for persisted data.
+- **Runtime validation schemas** at server boundaries for critical inputs and
+  outputs.
+- **Shared TypeScript types** only where they reduce duplication between server
+  code and consuming UI.
+- **Canonical fixtures/examples** per use case so frontend can work against
+  realistic states before every backend capability is fully implemented.
+- **Integration tests** that lock down behavior at the use-case level rather
+  than relying on documentation alone.
+
+Backend work should be planned as a roadmap of capabilities rather than as
+isolated infrastructure layers:
+
+1. **Foundation of the system**: persistence, auth, storage, realtime, roles,
+   reproducible local setup.
+2. **Identity and access**: sessions, recovery, permissions, abuse limits.
+3. **Artwork domain**: publish, persist, edit title, delete, visibility rules.
+4. **Discovery and read models**: feed queries, sorting, detail views,
+   pagination.
+5. **Community interactions**: votes, comments, derived counters, live updates.
+6. **Lineage**: forks, attribution, parent/child navigation, deleted-parent
+   behavior.
+7. **Moderation and governance**: reports, auto-hide rules, moderator actions,
+   admin controls.
+8. **Operational hardening**: performance, observability, security review,
+   resilience.
+
+Each backend phase should leave the system in a state that is testable,
+integrable, and usable by frontend work, even if the final user experience is
+completed in a different phase.
 
 ## 12. Milestones & Phases
 
