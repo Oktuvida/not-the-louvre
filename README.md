@@ -1,5 +1,11 @@
 # 🖼️ Not The Louvre
 
+
+<p align="center">
+  <img width="256" height="256" src="assets/images/logo.svg">
+</p>
+
+
 *[Leer en Español 🇪🇸](./README.es.md)*
 
 > "A very expensive frame for a very questionable drawing."
