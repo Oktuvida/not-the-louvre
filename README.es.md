@@ -1,4 +1,7 @@
-# 🖼️ Not The Louvre (No es el Louvre)
+<p align="center">
+  <img width="420" src="./assets/images/logo.svg" alt="Not The Louvre logo">
+</p>
+
 
 *[Read in English 🇬🇧](./README.md)*
 
