@@ -3,6 +3,7 @@ import { getIp } from 'better-auth/api';
 import type { RequestHandler } from './$types';
 import { auth } from '$lib/server/auth';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';
 
 const toErrorResponse = (error: unknown) => {
@@ -37,6 +38,20 @@ export const POST: RequestHandler = async (event) => {
 		);
 
 		return json({ artwork }, { status: 201 });
+	} catch (error) {
+		return toErrorResponse(error);
+	}
+};
+
+export const GET: RequestHandler = async (event) => {
+	const sort = event.url.searchParams.get('sort') ?? 'recent';
+	const cursor = event.url.searchParams.get('cursor');
+	const limitValue = event.url.searchParams.get('limit');
+	const limit = limitValue ? Number.parseInt(limitValue, 10) : undefined;
+
+	try {
+		const discovery = await listArtworkDiscovery({ cursor, limit, sort: sort as 'recent' });
+		return json(discovery);
 	} catch (error) {
 		return toErrorResponse(error);
 	}
