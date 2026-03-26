@@ -46,13 +46,22 @@ describe('database schema namespaces', () => {
 			'media_content_type',
 			'media_size_bytes',
 			'score',
-			'comment_count'
+			'comment_count',
+			'fork_count'
 		];
 
 		for (const columnName of requiredColumns) {
 			const column = artworkColumns.find((candidate) => candidate.name === columnName);
 			expect(column?.notNull, `${columnName} should be required`).toBe(true);
 		}
+	});
+
+	it('stores optional parent lineage references for forked artworks', () => {
+		const artworkColumns = getTableConfig(artworks).columns;
+		const parentIdColumn = artworkColumns.find((candidate) => candidate.name === 'parent_id');
+
+		expect(parentIdColumn).toBeDefined();
+		expect(parentIdColumn?.notNull).toBe(false);
 	});
 
 	it('tracks publish rate limits per actor in the app schema', () => {

@@ -63,12 +63,14 @@ export const artworks = appSchema.table(
 		authorId: text('author_id')
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
+		parentId: text('parent_id'),
 		title: text('title').notNull(),
 		storageKey: text('storage_key').notNull(),
 		mediaContentType: text('media_content_type').notNull(),
 		mediaSizeBytes: integer('media_size_bytes').notNull(),
 		score: integer('score').notNull().default(0),
 		commentCount: integer('comment_count').notNull().default(0),
+		forkCount: integer('fork_count').notNull().default(0),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at')
 			.defaultNow()
@@ -77,8 +79,10 @@ export const artworks = appSchema.table(
 	},
 	(table) => [
 		index('artworks_author_id_idx').on(table.authorId),
+		index('artworks_parent_id_idx').on(table.parentId),
 		uniqueIndex('artworks_storage_key_unique').on(table.storageKey),
-		check('artworks_media_size_positive_check', sql`${table.mediaSizeBytes} > 0`)
+		check('artworks_media_size_positive_check', sql`${table.mediaSizeBytes} > 0`),
+		check('artworks_fork_count_non_negative_check', sql`${table.forkCount} >= 0`)
 	]
 );
 
@@ -196,6 +200,11 @@ export const artworksRelations = relations(artworks, ({ many, one }) => ({
 		fields: [artworks.authorId],
 		references: [users.id]
 	}),
+	parent: one(artworks, {
+		fields: [artworks.parentId],
+		references: [artworks.id]
+	}),
+	childForks: many(artworks),
 	votes: many(artworkVotes),
 	comments: many(artworkComments)
 }));
