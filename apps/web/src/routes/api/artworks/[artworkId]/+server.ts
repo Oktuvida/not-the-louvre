@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { deleteArtwork, updateArtworkTitle } from '$lib/server/artwork/service';
 
@@ -10,7 +11,7 @@ const toErrorResponse = (error: unknown) => {
 	return json({ code: 'PUBLISH_FAILED', message: 'Artwork request failed' }, { status: 500 });
 };
 
-export const PATCH = async (event) => {
+export const PATCH: RequestHandler = async (event) => {
 	try {
 		const body = (await event.request.json()) as { title?: string };
 		const artwork = await updateArtworkTitle(
@@ -27,7 +28,7 @@ export const PATCH = async (event) => {
 	}
 };
 
-export const DELETE = async (event) => {
+export const DELETE: RequestHandler = async (event) => {
 	try {
 		const artwork = await deleteArtwork(
 			{ artworkId: event.params.artworkId },

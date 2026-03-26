@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
+import type { RequestHandler } from './$types';
 import { auth } from '$lib/server/auth';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { publishArtwork } from '$lib/server/artwork/service';
@@ -12,7 +13,7 @@ const toErrorResponse = (error: unknown) => {
 	return json({ code: 'PUBLISH_FAILED', message: 'Artwork publish failed' }, { status: 500 });
 };
 
-export const POST = async (event) => {
+export const POST: RequestHandler = async (event) => {
 	const formData = await event.request.formData();
 	const media = formData.get('media');
 
