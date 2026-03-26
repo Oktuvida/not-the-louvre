@@ -1,0 +1,27 @@
+{
+	"version": "7",
+	"dialect": "postgresql",
+	"entries": [
+		{
+			"idx": 0,
+			"version": "7",
+			"when": 1774420850761,
+			"tag": "0000_melodic_queen_noir",
+			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "7",
+			"when": 1774421243191,
+			"tag": "0001_big_microchip",
+			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "7",
+			"when": 1774485600000,
+			"tag": "0002_solid_app_schemas",
+			"breakpoints": true
+		}
+	]
+}

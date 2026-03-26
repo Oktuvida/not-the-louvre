@@ -1,0 +1,7 @@
+.svelte-kit
+build
+coverage
+playwright-report
+test-results
+drizzle
+static

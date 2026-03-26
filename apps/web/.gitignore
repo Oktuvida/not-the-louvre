@@ -1,0 +1,13 @@
+.svelte-kit
+build
+coverage
+playwright-report
+test-results
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Local env files
+.env
+.env.*
+!.env.example
+!.env.test

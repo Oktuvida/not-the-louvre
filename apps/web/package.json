@@ -19,7 +19,13 @@
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
-		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes"
+		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes && bun run scripts/generate-auth-schema.ts"
+	},
+	"dependencies": {
+		"better-auth": "~1.4.21",
+		"drizzle-orm": "^0.45.1",
+		"postgres": "^3.4.8",
+		"zod": "^4.3.6"
 	},
 	"devDependencies": {
 		"@better-auth/cli": "~1.4.21",
@@ -32,15 +38,12 @@
 		"@tailwindcss/vite": "^4.1.18",
 		"@types/node": "^24",
 		"@vitest/browser-playwright": "^4.1.0",
-		"better-auth": "~1.4.21",
 		"drizzle-kit": "^0.31.8",
-		"drizzle-orm": "^0.45.1",
 		"eslint": "^10.0.3",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.15.2",
 		"globals": "^17.4.0",
 		"playwright": "^1.58.2",
-		"postgres": "^3.4.8",
 		"prettier": "^3.8.1",
 		"prettier-plugin-svelte": "^3.4.1",
 		"prettier-plugin-tailwindcss": "^0.7.2",
