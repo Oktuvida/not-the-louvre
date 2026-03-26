@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
 	artworkComments,
@@ -28,8 +28,21 @@ export const artworkRepository: ArtworkRepository = {
 		return (await db.query.artworks.findFirst({ where: eq(artworks.id, id) })) ?? null;
 	},
 	async createArtwork(input) {
-		const [record] = await db.insert(artworks).values(input).returning();
-		return record as ArtworkRecord;
+		return db.transaction(async (tx) => {
+			const [record] = await tx.insert(artworks).values(input).returning();
+
+			if (input.parentId) {
+				await tx
+					.update(artworks)
+					.set({
+						forkCount: sql`${artworks.forkCount} + 1`,
+						updatedAt: input.updatedAt
+					})
+					.where(eq(artworks.id, input.parentId));
+			}
+
+			return record as ArtworkRecord;
+		});
 	},
 	async updateArtworkTitle(id, title, updatedAt) {
 		const [record] = await db
@@ -41,8 +54,27 @@ export const artworkRepository: ArtworkRepository = {
 		return (record as ArtworkRecord | undefined) ?? null;
 	},
 	async deleteArtwork(id) {
-		const [record] = await db.delete(artworks).where(eq(artworks.id, id)).returning();
-		return (record as ArtworkRecord | undefined) ?? null;
+		return db.transaction(async (tx) => {
+			const artwork = (await tx.query.artworks.findFirst({ where: eq(artworks.id, id) })) ?? null;
+			if (!artwork) return null;
+
+			const [record] = await tx.delete(artworks).where(eq(artworks.id, id)).returning();
+
+			if (artwork.parentId) {
+				await tx
+					.update(artworks)
+					.set({
+						forkCount: sql`greatest(0, ${artworks.forkCount} - 1)`,
+						updatedAt: artwork.updatedAt
+					})
+					.where(eq(artworks.id, artwork.parentId));
+			}
+
+			return (record as ArtworkRecord | undefined) ?? null;
+		});
+	},
+	async findChildForksByParentId(parentId) {
+		return db.query.artworks.findMany({ where: eq(artworks.parentId, parentId) });
 	},
 	async findVoteByArtworkAndUser(artworkId, userId) {
 		return (

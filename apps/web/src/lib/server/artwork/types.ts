@@ -4,9 +4,11 @@ export type ArtworkRecord = {
 	authorId: string;
 	commentCount: number;
 	createdAt: Date;
+	forkCount: number;
 	id: string;
 	mediaContentType: string;
 	mediaSizeBytes: number;
+	parentId: string | null;
 	score: number;
 	storageKey: string;
 	title: string;
@@ -23,13 +25,36 @@ export type ArtworkFeedCard = {
 	author: ArtworkAuthorSummary;
 	commentCount: number;
 	createdAt: Date;
+	forkCount: number;
 	id: string;
+	lineage: ArtworkLineageSummary;
 	mediaUrl: string;
 	score: number;
 	title: string;
 };
 
+export type ArtworkLineageParentSummary = {
+	author: ArtworkAuthorSummary;
+	id: string;
+	title: string;
+};
+
+export type ArtworkLineageSummary = {
+	isFork: boolean;
+	parent: ArtworkLineageParentSummary | null;
+	parentStatus: 'available' | 'deleted' | 'none';
+};
+
+export type ArtworkChildForkSummary = {
+	author: ArtworkAuthorSummary;
+	createdAt: Date;
+	id: string;
+	mediaUrl: string;
+	title: string;
+};
+
 export type ArtworkDetail = ArtworkFeedCard & {
+	childForks: ArtworkChildForkSummary[];
 	mediaContentType: string;
 	mediaSizeBytes: number;
 	updatedAt: Date;
@@ -54,6 +79,18 @@ export type ArtworkDiscoveryPage = {
 export type ArtworkReadRecord = ArtworkRecord & {
 	authorAvatarUrl: string | null;
 	authorNickname: string;
+	childForks?: Array<{
+		authorAvatarUrl: string | null;
+		authorId: string;
+		authorNickname: string;
+		createdAt: Date;
+		id: string;
+		title: string;
+	}>;
+	parentAuthorAvatarUrl?: string | null;
+	parentAuthorId?: string | null;
+	parentAuthorNickname?: string | null;
+	parentTitle?: string | null;
 };
 
 export type ArtworkVoteValue = 'down' | 'up';
@@ -188,6 +225,7 @@ export type ArtworkRepository = {
 	deleteComment(id: string, updatedAt: Date): Promise<ArtworkCommentRecord | null>;
 	findCommentById(id: string): Promise<ArtworkCommentRecord | null>;
 	findArtworkById(id: string): Promise<ArtworkRecord | null>;
+	findChildForksByParentId(parentId: string): Promise<ArtworkRecord[]>;
 	findEngagementRateLimit(
 		kind: ArtworkEngagementRateLimitKind,
 		actorKey: string
