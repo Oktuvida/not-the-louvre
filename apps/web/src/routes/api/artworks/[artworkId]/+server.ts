@@ -1,0 +1,41 @@
+import { json } from '@sveltejs/kit';
+import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { deleteArtwork, updateArtworkTitle } from '$lib/server/artwork/service';
+
+const toErrorResponse = (error: unknown) => {
+	if (error instanceof ArtworkFlowError) {
+		return json({ code: error.code, message: error.message }, { status: error.status });
+	}
+
+	return json({ code: 'PUBLISH_FAILED', message: 'Artwork request failed' }, { status: 500 });
+};
+
+export const PATCH = async (event) => {
+	try {
+		const body = (await event.request.json()) as { title?: string };
+		const artwork = await updateArtworkTitle(
+			{
+				artworkId: event.params.artworkId,
+				title: body.title ?? ''
+			},
+			{ user: event.locals.user }
+		);
+
+		return json({ artwork });
+	} catch (error) {
+		return toErrorResponse(error);
+	}
+};
+
+export const DELETE = async (event) => {
+	try {
+		const artwork = await deleteArtwork(
+			{ artworkId: event.params.artworkId },
+			{ user: event.locals.user }
+		);
+
+		return json({ artwork });
+	} catch (error) {
+		return toErrorResponse(error);
+	}
+};
