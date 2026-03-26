@@ -26,6 +26,8 @@ const baseSelect = {
 	mediaSizeBytes: artworks.mediaSizeBytes,
 	score: artworks.score,
 	commentCount: artworks.commentCount,
+	forkCount: artworks.forkCount,
+	parentId: artworks.parentId,
 	createdAt: artworks.createdAt,
 	updatedAt: artworks.updatedAt,
 	authorNickname: users.nickname,
@@ -41,6 +43,8 @@ type ArtworkReadRow = {
 	mediaContentType: string;
 	mediaSizeBytes: number;
 	commentCount: number;
+	forkCount: number;
+	parentId: string | null;
 	score: number;
 	storageKey: string;
 	title: string;
@@ -53,9 +57,11 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	authorNickname: row.authorNickname,
 	commentCount: row.commentCount,
 	createdAt: row.createdAt,
+	forkCount: row.forkCount,
 	id: row.id,
 	mediaContentType: row.mediaContentType,
 	mediaSizeBytes: row.mediaSizeBytes,
+	parentId: row.parentId,
 	score: row.score,
 	storageKey: row.storageKey,
 	title: row.title,
@@ -82,7 +88,46 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.where(eq(artworks.id, id))
 			.limit(1);
 
-		return row[0] ? mapRow(row[0]) : null;
+		const record = row[0] ? mapRow(row[0]) : null;
+		if (!record) return null;
+
+		const parent = record.parentId
+			? await db
+					.select({
+						authorAvatarUrl: users.avatarUrl,
+						authorId: artworks.authorId,
+						authorNickname: users.nickname,
+						id: artworks.id,
+						title: artworks.title
+					})
+					.from(artworks)
+					.innerJoin(users, eq(users.id, artworks.authorId))
+					.where(eq(artworks.id, record.parentId))
+					.limit(1)
+			: [];
+
+		const childForkRows = await db
+			.select({
+				authorAvatarUrl: users.avatarUrl,
+				authorId: artworks.authorId,
+				authorNickname: users.nickname,
+				createdAt: artworks.createdAt,
+				id: artworks.id,
+				title: artworks.title
+			})
+			.from(artworks)
+			.innerJoin(users, eq(users.id, artworks.authorId))
+			.where(eq(artworks.parentId, record.id))
+			.orderBy(desc(artworks.createdAt), desc(artworks.id));
+
+		return {
+			...record,
+			childForks: childForkRows,
+			parentAuthorAvatarUrl: parent[0]?.authorAvatarUrl ?? null,
+			parentAuthorId: parent[0]?.authorId ?? null,
+			parentAuthorNickname: parent[0]?.authorNickname ?? null,
+			parentTitle: parent[0]?.title ?? null
+		};
 	},
 	async findArtworkMediaById(id) {
 		const row = await db

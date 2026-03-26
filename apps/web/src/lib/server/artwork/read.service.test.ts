@@ -73,12 +73,20 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 			throw new Error('not implemented in read tests');
 		},
 		findArtworkById: async (id: string) => artworks.get(id) ?? null,
+		findChildForksByParentId: async (parentId: string) =>
+			Array.from(artworks.values()).filter((artwork) => artwork.parentId === parentId),
 		createArtwork: async (input) => {
 			const record: ArtworkRecord = {
 				...input
 			};
 
 			artworks.set(record.id, record);
+			if (record.parentId) {
+				const parent = artworks.get(record.parentId);
+				if (parent) {
+					artworks.set(record.parentId, { ...parent, forkCount: parent.forkCount + 1 });
+				}
+			}
 			return record;
 		},
 		updateArtworkTitle: async (id: string, title: string, updatedAt: Date) => {
@@ -91,7 +99,18 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 		},
 		deleteArtwork: async (id: string) => {
 			const current = artworks.get(id) ?? null;
-			if (current) artworks.delete(id);
+			if (current) {
+				artworks.delete(id);
+				if (current.parentId) {
+					const parent = artworks.get(current.parentId);
+					if (parent) {
+						artworks.set(current.parentId, {
+							...parent,
+							forkCount: Math.max(0, parent.forkCount - 1)
+						});
+					}
+				}
+			}
 			return current;
 		},
 		findPublishRateLimit: async (actorKey: string) => rateLimits.get(actorKey) ?? null,
@@ -158,13 +177,37 @@ const createReadRepository = (
 
 		const profile = profiles.get(record.authorId);
 		if (!profile) throw new Error(`Missing profile ${record.authorId}`);
+		const parent = record.parentId ? (artworks.get(record.parentId) ?? null) : null;
+		const parentProfile = parent ? (profiles.get(parent.authorId) ?? null) : null;
+		const childForks = Array.from(artworks.values())
+			.filter((candidate) => candidate.parentId === record.id)
+			.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+			.map((child) => {
+				const childProfile = profiles.get(child.authorId);
+				if (!childProfile) throw new Error(`Missing profile ${child.authorId}`);
+
+				return {
+					authorAvatarUrl: childProfile.avatarUrl,
+					authorId: child.authorId,
+					authorNickname: childProfile.nickname,
+					createdAt: child.createdAt,
+					id: child.id,
+					title: child.title
+				};
+			});
 
 		return {
 			...record,
 			authorAvatarUrl: profile.avatarUrl,
 			authorNickname: profile.nickname,
 			commentCount: record.commentCount ?? 0,
-			score: record.score ?? 0
+			parentAuthorAvatarUrl: parentProfile?.avatarUrl ?? null,
+			parentAuthorId: parent?.authorId ?? null,
+			parentAuthorNickname: parentProfile?.nickname ?? null,
+			parentId: record.parentId ?? null,
+			parentTitle: parent?.title ?? null,
+			score: record.score ?? 0,
+			childForks
 		};
 	},
 	async findArtworkMediaById(id) {
@@ -300,6 +343,12 @@ describe('artwork read service', () => {
 			title: 'Projection test',
 			mediaUrl: '/api/artworks/artwork-101/media',
 			commentCount: 0,
+			forkCount: 0,
+			lineage: {
+				isFork: false,
+				parent: null,
+				parentStatus: 'none'
+			},
 			score: 0,
 			author: {
 				id: 'user-1',
@@ -315,7 +364,14 @@ describe('artwork read service', () => {
 			mediaUrl: '/api/artworks/artwork-101/media',
 			mediaContentType: 'image/avif',
 			mediaSizeBytes: 128,
+			childForks: [],
 			commentCount: 0,
+			forkCount: 0,
+			lineage: {
+				isFork: false,
+				parent: null,
+				parentStatus: 'none'
+			},
 			score: 0,
 			author: {
 				id: 'user-1',
@@ -324,6 +380,125 @@ describe('artwork read service', () => {
 			}
 		});
 		expect(detail).not.toHaveProperty('storageKey');
+	});
+
+	it('returns parent attribution and direct child fork summaries for fork-aware detail reads', async () => {
+		const { getArtworkDetail } = await import('./read.service');
+		const artworks = new Map<string, ArtworkRecord>();
+		const profiles = createProfiles();
+		const { repository } = createWriteRepository(artworks);
+		const readRepository = createReadRepository(artworks, profiles);
+		const { storage } = createStorage();
+
+		await publishArtwork(
+			{ media: createAvifFile(), title: 'Parent artwork' },
+			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
+			{
+				generateId: () => 'artwork-parent',
+				now: () => new Date('2026-03-26T12:00:00.000Z'),
+				repository,
+				storage
+			}
+		);
+
+		await publishArtwork(
+			{
+				media: createAvifFile(),
+				parentArtworkId: 'artwork-parent',
+				title: 'Fork artwork'
+			},
+			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-2')!) },
+			{
+				generateId: () => 'artwork-child',
+				now: () => new Date('2026-03-26T13:00:00.000Z'),
+				repository,
+				storage
+			}
+		);
+
+		await publishArtwork(
+			{
+				media: createAvifFile(),
+				parentArtworkId: 'artwork-parent',
+				title: 'Second fork artwork'
+			},
+			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
+			{
+				generateId: () => 'artwork-child-2',
+				now: () => new Date('2026-03-26T14:00:00.000Z'),
+				repository,
+				storage
+			}
+		);
+
+		const childDetail = await getArtworkDetail('artwork-child', { repository: readRepository });
+		const parentDetail = await getArtworkDetail('artwork-parent', { repository: readRepository });
+
+		expect(childDetail.lineage).toMatchObject({
+			isFork: true,
+			parentStatus: 'available',
+			parent: {
+				id: 'artwork-parent',
+				title: 'Parent artwork',
+				author: {
+					id: 'user-1',
+					nickname: 'artist_1'
+				}
+			}
+		});
+		expect(parentDetail.childForks.map((fork) => fork.id)).toEqual([
+			'artwork-child-2',
+			'artwork-child'
+		]);
+		expect(parentDetail.forkCount).toBe(2);
+	});
+
+	it('preserves fork attribution when a parent artwork is deleted later', async () => {
+		const { getArtworkDetail } = await import('./read.service');
+		const artworks = new Map<string, ArtworkRecord>();
+		const profiles = createProfiles();
+		const { repository } = createWriteRepository(artworks);
+		const readRepository = createReadRepository(artworks, profiles);
+		const { storage } = createStorage();
+
+		await publishArtwork(
+			{ media: createAvifFile(), title: 'Parent artwork' },
+			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
+			{
+				generateId: () => 'artwork-parent',
+				now: () => new Date('2026-03-26T12:00:00.000Z'),
+				repository,
+				storage
+			}
+		);
+
+		await publishArtwork(
+			{
+				media: createAvifFile(),
+				parentArtworkId: 'artwork-parent',
+				title: 'Fork artwork'
+			},
+			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-2')!) },
+			{
+				generateId: () => 'artwork-child',
+				now: () => new Date('2026-03-26T13:00:00.000Z'),
+				repository,
+				storage
+			}
+		);
+
+		await deleteArtwork({ artworkId: 'artwork-parent' }, createActor(profiles.get('user-1')!), {
+			repository,
+			storage
+		});
+
+		const detail = await getArtworkDetail('artwork-child', { repository: readRepository });
+
+		expect(detail.lineage).toMatchObject({
+			isFork: true,
+			parent: null,
+			parentStatus: 'deleted'
+		});
 	});
 
 	it('omits deleted artworks from discovery and returns not found for deleted detail reads', async () => {

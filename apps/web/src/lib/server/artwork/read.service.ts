@@ -3,11 +3,13 @@ import { ArtworkFlowError } from './errors';
 import { artworkReadRepository } from './read.repository';
 import type {
 	ArtworkAuthorSummary,
+	ArtworkChildForkSummary,
 	ArtworkDetail,
 	ArtworkDiscoveryCursor,
 	ArtworkDiscoveryPage,
 	ArtworkDiscoverySort,
 	ArtworkFeedCard,
+	ArtworkLineageSummary,
 	ArtworkReadRecord,
 	ArtworkReadRepository
 } from './types';
@@ -39,11 +41,59 @@ const getMediaBasePath = () => env.PUBLIC_ARTWORK_MEDIA_BASE_PATH || '/api/artwo
 
 export const getArtworkMediaUrl = (artworkId: string) => `${getMediaBasePath()}/${artworkId}/media`;
 
+const toLineage = (record: ArtworkReadRecord): ArtworkLineageSummary => {
+	if (!record.parentId) {
+		return {
+			isFork: false,
+			parent: null,
+			parentStatus: 'none'
+		};
+	}
+
+	if (record.parentTitle && record.parentAuthorId && record.parentAuthorNickname) {
+		return {
+			isFork: true,
+			parent: {
+				author: {
+					avatarUrl: record.parentAuthorAvatarUrl ?? null,
+					id: record.parentAuthorId,
+					nickname: record.parentAuthorNickname
+				},
+				id: record.parentId,
+				title: record.parentTitle
+			},
+			parentStatus: 'available'
+		};
+	}
+
+	return {
+		isFork: true,
+		parent: null,
+		parentStatus: 'deleted'
+	};
+};
+
+const toChildForkSummary = (
+	record: NonNullable<ArtworkReadRecord['childForks']>[number]
+): ArtworkChildForkSummary => ({
+	author: {
+		avatarUrl: record.authorAvatarUrl,
+		id: record.authorId,
+		nickname: record.authorNickname
+	},
+	createdAt: record.createdAt,
+	id: record.id,
+	mediaUrl: getArtworkMediaUrl(record.id),
+	title: record.title
+});
+
 const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 	author: toAuthorSummary(record),
 	commentCount: record.commentCount,
 	createdAt: record.createdAt,
+	forkCount: record.forkCount,
 	id: record.id,
+	lineage: toLineage(record),
 	mediaUrl: getArtworkMediaUrl(record.id),
 	score: record.score,
 	title: record.title
@@ -51,6 +101,7 @@ const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 
 const toDetail = (record: ArtworkReadRecord): ArtworkDetail => ({
 	...toFeedCard(record),
+	childForks: (record.childForks ?? []).map(toChildForkSummary),
 	mediaContentType: record.mediaContentType,
 	mediaSizeBytes: record.mediaSizeBytes,
 	updatedAt: record.updatedAt
