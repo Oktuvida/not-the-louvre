@@ -24,11 +24,23 @@ If it is not reproducible, it is a future bug wearing a disguise.
 
 Every behavior change starts with a failing test:
 
-1. **Red** — Write a test that describes the expected behavior. Run it; it must fail.
+1. **Red** — Model the behavior as a business scenario first, then write the test from that scenario. Run it; it must fail.
 2. **Green** — Write the minimum code to make the test pass.
 3. **Refactor** — Clean up while keeping the tests green.
 
 Do not skip the red step. A test that has never been seen failing proves nothing.
+
+The red step is the most important phase and must happen before design details or implementation details.
+Think in user outcomes, not functions, classes, or endpoints. Start with what the user is trying to achieve and what the system must guarantee.
+
+Business-scenario-first test modeling:
+
+1. Describe the user flow in plain language (example: "A user finishes drawing artwork and clicks save").
+2. Define the expected business outcome (example: "The artwork is persisted and can be retrieved in the user's gallery").
+3. Encode that outcome as a failing test.
+4. Only then write the minimum code needed to satisfy the test.
+
+If code exists before a failing scenario test, the process is out of order.
 
 ### Automated Quality Gates
 
