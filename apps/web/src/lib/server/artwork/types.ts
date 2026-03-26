@@ -11,6 +11,52 @@ export type ArtworkRecord = {
 	updatedAt: Date;
 };
 
+export type ArtworkAuthorSummary = {
+	avatarUrl: string | null;
+	id: string;
+	nickname: string;
+};
+
+export type ArtworkFeedCard = {
+	author: ArtworkAuthorSummary;
+	createdAt: Date;
+	id: string;
+	mediaUrl: string;
+	title: string;
+};
+
+export type ArtworkDetail = ArtworkFeedCard & {
+	mediaContentType: string;
+	mediaSizeBytes: number;
+	updatedAt: Date;
+};
+
+export type ArtworkDiscoverySort = 'recent';
+
+export type ArtworkDiscoveryCursor = {
+	createdAt: Date;
+	id: string;
+};
+
+export type ArtworkDiscoveryPage = {
+	items: ArtworkFeedCard[];
+	pageInfo: {
+		hasMore: boolean;
+		nextCursor: string | null;
+	};
+	sort: ArtworkDiscoverySort;
+};
+
+export type ArtworkReadRecord = ArtworkRecord & {
+	authorAvatarUrl: string | null;
+	authorNickname: string;
+};
+
+export type ListRecentArtworksInput = {
+	cursor: ArtworkDiscoveryCursor | null;
+	limit: number;
+};
+
 export type PublishRateLimitRecord = {
 	attemptCount: number;
 	actorKey: string;
@@ -60,6 +106,14 @@ export type ArtworkRepository = {
 		id: string,
 		input: UpdatePublishRateLimitInput
 	): Promise<PublishRateLimitRecord>;
+};
+
+export type ArtworkReadRepository = {
+	findArtworkDetailById(id: string): Promise<ArtworkReadRecord | null>;
+	findArtworkMediaById(
+		id: string
+	): Promise<Pick<ArtworkRecord, 'id' | 'mediaContentType' | 'storageKey'> | null>;
+	listRecentArtworks(input: ListRecentArtworksInput): Promise<ArtworkReadRecord[]>;
 };
 
 export type ArtworkActorContext = {
