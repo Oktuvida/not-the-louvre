@@ -45,10 +45,13 @@ Ahora el repo usa un workspace pequeño de Bun para que la raíz quede centrada 
 ├── apps/
 │   └── web/        # App SvelteKit
 ├── docs/           # Documentación de producto y proyecto
-├── compose.yaml    # Postgres local
+├── compose.yaml    # Stack local de Supabase
+├── .env.supabase.example
 └── package.json    # Scripts del workspace
 ```
 
+- Levanta el stack local de Supabase con `bun run db:start` y detenlo con `bun run db:stop`.
+- La primera vez, `bun run db:start` copia `.env.supabase.example` a `.env.supabase` si todavía no lo personalizaste.
 - Puedes seguir ejecutando la app desde la raíz con `bun run dev`, `bun run check`, `bun run build`, etc.
 - La configuración específica de la app vive ahora en `apps/web`.
 - Los archivos de entorno de la app pasan a estar en `apps/web/.env` y `apps/web/.env.example`.

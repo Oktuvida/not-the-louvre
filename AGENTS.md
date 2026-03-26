@@ -34,6 +34,8 @@ Do not skip the red step. A test that has never been seen failing proves nothing
 
 All quality checks run as scripts — never rely on manual review alone.
 
+After every change, run `bun run format`, `bun run lint`, `bun run check`, and `bun run test` before considering the work complete.
+
 | Script | What it checks |
 | --- | --- |
 | `bun run format` | Code formatting (Prettier) |
