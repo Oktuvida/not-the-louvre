@@ -24,6 +24,8 @@ const baseSelect = {
 	storageKey: artworks.storageKey,
 	mediaContentType: artworks.mediaContentType,
 	mediaSizeBytes: artworks.mediaSizeBytes,
+	score: artworks.score,
+	commentCount: artworks.commentCount,
 	createdAt: artworks.createdAt,
 	updatedAt: artworks.updatedAt,
 	authorNickname: users.nickname,
@@ -38,6 +40,8 @@ type ArtworkReadRow = {
 	id: string;
 	mediaContentType: string;
 	mediaSizeBytes: number;
+	commentCount: number;
+	score: number;
 	storageKey: string;
 	title: string;
 	updatedAt: Date;
@@ -47,10 +51,12 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	authorAvatarUrl: row.authorAvatarUrl,
 	authorId: row.authorId,
 	authorNickname: row.authorNickname,
+	commentCount: row.commentCount,
 	createdAt: row.createdAt,
 	id: row.id,
 	mediaContentType: row.mediaContentType,
 	mediaSizeBytes: row.mediaSizeBytes,
+	score: row.score,
 	storageKey: row.storageKey,
 	title: row.title,
 	updatedAt: row.updatedAt
