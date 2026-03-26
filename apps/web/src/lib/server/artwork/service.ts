@@ -1,9 +1,23 @@
 import { generateId } from 'better-auth';
-import { ARTWORK_PUBLISH_RATE_LIMIT } from './config';
+import {
+	ARTWORK_COMMENT_MAX_LENGTH,
+	ARTWORK_COMMENT_RATE_LIMIT,
+	ARTWORK_PUBLISH_RATE_LIMIT,
+	ARTWORK_VOTE_RATE_LIMIT
+} from './config';
 import { ArtworkFlowError } from './errors';
 import { artworkRepository } from './repository';
 import { supabaseArtworkStorage } from './storage';
-import type { ArtworkActorContext, ArtworkRepository, ArtworkStorage } from './types';
+import type {
+	ArtworkActorContext,
+	ArtworkCommentView,
+	ArtworkEngagementRateLimitKind,
+	ArtworkRepository,
+	ArtworkStorage,
+	ArtworkVoteMutationResult,
+	ArtworkVoteRemovalResult,
+	ArtworkVoteValue
+} from './types';
 import { normalizePublishTitle, normalizeUpdatedTitle, validateArtworkMedia } from './validation';
 
 type PublishArtworkInput = {
@@ -18,6 +32,25 @@ type UpdateArtworkTitleInput = {
 
 type DeleteArtworkInput = {
 	artworkId: string;
+};
+
+type ApplyArtworkVoteInput = {
+	artworkId: string;
+	value: ArtworkVoteValue;
+};
+
+type RemoveArtworkVoteInput = {
+	artworkId: string;
+};
+
+type CreateArtworkCommentInput = {
+	artworkId: string;
+	body: string;
+};
+
+type DeleteArtworkCommentInput = {
+	artworkId: string;
+	commentId: string;
 };
 
 type ServiceDependencies = {
@@ -49,6 +82,97 @@ const requireActor = (context: Partial<ArtworkActorContext>): ArtworkActorContex
 
 const getActorKey = (context: ArtworkActorContext) =>
 	`${context.user.id}:${context.ipAddress ?? 'unknown'}`;
+
+const normalizeCommentBody = (body: string) => {
+	const trimmed = body.trim();
+
+	if (!trimmed || trimmed.length > ARTWORK_COMMENT_MAX_LENGTH) {
+		throw new ArtworkFlowError(
+			400,
+			`Comment must be between 1 and ${ARTWORK_COMMENT_MAX_LENGTH} characters`,
+			'INVALID_COMMENT'
+		);
+	}
+
+	return trimmed;
+};
+
+const normalizeVoteValue = (value: string): ArtworkVoteValue => {
+	if (value === 'up' || value === 'down') {
+		return value;
+	}
+
+	throw new ArtworkFlowError(400, 'Vote must be either up or down', 'INVALID_VOTE');
+};
+
+const assertEngagementRateLimit = async (
+	kind: ArtworkEngagementRateLimitKind,
+	context: ArtworkActorContext,
+	repository: ArtworkRepository,
+	now: Date,
+	message: string
+) => {
+	const actorKey = getActorKey(context);
+	const record = await repository.findEngagementRateLimit(kind, actorKey);
+
+	if (record?.blockedUntil && record.blockedUntil > now) {
+		throw new ArtworkFlowError(429, message, 'RATE_LIMITED');
+	}
+
+	return { actorKey, record };
+};
+
+const recordEngagementAttempt = async (
+	kind: ArtworkEngagementRateLimitKind,
+	context: ArtworkActorContext,
+	repository: ArtworkRepository,
+	now: Date,
+	nextId: () => string,
+	config: { maxAttempts: number; windowMs: number },
+	message: string
+) => {
+	const { actorKey, record } = await assertEngagementRateLimit(
+		kind,
+		context,
+		repository,
+		now,
+		message
+	);
+	const withinWindow =
+		record && now.getTime() - record.windowStartedAt.getTime() <= config.windowMs;
+	const attemptCount = withinWindow ? record.attemptCount + 1 : 1;
+	const windowStartedAt = withinWindow && record ? record.windowStartedAt : now;
+	const blockedUntil =
+		attemptCount >= config.maxAttempts
+			? new Date(windowStartedAt.getTime() + config.windowMs)
+			: null;
+
+	if (!record) {
+		await repository.createEngagementRateLimit({
+			actorKey,
+			attemptCount,
+			blockedUntil,
+			createdAt: now,
+			id: nextId(),
+			kind,
+			lastAttemptAt: now,
+			updatedAt: now,
+			windowStartedAt
+		});
+	} else {
+		await repository.updateEngagementRateLimit(record.id, {
+			attemptCount,
+			blockedUntil,
+			lastAttemptAt: now,
+			updatedAt: now,
+			windowStartedAt
+		});
+	}
+
+	if (blockedUntil) {
+		throw new ArtworkFlowError(429, message, 'RATE_LIMITED');
+	}
+};
 
 const assertPublishRateLimit = async (
 	context: ArtworkActorContext,
@@ -158,10 +282,12 @@ export const publishArtwork = async (
 	try {
 		const artwork = await repository.createArtwork({
 			authorId: actor.user.id,
+			commentCount: 0,
 			createdAt: now,
 			id: artworkId,
 			mediaContentType: media.contentType,
 			mediaSizeBytes: media.sizeBytes,
+			score: 0,
 			storageKey,
 			title,
 			updatedAt: now
@@ -225,4 +351,131 @@ export const deleteArtwork = async (
 	}
 
 	return deleted;
+};
+
+export const applyArtworkVote = async (
+	input: ApplyArtworkVoteInput,
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+): Promise<ArtworkVoteMutationResult> => {
+	const actor = requireActor(context);
+	const { generateId: nextId, now: getNow, repository } = getDependencies(dependencies);
+	const now = getNow();
+	const artwork = await getArtworkOrThrow(input.artworkId, repository);
+
+	await recordEngagementAttempt(
+		'vote',
+		actor,
+		repository,
+		now,
+		nextId,
+		ARTWORK_VOTE_RATE_LIMIT,
+		'Too many vote attempts. Please wait before trying again.'
+	);
+
+	const result = await repository.upsertVote({
+		artworkId: artwork.id,
+		createdAt: now,
+		id: nextId(),
+		updatedAt: now,
+		userId: actor.user.id,
+		value: normalizeVoteValue(input.value)
+	});
+
+	if (!result) {
+		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+	}
+
+	return result;
+};
+
+export const removeArtworkVote = async (
+	input: RemoveArtworkVoteInput,
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+): Promise<ArtworkVoteRemovalResult> => {
+	const actor = requireActor(context);
+	const { now: getNow, repository } = getDependencies(dependencies);
+	const result = await repository.removeVote(input.artworkId, actor.user.id, getNow());
+
+	if (!result) {
+		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+	}
+
+	return result;
+};
+
+export const createArtworkComment = async (
+	input: CreateArtworkCommentInput,
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+): Promise<ArtworkCommentView> => {
+	const actor = requireActor(context);
+	const { generateId: nextId, now: getNow, repository } = getDependencies(dependencies);
+	const now = getNow();
+	const artwork = await getArtworkOrThrow(input.artworkId, repository);
+
+	await recordEngagementAttempt(
+		'comment',
+		actor,
+		repository,
+		now,
+		nextId,
+		ARTWORK_COMMENT_RATE_LIMIT,
+		'Too many comment attempts. Please wait before trying again.'
+	);
+
+	const comment = await repository.createComment({
+		authorId: actor.user.id,
+		artworkId: artwork.id,
+		body: normalizeCommentBody(input.body),
+		createdAt: now,
+		id: nextId(),
+		updatedAt: now
+	});
+
+	if (!comment) {
+		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+	}
+
+	return comment;
+};
+
+export const listArtworkComments = async (
+	artworkId: string,
+	dependencies: Readonly<{ repository?: ArtworkRepository }> = {}
+) => {
+	const repository = dependencies.repository ?? artworkRepository;
+	await getArtworkOrThrow(artworkId, repository);
+	return repository.listCommentsByArtworkId(artworkId);
+};
+
+export const deleteArtworkComment = async (
+	input: DeleteArtworkCommentInput,
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+): Promise<{ artworkId: string; body: string; createdAt: Date; id: string; updatedAt: Date }> => {
+	const actor = requireActor(context);
+	const { now: getNow, repository } = getDependencies(dependencies);
+	await getArtworkOrThrow(input.artworkId, repository);
+	const comment = await repository.findCommentById(input.commentId);
+
+	if (!comment || comment.artworkId !== input.artworkId) {
+		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
+	}
+
+	assertAuthor(comment.authorId, actor.user.id);
+	const deleted = await repository.deleteComment(input.commentId, getNow());
+
+	if (!deleted) {
+		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
+	}
+
+	return {
+		artworkId: deleted.artworkId,
+		body: deleted.body,
+		createdAt: deleted.createdAt,
+		id: deleted.id,
+		updatedAt: deleted.updatedAt
+	};
 };

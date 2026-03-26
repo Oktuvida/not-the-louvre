@@ -7,3 +7,15 @@ export const ARTWORK_PUBLISH_RATE_LIMIT = {
 	maxAttempts: 20,
 	windowMs: 60 * 60 * 1000
 } as const;
+
+export const ARTWORK_VOTE_RATE_LIMIT = {
+	maxAttempts: 60,
+	windowMs: 60 * 60 * 1000
+} as const;
+
+export const ARTWORK_COMMENT_RATE_LIMIT = {
+	maxAttempts: 10,
+	windowMs: 60 * 60 * 1000
+} as const;
+
+export const ARTWORK_COMMENT_MAX_LENGTH = 500;

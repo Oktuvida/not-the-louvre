@@ -26,6 +26,28 @@ const createRepository = () => {
 	const rateLimits = new Map<string, PublishRateLimitRecord>();
 
 	const repository: ArtworkRepository = {
+		findVoteByArtworkAndUser: vi.fn(async () => null),
+		upsertVote: vi.fn(async () => {
+			throw new Error('not implemented in publish tests');
+		}),
+		removeVote: vi.fn(async () => {
+			throw new Error('not implemented in publish tests');
+		}),
+		findEngagementRateLimit: vi.fn(async () => null),
+		createEngagementRateLimit: vi.fn(async () => {
+			throw new Error('not implemented in publish tests');
+		}),
+		updateEngagementRateLimit: vi.fn(async () => {
+			throw new Error('not implemented in publish tests');
+		}),
+		listCommentsByArtworkId: vi.fn(async () => []),
+		createComment: vi.fn(async () => {
+			throw new Error('not implemented in publish tests');
+		}),
+		findCommentById: vi.fn(async () => null),
+		deleteComment: vi.fn(async () => {
+			throw new Error('not implemented in publish tests');
+		}),
 		findArtworkById: vi.fn(async (id: string) => artworks.get(id) ?? null),
 		createArtwork: vi.fn(async (input) => {
 			const record: ArtworkRecord = {
