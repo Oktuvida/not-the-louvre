@@ -1,13 +1,21 @@
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import type { PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 
 export const load: PageServerLoad = async (event) => {
-	if (!event.locals.user) {
-		return redirect(302, '/demo/better-auth/login');
+	if (event.locals.integrityFailure) {
+		throw error(500, 'Authenticated session is missing its product user profile');
 	}
-	return { user: event.locals.user };
+
+	if (!event.locals.user) {
+		throw redirect(302, '/demo/better-auth/login');
+	}
+	return {
+		authUser: event.locals.authUser,
+		user: event.locals.user,
+		recoveryKey: event.url.searchParams.get('recoveryKey') ?? undefined
+	};
 };
 
 export const actions: Actions = {
@@ -15,6 +23,6 @@ export const actions: Actions = {
 		await auth.api.signOut({
 			headers: event.request.headers
 		});
-		return redirect(302, '/demo/better-auth/login');
+		throw redirect(302, '/demo/better-auth/login');
 	}
 };
