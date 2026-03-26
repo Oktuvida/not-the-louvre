@@ -49,6 +49,9 @@ const createRepository = () => {
 			throw new Error('not implemented in publish tests');
 		}),
 		findArtworkById: vi.fn(async (id: string) => artworks.get(id) ?? null),
+		findChildForksByParentId: vi.fn(async (parentId: string) =>
+			Array.from(artworks.values()).filter((artwork) => artwork.parentId === parentId)
+		),
 		createArtwork: vi.fn(async (input) => {
 			const record: ArtworkRecord = {
 				createdAt: input.createdAt,
@@ -57,6 +60,14 @@ const createRepository = () => {
 			};
 
 			artworks.set(record.id, record);
+
+			if (record.parentId) {
+				const parent = artworks.get(record.parentId);
+				if (parent) {
+					artworks.set(record.parentId, { ...parent, forkCount: parent.forkCount + 1 });
+				}
+			}
+
 			return record;
 		}),
 		updateArtworkTitle: vi.fn(async (id: string, title: string, updatedAt: Date) => {
@@ -69,7 +80,18 @@ const createRepository = () => {
 		}),
 		deleteArtwork: vi.fn(async (id: string) => {
 			const current = artworks.get(id) ?? null;
-			if (current) artworks.delete(id);
+			if (current) {
+				artworks.delete(id);
+				if (current.parentId) {
+					const parent = artworks.get(current.parentId);
+					if (parent) {
+						artworks.set(current.parentId, {
+							...parent,
+							forkCount: Math.max(0, parent.forkCount - 1)
+						});
+					}
+				}
+			}
 			return current;
 		}),
 		findPublishRateLimit: vi.fn(async (actorKey: string) => rateLimits.get(actorKey) ?? null),
@@ -155,13 +177,131 @@ describe('artwork service', () => {
 
 		expect(result.id).toBe('artwork-1');
 		expect(result.storageKey).toBe('artworks/user-1/artwork-1.avif');
+		expect(result.parentId).toBeNull();
+		expect(result.forkCount).toBe(0);
 		expect(uploads).toHaveLength(1);
 		expect(uploads[0]?.key).toBe('artworks/user-1/artwork-1.avif');
 		expect(artworks.get('artwork-1')).toMatchObject({
 			title: 'Evening Light',
 			authorId: 'user-1',
-			storageKey: 'artworks/user-1/artwork-1.avif'
+			storageKey: 'artworks/user-1/artwork-1.avif',
+			parentId: null,
+			forkCount: 0
 		});
+	});
+
+	it('publishes a forked artwork for a valid active parent and increments the parent fork count', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+
+		await publishArtwork(
+			{
+				media: createAvifFile(),
+				title: 'Original artwork'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-parent',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		const fork = await publishArtwork(
+			{
+				media: createAvifFile(),
+				parentArtworkId: 'artwork-parent',
+				title: 'Forked artwork'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-2',
+					authUserId: 'user-2',
+					nickname: 'artist_2',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_2',
+					email: 'artist_2@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-child',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		expect(fork).toMatchObject({
+			id: 'artwork-child',
+			parentId: 'artwork-parent',
+			forkCount: 0
+		});
+		expect(artworks.get('artwork-parent')).toMatchObject({
+			forkCount: 1,
+			id: 'artwork-parent'
+		});
+	});
+
+	it('rejects fork publishes for a missing parent before uploading media', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage } = createStorage();
+
+		await expect(
+			publishArtwork(
+				{
+					media: createAvifFile(),
+					parentArtworkId: 'missing-parent',
+					title: 'Broken fork'
+				},
+				{
+					ipAddress: '127.0.0.1',
+					user: {
+						id: 'user-1',
+						authUserId: 'user-1',
+						nickname: 'artist_1',
+						role: 'user',
+						avatarUrl: null,
+						name: 'artist_1',
+						email: 'artist_1@not-the-louvre.local',
+						emailVerified: true,
+						image: null,
+						createdAt: new Date(),
+						updatedAt: new Date()
+					}
+				},
+				{ repository, storage }
+			)
+		).rejects.toMatchObject({
+			code: 'INVALID_FORK_PARENT',
+			status: 400
+		});
+
+		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
 	it('rejects non-AVIF media before touching storage', async () => {
@@ -446,6 +586,96 @@ describe('artwork service', () => {
 
 		expect(deleted.id).toBe('artwork-1');
 		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
+	});
+
+	it('decrements the parent fork count when a child fork is deleted', async () => {
+		const { deleteArtwork, publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+
+		await publishArtwork(
+			{
+				media: createAvifFile(),
+				title: 'Original artwork'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-parent',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		await publishArtwork(
+			{
+				media: createAvifFile(),
+				parentArtworkId: 'artwork-parent',
+				title: 'Forked artwork'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-2',
+					authUserId: 'user-2',
+					nickname: 'artist_2',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_2',
+					email: 'artist_2@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-child',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		expect(artworks.get('artwork-parent')?.forkCount).toBe(1);
+
+		await deleteArtwork(
+			{ artworkId: 'artwork-child' },
+			{
+				user: {
+					id: 'user-2',
+					authUserId: 'user-2',
+					nickname: 'artist_2',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_2',
+					email: 'artist_2@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{ repository, storage }
+		);
+
+		expect(artworks.get('artwork-parent')?.forkCount).toBe(0);
 	});
 
 	it('rate limits repeated publish attempts within the configured window', async () => {

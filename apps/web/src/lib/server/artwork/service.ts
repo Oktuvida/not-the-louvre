@@ -22,6 +22,7 @@ import { normalizePublishTitle, normalizeUpdatedTitle, validateArtworkMedia } fr
 
 type PublishArtworkInput = {
 	media: File;
+	parentArtworkId?: string | null;
 	title?: string | null;
 };
 
@@ -273,6 +274,15 @@ export const publishArtwork = async (
 	await assertPublishRateLimit(actor, repository, now);
 
 	const title = normalizePublishTitle(input.title, randomSuffix());
+	const parentArtworkId = input.parentArtworkId?.trim() ? input.parentArtworkId.trim() : null;
+
+	if (parentArtworkId) {
+		const parentArtwork = await repository.findArtworkById(parentArtworkId);
+		if (!parentArtwork) {
+			throw new ArtworkFlowError(400, 'Fork parent artwork not found', 'INVALID_FORK_PARENT');
+		}
+	}
+
 	const media = await validateArtworkMedia(input.media);
 	const artworkId = nextId();
 	const storageKey = `artworks/${actor.user.id}/${artworkId}.avif`;
@@ -284,9 +294,11 @@ export const publishArtwork = async (
 			authorId: actor.user.id,
 			commentCount: 0,
 			createdAt: now,
+			forkCount: 0,
 			id: artworkId,
 			mediaContentType: media.contentType,
 			mediaSizeBytes: media.sizeBytes,
+			parentId: parentArtworkId,
 			score: 0,
 			storageKey,
 			title,

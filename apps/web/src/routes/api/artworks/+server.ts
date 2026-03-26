@@ -29,6 +29,7 @@ export const POST: RequestHandler = async (event) => {
 		const artwork = await publishArtwork(
 			{
 				media,
+				parentArtworkId: formData.get('parentArtworkId')?.toString(),
 				title: formData.get('title')?.toString()
 			},
 			{

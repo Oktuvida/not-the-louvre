@@ -38,7 +38,9 @@ describe('artwork publish endpoint', () => {
 			return {
 				id: 'artwork-1',
 				authorId: context.user.id,
+				forkCount: 0,
 				title: 'Published artwork',
+				parentId: null,
 				storageKey: `artworks/${context.user.id}/artwork-1.avif`,
 				mediaContentType: 'image/avif',
 				mediaSizeBytes: 128,
@@ -78,7 +80,9 @@ describe('artwork publish endpoint', () => {
 					author: { avatarUrl: null, id: 'user-1', nickname: 'artist_1' },
 					commentCount: 2,
 					createdAt: new Date('2026-03-26T12:00:00.000Z'),
+					forkCount: 3,
 					id: 'artwork-1',
+					lineage: { isFork: false, parent: null, parentStatus: 'none' },
 					mediaUrl: '/api/artworks/artwork-1/media',
 					score: 4,
 					title: 'Recent artwork'
@@ -107,7 +111,8 @@ describe('artwork publish endpoint', () => {
 					id: 'artwork-1',
 					mediaUrl: '/api/artworks/artwork-1/media',
 					score: 4,
-					commentCount: 2
+					commentCount: 2,
+					forkCount: 3
 				}
 			],
 			pageInfo: {
@@ -115,6 +120,35 @@ describe('artwork publish endpoint', () => {
 				nextCursor: 'cursor-1'
 			},
 			sort: 'recent'
+		});
+	});
+
+	it('passes an optional fork parent reference through the publish endpoint', async () => {
+		const { POST } = await import('./+server');
+		const formData = new FormData();
+		formData.set('title', 'Forked artwork');
+		formData.set('parentArtworkId', 'artwork-parent');
+		formData.set(
+			'media',
+			new File([new Uint8Array([1, 2, 3])], 'artwork.avif', { type: 'image/avif' })
+		);
+
+		const response = await POST({
+			locals: {
+				user: {
+					id: 'user-1'
+				}
+			},
+			request: new Request('http://localhost/api/artworks', {
+				body: formData,
+				method: 'POST'
+			})
+		} as never);
+
+		expect(response.status).toBe(201);
+		expect(mocked.publishArtwork).toHaveBeenCalledTimes(1);
+		expect(mocked.publishArtwork.mock.calls[0]?.[0]).toMatchObject({
+			parentArtworkId: 'artwork-parent'
 		});
 	});
 });
