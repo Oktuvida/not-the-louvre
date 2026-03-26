@@ -18,6 +18,36 @@ export default defineConfig(
 	prettier,
 	svelte.configs.prettier,
 	{
+		files: ['src/**/*.{ts,js}'],
+		languageOptions: {
+			parserOptions: {
+				projectService: true
+			}
+		},
+		rules: {
+			'@typescript-eslint/consistent-type-assertions': [
+				'error',
+				{
+					assertionStyle: 'as',
+					objectLiteralTypeAssertions: 'never'
+				}
+			],
+			'@typescript-eslint/no-explicit-any': 'error',
+			'@typescript-eslint/no-unsafe-assignment': 'error',
+			'@typescript-eslint/no-unsafe-call': 'error',
+			'@typescript-eslint/no-unsafe-member-access': 'error'
+		}
+	},
+	{
+		files: ['src/**/*.{test,spec}.{ts,js}'],
+		rules: {
+			'@typescript-eslint/consistent-type-assertions': 'off',
+			'@typescript-eslint/no-unsafe-assignment': 'off',
+			'@typescript-eslint/no-unsafe-call': 'off',
+			'@typescript-eslint/no-unsafe-member-access': 'off'
+		}
+	},
+	{
 		languageOptions: { globals: { ...globals.browser, ...globals.node } },
 		rules: {
 			// typescript-eslint strongly recommend that you do not use the no-undef lint rule on TypeScript projects.
