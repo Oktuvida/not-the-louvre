@@ -41,9 +41,11 @@ export const getArtworkMediaUrl = (artworkId: string) => `${getMediaBasePath()}/
 
 const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 	author: toAuthorSummary(record),
+	commentCount: record.commentCount,
 	createdAt: record.createdAt,
 	id: record.id,
 	mediaUrl: getArtworkMediaUrl(record.id),
+	score: record.score,
 	title: record.title
 });
 

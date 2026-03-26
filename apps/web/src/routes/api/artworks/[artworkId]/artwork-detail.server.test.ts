@@ -31,11 +31,13 @@ describe('artwork detail endpoints', () => {
 	it('returns the detail projection for an existing artwork', async () => {
 		mocked.getArtworkDetail.mockResolvedValue({
 			author: { avatarUrl: null, id: 'user-1', nickname: 'artist_1' },
+			commentCount: 3,
 			createdAt: new Date('2026-03-26T12:00:00.000Z'),
 			id: 'artwork-1',
 			mediaContentType: 'image/avif',
 			mediaSizeBytes: 128,
 			mediaUrl: '/api/artworks/artwork-1/media',
+			score: 7,
 			title: 'Detail artwork',
 			updatedAt: new Date('2026-03-26T12:00:00.000Z')
 		});
@@ -47,7 +49,9 @@ describe('artwork detail endpoints', () => {
 		expect(await response.json()).toMatchObject({
 			artwork: {
 				id: 'artwork-1',
-				mediaUrl: '/api/artworks/artwork-1/media'
+				mediaUrl: '/api/artworks/artwork-1/media',
+				score: 7,
+				commentCount: 3
 			}
 		});
 	});

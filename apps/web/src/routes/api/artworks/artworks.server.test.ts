@@ -76,9 +76,11 @@ describe('artwork publish endpoint', () => {
 			items: [
 				{
 					author: { avatarUrl: null, id: 'user-1', nickname: 'artist_1' },
+					commentCount: 2,
 					createdAt: new Date('2026-03-26T12:00:00.000Z'),
 					id: 'artwork-1',
 					mediaUrl: '/api/artworks/artwork-1/media',
+					score: 4,
 					title: 'Recent artwork'
 				}
 			],
@@ -103,7 +105,9 @@ describe('artwork publish endpoint', () => {
 			items: [
 				{
 					id: 'artwork-1',
-					mediaUrl: '/api/artworks/artwork-1/media'
+					mediaUrl: '/api/artworks/artwork-1/media',
+					score: 4,
+					commentCount: 2
 				}
 			],
 			pageInfo: {

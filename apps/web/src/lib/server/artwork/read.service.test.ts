@@ -50,6 +50,28 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 	const rateLimits = new Map<string, PublishRateLimitRecord>();
 
 	const repository: ArtworkRepository = {
+		findVoteByArtworkAndUser: async () => null,
+		upsertVote: async () => {
+			throw new Error('not implemented in read tests');
+		},
+		removeVote: async () => {
+			throw new Error('not implemented in read tests');
+		},
+		findEngagementRateLimit: async () => null,
+		createEngagementRateLimit: async () => {
+			throw new Error('not implemented in read tests');
+		},
+		updateEngagementRateLimit: async () => {
+			throw new Error('not implemented in read tests');
+		},
+		listCommentsByArtworkId: async () => [],
+		createComment: async () => {
+			throw new Error('not implemented in read tests');
+		},
+		findCommentById: async () => null,
+		deleteComment: async () => {
+			throw new Error('not implemented in read tests');
+		},
 		findArtworkById: async (id: string) => artworks.get(id) ?? null,
 		createArtwork: async (input) => {
 			const record: ArtworkRecord = {
@@ -122,7 +144,9 @@ const createReadRepository = (
 				const readRecord: ArtworkReadRecord = {
 					...record,
 					authorAvatarUrl: profile.avatarUrl,
-					authorNickname: profile.nickname
+					authorNickname: profile.nickname,
+					commentCount: record.commentCount ?? 0,
+					score: record.score ?? 0
 				};
 
 				return readRecord;
@@ -138,7 +162,9 @@ const createReadRepository = (
 		return {
 			...record,
 			authorAvatarUrl: profile.avatarUrl,
-			authorNickname: profile.nickname
+			authorNickname: profile.nickname,
+			commentCount: record.commentCount ?? 0,
+			score: record.score ?? 0
 		};
 	},
 	async findArtworkMediaById(id) {
@@ -273,6 +299,8 @@ describe('artwork read service', () => {
 			id: 'artwork-101',
 			title: 'Projection test',
 			mediaUrl: '/api/artworks/artwork-101/media',
+			commentCount: 0,
+			score: 0,
 			author: {
 				id: 'user-1',
 				nickname: 'artist_1',
@@ -287,6 +315,8 @@ describe('artwork read service', () => {
 			mediaUrl: '/api/artworks/artwork-101/media',
 			mediaContentType: 'image/avif',
 			mediaSizeBytes: 128,
+			commentCount: 0,
+			score: 0,
 			author: {
 				id: 'user-1',
 				nickname: 'artist_1',
