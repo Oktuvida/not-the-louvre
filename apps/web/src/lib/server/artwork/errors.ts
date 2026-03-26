@@ -4,7 +4,10 @@ export class ArtworkFlowError extends Error {
 		message: string,
 		readonly code:
 			| 'FORBIDDEN'
+			| 'INVALID_CURSOR'
+			| 'INVALID_LIMIT'
 			| 'INVALID_MEDIA_FORMAT'
+			| 'INVALID_SORT'
 			| 'INVALID_TITLE'
 			| 'MEDIA_TOO_LARGE'
 			| 'NOT_FOUND'

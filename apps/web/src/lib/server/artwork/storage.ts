@@ -65,3 +65,26 @@ export const supabaseArtworkStorage: ArtworkStorage = {
 		}
 	}
 };
+
+export const streamArtworkStorageObject = async (key: string) => {
+	const { baseUrl, bucket, serviceKey } = getStorageConfig();
+	const response = await fetch(
+		`${baseUrl}/storage/v1/object/${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}`,
+		{
+			headers: {
+				authorization: `Bearer ${serviceKey}`
+			},
+			method: 'GET'
+		}
+	);
+
+	if (!response.ok) {
+		if (response.status === 404) {
+			throw new ArtworkFlowError(404, 'Artwork media not found', 'NOT_FOUND');
+		}
+
+		await toStorageError(response, 'Artwork media read failed');
+	}
+
+	return response;
+};
