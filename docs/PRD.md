@@ -171,7 +171,8 @@ fully custom session system.
   eye placement dots, mouth line) as a guide. The template is purely visual and
   not part of the final avatar.
 - **Tools**: Same minimalist toolset as the main canvas (see 5.3).
-- **Output**: Rasterized to 256x256 PNG, stored in Supabase Storage.
+- **Output**: Rasterized to 256x256 AVIF, capped at roughly 100KB per image,
+  and stored in Supabase Storage behind a cache layer.
 - **Display**: Shown next to every artwork, comment, and in the feed.
 - **Edit**: Users can re-draw their avatar at any time from settings.
 
@@ -196,10 +197,10 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
 
 | Property      | Value                                        |
 | ------------- | -------------------------------------------- |
-| Resolution    | 1024x1024 internal, responsive display       |
-| Format        | Exported as PNG (lossless)                    |
-| Max file size | ~500KB after compression                     |
-| Stroke data   | Stored as vector paths for replay (optional) |
+| Resolution    | 1024x1024 internal, responsive display        |
+| Format        | Exported as AVIF                              |
+| Max file size | ~100KB after compression                      |
+| Stroke data   | Stored as vector paths for replay (optional)  |
 
 #### Drawing Experience
 
@@ -214,8 +215,9 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
   suffix (e.g., "Untitled #4827").
 - **Preview**: Before publishing, show a preview of how it will look in the
   feed (with frame, avatar, title).
-- **Publish**: Uploads PNG to object storage and creates the DB record through
-  the application server.
+- **Publish**: Encodes the final image as AVIF, enforces the ~100KB size budget,
+  uploads it to object storage, and creates the DB record through the
+  application server.
 - **Edit**: Title can be edited post-publish. Artwork image cannot be changed
   (fork instead).
 - **Delete**: Author can delete their own artwork. Forks remain but show
@@ -311,7 +313,7 @@ Full-screen view of a single artwork:
 | Database       | PostgreSQL with Drizzle ORM (code-first)          |
 | Auth           | Better Auth with nickname-first UX                |
 | Real-time      | Supabase Realtime (Postgres changes + broadcast)  |
-| Storage        | Supabase Storage (artwork PNGs, avatars)          |
+| Storage        | Supabase Storage + cache layer (AVIF artworks, avatars) |
 | NSFW Filter    | NSFWJS (client-side pre-publish check)            |
 | Hosting        | TBD (any Node-compatible host)                    |
 
@@ -361,7 +363,19 @@ onto a 3D plane in the Threlte scene. This gives us:
 - Full Canvas 2D API performance for drawing (no WebGL overhead on strokes).
 - The ability to wrap the canvas in a 3D scene with lighting, particles, and
   camera effects.
-- Easy PNG export via `canvas.toDataURL()`.
+- A deterministic export pipeline that converts the final canvas output to AVIF
+  before persistence.
+
+**Storage and egress budget first**: The storage tier is capped at 1GB capacity
+and 5GB of egress, so image handling must optimize for both footprint and
+delivery efficiency from day one.
+
+- All persisted artwork and avatar images should be stored as AVIF.
+- Each stored image should target a hard ceiling of roughly 100KB.
+- Users should fetch media through cached application-controlled URLs rather
+  than downloading directly from the storage bucket.
+- The cache layer should absorb repeat reads so popular artwork does not burn
+  through bucket egress on every view.
 
 **Better Auth instead of Supabase Auth**: The product uses nickname + password
 and a recovery-key flow, which do not fit Supabase Auth's email/OAuth-first
@@ -704,7 +718,17 @@ Every phase is only complete when the standard repository scripts pass:
 - `.env.example` must document every required variable before launch.
 - CI should execute the same scripts used locally; no hidden release steps.
 
-### 11.3 Testing Expectations By Area
+### 11.3 Storage and delivery budget
+
+- The MVP must fit within a storage ceiling of 1GB and an egress ceiling of 5GB.
+- Artwork and avatar media are stored as AVIF to maximize compression quality
+  for the available budget.
+- The publish pipeline must enforce an image size budget of roughly 100KB per
+  stored image.
+- Media delivery should go through a cache layer in front of object storage;
+  clients should not hotlink bucket objects directly for normal app reads.
+
+### 11.4 Testing Expectations By Area
 
 - **Auth**: signup, login, logout, recovery-key reset, and session expiry.
 - **Canvas flows**: publish, fork, undo/redo, and title validation.
@@ -713,7 +737,7 @@ Every phase is only complete when the standard repository scripts pass:
 - **Infrastructure-sensitive features**: migrations, storage integration, and
   realtime subscriptions should have automated validation where practical.
 
-### 11.4 Backend Development
+### 11.5 Backend Development
 
 The backend has its own roadmap within product delivery, but this project is
 not organized as a backend-first program. Frontend and backend are expected to
