@@ -103,7 +103,8 @@ describe('artwork publish endpoint', () => {
 		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith({
 			cursor: 'cursor-0',
 			limit: 12,
-			sort: 'recent'
+			sort: 'recent',
+			window: null
 		});
 		expect(await response.json()).toMatchObject({
 			items: [
@@ -120,6 +121,81 @@ describe('artwork publish endpoint', () => {
 				nextCursor: 'cursor-1'
 			},
 			sort: 'recent'
+		});
+	});
+
+	it('passes ranked feed sort and window parameters through the discovery endpoint', async () => {
+		mocked.listArtworkDiscovery.mockResolvedValue({
+			items: [],
+			pageInfo: { hasMore: false, nextCursor: null },
+			sort: 'top'
+		});
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: {},
+			request: new Request('http://localhost/api/artworks?sort=top&window=week&limit=5'),
+			url: new URL('http://localhost/api/artworks?sort=top&window=week&limit=5')
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith({
+			cursor: null,
+			limit: 5,
+			sort: 'top',
+			window: 'week'
+		});
+	});
+
+	it('returns validation errors for unsupported ranked sort and window inputs', async () => {
+		mocked.listArtworkDiscovery.mockRejectedValueOnce(
+			new ArtworkFlowError(400, 'Unsupported artwork discovery sort', 'INVALID_SORT')
+		);
+
+		const { GET } = await import('./+server');
+		const invalidSortResponse = await GET({
+			locals: {},
+			request: new Request('http://localhost/api/artworks?sort=chaos'),
+			url: new URL('http://localhost/api/artworks?sort=chaos')
+		} as never);
+
+		expect(invalidSortResponse.status).toBe(400);
+		expect(await invalidSortResponse.json()).toMatchObject({ code: 'INVALID_SORT' });
+
+		mocked.listArtworkDiscovery.mockRejectedValueOnce(
+			new ArtworkFlowError(400, 'Unsupported artwork discovery window', 'INVALID_WINDOW')
+		);
+
+		const invalidWindowResponse = await GET({
+			locals: {},
+			request: new Request('http://localhost/api/artworks?sort=top&window=month'),
+			url: new URL('http://localhost/api/artworks?sort=top&window=month')
+		} as never);
+
+		expect(invalidWindowResponse.status).toBe(400);
+		expect(await invalidWindowResponse.json()).toMatchObject({ code: 'INVALID_WINDOW' });
+	});
+
+	it('passes ranked continuation cursors through the discovery endpoint', async () => {
+		mocked.listArtworkDiscovery.mockResolvedValue({
+			items: [],
+			pageInfo: { hasMore: false, nextCursor: null },
+			sort: 'hot'
+		});
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: {},
+			request: new Request('http://localhost/api/artworks?sort=hot&cursor=ranked-cursor'),
+			url: new URL('http://localhost/api/artworks?sort=hot&cursor=ranked-cursor')
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith({
+			cursor: 'ranked-cursor',
+			limit: undefined,
+			sort: 'hot',
+			window: null
 		});
 	});
 

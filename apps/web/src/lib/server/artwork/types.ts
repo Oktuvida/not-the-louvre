@@ -60,12 +60,34 @@ export type ArtworkDetail = ArtworkFeedCard & {
 	updatedAt: Date;
 };
 
-export type ArtworkDiscoverySort = 'recent';
+export type ArtworkDiscoverySort = 'recent' | 'hot' | 'top';
 
-export type ArtworkDiscoveryCursor = {
+export type ArtworkDiscoveryTopWindow = 'today' | 'week' | 'all';
+
+export type ArtworkRecentDiscoveryCursor = {
+	sort: 'recent';
 	createdAt: Date;
 	id: string;
 };
+
+export type ArtworkRankedDiscoveryCursor =
+	| {
+			sort: 'hot';
+			createdAt: Date;
+			id: string;
+			rankingValue: number;
+			snapshotAt: Date;
+	  }
+	| {
+			sort: 'top';
+			createdAt: Date;
+			id: string;
+			rankingValue: number;
+			snapshotAt: Date;
+			window: ArtworkDiscoveryTopWindow;
+	  };
+
+export type ArtworkDiscoveryCursor = ArtworkRecentDiscoveryCursor | ArtworkRankedDiscoveryCursor;
 
 export type ArtworkDiscoveryPage = {
 	items: ArtworkFeedCard[];
@@ -91,6 +113,7 @@ export type ArtworkReadRecord = ArtworkRecord & {
 	parentAuthorId?: string | null;
 	parentAuthorNickname?: string | null;
 	parentTitle?: string | null;
+	rankingValue?: number;
 };
 
 export type ArtworkVoteValue = 'down' | 'up';
@@ -147,8 +170,21 @@ export type ArtworkVoteRemovalResult = {
 };
 
 export type ListRecentArtworksInput = {
-	cursor: ArtworkDiscoveryCursor | null;
+	cursor: ArtworkRecentDiscoveryCursor | null;
 	limit: number;
+};
+
+export type ListHotArtworksInput = {
+	cursor: Extract<ArtworkRankedDiscoveryCursor, { sort: 'hot' }> | null;
+	limit: number;
+	now: Date;
+};
+
+export type ListTopArtworksInput = {
+	cursor: Extract<ArtworkRankedDiscoveryCursor, { sort: 'top' }> | null;
+	limit: number;
+	now: Date;
+	window: ArtworkDiscoveryTopWindow;
 };
 
 export type PublishRateLimitRecord = {
@@ -255,7 +291,9 @@ export type ArtworkReadRepository = {
 	findArtworkMediaById(
 		id: string
 	): Promise<Pick<ArtworkRecord, 'id' | 'mediaContentType' | 'storageKey'> | null>;
+	listHotArtworks(input: ListHotArtworksInput): Promise<ArtworkReadRecord[]>;
 	listRecentArtworks(input: ListRecentArtworksInput): Promise<ArtworkReadRecord[]>;
+	listTopArtworks(input: ListTopArtworksInput): Promise<ArtworkReadRecord[]>;
 };
 
 export type ArtworkActorContext = {

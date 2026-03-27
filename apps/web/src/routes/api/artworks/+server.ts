@@ -46,12 +46,13 @@ export const POST: RequestHandler = async (event) => {
 
 export const GET: RequestHandler = async (event) => {
 	const sort = event.url.searchParams.get('sort') ?? 'recent';
+	const window = event.url.searchParams.get('window');
 	const cursor = event.url.searchParams.get('cursor');
 	const limitValue = event.url.searchParams.get('limit');
 	const limit = limitValue ? Number.parseInt(limitValue, 10) : undefined;
 
 	try {
-		const discovery = await listArtworkDiscovery({ cursor, limit, sort: sort as 'recent' });
+		const discovery = await listArtworkDiscovery({ cursor, limit, sort: sort as never, window });
 		return json(discovery);
 	} catch (error) {
 		return toErrorResponse(error);

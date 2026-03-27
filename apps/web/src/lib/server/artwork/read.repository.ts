@@ -1,11 +1,14 @@
-import { and, desc, eq, lt, or } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { artworks, users } from '$lib/server/db/schema';
 import type {
 	ArtworkDiscoveryCursor,
+	ArtworkDiscoveryTopWindow,
 	ArtworkReadRecord,
 	ArtworkReadRepository,
-	ListRecentArtworksInput
+	ListHotArtworksInput,
+	ListRecentArtworksInput,
+	ListTopArtworksInput
 } from './types';
 
 const recentCursorWhere = (cursor: ArtworkDiscoveryCursor | null) => {
@@ -14,6 +17,49 @@ const recentCursorWhere = (cursor: ArtworkDiscoveryCursor | null) => {
 	return or(
 		lt(artworks.createdAt, cursor.createdAt),
 		and(eq(artworks.createdAt, cursor.createdAt), lt(artworks.id, cursor.id))
+	);
+};
+
+const HOT_RANKING_GRAVITY = 1.5;
+
+const getTopWindowStart = (now: Date, window: ArtworkDiscoveryTopWindow) => {
+	if (window === 'all') return null;
+
+	if (window === 'today') {
+		return new Date(
+			Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)
+		);
+	}
+
+	const day = now.getUTCDay();
+	const isoDayOffset = day === 0 ? 6 : day - 1;
+
+	return new Date(
+		Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - isoDayOffset, 0, 0, 0, 0)
+	);
+};
+
+const hotRankingSql = (now: Date) =>
+	sql<number>`(${artworks.score}::double precision / power(((extract(epoch from ${now}) - extract(epoch from ${artworks.createdAt})) / 3600.0) + 2, ${HOT_RANKING_GRAVITY}))`;
+
+const rankedCursorWhere = (
+	cursor:
+		| Extract<ArtworkDiscoveryCursor, { sort: 'hot' }>
+		| Extract<ArtworkDiscoveryCursor, { sort: 'top' }>
+		| null,
+	rankingExpression: ReturnType<typeof sql<number>>
+) => {
+	if (!cursor) return undefined;
+
+	return or(
+		lt(rankingExpression, cursor.rankingValue),
+		and(
+			eq(rankingExpression, cursor.rankingValue),
+			or(
+				lt(artworks.createdAt, cursor.createdAt),
+				and(eq(artworks.createdAt, cursor.createdAt), lt(artworks.id, cursor.id))
+			)
+		)
 	);
 };
 
@@ -49,6 +95,7 @@ type ArtworkReadRow = {
 	storageKey: string;
 	title: string;
 	updatedAt: Date;
+	rankingValue?: number;
 };
 
 const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
@@ -65,7 +112,13 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	score: row.score,
 	storageKey: row.storageKey,
 	title: row.title,
+	rankingValue: row.rankingValue,
 	updatedAt: row.updatedAt
+});
+
+const rankedBaseSelect = (rankingExpression: ReturnType<typeof sql<number>>) => ({
+	...baseSelect,
+	rankingValue: rankingExpression.as('rankingValue')
 });
 
 export const artworkReadRepository: ArtworkReadRepository = {
@@ -76,6 +129,36 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(recentCursorWhere(input.cursor) ?? undefined)
 			.orderBy(desc(artworks.createdAt), desc(artworks.id))
+			.limit(input.limit);
+
+		return rows.map(mapRow);
+	},
+	async listHotArtworks(input: ListHotArtworksInput) {
+		const rankingExpression = hotRankingSql(input.now);
+		const rows = await db
+			.select(rankedBaseSelect(rankingExpression))
+			.from(artworks)
+			.innerJoin(users, eq(users.id, artworks.authorId))
+			.where(rankedCursorWhere(input.cursor, rankingExpression) ?? undefined)
+			.orderBy(desc(rankingExpression), desc(artworks.createdAt), desc(artworks.id))
+			.limit(input.limit);
+
+		return rows.map(mapRow);
+	},
+	async listTopArtworks(input: ListTopArtworksInput) {
+		const rankingExpression = sql<number>`${artworks.score}::double precision`;
+		const windowStart = getTopWindowStart(input.now, input.window);
+		const rows = await db
+			.select(rankedBaseSelect(rankingExpression))
+			.from(artworks)
+			.innerJoin(users, eq(users.id, artworks.authorId))
+			.where(
+				and(
+					windowStart ? gte(artworks.createdAt, windowStart) : undefined,
+					rankedCursorWhere(input.cursor, rankingExpression) ?? undefined
+				)
+			)
+			.orderBy(desc(artworks.score), desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
 		return rows.map(mapRow);

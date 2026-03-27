@@ -8,6 +8,7 @@ import type {
 	ArtworkDiscoveryCursor,
 	ArtworkDiscoveryPage,
 	ArtworkDiscoverySort,
+	ArtworkDiscoveryTopWindow,
 	ArtworkFeedCard,
 	ArtworkLineageSummary,
 	ArtworkReadRecord,
@@ -18,16 +19,21 @@ type ListArtworkDiscoveryInput = {
 	cursor?: string | null;
 	limit?: number;
 	sort: ArtworkDiscoverySort;
+	window?: string | null;
 };
 
 type ReadServiceDependencies = {
+	now?: () => Date;
 	repository?: ArtworkReadRepository;
 };
 
 const DEFAULT_DISCOVERY_LIMIT = 20;
 const MAX_DISCOVERY_LIMIT = 50;
+const SUPPORTED_DISCOVERY_SORTS: ArtworkDiscoverySort[] = ['recent', 'hot', 'top'];
+const SUPPORTED_TOP_WINDOWS: ArtworkDiscoveryTopWindow[] = ['today', 'week', 'all'];
 
 const getDependencies = (dependencies: ReadServiceDependencies = {}) => ({
+	now: dependencies.now ?? (() => new Date()),
 	repository: dependencies.repository ?? artworkReadRepository
 });
 
@@ -107,16 +113,44 @@ const toDetail = (record: ArtworkReadRecord): ArtworkDetail => ({
 	updatedAt: record.updatedAt
 });
 
+const normalizeSort = (value: string): ArtworkDiscoverySort => {
+	if (SUPPORTED_DISCOVERY_SORTS.includes(value as ArtworkDiscoverySort)) {
+		return value as ArtworkDiscoverySort;
+	}
+
+	throw new ArtworkFlowError(400, 'Unsupported artwork discovery sort', 'INVALID_SORT');
+};
+
+const normalizeWindow = (
+	sort: ArtworkDiscoverySort,
+	value: string | null | undefined
+): ArtworkDiscoveryTopWindow | null => {
+	if (sort !== 'top') return null;
+	if (!value) {
+		throw new ArtworkFlowError(400, 'Top feed window is required', 'INVALID_WINDOW');
+	}
+
+	if (SUPPORTED_TOP_WINDOWS.includes(value as ArtworkDiscoveryTopWindow)) {
+		return value as ArtworkDiscoveryTopWindow;
+	}
+
+	throw new ArtworkFlowError(400, 'Unsupported artwork discovery window', 'INVALID_WINDOW');
+};
+
 const decodeCursor = (value: string | null | undefined): ArtworkDiscoveryCursor | null => {
 	if (!value) return null;
 
 	try {
 		const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as {
+			sort?: ArtworkDiscoverySort;
 			createdAt?: string;
 			id?: string;
+			rankingValue?: number;
+			snapshotAt?: string;
+			window?: ArtworkDiscoveryTopWindow;
 		};
 
-		if (!parsed.createdAt || !parsed.id) {
+		if (!parsed.createdAt || !parsed.id || !parsed.sort) {
 			throw new Error('Invalid artwork discovery cursor');
 		}
 
@@ -125,15 +159,67 @@ const decodeCursor = (value: string | null | undefined): ArtworkDiscoveryCursor 
 			throw new Error('Invalid artwork discovery cursor');
 		}
 
-		return { createdAt, id: parsed.id };
+		const snapshotAt = parsed.snapshotAt ? new Date(parsed.snapshotAt) : null;
+		if (
+			(parsed.sort === 'hot' || parsed.sort === 'top') &&
+			(!snapshotAt || Number.isNaN(snapshotAt.getTime()))
+		) {
+			throw new Error('Invalid artwork discovery cursor');
+		}
+
+		if (parsed.sort === 'recent') {
+			return { createdAt, id: parsed.id, sort: 'recent' };
+		}
+
+		if (typeof parsed.rankingValue !== 'number' || Number.isNaN(parsed.rankingValue)) {
+			throw new Error('Invalid artwork discovery cursor');
+		}
+
+		if (parsed.sort === 'hot') {
+			return {
+				createdAt,
+				id: parsed.id,
+				rankingValue: parsed.rankingValue,
+				snapshotAt: snapshotAt!,
+				sort: 'hot'
+			};
+		}
+
+		if (parsed.sort === 'top' && parsed.window && SUPPORTED_TOP_WINDOWS.includes(parsed.window)) {
+			return {
+				createdAt,
+				id: parsed.id,
+				rankingValue: parsed.rankingValue,
+				snapshotAt: snapshotAt!,
+				sort: 'top',
+				window: parsed.window
+			};
+		}
+
+		throw new Error('Invalid artwork discovery cursor');
 	} catch {
 		throw new ArtworkFlowError(400, 'Invalid artwork discovery cursor', 'INVALID_CURSOR');
 	}
 };
 
-const encodeCursor = (record: Pick<ArtworkReadRecord, 'createdAt' | 'id'>) =>
+const encodeCursor = (
+	record: Pick<ArtworkReadRecord, 'createdAt' | 'id'>,
+	options: {
+		rankingValue?: number;
+		snapshotAt?: Date;
+		sort: ArtworkDiscoverySort;
+		window?: ArtworkDiscoveryTopWindow | null;
+	}
+) =>
 	Buffer.from(
-		JSON.stringify({ createdAt: record.createdAt.toISOString(), id: record.id }),
+		JSON.stringify({
+			createdAt: record.createdAt.toISOString(),
+			id: record.id,
+			rankingValue: options.rankingValue,
+			snapshotAt: options.snapshotAt?.toISOString(),
+			sort: options.sort,
+			window: options.window ?? undefined
+		}),
 		'utf8'
 	).toString('base64url');
 
@@ -154,18 +240,47 @@ export const listArtworkDiscovery = async (
 	input: ListArtworkDiscoveryInput,
 	dependencies: ReadServiceDependencies = {}
 ): Promise<ArtworkDiscoveryPage> => {
-	if (input.sort !== 'recent') {
-		throw new ArtworkFlowError(400, 'Unsupported artwork discovery sort', 'INVALID_SORT');
-	}
-
-	const { repository } = getDependencies(dependencies);
+	const { now, repository } = getDependencies(dependencies);
+	const sort = normalizeSort(input.sort);
+	const window = normalizeWindow(sort, input.window);
 	const cursor = decodeCursor(input.cursor);
+	if (cursor && cursor.sort !== sort) {
+		throw new ArtworkFlowError(400, 'Invalid artwork discovery cursor', 'INVALID_CURSOR');
+	}
+	if (sort === 'top' && cursor?.sort === 'top' && cursor.window !== window) {
+		throw new ArtworkFlowError(400, 'Invalid artwork discovery cursor', 'INVALID_CURSOR');
+	}
 	const limit = normalizeLimit(input.limit);
-	const records = await repository.listRecentArtworks({ cursor, limit: limit + 1 });
+	const snapshotAt = cursor?.sort === 'hot' || cursor?.sort === 'top' ? cursor.snapshotAt : now();
+	const records =
+		sort === 'recent'
+			? await repository.listRecentArtworks({
+					cursor: cursor?.sort === 'recent' ? cursor : null,
+					limit: limit + 1
+				})
+			: sort === 'hot'
+				? await repository.listHotArtworks({
+						cursor: cursor?.sort === 'hot' ? cursor : null,
+						limit: limit + 1,
+						now: snapshotAt
+					})
+				: await repository.listTopArtworks({
+						cursor: cursor?.sort === 'top' ? cursor : null,
+						limit: limit + 1,
+						now: snapshotAt,
+						window: window!
+					});
 	const hasMore = records.length > limit;
 	const visible = hasMore ? records.slice(0, limit) : records;
 	const nextCursor =
-		hasMore && visible.length > 0 ? encodeCursor(visible[visible.length - 1]!) : null;
+		hasMore && visible.length > 0
+			? encodeCursor(visible[visible.length - 1]!, {
+					rankingValue: visible[visible.length - 1]!.rankingValue,
+					snapshotAt: sort === 'recent' ? undefined : snapshotAt,
+					sort,
+					window
+				})
+			: null;
 
 	return {
 		items: visible.map(toFeedCard),
@@ -173,7 +288,7 @@ export const listArtworkDiscovery = async (
 			hasMore,
 			nextCursor
 		},
-		sort: input.sort
+		sort
 	};
 };
 
