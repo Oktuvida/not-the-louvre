@@ -81,7 +81,7 @@ const createProfiles = () =>
 		[
 			'user-1',
 			{
-				avatarUrl: 'https://cdn.not-the-louvre.test/avatars/user-1.avif',
+				avatarUrl: '/api/users/user-1/avatar',
 				id: 'user-1',
 				nickname: 'artist_1'
 			}
@@ -380,6 +380,9 @@ const createReadRepository = (
 			.slice(0, limit);
 	},
 	async listArtworkCommentsByArtworkId() {
+		return [];
+	},
+	async listModerationQueue() {
 		return [];
 	}
 });
@@ -871,7 +874,7 @@ describe('artwork read service', () => {
 			author: {
 				id: 'user-1',
 				nickname: 'artist_1',
-				avatarUrl: 'https://cdn.not-the-louvre.test/avatars/user-1.avif'
+				avatarUrl: '/api/users/user-1/avatar'
 			}
 		});
 		expect(discovery.items[0]).not.toHaveProperty('storageKey');
@@ -894,7 +897,7 @@ describe('artwork read service', () => {
 			author: {
 				id: 'user-1',
 				nickname: 'artist_1',
-				avatarUrl: 'https://cdn.not-the-louvre.test/avatars/user-1.avif'
+				avatarUrl: '/api/users/user-1/avatar'
 			}
 		});
 		expect(detail).not.toHaveProperty('storageKey');

@@ -13,7 +13,9 @@ import type {
 	ArtworkLineageSummary,
 	ArtworkReadRecord,
 	ArtworkReadRepository,
-	ArtworkVisibilityActor
+	ArtworkVisibilityActor,
+	ModerationQueueCursor,
+	ModerationQueuePage
 } from './types';
 
 type ListArtworkDiscoveryInput = {
@@ -53,7 +55,7 @@ const toViewer = (context: RequesterContext = {}): ArtworkVisibilityActor => ({
 });
 
 const toAuthorSummary = (record: ArtworkReadRecord): ArtworkAuthorSummary => ({
-	avatarUrl: record.authorAvatarUrl,
+	avatarUrl: resolveAvatarUrl(record.authorId, record.authorAvatarUrl),
 	id: record.authorId,
 	nickname: record.authorNickname
 });
@@ -61,6 +63,11 @@ const toAuthorSummary = (record: ArtworkReadRecord): ArtworkAuthorSummary => ({
 const getMediaBasePath = () => env.PUBLIC_ARTWORK_MEDIA_BASE_PATH || '/api/artworks';
 
 export const getArtworkMediaUrl = (artworkId: string) => `${getMediaBasePath()}/${artworkId}/media`;
+
+const getUserAvatarUrl = (userId: string) => `/api/users/${userId}/avatar`;
+
+const resolveAvatarUrl = (userId: string, storageKey: string | null) =>
+	storageKey ? getUserAvatarUrl(userId) : null;
 
 const toLineage = (record: ArtworkReadRecord): ArtworkLineageSummary => {
 	if (!record.parentId) {
@@ -76,7 +83,7 @@ const toLineage = (record: ArtworkReadRecord): ArtworkLineageSummary => {
 			isFork: true,
 			parent: {
 				author: {
-					avatarUrl: record.parentAuthorAvatarUrl ?? null,
+					avatarUrl: resolveAvatarUrl(record.parentAuthorId, record.parentAuthorAvatarUrl ?? null),
 					id: record.parentAuthorId,
 					nickname: record.parentAuthorNickname
 				},
@@ -98,7 +105,7 @@ const toChildForkSummary = (
 	record: NonNullable<ArtworkReadRecord['childForks']>[number]
 ): ArtworkChildForkSummary => ({
 	author: {
-		avatarUrl: record.authorAvatarUrl,
+		avatarUrl: resolveAvatarUrl(record.authorId, record.authorAvatarUrl),
 		id: record.authorId,
 		nickname: record.authorNickname
 	},
@@ -344,7 +351,96 @@ export const listArtworkCommentsForViewer = async (
 ) => {
 	const repository =
 		contextAndDependencies.repository ?? dependencies.repository ?? artworkReadRepository;
-	return repository.listArtworkCommentsByArtworkId(artworkId, toViewer(contextAndDependencies));
+	const comments = await repository.listArtworkCommentsByArtworkId(
+		artworkId,
+		toViewer(contextAndDependencies)
+	);
+	return comments.map((comment) => ({
+		...comment,
+		author: {
+			...comment.author,
+			avatarUrl: resolveAvatarUrl(comment.author.id, comment.author.avatarUrl)
+		}
+	}));
+};
+
+type ListModerationQueueInput = {
+	cursor?: string | null;
+	limit?: number;
+};
+
+const DEFAULT_MODERATION_LIMIT = 20;
+const MAX_MODERATION_LIMIT = 50;
+
+const decodeModerationCursor = (value: string | null | undefined): ModerationQueueCursor | null => {
+	if (!value) return null;
+
+	try {
+		const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as {
+			id?: string;
+			reportCount?: number;
+			targetType?: string;
+		};
+
+		if (
+			!parsed.id ||
+			typeof parsed.reportCount !== 'number' ||
+			(parsed.targetType !== 'artwork' && parsed.targetType !== 'comment')
+		) {
+			throw new Error('Invalid moderation cursor');
+		}
+
+		return {
+			id: parsed.id,
+			reportCount: parsed.reportCount,
+			targetType: parsed.targetType
+		};
+	} catch {
+		throw new ArtworkFlowError(400, 'Invalid moderation queue cursor', 'INVALID_CURSOR');
+	}
+};
+
+const encodeModerationCursor = (cursor: ModerationQueueCursor): string =>
+	Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+
+export const listModerationQueue = async (
+	input: ListModerationQueueInput,
+	contextAndDependencies: ReadContextAndDependencies = {}
+): Promise<ModerationQueuePage> => {
+	const user = contextAndDependencies.user;
+	if (!user) {
+		throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
+	}
+
+	if (user.role !== 'moderator' && user.role !== 'admin') {
+		throw new ArtworkFlowError(403, 'Moderator access required', 'FORBIDDEN');
+	}
+
+	const repository = contextAndDependencies.repository ?? artworkReadRepository;
+
+	const limit = !input.limit
+		? DEFAULT_MODERATION_LIMIT
+		: Math.min(input.limit, MAX_MODERATION_LIMIT);
+	const cursor = decodeModerationCursor(input.cursor);
+
+	const items = await repository.listModerationQueue({ cursor, limit: limit + 1 });
+
+	const hasMore = items.length > limit;
+	const visible = hasMore ? items.slice(0, limit) : items;
+	const last = visible[visible.length - 1];
+	const nextCursor =
+		hasMore && last
+			? encodeModerationCursor({
+					id: last.commentId ?? last.artworkId,
+					reportCount: last.reportCount,
+					targetType: last.targetType
+				})
+			: null;
+
+	return {
+		items: visible,
+		pageInfo: { hasMore, nextCursor }
+	};
 };
 
 export const getArtworkMedia = async (

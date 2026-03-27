@@ -1,14 +1,16 @@
-import { and, asc, desc, eq, gte, lt, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, isNotNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { artworkComments, artworks, users } from '$lib/server/db/schema';
+import { artworkComments, artworks, contentReports, users } from '$lib/server/db/schema';
 import type {
 	ArtworkDiscoveryCursor,
 	ArtworkDiscoveryTopWindow,
 	ArtworkReadRecord,
 	ArtworkReadRepository,
 	ListHotArtworksInput,
+	ListModerationQueueInput,
 	ListRecentArtworksInput,
-	ListTopArtworksInput
+	ListTopArtworksInput,
+	ModerationQueueItem
 } from './types';
 
 const recentCursorWhere = (cursor: ArtworkDiscoveryCursor | null) => {
@@ -267,6 +269,86 @@ export const artworkReadRepository: ArtworkReadRepository = {
 
 		return row[0] ?? null;
 	},
+	async listModerationQueue(input: ListModerationQueueInput) {
+		const [artworkRows, commentRows] = await Promise.all([
+			db
+				.select({
+					artworkId: artworks.id,
+					authorId: artworks.authorId,
+					authorNickname: users.nickname,
+					contentSummary: artworks.title,
+					isHidden: artworks.isHidden,
+					reportCount: count(contentReports.id)
+				})
+				.from(contentReports)
+				.innerJoin(artworks, eq(artworks.id, contentReports.artworkId))
+				.innerJoin(users, eq(users.id, artworks.authorId))
+				.where(isNotNull(contentReports.artworkId))
+				.groupBy(artworks.id, users.id)
+				.having(gt(count(contentReports.id), 0)),
+
+			db
+				.select({
+					artworkId: artworkComments.artworkId,
+					authorId: artworkComments.authorId,
+					authorNickname: users.nickname,
+					commentId: artworkComments.id,
+					contentSummary: artworkComments.body,
+					isHidden: artworkComments.isHidden,
+					reportCount: count(contentReports.id)
+				})
+				.from(contentReports)
+				.innerJoin(artworkComments, eq(artworkComments.id, contentReports.commentId))
+				.innerJoin(users, eq(users.id, artworkComments.authorId))
+				.where(isNotNull(contentReports.commentId))
+				.groupBy(artworkComments.id, users.id)
+				.having(gt(count(contentReports.id), 0))
+		]);
+
+		const allItems: ModerationQueueItem[] = [
+			...artworkRows.map((row) => ({
+				artworkId: row.artworkId,
+				authorId: row.authorId,
+				authorNickname: row.authorNickname,
+				commentId: null,
+				contentSummary: row.contentSummary,
+				isHidden: row.isHidden,
+				reportCount: row.reportCount,
+				targetType: 'artwork' as const
+			})),
+			...commentRows.map((row) => ({
+				artworkId: row.artworkId,
+				authorId: row.authorId,
+				authorNickname: row.authorNickname,
+				commentId: row.commentId,
+				contentSummary: row.contentSummary,
+				isHidden: row.isHidden,
+				reportCount: row.reportCount,
+				targetType: 'comment' as const
+			}))
+		];
+
+		allItems.sort((a, b) => {
+			if (b.reportCount !== a.reportCount) return b.reportCount - a.reportCount;
+			if (a.targetType !== b.targetType) return a.targetType < b.targetType ? -1 : 1;
+			const aId = a.commentId ?? a.artworkId;
+			const bId = b.commentId ?? b.artworkId;
+			return aId < bId ? -1 : aId > bId ? 1 : 0;
+		});
+
+		const filtered = input.cursor
+			? allItems.filter((item) => {
+					const cursor = input.cursor!;
+					if (item.reportCount !== cursor.reportCount) return item.reportCount < cursor.reportCount;
+					if (item.targetType !== cursor.targetType) return item.targetType > cursor.targetType;
+					const itemId = item.commentId ?? item.artworkId;
+					return itemId > cursor.id;
+				})
+			: allItems;
+
+		return filtered.slice(0, input.limit);
+	},
+
 	async listArtworkCommentsByArtworkId(artworkId, viewer) {
 		const activeViewer = defaultViewer(viewer);
 		const rows = await db
