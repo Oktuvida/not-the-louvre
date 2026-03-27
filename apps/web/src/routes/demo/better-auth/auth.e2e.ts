@@ -41,7 +41,7 @@ test('supports nickname signup, login, availability, and recovery surfaces', asy
 	await expect(page).toHaveURL(/\/demo\/better-auth$/);
 
 	await page.getByRole('button', { name: 'Sign out' }).click();
-	await page.goto('/demo/better-auth/login');
+	await expect(page).toHaveURL(/\/demo\/better-auth\/login/);
 
 	await page.locator('input[name="recoveryNickname"]').fill(nickname);
 	await page.locator('input[name="recoveryKey"]').fill(recoveryKey);
