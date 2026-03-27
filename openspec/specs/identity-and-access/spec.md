@@ -70,7 +70,7 @@ The system SHALL allow account recovery by normalized nickname plus recovery key
 - **THEN** the system rejects the old recovery key as invalid
 
 ### Requirement: Role and RBAC foundations
-The system SHALL persist a role for every product user and make that role available through the canonical authenticated product identity. This change SHALL establish the structural foundation for RBAC without requiring moderator or admin management workflows in the same spec.
+The system SHALL persist a role for every product user and make that role available through the canonical authenticated product identity. The role field SHALL support admin-initiated mutations beyond default assignment at signup, enabling governance workflows such as moderator promotion and demotion.
 
 #### Scenario: New account receives default role
 - **WHEN** a visitor successfully creates a new account
@@ -79,6 +79,10 @@ The system SHALL persist a role for every product user and make that role availa
 #### Scenario: Authenticated request carries role information
 - **WHEN** server-side code resolves an authenticated product identity
 - **THEN** the resolved identity includes the user's current persisted role for downstream authorization checks
+
+#### Scenario: Role mutation by admin persists and takes effect on next request
+- **WHEN** an admin changes a user's role and the affected user makes a subsequent authenticated request
+- **THEN** the resolved canonical identity reflects the updated role
 
 ### Requirement: Abuse protection for auth-sensitive flows
 The system SHALL enforce rate limits for failed login attempts and failed recovery attempts using durable server-side state so the protections remain effective across process restarts and multiple app instances.
