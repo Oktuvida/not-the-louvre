@@ -47,11 +47,13 @@ const createRepository = (initial: UserRecord | null = null): UserRepository => 
 
 	return {
 		findUserById: vi.fn(async (id) => (stored?.id === id ? stored : null)),
+		listUsers: vi.fn(async () => []),
 		updateUserAvatarUrl: vi.fn(async (id, avatarUrl, updatedAt) => {
 			if (!stored || stored.id !== id) return null;
 			stored = { ...stored, avatarUrl, updatedAt };
 			return stored;
-		})
+		}),
+		updateUserRole: vi.fn(async () => null)
 	};
 };
 
