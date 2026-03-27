@@ -1,9 +1,10 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, count, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
 	artworkComments,
 	artworkEngagementRateLimits,
 	artworkPublishRateLimits,
+	contentReports,
 	artworkVotes,
 	artworks,
 	users
@@ -11,14 +12,17 @@ import {
 import type {
 	ArtworkCommentRecord,
 	ArtworkCommentView,
+	ContentReportRecord,
 	ArtworkRecord,
 	ArtworkRepository,
 	ArtworkVoteMutationResult,
 	ArtworkVoteRecord,
 	CreatePublishRateLimitInput,
 	CreateArtworkCommentInput,
+	CreateContentReportInput,
 	CreateArtworkVoteInput,
 	CreateEngagementRateLimitInput,
+	HiddenStateUpdate,
 	UpdateEngagementRateLimitInput,
 	UpdatePublishRateLimitInput
 } from './types';
@@ -43,6 +47,10 @@ export const artworkRepository: ArtworkRepository = {
 
 			return record as ArtworkRecord;
 		});
+	},
+	async createContentReport(input: CreateContentReportInput) {
+		const [record] = await db.insert(contentReports).values(input).returning();
+		return record as ContentReportRecord;
 	},
 	async updateArtworkTitle(id, title, updatedAt) {
 		const [record] = await db
@@ -75,6 +83,14 @@ export const artworkRepository: ArtworkRepository = {
 	},
 	async findChildForksByParentId(parentId) {
 		return db.query.artworks.findMany({ where: eq(artworks.parentId, parentId) });
+	},
+	async findArtworkReportCount(artworkId) {
+		const [result] = await db
+			.select({ value: count() })
+			.from(contentReports)
+			.where(eq(contentReports.artworkId, artworkId));
+
+		return result?.value ?? 0;
 	},
 	async findVoteByArtworkAndUser(artworkId, userId) {
 		return (
@@ -161,7 +177,7 @@ export const artworkRepository: ArtworkRepository = {
 			})
 			.from(artworkComments)
 			.innerJoin(users, eq(users.id, artworkComments.authorId))
-			.where(eq(artworkComments.artworkId, artworkId))
+			.where(and(eq(artworkComments.artworkId, artworkId), eq(artworkComments.isHidden, false)))
 			.orderBy(asc(artworkComments.createdAt), asc(artworkComments.id));
 
 		return rows.map<ArtworkCommentView>((row) => ({
@@ -212,6 +228,14 @@ export const artworkRepository: ArtworkRepository = {
 			(await db.query.artworkComments.findFirst({ where: eq(artworkComments.id, id) })) ?? null
 		);
 	},
+	async findCommentReportCount(commentId) {
+		const [result] = await db
+			.select({ value: count() })
+			.from(contentReports)
+			.where(eq(contentReports.commentId, commentId));
+
+		return result?.value ?? 0;
+	},
 	async deleteComment(id, updatedAt) {
 		return db.transaction(async (tx) => {
 			const comment =
@@ -233,6 +257,20 @@ export const artworkRepository: ArtworkRepository = {
 
 			return deleted as ArtworkCommentRecord;
 		});
+	},
+	async setArtworkHiddenState(id: string, input: HiddenStateUpdate) {
+		const [record] = await db.update(artworks).set(input).where(eq(artworks.id, id)).returning();
+
+		return (record as ArtworkRecord | undefined) ?? null;
+	},
+	async setCommentHiddenState(id: string, input: HiddenStateUpdate) {
+		const [record] = await db
+			.update(artworkComments)
+			.set(input)
+			.where(eq(artworkComments.id, id))
+			.returning();
+
+		return (record as ArtworkCommentRecord | undefined) ?? null;
 	},
 	async findEngagementRateLimit(kind, actorKey) {
 		return (

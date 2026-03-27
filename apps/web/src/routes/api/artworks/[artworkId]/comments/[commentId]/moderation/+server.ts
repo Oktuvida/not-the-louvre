@@ -1,8 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { getArtworkDetail } from '$lib/server/artwork/read.service';
-import { deleteArtwork, updateArtworkTitle } from '$lib/server/artwork/service';
+import { moderateComment } from '$lib/server/artwork/service';
 
 const toErrorResponse = (error: unknown) => {
 	if (error instanceof ArtworkFlowError) {
@@ -14,16 +13,17 @@ const toErrorResponse = (error: unknown) => {
 
 export const PATCH: RequestHandler = async (event) => {
 	try {
-		const body = (await event.request.json()) as { title?: string };
-		const artwork = await updateArtworkTitle(
+		const body = (await event.request.json()) as { action?: 'hide' | 'unhide' };
+		const comment = await moderateComment(
 			{
+				action: body.action ?? 'hide',
 				artworkId: event.params.artworkId,
-				title: body.title ?? ''
+				commentId: event.params.commentId
 			},
 			{ user: event.locals.user }
 		);
 
-		return json({ artwork });
+		return json({ comment });
 	} catch (error) {
 		return toErrorResponse(error);
 	}
@@ -31,21 +31,16 @@ export const PATCH: RequestHandler = async (event) => {
 
 export const DELETE: RequestHandler = async (event) => {
 	try {
-		const artwork = await deleteArtwork(
-			{ artworkId: event.params.artworkId },
+		const comment = await moderateComment(
+			{
+				action: 'delete',
+				artworkId: event.params.artworkId,
+				commentId: event.params.commentId
+			},
 			{ user: event.locals.user }
 		);
 
-		return json({ artwork });
-	} catch (error) {
-		return toErrorResponse(error);
-	}
-};
-
-export const GET: RequestHandler = async (event) => {
-	try {
-		const artwork = await getArtworkDetail(event.params.artworkId, { user: event.locals.user });
-		return json({ artwork });
+		return json({ comment });
 	} catch (error) {
 		return toErrorResponse(error);
 	}

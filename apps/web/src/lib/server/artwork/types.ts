@@ -5,7 +5,9 @@ export type ArtworkRecord = {
 	commentCount: number;
 	createdAt: Date;
 	forkCount: number;
+	hiddenAt?: Date | null;
 	id: string;
+	isHidden?: boolean;
 	mediaContentType: string;
 	mediaSizeBytes: number;
 	parentId: string | null;
@@ -132,7 +134,30 @@ export type ArtworkCommentRecord = {
 	artworkId: string;
 	body: string;
 	createdAt: Date;
+	hiddenAt?: Date | null;
 	id: string;
+	isHidden?: boolean;
+	updatedAt: Date;
+};
+
+export type ArtworkReportReason =
+	| 'spam'
+	| 'harassment'
+	| 'hate'
+	| 'sexual_content'
+	| 'violence'
+	| 'misinformation'
+	| 'copyright'
+	| 'other';
+
+export type ContentReportRecord = {
+	artworkId: string | null;
+	commentId: string | null;
+	createdAt: Date;
+	details: string | null;
+	id: string;
+	reason: ArtworkReportReason;
+	reporterId: string;
 	updatedAt: Date;
 };
 
@@ -172,18 +197,21 @@ export type ArtworkVoteRemovalResult = {
 export type ListRecentArtworksInput = {
 	cursor: ArtworkRecentDiscoveryCursor | null;
 	limit: number;
+	viewer?: ArtworkVisibilityActor;
 };
 
 export type ListHotArtworksInput = {
 	cursor: Extract<ArtworkRankedDiscoveryCursor, { sort: 'hot' }> | null;
 	limit: number;
 	now: Date;
+	viewer?: ArtworkVisibilityActor;
 };
 
 export type ListTopArtworksInput = {
 	cursor: Extract<ArtworkRankedDiscoveryCursor, { sort: 'top' }> | null;
 	limit: number;
 	now: Date;
+	viewer?: ArtworkVisibilityActor;
 	window: ArtworkDiscoveryTopWindow;
 };
 
@@ -214,6 +242,21 @@ export type CreateArtworkVoteInput = Omit<ArtworkVoteRecord, 'updatedAt'> & {
 
 export type CreateArtworkCommentInput = Omit<ArtworkCommentRecord, 'updatedAt'> & {
 	updatedAt: Date;
+};
+
+export type CreateContentReportInput = Omit<ContentReportRecord, 'updatedAt'> & {
+	updatedAt: Date;
+};
+
+export type HiddenStateUpdate = {
+	hiddenAt: Date | null;
+	isHidden: boolean;
+	updatedAt: Date;
+};
+
+export type ArtworkVisibilityActor = {
+	isModerator: boolean;
+	userId: string | null;
 };
 
 export type CreatePublishRateLimitInput = Omit<
@@ -253,13 +296,16 @@ export type UpdateEngagementRateLimitInput = Partial<
 export type ArtworkRepository = {
 	createComment(input: CreateArtworkCommentInput): Promise<ArtworkCommentView | null>;
 	createArtwork(input: CreateArtworkInput): Promise<ArtworkRecord>;
+	createContentReport(input: CreateContentReportInput): Promise<ContentReportRecord>;
 	createEngagementRateLimit(
 		input: CreateEngagementRateLimitInput
 	): Promise<ArtworkEngagementRateLimitRecord>;
 	createPublishRateLimit(input: CreatePublishRateLimitInput): Promise<PublishRateLimitRecord>;
 	deleteArtwork(id: string): Promise<ArtworkRecord | null>;
 	deleteComment(id: string, updatedAt: Date): Promise<ArtworkCommentRecord | null>;
+	findArtworkReportCount(artworkId: string): Promise<number>;
 	findCommentById(id: string): Promise<ArtworkCommentRecord | null>;
+	findCommentReportCount(commentId: string): Promise<number>;
 	findArtworkById(id: string): Promise<ArtworkRecord | null>;
 	findChildForksByParentId(parentId: string): Promise<ArtworkRecord[]>;
 	findEngagementRateLimit(
@@ -268,12 +314,17 @@ export type ArtworkRepository = {
 	): Promise<ArtworkEngagementRateLimitRecord | null>;
 	findPublishRateLimit(actorKey: string): Promise<PublishRateLimitRecord | null>;
 	findVoteByArtworkAndUser(artworkId: string, userId: string): Promise<ArtworkVoteRecord | null>;
-	listCommentsByArtworkId(artworkId: string): Promise<ArtworkCommentView[]>;
+	listCommentsByArtworkId(
+		artworkId: string,
+		viewer?: ArtworkVisibilityActor
+	): Promise<ArtworkCommentView[]>;
 	removeVote(
 		artworkId: string,
 		userId: string,
 		updatedAt: Date
 	): Promise<ArtworkVoteRemovalResult | null>;
+	setArtworkHiddenState(id: string, input: HiddenStateUpdate): Promise<ArtworkRecord | null>;
+	setCommentHiddenState(id: string, input: HiddenStateUpdate): Promise<ArtworkCommentRecord | null>;
 	upsertVote(input: CreateArtworkVoteInput): Promise<ArtworkVoteMutationResult | null>;
 	updateArtworkTitle(id: string, title: string, updatedAt: Date): Promise<ArtworkRecord | null>;
 	updateEngagementRateLimit(
@@ -287,10 +338,18 @@ export type ArtworkRepository = {
 };
 
 export type ArtworkReadRepository = {
-	findArtworkDetailById(id: string): Promise<ArtworkReadRecord | null>;
+	findArtworkDetailById(
+		id: string,
+		viewer?: ArtworkVisibilityActor
+	): Promise<ArtworkReadRecord | null>;
 	findArtworkMediaById(
-		id: string
+		id: string,
+		viewer?: ArtworkVisibilityActor
 	): Promise<Pick<ArtworkRecord, 'id' | 'mediaContentType' | 'storageKey'> | null>;
+	listArtworkCommentsByArtworkId(
+		artworkId: string,
+		viewer?: ArtworkVisibilityActor
+	): Promise<ArtworkCommentView[]>;
 	listHotArtworks(input: ListHotArtworksInput): Promise<ArtworkReadRecord[]>;
 	listRecentArtworks(input: ListRecentArtworksInput): Promise<ArtworkReadRecord[]>;
 	listTopArtworks(input: ListTopArtworksInput): Promise<ArtworkReadRecord[]>;

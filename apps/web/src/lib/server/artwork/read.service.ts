@@ -12,7 +12,8 @@ import type {
 	ArtworkFeedCard,
 	ArtworkLineageSummary,
 	ArtworkReadRecord,
-	ArtworkReadRepository
+	ArtworkReadRepository,
+	ArtworkVisibilityActor
 } from './types';
 
 type ListArtworkDiscoveryInput = {
@@ -22,10 +23,19 @@ type ListArtworkDiscoveryInput = {
 	window?: string | null;
 };
 
+type RequesterContext = {
+	user?: {
+		id: string;
+		role: 'admin' | 'moderator' | 'user';
+	} | null;
+};
+
 type ReadServiceDependencies = {
 	now?: () => Date;
 	repository?: ArtworkReadRepository;
 };
+
+type ReadContextAndDependencies = RequesterContext & ReadServiceDependencies;
 
 const DEFAULT_DISCOVERY_LIMIT = 20;
 const MAX_DISCOVERY_LIMIT = 50;
@@ -35,6 +45,11 @@ const SUPPORTED_TOP_WINDOWS: ArtworkDiscoveryTopWindow[] = ['today', 'week', 'al
 const getDependencies = (dependencies: ReadServiceDependencies = {}) => ({
 	now: dependencies.now ?? (() => new Date()),
 	repository: dependencies.repository ?? artworkReadRepository
+});
+
+const toViewer = (context: RequesterContext = {}): ArtworkVisibilityActor => ({
+	isModerator: context.user?.role === 'moderator' || context.user?.role === 'admin',
+	userId: context.user?.id ?? null
 });
 
 const toAuthorSummary = (record: ArtworkReadRecord): ArtworkAuthorSummary => ({
@@ -238,9 +253,14 @@ const normalizeLimit = (value: number | undefined) => {
 
 export const listArtworkDiscovery = async (
 	input: ListArtworkDiscoveryInput,
+	contextAndDependencies: ReadContextAndDependencies = {},
 	dependencies: ReadServiceDependencies = {}
 ): Promise<ArtworkDiscoveryPage> => {
-	const { now, repository } = getDependencies(dependencies);
+	const { now, repository } = getDependencies({
+		now: contextAndDependencies.now ?? dependencies.now,
+		repository: contextAndDependencies.repository ?? dependencies.repository
+	});
+	const viewer = toViewer(contextAndDependencies);
 	const sort = normalizeSort(input.sort);
 	const window = normalizeWindow(sort, input.window);
 	const cursor = decodeCursor(input.cursor);
@@ -256,18 +276,21 @@ export const listArtworkDiscovery = async (
 		sort === 'recent'
 			? await repository.listRecentArtworks({
 					cursor: cursor?.sort === 'recent' ? cursor : null,
-					limit: limit + 1
+					limit: limit + 1,
+					viewer
 				})
 			: sort === 'hot'
 				? await repository.listHotArtworks({
 						cursor: cursor?.sort === 'hot' ? cursor : null,
 						limit: limit + 1,
-						now: snapshotAt
+						now: snapshotAt,
+						viewer
 					})
 				: await repository.listTopArtworks({
 						cursor: cursor?.sort === 'top' ? cursor : null,
 						limit: limit + 1,
 						now: snapshotAt,
+						viewer,
 						window: window!
 					});
 	const hasMore = records.length > limit;
@@ -294,14 +317,48 @@ export const listArtworkDiscovery = async (
 
 export const getArtworkDetail = async (
 	artworkId: string,
+	contextAndDependencies: ReadContextAndDependencies = {},
 	dependencies: ReadServiceDependencies = {}
 ): Promise<ArtworkDetail> => {
-	const { repository } = getDependencies(dependencies);
-	const record = await repository.findArtworkDetailById(artworkId);
+	const { repository } = getDependencies({
+		repository: contextAndDependencies.repository ?? dependencies.repository
+	});
+	const viewer = toViewer(contextAndDependencies);
+	const record = await repository.findArtworkDetailById(artworkId, viewer);
 
 	if (!record) {
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 
+	if (record.isHidden && !viewer.isModerator && record.authorId !== viewer.userId) {
+		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+	}
+
 	return toDetail(record);
+};
+
+export const listArtworkCommentsForViewer = async (
+	artworkId: string,
+	contextAndDependencies: ReadContextAndDependencies = {},
+	dependencies: Readonly<{ repository?: ArtworkReadRepository }> = {}
+) => {
+	const repository =
+		contextAndDependencies.repository ?? dependencies.repository ?? artworkReadRepository;
+	return repository.listArtworkCommentsByArtworkId(artworkId, toViewer(contextAndDependencies));
+};
+
+export const getArtworkMedia = async (
+	artworkId: string,
+	contextAndDependencies: ReadContextAndDependencies = {},
+	dependencies: Readonly<{ repository?: ArtworkReadRepository }> = {}
+) => {
+	const repository =
+		contextAndDependencies.repository ?? dependencies.repository ?? artworkReadRepository;
+	const media = await repository.findArtworkMediaById(artworkId, toViewer(contextAndDependencies));
+
+	if (!media) {
+		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+	}
+
+	return media;
 };

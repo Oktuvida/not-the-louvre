@@ -100,12 +100,15 @@ describe('artwork publish endpoint', () => {
 		} as never);
 
 		expect(response.status).toBe(200);
-		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith({
-			cursor: 'cursor-0',
-			limit: 12,
-			sort: 'recent',
-			window: null
-		});
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
+			{
+				cursor: 'cursor-0',
+				limit: 12,
+				sort: 'recent',
+				window: null
+			},
+			{ user: undefined }
+		);
 		expect(await response.json()).toMatchObject({
 			items: [
 				{
@@ -139,12 +142,15 @@ describe('artwork publish endpoint', () => {
 		} as never);
 
 		expect(response.status).toBe(200);
-		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith({
-			cursor: null,
-			limit: 5,
-			sort: 'top',
-			window: 'week'
-		});
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
+			{
+				cursor: null,
+				limit: 5,
+				sort: 'top',
+				window: 'week'
+			},
+			{ user: undefined }
+		);
 	});
 
 	it('returns validation errors for unsupported ranked sort and window inputs', async () => {
@@ -191,12 +197,15 @@ describe('artwork publish endpoint', () => {
 		} as never);
 
 		expect(response.status).toBe(200);
-		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith({
-			cursor: 'ranked-cursor',
-			limit: undefined,
-			sort: 'hot',
-			window: null
-		});
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
+			{
+				cursor: 'ranked-cursor',
+				limit: undefined,
+				sort: 'hot',
+				window: null
+			},
+			{ user: undefined }
+		);
 	});
 
 	it('passes an optional fork parent reference through the publish endpoint', async () => {

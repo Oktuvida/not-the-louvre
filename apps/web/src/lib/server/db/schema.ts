@@ -1,5 +1,14 @@
 import { relations, sql } from 'drizzle-orm';
-import { check, index, integer, pgSchema, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+	boolean,
+	check,
+	index,
+	integer,
+	pgSchema,
+	text,
+	timestamp,
+	uniqueIndex
+} from 'drizzle-orm/pg-core';
 import { account, session, user, verification } from './auth.schema';
 
 const appSchema = pgSchema('app');
@@ -7,6 +16,16 @@ const appSchema = pgSchema('app');
 export const userRole = appSchema.enum('user_role', ['user', 'moderator', 'admin']);
 export const authAttemptKind = appSchema.enum('auth_attempt_kind', ['login', 'recovery']);
 export const artworkVoteValue = appSchema.enum('artwork_vote_value', ['up', 'down']);
+export const artworkReportReason = appSchema.enum('artwork_report_reason', [
+	'spam',
+	'harassment',
+	'hate',
+	'sexual_content',
+	'violence',
+	'misinformation',
+	'copyright',
+	'other'
+]);
 export const engagementRateLimitKind = appSchema.enum('engagement_rate_limit_kind', [
 	'vote',
 	'comment'
@@ -68,6 +87,8 @@ export const artworks = appSchema.table(
 		storageKey: text('storage_key').notNull(),
 		mediaContentType: text('media_content_type').notNull(),
 		mediaSizeBytes: integer('media_size_bytes').notNull(),
+		isHidden: boolean('is_hidden').notNull().default(false),
+		hiddenAt: timestamp('hidden_at'),
 		score: integer('score').notNull().default(0),
 		commentCount: integer('comment_count').notNull().default(0),
 		forkCount: integer('fork_count').notNull().default(0),
@@ -121,6 +142,8 @@ export const artworkComments = appSchema.table(
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
 		body: text('body').notNull(),
+		isHidden: boolean('is_hidden').notNull().default(false),
+		hiddenAt: timestamp('hidden_at'),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at')
 			.defaultNow()
@@ -130,6 +153,34 @@ export const artworkComments = appSchema.table(
 	(table) => [
 		index('artwork_comments_artwork_created_idx').on(table.artworkId, table.createdAt, table.id),
 		index('artwork_comments_author_id_idx').on(table.authorId)
+	]
+);
+
+export const contentReports = appSchema.table(
+	'content_reports',
+	{
+		id: text('id').primaryKey(),
+		reporterId: text('reporter_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		artworkId: text('artwork_id').references(() => artworks.id, { onDelete: 'cascade' }),
+		commentId: text('comment_id').references(() => artworkComments.id, { onDelete: 'cascade' }),
+		reason: artworkReportReason('reason').notNull(),
+		details: text('details'),
+		createdAt: timestamp('created_at').defaultNow().notNull(),
+		updatedAt: timestamp('updated_at')
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull()
+	},
+	(table) => [
+		index('content_reports_artwork_id_idx').on(table.artworkId),
+		index('content_reports_comment_id_idx').on(table.commentId),
+		index('content_reports_reporter_id_idx').on(table.reporterId),
+		check(
+			'content_reports_single_target_check',
+			sql`(case when ${table.artworkId} is null then 0 else 1 end + case when ${table.commentId} is null then 0 else 1 end) = 1`
+		)
 	]
 );
 
@@ -192,7 +243,8 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 	}),
 	artworks: many(artworks),
 	votes: many(artworkVotes),
-	comments: many(artworkComments)
+	comments: many(artworkComments),
+	reports: many(contentReports)
 }));
 
 export const artworksRelations = relations(artworks, ({ many, one }) => ({
@@ -206,7 +258,8 @@ export const artworksRelations = relations(artworks, ({ many, one }) => ({
 	}),
 	childForks: many(artworks),
 	votes: many(artworkVotes),
-	comments: many(artworkComments)
+	comments: many(artworkComments),
+	reports: many(contentReports)
 }));
 
 export const artworkVotesRelations = relations(artworkVotes, ({ one }) => ({
@@ -228,6 +281,21 @@ export const artworkCommentsRelations = relations(artworkComments, ({ one }) => 
 	author: one(users, {
 		fields: [artworkComments.authorId],
 		references: [users.id]
+	})
+}));
+
+export const contentReportsRelations = relations(contentReports, ({ one }) => ({
+	reporter: one(users, {
+		fields: [contentReports.reporterId],
+		references: [users.id]
+	}),
+	artwork: one(artworks, {
+		fields: [contentReports.artworkId],
+		references: [artworks.id]
+	}),
+	comment: one(artworkComments, {
+		fields: [contentReports.commentId],
+		references: [artworkComments.id]
 	})
 }));
 

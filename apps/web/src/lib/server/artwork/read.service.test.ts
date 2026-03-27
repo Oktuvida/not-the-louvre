@@ -100,6 +100,9 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 	const rateLimits = new Map<string, PublishRateLimitRecord>();
 
 	const repository: ArtworkRepository = {
+		createContentReport: async () => {
+			throw new Error('not implemented in read tests');
+		},
 		findVoteByArtworkAndUser: async () => null,
 		upsertVote: async () => {
 			throw new Error('not implemented in read tests');
@@ -119,6 +122,8 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 			throw new Error('not implemented in read tests');
 		},
 		findCommentById: async () => null,
+		findCommentReportCount: async () => 0,
+		findArtworkReportCount: async () => 0,
 		deleteComment: async () => {
 			throw new Error('not implemented in read tests');
 		},
@@ -163,6 +168,16 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 			}
 			return current;
 		},
+		setArtworkHiddenState: async (id: string, input) => {
+			const current = artworks.get(id);
+			if (!current) return null;
+			const next = { ...current, ...input };
+			artworks.set(id, next);
+			return next;
+		},
+		setCommentHiddenState: async () => {
+			throw new Error('not implemented in read tests');
+		},
 		findPublishRateLimit: async (actorKey: string) => rateLimits.get(actorKey) ?? null,
 		createPublishRateLimit: async (input) => {
 			const record: PublishRateLimitRecord = {
@@ -189,8 +204,11 @@ const createReadRepository = (
 	artworks: Map<string, ArtworkRecord>,
 	profiles: Map<string, ProfileRecord>
 ): ArtworkReadRepository => ({
-	async listRecentArtworks({ cursor, limit }) {
+	async listRecentArtworks({ cursor, limit, viewer }) {
 		return Array.from(artworks.values())
+			.filter(
+				(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
+			)
 			.sort((left, right) => {
 				const createdAtDelta = right.createdAt.getTime() - left.createdAt.getTime();
 				if (createdAtDelta !== 0) return createdAtDelta;
@@ -221,8 +239,11 @@ const createReadRepository = (
 				return readRecord;
 			});
 	},
-	async listHotArtworks({ cursor, limit, now }) {
+	async listHotArtworks({ cursor, limit, now, viewer }) {
 		return Array.from(artworks.values())
+			.filter(
+				(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
+			)
 			.map((record) => {
 				const profile = profiles.get(record.authorId);
 				if (!profile) throw new Error(`Missing profile ${record.authorId}`);
@@ -258,16 +279,23 @@ const createReadRepository = (
 			)
 			.slice(0, limit);
 	},
-	async findArtworkDetailById(id) {
+	async findArtworkDetailById(id, viewer) {
 		const record = artworks.get(id);
 		if (!record) return null;
+		if (record.isHidden && !viewer?.isModerator && record.authorId !== viewer?.userId) return null;
 
 		const profile = profiles.get(record.authorId);
 		if (!profile) throw new Error(`Missing profile ${record.authorId}`);
-		const parent = record.parentId ? (artworks.get(record.parentId) ?? null) : null;
+		const parent = record.parentId
+			? (() => {
+					const candidate = artworks.get(record.parentId) ?? null;
+					if (!candidate || candidate.isHidden) return null;
+					return candidate;
+				})()
+			: null;
 		const parentProfile = parent ? (profiles.get(parent.authorId) ?? null) : null;
 		const childForks = Array.from(artworks.values())
-			.filter((candidate) => candidate.parentId === record.id)
+			.filter((candidate) => candidate.parentId === record.id && !candidate.isHidden)
 			.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
 			.map((child) => {
 				const childProfile = profiles.get(child.authorId);
@@ -297,9 +325,10 @@ const createReadRepository = (
 			childForks
 		};
 	},
-	async findArtworkMediaById(id) {
+	async findArtworkMediaById(id, viewer) {
 		const record = artworks.get(id);
 		if (!record) return null;
+		if (record.isHidden && !viewer?.isModerator && record.authorId !== viewer?.userId) return null;
 
 		return {
 			id: record.id,
@@ -307,10 +336,13 @@ const createReadRepository = (
 			storageKey: record.storageKey
 		};
 	},
-	async listTopArtworks({ cursor, limit, now, window }) {
+	async listTopArtworks({ cursor, limit, now, window, viewer }) {
 		const windowStart = getTopWindowStart(now, window);
 
 		return Array.from(artworks.values())
+			.filter(
+				(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
+			)
 			.filter((record) => !windowStart || record.createdAt >= windowStart)
 			.map((record) => {
 				const profile = profiles.get(record.authorId);
@@ -346,6 +378,21 @@ const createReadRepository = (
 				)
 			)
 			.slice(0, limit);
+	},
+	async listArtworkCommentsByArtworkId() {
+		return [];
+	}
+});
+
+const asReadDeps = (repository: ArtworkReadRepository, now?: () => Date) => ({
+	repository,
+	...(now ? { now } : {})
+});
+
+const asViewer = (profile: ProfileRecord) => ({
+	user: {
+		id: profile.id,
+		role: 'user' as const
 	}
 });
 
@@ -422,7 +469,7 @@ describe('artwork read service', () => {
 
 		const firstPage = await listArtworkDiscovery(
 			{ limit: 2, sort: 'recent' },
-			{ repository: readRepository }
+			asReadDeps(readRepository)
 		);
 
 		expect(firstPage.sort).toBe('recent');
@@ -432,7 +479,7 @@ describe('artwork read service', () => {
 
 		const secondPage = await listArtworkDiscovery(
 			{ cursor: firstPage.pageInfo.nextCursor, limit: 2, sort: 'recent' },
-			{ repository: readRepository }
+			asReadDeps(readRepository)
 		);
 
 		expect(secondPage.items.map((artwork) => artwork.id)).toEqual(['artwork-001']);
@@ -449,28 +496,28 @@ describe('artwork read service', () => {
 		await expect(
 			listArtworkDiscovery(
 				{ sort: 'hot' },
-				{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+				asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 			)
 		).resolves.toMatchObject({ sort: 'hot' });
 
 		await expect(
 			listArtworkDiscovery(
 				{ sort: 'top', window: 'today' },
-				{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+				asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 			)
 		).resolves.toMatchObject({ sort: 'top' });
 
 		await expect(
 			listArtworkDiscovery(
 				{ sort: 'top' },
-				{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+				asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 			)
 		).rejects.toMatchObject({ code: 'INVALID_WINDOW', status: 400 });
 
 		await expect(
 			listArtworkDiscovery(
 				{ sort: 'hot', window: 'today' },
-				{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+				asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 			)
 		).resolves.toMatchObject({ sort: 'hot' });
 	});
@@ -484,14 +531,14 @@ describe('artwork read service', () => {
 		await expect(
 			listArtworkDiscovery(
 				{ sort: 'controversial' as never },
-				{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+				asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 			)
 		).rejects.toMatchObject({ code: 'INVALID_SORT', status: 400 });
 
 		await expect(
 			listArtworkDiscovery(
 				{ sort: 'top', window: 'month' as never },
-				{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+				asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 			)
 		).rejects.toMatchObject({ code: 'INVALID_WINDOW', status: 400 });
 	});
@@ -573,7 +620,7 @@ describe('artwork read service', () => {
 
 		const firstPage = await listArtworkDiscovery(
 			{ limit: 2, sort: 'hot' },
-			{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+			asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 		);
 
 		expect(firstPage.items.map((artwork) => artwork.id)).toEqual([
@@ -592,7 +639,7 @@ describe('artwork read service', () => {
 
 		const secondPage = await listArtworkDiscovery(
 			{ cursor: firstPage.pageInfo.nextCursor, limit: 2, sort: 'hot' },
-			{ now: () => new Date('2026-03-26T18:00:00.000Z'), repository: readRepository }
+			asReadDeps(readRepository, () => new Date('2026-03-26T18:00:00.000Z'))
 		);
 
 		expect(secondPage.items.map((artwork) => artwork.id)).toEqual([
@@ -696,7 +743,7 @@ describe('artwork read service', () => {
 
 		const todayPage = await listArtworkDiscovery(
 			{ limit: 2, sort: 'top', window: 'today' },
-			{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+			asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 		);
 
 		expect(todayPage.items.map((artwork) => artwork.id)).toEqual([
@@ -707,14 +754,14 @@ describe('artwork read service', () => {
 
 		const todayNextPage = await listArtworkDiscovery(
 			{ cursor: todayPage.pageInfo.nextCursor, limit: 2, sort: 'top', window: 'today' },
-			{ now: () => new Date('2026-03-27T12:00:00.000Z'), repository: readRepository }
+			asReadDeps(readRepository, () => new Date('2026-03-27T12:00:00.000Z'))
 		);
 
 		expect(todayNextPage.items.map((artwork) => artwork.id)).toEqual(['artwork-today-tie-a']);
 
 		const weekPage = await listArtworkDiscovery(
 			{ limit: 10, sort: 'top', window: 'week' },
-			{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+			asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 		);
 		expect(weekPage.items.map((artwork) => artwork.id)).toEqual([
 			'artwork-today-top',
@@ -725,7 +772,7 @@ describe('artwork read service', () => {
 
 		const allTimePage = await listArtworkDiscovery(
 			{ limit: 10, sort: 'top', window: 'all' },
-			{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+			asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 		);
 		expect(allTimePage.items.map((artwork) => artwork.id)).toEqual([
 			'artwork-old-all-time',
@@ -756,7 +803,7 @@ describe('artwork read service', () => {
 		await expect(
 			listArtworkDiscovery(
 				{ cursor: hotCursor, sort: 'top', window: 'today' },
-				{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+				asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 			)
 		).rejects.toMatchObject({ code: 'INVALID_CURSOR', status: 400 });
 
@@ -775,7 +822,7 @@ describe('artwork read service', () => {
 		await expect(
 			listArtworkDiscovery(
 				{ cursor: topWeekCursor, sort: 'top', window: 'today' },
-				{ now: () => new Date('2026-03-26T12:00:00.000Z'), repository: readRepository }
+				asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
 			)
 		).rejects.toMatchObject({ code: 'INVALID_CURSOR', status: 400 });
 	});
@@ -801,9 +848,13 @@ describe('artwork read service', () => {
 
 		const discovery = await listArtworkDiscovery(
 			{ limit: 10, sort: 'recent' },
-			{ repository: readRepository }
+			asReadDeps(readRepository)
 		);
-		const detail = await getArtworkDetail('artwork-101', { repository: readRepository });
+		const detail = await getArtworkDetail(
+			'artwork-101',
+			asViewer(profiles.get('user-1')!),
+			asReadDeps(readRepository)
+		);
 
 		expect(discovery.items[0]).toMatchObject({
 			id: 'artwork-101',
@@ -898,8 +949,16 @@ describe('artwork read service', () => {
 			}
 		);
 
-		const childDetail = await getArtworkDetail('artwork-child', { repository: readRepository });
-		const parentDetail = await getArtworkDetail('artwork-parent', { repository: readRepository });
+		const childDetail = await getArtworkDetail(
+			'artwork-child',
+			asViewer(profiles.get('user-2')!),
+			asReadDeps(readRepository)
+		);
+		const parentDetail = await getArtworkDetail(
+			'artwork-parent',
+			asViewer(profiles.get('user-1')!),
+			asReadDeps(readRepository)
+		);
 
 		expect(childDetail.lineage).toMatchObject({
 			isFork: true,
@@ -959,7 +1018,11 @@ describe('artwork read service', () => {
 			storage
 		});
 
-		const detail = await getArtworkDetail('artwork-child', { repository: readRepository });
+		const detail = await getArtworkDetail(
+			'artwork-child',
+			asViewer(profiles.get('user-2')!),
+			asReadDeps(readRepository)
+		);
 
 		expect(detail.lineage).toMatchObject({
 			isFork: true,
@@ -1005,19 +1068,23 @@ describe('artwork read service', () => {
 
 		const discovery = await listArtworkDiscovery(
 			{ limit: 10, sort: 'recent' },
-			{ repository: readRepository }
+			asReadDeps(readRepository)
 		);
 
 		expect(discovery.items.map((artwork) => artwork.id)).toEqual(['artwork-201']);
 
 		await expect(
-			getArtworkDetail('artwork-202', { repository: readRepository })
+			getArtworkDetail('artwork-202', asViewer(profiles.get('user-1')!), asReadDeps(readRepository))
 		).rejects.toMatchObject({
 			code: 'NOT_FOUND',
 			status: 404
 		});
 		await expect(
-			getArtworkDetail('missing-artwork', { repository: readRepository })
+			getArtworkDetail(
+				'missing-artwork',
+				asViewer(profiles.get('user-1')!),
+				asReadDeps(readRepository)
+			)
 		).rejects.toBeInstanceOf(ArtworkFlowError);
 	});
 
@@ -1062,18 +1129,22 @@ describe('artwork read service', () => {
 
 		const hotDiscovery = await listArtworkDiscovery(
 			{ limit: 10, sort: 'hot' },
-			{ now: () => new Date('2026-03-26T12:30:00.000Z'), repository: readRepository }
+			asReadDeps(readRepository, () => new Date('2026-03-26T12:30:00.000Z'))
 		);
 		const topDiscovery = await listArtworkDiscovery(
 			{ limit: 10, sort: 'top', window: 'today' },
-			{ now: () => new Date('2026-03-26T12:30:00.000Z'), repository: readRepository }
+			asReadDeps(readRepository, () => new Date('2026-03-26T12:30:00.000Z'))
 		);
 
 		expect(hotDiscovery.items.map((artwork) => artwork.id)).toEqual(['artwork-ranked-visible']);
 		expect(topDiscovery.items.map((artwork) => artwork.id)).toEqual(['artwork-ranked-visible']);
 
 		await expect(
-			getArtworkDetail('artwork-ranked-deleted', { repository: readRepository })
+			getArtworkDetail(
+				'artwork-ranked-deleted',
+				asViewer(profiles.get('user-2')!),
+				asReadDeps(readRepository)
+			)
 		).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
 	});
 });

@@ -52,7 +52,10 @@ export const GET: RequestHandler = async (event) => {
 	const limit = limitValue ? Number.parseInt(limitValue, 10) : undefined;
 
 	try {
-		const discovery = await listArtworkDiscovery({ cursor, limit, sort: sort as never, window });
+		const discovery = await listArtworkDiscovery(
+			{ cursor, limit, sort: sort as never, window },
+			{ user: event.locals.user }
+		);
 		return json(discovery);
 	} catch (error) {
 		return toErrorResponse(error);

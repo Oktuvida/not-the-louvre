@@ -3,6 +3,7 @@ import { ArtworkFlowError } from './errors';
 import {
 	ARTWORK_COMMENT_MAX_LENGTH,
 	ARTWORK_COMMENT_RATE_LIMIT,
+	CONTENT_REPORT_AUTO_HIDE_THRESHOLD,
 	ARTWORK_VOTE_RATE_LIMIT
 } from './config';
 import type {
@@ -10,8 +11,20 @@ import type {
 	ArtworkCommentView,
 	ArtworkRecord,
 	ArtworkRepository,
+	ContentReportRecord,
 	ArtworkVoteRecord
 } from './types';
+
+vi.mock('./storage', () => ({
+	supabaseArtworkStorage: {
+		delete: vi.fn(async () => undefined),
+		upload: vi.fn(async () => undefined)
+	}
+}));
+
+vi.mock('./repository', () => ({
+	artworkRepository: {}
+}));
 
 type EngagementKind = 'comment' | 'vote';
 
@@ -37,7 +50,9 @@ const createArtworkRecord = (overrides: Partial<ArtworkWithSummary> = {}): Artwo
 	commentCount: 0,
 	createdAt: new Date('2026-03-26T10:00:00.000Z'),
 	forkCount: 0,
+	hiddenAt: null,
 	id: 'artwork-1',
+	isHidden: false,
 	mediaContentType: 'image/avif',
 	mediaSizeBytes: 128,
 	parentId: null,
@@ -48,14 +63,14 @@ const createArtworkRecord = (overrides: Partial<ArtworkWithSummary> = {}): Artwo
 	...overrides
 });
 
-const createUser = (id: string) => {
+const createUser = (id: string, role: 'admin' | 'moderator' | 'user' = 'user') => {
 	const now = new Date('2026-03-26T10:00:00.000Z');
 
 	return {
 		id,
 		authUserId: id,
 		nickname: `${id}_nick`,
-		role: 'user' as const,
+		role,
 		avatarUrl: null,
 		name: id,
 		email: `${id}@not-the-louvre.local`,
@@ -70,12 +85,20 @@ const createRepository = () => {
 	const artworks = new Map<string, ArtworkWithSummary>();
 	const votes = new Map<string, ArtworkVoteRecord>();
 	const comments = new Map<string, ArtworkCommentRecord>();
+	const reports = new Map<string, ContentReportRecord>();
 	const rateLimits = new Map<string, EngagementRateLimitRecord>();
 
 	const voteKey = (artworkId: string, userId: string) => `${artworkId}:${userId}`;
 	const rateLimitKey = (kind: EngagementKind, actorKey: string) => `${kind}:${actorKey}`;
 
 	const repository = {
+		createContentReport: vi.fn(async (input: ContentReportRecord) => {
+			reports.set(input.id, input);
+			return input;
+		}),
+		createArtwork: vi.fn(async () => {
+			throw new Error('not implemented in engagement tests');
+		}),
 		findArtworkById: vi.fn(async (id: string) => artworks.get(id) ?? null),
 		findVoteByArtworkAndUser: vi.fn(async (artworkId: string, userId: string) => {
 			return votes.get(voteKey(artworkId, userId)) ?? null;
@@ -205,6 +228,33 @@ const createRepository = () => {
 			};
 		}),
 		findCommentById: vi.fn(async (commentId: string) => comments.get(commentId) ?? null),
+		findArtworkReportCount: vi.fn(
+			async (artworkId: string) =>
+				Array.from(reports.values()).filter((report) => report.artworkId === artworkId).length
+		),
+		findCommentReportCount: vi.fn(
+			async (commentId: string) =>
+				Array.from(reports.values()).filter((report) => report.commentId === commentId).length
+		),
+		deleteArtwork: vi.fn(async (id: string) => {
+			const artwork = artworks.get(id) ?? null;
+			if (artwork) {
+				artworks.delete(id);
+			}
+
+			return artwork;
+		}),
+		findChildForksByParentId: vi.fn(async (parentId: string) =>
+			Array.from(artworks.values()).filter((artwork) => artwork.parentId === parentId)
+		),
+		findPublishRateLimit: vi.fn(async () => null),
+		createPublishRateLimit: vi.fn(async () => {
+			throw new Error('not implemented in engagement tests');
+		}),
+		updatePublishRateLimit: vi.fn(async () => {
+			throw new Error('not implemented in engagement tests');
+		}),
+		updateArtworkTitle: vi.fn(async () => null),
 		deleteComment: vi.fn(async (commentId: string, updatedAt: Date) => {
 			const comment = comments.get(commentId) ?? null;
 			if (!comment) return null;
@@ -220,10 +270,24 @@ const createRepository = () => {
 			});
 
 			return comment;
+		}),
+		setArtworkHiddenState: vi.fn(async (id: string, input) => {
+			const artwork = artworks.get(id);
+			if (!artwork) return null;
+			const next = { ...artwork, ...input };
+			artworks.set(id, next);
+			return next;
+		}),
+		setCommentHiddenState: vi.fn(async (id: string, input) => {
+			const comment = comments.get(id);
+			if (!comment) return null;
+			const next = { ...comment, ...input };
+			comments.set(id, next);
+			return next;
 		})
 	} as unknown as ArtworkRepository;
 
-	return { artworks, comments, rateLimits, repository, votes };
+	return { artworks, comments, rateLimits, reports, repository, votes };
 };
 
 describe('artwork engagement service', () => {
@@ -347,7 +411,7 @@ describe('artwork engagement service', () => {
 			{ generateId: () => 'comment-1', now: () => new Date('2026-03-26T12:20:00.000Z'), repository }
 		);
 
-		const comments = await listArtworkComments('artwork-1', { repository });
+		const comments = await listArtworkComments('artwork-1', {}, { repository });
 
 		expect(comments.map((comment) => comment.id)).toEqual(['comment-1', 'comment-2']);
 		expect(artworks.get('artwork-1')?.commentCount).toBe(2);
@@ -434,5 +498,231 @@ describe('artwork engagement service', () => {
 	it('wraps unknown engagement failures in artwork flow errors', () => {
 		const error = new ArtworkFlowError(500, 'Engagement failed', 'PUBLISH_FAILED');
 		expect(error.code).toBe('PUBLISH_FAILED');
+	});
+
+	it('submits reports and auto-hides artworks once the threshold is reached', async () => {
+		const { submitContentReport } = await import('./service');
+		const { artworks, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		const actor = { ipAddress: '127.0.0.1', user: createUser('user-9') };
+
+		for (let index = 0; index < CONTENT_REPORT_AUTO_HIDE_THRESHOLD; index += 1) {
+			await submitContentReport({ artworkId: 'artwork-1', reason: 'spam' }, actor, {
+				generateId: () => `report-${index}`,
+				now: () => new Date(`2026-03-26T13:0${index}:00.000Z`),
+				repository
+			});
+		}
+
+		expect(artworks.get('artwork-1')?.isHidden).toBe(true);
+	});
+
+	it('rejects report submissions that do not target exactly one object', async () => {
+		const { submitContentReport } = await import('./service');
+		const { repository } = createRepository();
+		const actor = { ipAddress: '127.0.0.1', user: createUser('user-9') };
+
+		await expect(
+			submitContentReport({ reason: 'spam' }, actor, { generateId: () => 'report-1', repository })
+		).rejects.toMatchObject({ code: 'INVALID_REPORT_TARGET', status: 400 });
+
+		await expect(
+			submitContentReport(
+				{ artworkId: 'artwork-1', commentId: 'comment-1', reason: 'spam' },
+				actor,
+				{ generateId: () => 'report-2', repository }
+			)
+		).rejects.toMatchObject({ code: 'INVALID_REPORT_TARGET', status: 400 });
+	});
+
+	it('auto-hides comments once the report threshold is reached', async () => {
+		const { submitContentReport } = await import('./service');
+		const { artworks, comments, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		comments.set('comment-1', {
+			authorId: 'author-2',
+			artworkId: 'artwork-1',
+			body: 'Needs review',
+			createdAt: new Date('2026-03-26T12:00:00.000Z'),
+			hiddenAt: null,
+			id: 'comment-1',
+			isHidden: false,
+			updatedAt: new Date('2026-03-26T12:00:00.000Z')
+		});
+		const actor = { ipAddress: '127.0.0.1', user: createUser('user-9') };
+
+		for (let index = 0; index < CONTENT_REPORT_AUTO_HIDE_THRESHOLD; index += 1) {
+			await submitContentReport({ commentId: 'comment-1', reason: 'harassment' }, actor, {
+				generateId: () => `comment-report-${index}`,
+				now: () => new Date(`2026-03-26T14:0${index}:00.000Z`),
+				repository
+			});
+		}
+
+		expect(comments.get('comment-1')?.isHidden).toBe(true);
+	});
+
+	it('keeps hidden artworks deletable by their author after auto-hide', async () => {
+		const { deleteArtwork, submitContentReport } = await import('./service');
+		const { artworks, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord({ authorId: 'user-1' }));
+		const reporter = { ipAddress: '127.0.0.1', user: createUser('user-9') };
+
+		for (let index = 0; index < CONTENT_REPORT_AUTO_HIDE_THRESHOLD; index += 1) {
+			await submitContentReport({ artworkId: 'artwork-1', reason: 'spam' }, reporter, {
+				generateId: () => `report-delete-${index}`,
+				now: () => new Date(`2026-03-26T15:0${index}:00.000Z`),
+				repository,
+				storage: { delete: async () => undefined, upload: async () => undefined }
+			});
+		}
+
+		const deleted = await deleteArtwork(
+			{ artworkId: 'artwork-1' },
+			{ user: createUser('user-1') },
+			{
+				repository,
+				storage: { delete: async () => undefined, upload: async () => undefined }
+			}
+		);
+
+		expect(deleted.id).toBe('artwork-1');
+		expect(artworks.has('artwork-1')).toBe(false);
+	});
+
+	it('keeps hidden comments deletable by their author after auto-hide', async () => {
+		const { deleteArtworkComment, submitContentReport } = await import('./service');
+		const { artworks, comments, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		comments.set('comment-1', {
+			authorId: 'user-1',
+			artworkId: 'artwork-1',
+			body: 'Hidden comment',
+			createdAt: new Date('2026-03-26T12:00:00.000Z'),
+			hiddenAt: null,
+			id: 'comment-1',
+			isHidden: false,
+			updatedAt: new Date('2026-03-26T12:00:00.000Z')
+		});
+		const reporter = { ipAddress: '127.0.0.1', user: createUser('user-9') };
+
+		for (let index = 0; index < CONTENT_REPORT_AUTO_HIDE_THRESHOLD; index += 1) {
+			await submitContentReport({ commentId: 'comment-1', reason: 'harassment' }, reporter, {
+				generateId: () => `comment-delete-${index}`,
+				now: () => new Date(`2026-03-26T16:0${index}:00.000Z`),
+				repository
+			});
+		}
+
+		const deleted = await deleteArtworkComment(
+			{ artworkId: 'artwork-1', commentId: 'comment-1' },
+			{ user: createUser('user-1') },
+			{ now: () => new Date('2026-03-26T16:10:00.000Z'), repository }
+		);
+
+		expect(deleted.id).toBe('comment-1');
+		expect(comments.has('comment-1')).toBe(false);
+	});
+
+	it('allows moderators to hide and unhide artworks', async () => {
+		const { moderateArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		const now = new Date('2026-03-26T17:00:00.000Z');
+
+		const hidden = await moderateArtwork(
+			{ action: 'hide', artworkId: 'artwork-1' },
+			{ user: createUser('moderator-1', 'moderator') },
+			{
+				now: () => now,
+				repository,
+				storage: { delete: async () => undefined, upload: async () => undefined }
+			}
+		);
+
+		expect(hidden.isHidden).toBe(true);
+		expect(hidden.hiddenAt).toEqual(now);
+
+		const unhidden = await moderateArtwork(
+			{ action: 'unhide', artworkId: 'artwork-1' },
+			{ user: createUser('moderator-1', 'moderator') },
+			{
+				now: () => new Date('2026-03-26T17:05:00.000Z'),
+				repository,
+				storage: { delete: async () => undefined, upload: async () => undefined }
+			}
+		);
+
+		expect(unhidden.isHidden).toBe(false);
+		expect(unhidden.hiddenAt).toBeNull();
+	});
+
+	it('allows moderators to delete artworks and comments', async () => {
+		const { moderateArtwork, moderateComment } = await import('./service');
+		const { artworks, comments, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		comments.set('comment-1', {
+			authorId: 'author-2',
+			artworkId: 'artwork-1',
+			body: 'Needs review',
+			createdAt: new Date('2026-03-26T12:00:00.000Z'),
+			hiddenAt: null,
+			id: 'comment-1',
+			isHidden: false,
+			updatedAt: new Date('2026-03-26T12:00:00.000Z')
+		});
+		const storage = { delete: vi.fn(async () => undefined), upload: async () => undefined };
+
+		const deletedArtwork = await moderateArtwork(
+			{ action: 'delete', artworkId: 'artwork-1' },
+			{ user: createUser('moderator-1', 'moderator') },
+			{ repository, storage }
+		);
+
+		expect(deletedArtwork.id).toBe('artwork-1');
+		expect(storage.delete).toHaveBeenCalledWith('artworks/author-1/artwork-1.avif');
+		expect(artworks.has('artwork-1')).toBe(false);
+
+		artworks.set('artwork-1', createArtworkRecord());
+		const deletedComment = await moderateComment(
+			{ action: 'delete', artworkId: 'artwork-1', commentId: 'comment-1' },
+			{ user: createUser('moderator-1', 'moderator') },
+			{ now: () => new Date('2026-03-26T17:10:00.000Z'), repository }
+		);
+
+		expect(deletedComment.id).toBe('comment-1');
+		expect(comments.has('comment-1')).toBe(false);
+	});
+
+	it('rejects moderation actions for non-moderators', async () => {
+		const { moderateArtwork, moderateComment } = await import('./service');
+		const { artworks, comments, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		comments.set('comment-1', {
+			authorId: 'author-2',
+			artworkId: 'artwork-1',
+			body: 'Needs review',
+			createdAt: new Date('2026-03-26T12:00:00.000Z'),
+			hiddenAt: null,
+			id: 'comment-1',
+			isHidden: false,
+			updatedAt: new Date('2026-03-26T12:00:00.000Z')
+		});
+
+		await expect(
+			moderateArtwork(
+				{ action: 'hide', artworkId: 'artwork-1' },
+				{ user: createUser('user-1') },
+				{ repository, storage: { delete: async () => undefined, upload: async () => undefined } }
+			)
+		).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403 });
+
+		await expect(
+			moderateComment(
+				{ action: 'hide', artworkId: 'artwork-1', commentId: 'comment-1' },
+				{ user: createUser('user-1') },
+				{ repository }
+			)
+		).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403 });
 	});
 });
