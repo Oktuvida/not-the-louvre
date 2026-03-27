@@ -312,7 +312,7 @@ Full-screen view of a single artwork:
 | Backend        | SvelteKit server + self-hosted supporting services |
 | Database       | PostgreSQL with Drizzle ORM (code-first)          |
 | Auth           | Better Auth with nickname-first UX                |
-| Real-time      | Supabase Realtime (Postgres changes + broadcast)  |
+| Real-time      | Supabase Realtime for votes/comments only (RLS-protected) |
 | Storage        | Supabase Storage + cache layer (AVIF artworks, avatars) |
 | NSFW Filter    | NSFWJS (client-side pre-publish check)            |
 | Hosting        | TBD (any Node-compatible host)                    |
@@ -352,6 +352,13 @@ Full-screen view of a single artwork:
 │  │  (users, artworks, votes, comments, flags)   │  │
 │  └──────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────┘
+
+Client data access policy for MVP:
+
+- Writes and sensitive reads flow through the SvelteKit backend.
+- Real-time vote/comment subscriptions flow from frontend to Supabase Realtime.
+- Auth/session and identity-sensitive domain logic are enforced in backend code.
+- Realtime-exposed relations require RLS and least-privilege grants.
 ```
 
 ### 6.3 Key Technical Decisions
@@ -387,6 +394,12 @@ schema, while product-specific identity data stays in the application schema.
   `apps/web/src/lib/server/db/auth.schema.ts` via `bun run auth:schema`.
 - Product tables live in `apps/web/src/lib/server/db/schema.ts`.
 
+Schema boundary for MVP:
+
+- `app` schema: product-domain source of truth (not directly consumed by frontend writes/secure reads).
+- `better-auth` schema: auth/session internals owned by Better Auth.
+- Realtime-facing relations: only the minimum set needed for live vote/comment updates, protected with RLS.
+
 **NSFWJS client-side**: Running the NSFW check on the client before upload
 avoids server-side image processing infra for MVP. The model (~3MB) is loaded
 once and cached. If the image is flagged above a threshold, the publish button
@@ -395,17 +408,25 @@ handle the rest.
 
 ### 6.4 Real-time Strategy
 
-Supabase Realtime is used for two features:
+Supabase Realtime is used only for two features and only on minimal data shapes:
 
-1. **Vote updates**: Subscribe to `INSERT/UPDATE/DELETE` on the `votes` table
-   filtered by `artwork_id`. On change, re-fetch the aggregated score (or
-   compute delta client-side).
+1. **Vote updates**: subscribe to vote changes scoped by `artwork_id`, then refresh
+  or patch the score projection on the artwork detail view.
+2. **New comments**: subscribe to new comment events scoped by `artwork_id`, then
+  append to the local chronological comment list.
 
-2. **New comments**: Subscribe to `INSERT` on the `comments` table filtered by
-   `artwork_id`. Append new comments to the local list.
+Access model:
 
-Subscriptions are only active when the user is viewing an artwork detail page.
-Feed-level real-time updates are not needed for MVP (pull on tab switch).
+- Frontend -> Supabase Realtime is allowed for these event streams.
+- Frontend -> backend remains mandatory for writes and sensitive reads.
+- Subscriptions are active only while viewing artwork detail.
+- Feed-level real-time is out of scope for MVP.
+
+Security model:
+
+- Realtime-exposed tables MUST enforce RLS.
+- Policies MUST be role-aware and row-scoped.
+- Do not expose recovery data, auth internals, moderation-only fields, or storage keys in realtime payloads.
 
 ### 6.5 Engineering Constraints
 
@@ -426,6 +447,13 @@ product behavior.
   readiness.
 - **Test-first workflow**: New behavior should begin with a failing automated
   test before implementation.
+
+### 6.6 API Identity and Trust Boundaries
+
+- Identity-sensitive server operations MUST derive actor identity from authenticated session context, not from request payload fields.
+- For backend endpoints, avoid taking identity authority from client-provided values (for example, avoid trusting `userId` in body/query when it can be inferred from session).
+- Route params that identify target resources are acceptable when authorization validates ownership/role against session identity.
+- Client payloads may carry content state, never trust authority state.
 
 ---
 
@@ -531,15 +559,22 @@ the same migration; seed or non-deterministic data work should stay outside it.
 
 ### 7.4 Row-Level Security (RLS)
 
+RLS policy scope for MVP:
+
+- RLS is mandatory on every relation exposed to frontend Supabase Realtime subscriptions.
+- Relations not exposed directly to frontend can remain backend-only, with authorization enforced in SvelteKit services.
+- If a relation transitions from backend-only to client-exposed, RLS policies must be added before exposure.
+
+Baseline policy intent for client-exposed social relations:
+
 | Table    | SELECT                        | INSERT                     | UPDATE         | DELETE         |
 | -------- | ----------------------------- | -------------------------- | -------------- | -------------- |
-| users    | Own row only                  | Public (signup)            | Own row only   | —              |
 | artworks | All (where not hidden)        | Authenticated              | Own row only   | Own row only   |
 | votes    | All                           | Authenticated              | Own row only   | Own row only   |
 | comments | All (where not hidden)        | Authenticated              | Own row only   | Own row only   |
 | reports  | Moderators only               | Authenticated              | Moderators     | —              |
 
-Moderators/admins bypass `is_hidden` filter on SELECT.
+Moderators/admins bypass `is_hidden` filtering where moderation policy allows it.
 
 ---
 
