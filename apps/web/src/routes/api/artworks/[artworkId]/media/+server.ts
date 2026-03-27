@@ -1,15 +1,11 @@
 import type { RequestHandler } from './$types';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { artworkReadRepository } from '$lib/server/artwork/read.repository';
+import { getArtworkMedia } from '$lib/server/artwork/read.service';
 import { streamArtworkStorageObject } from '$lib/server/artwork/storage';
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const media = await artworkReadRepository.findArtworkMediaById(event.params.artworkId);
-
-		if (!media) {
-			throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
-		}
+		const media = await getArtworkMedia(event.params.artworkId, { user: event.locals.user });
 
 		const upstream = await streamArtworkStorageObject(media.storageKey);
 		const headers = new Headers();

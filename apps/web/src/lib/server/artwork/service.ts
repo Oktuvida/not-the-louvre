@@ -3,7 +3,9 @@ import {
 	ARTWORK_COMMENT_MAX_LENGTH,
 	ARTWORK_COMMENT_RATE_LIMIT,
 	ARTWORK_PUBLISH_RATE_LIMIT,
-	ARTWORK_VOTE_RATE_LIMIT
+	ARTWORK_VOTE_RATE_LIMIT,
+	CONTENT_REPORT_AUTO_HIDE_THRESHOLD,
+	CONTENT_REPORT_DETAILS_MAX_LENGTH
 } from './config';
 import { ArtworkFlowError } from './errors';
 import { artworkRepository } from './repository';
@@ -12,10 +14,12 @@ import type {
 	ArtworkActorContext,
 	ArtworkCommentView,
 	ArtworkEngagementRateLimitKind,
+	ArtworkReportReason,
 	ArtworkRepository,
 	ArtworkStorage,
 	ArtworkVoteMutationResult,
 	ArtworkVoteRemovalResult,
+	ArtworkVisibilityActor,
 	ArtworkVoteValue
 } from './types';
 import { normalizePublishTitle, normalizeUpdatedTitle, validateArtworkMedia } from './validation';
@@ -50,6 +54,24 @@ type CreateArtworkCommentInput = {
 };
 
 type DeleteArtworkCommentInput = {
+	artworkId: string;
+	commentId: string;
+};
+
+type SubmitContentReportInput = {
+	artworkId?: string | null;
+	commentId?: string | null;
+	details?: string | null;
+	reason: string;
+};
+
+type ModerateArtworkInput = {
+	action: 'delete' | 'hide' | 'unhide';
+	artworkId: string;
+};
+
+type ModerateCommentInput = {
+	action: 'delete' | 'hide' | 'unhide';
 	artworkId: string;
 	commentId: string;
 };
@@ -256,6 +278,110 @@ const assertAuthor = (authorId: string, userId: string) => {
 	}
 };
 
+const toVisibilityActor = (context: Partial<ArtworkActorContext>): ArtworkVisibilityActor => ({
+	isModerator: context.user?.role === 'moderator' || context.user?.role === 'admin',
+	userId: context.user?.id ?? null
+});
+
+const assertModerator = (context: Partial<ArtworkActorContext>) => {
+	const actor = requireActor(context);
+	if (actor.user.role !== 'moderator' && actor.user.role !== 'admin') {
+		throw new ArtworkFlowError(403, 'Moderator access required', 'FORBIDDEN');
+	}
+
+	return actor;
+};
+
+const normalizeReportReason = (reason: string): ArtworkReportReason => {
+	const normalized = reason.trim();
+	const reasons: ArtworkReportReason[] = [
+		'spam',
+		'harassment',
+		'hate',
+		'sexual_content',
+		'violence',
+		'misinformation',
+		'copyright',
+		'other'
+	];
+
+	if (reasons.includes(normalized as ArtworkReportReason)) {
+		return normalized as ArtworkReportReason;
+	}
+
+	throw new ArtworkFlowError(400, 'Unsupported report reason', 'INVALID_REPORT_REASON');
+};
+
+const normalizeReportDetails = (details: string | null | undefined) => {
+	const trimmed = details?.trim() ?? null;
+	if (!trimmed) return null;
+	if (trimmed.length > CONTENT_REPORT_DETAILS_MAX_LENGTH) {
+		throw new ArtworkFlowError(
+			400,
+			`Report details must be at most ${CONTENT_REPORT_DETAILS_MAX_LENGTH} characters`,
+			'INVALID_REPORT_TARGET'
+		);
+	}
+
+	return trimmed;
+};
+
+const assertExactlyOneReportTarget = (artworkId?: string | null, commentId?: string | null) => {
+	const normalizedArtworkId = artworkId?.trim() ? artworkId.trim() : null;
+	const normalizedCommentId = commentId?.trim() ? commentId.trim() : null;
+	const targetCount = Number(Boolean(normalizedArtworkId)) + Number(Boolean(normalizedCommentId));
+
+	if (targetCount !== 1) {
+		throw new ArtworkFlowError(
+			400,
+			'Report must target exactly one artwork or comment',
+			'INVALID_REPORT_TARGET'
+		);
+	}
+
+	return { artworkId: normalizedArtworkId, commentId: normalizedCommentId };
+};
+
+const maybeAutoHideArtwork = async (
+	artworkId: string,
+	repository: ArtworkRepository,
+	now: Date
+) => {
+	const artwork = await repository.findArtworkById(artworkId);
+	if (!artwork || artwork.isHidden) return artwork;
+
+	const reportCount = await repository.findArtworkReportCount(artworkId);
+	if (reportCount < CONTENT_REPORT_AUTO_HIDE_THRESHOLD) {
+		return artwork;
+	}
+
+	return repository.setArtworkHiddenState(artworkId, {
+		hiddenAt: now,
+		isHidden: true,
+		updatedAt: now
+	});
+};
+
+const maybeAutoHideComment = async (
+	commentId: string,
+	repository: ArtworkRepository,
+	now: Date
+) => {
+	const comment = await repository.findCommentById(commentId);
+	if (!comment || comment.isHidden) return comment;
+
+	const reportCount = await repository.findCommentReportCount(commentId);
+	if (reportCount < CONTENT_REPORT_AUTO_HIDE_THRESHOLD) {
+		return comment;
+	}
+
+	return repository.setCommentHiddenState(commentId, {
+		hiddenAt: now,
+		isHidden: true,
+		updatedAt: now
+	});
+};
+
 export const publishArtwork = async (
 	input: PublishArtworkInput,
 	context: Partial<ArtworkActorContext>,
@@ -330,6 +456,9 @@ export const updateArtworkTitle = async (
 	const actor = requireActor(context);
 	const { now: getNow, repository } = getDependencies(dependencies);
 	const artwork = await getArtworkOrThrow(input.artworkId, repository);
+	if (artwork.isHidden) {
+		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+	}
 	assertAuthor(artwork.authorId, actor.user.id);
 
 	const updated = await repository.updateArtworkTitle(
@@ -455,11 +584,16 @@ export const createArtworkComment = async (
 
 export const listArtworkComments = async (
 	artworkId: string,
+	context: Partial<ArtworkActorContext> = {},
 	dependencies: Readonly<{ repository?: ArtworkRepository }> = {}
 ) => {
+	if ('repository' in context && !dependencies.repository) {
+		dependencies = { repository: (context as { repository?: ArtworkRepository }).repository };
+		context = {};
+	}
 	const repository = dependencies.repository ?? artworkRepository;
 	await getArtworkOrThrow(artworkId, repository);
-	return repository.listCommentsByArtworkId(artworkId);
+	return repository.listCommentsByArtworkId(artworkId, toVisibilityActor(context));
 };
 
 export const deleteArtworkComment = async (
@@ -490,4 +624,120 @@ export const deleteArtworkComment = async (
 		id: deleted.id,
 		updatedAt: deleted.updatedAt
 	};
+};
+
+export const submitContentReport = async (
+	input: SubmitContentReportInput,
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+) => {
+	const actor = requireActor(context);
+	const { generateId: nextId, now: getNow, repository } = getDependencies(dependencies);
+	const now = getNow();
+	const { artworkId, commentId } = assertExactlyOneReportTarget(input.artworkId, input.commentId);
+
+	if (artworkId) {
+		await getArtworkOrThrow(artworkId, repository);
+	}
+
+	if (commentId) {
+		const comment = await repository.findCommentById(commentId);
+		if (!comment) {
+			throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
+		}
+		if (comment.isHidden) {
+			throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
+		}
+	}
+
+	const report = await repository.createContentReport({
+		artworkId,
+		commentId,
+		createdAt: now,
+		details: normalizeReportDetails(input.details),
+		id: nextId(),
+		reason: normalizeReportReason(input.reason),
+		reporterId: actor.user.id,
+		updatedAt: now
+	});
+
+	if (artworkId) {
+		await maybeAutoHideArtwork(artworkId, repository, now);
+	}
+
+	if (commentId) {
+		await maybeAutoHideComment(commentId, repository, now);
+	}
+
+	return report;
+};
+
+export const moderateArtwork = async (
+	input: ModerateArtworkInput,
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+) => {
+	assertModerator(context);
+	const { now: getNow, repository, storage } = getDependencies(dependencies);
+	const now = getNow();
+	const artwork = await getArtworkOrThrow(input.artworkId, repository);
+
+	if (input.action === 'delete') {
+		await storage.delete(artwork.storageKey);
+		const deleted = await repository.deleteArtwork(artwork.id);
+		if (!deleted) {
+			throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+		}
+
+		return deleted;
+	}
+
+	const updated = await repository.setArtworkHiddenState(artwork.id, {
+		hiddenAt: input.action === 'hide' ? now : null,
+		isHidden: input.action === 'hide',
+		updatedAt: now
+	});
+
+	if (!updated) {
+		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+	}
+
+	return updated;
+};
+
+export const moderateComment = async (
+	input: ModerateCommentInput,
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+) => {
+	assertModerator(context);
+	const { now: getNow, repository } = getDependencies(dependencies);
+	await getArtworkOrThrow(input.artworkId, repository);
+	const comment = await repository.findCommentById(input.commentId);
+
+	if (!comment || comment.artworkId !== input.artworkId) {
+		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
+	}
+
+	if (input.action === 'delete') {
+		const deleted = await repository.deleteComment(comment.id, getNow());
+		if (!deleted) {
+			throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
+		}
+
+		return deleted;
+	}
+
+	const now = getNow();
+	const updated = await repository.setCommentHiddenState(comment.id, {
+		hiddenAt: input.action === 'hide' ? now : null,
+		isHidden: input.action === 'hide',
+		updatedAt: now
+	});
+
+	if (!updated) {
+		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
+	}
+
+	return updated;
 };

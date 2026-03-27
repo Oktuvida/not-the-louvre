@@ -5,6 +5,7 @@ import type {
 	ArtworkRecord,
 	ArtworkRepository,
 	ArtworkStorage,
+	ContentReportRecord,
 	PublishRateLimitRecord
 } from './types';
 
@@ -23,9 +24,28 @@ const createPngFile = (size = 128) =>
 
 const createRepository = () => {
 	const artworks = new Map<string, ArtworkRecord>();
+	const reports = new Map<string, ContentReportRecord>();
 	const rateLimits = new Map<string, PublishRateLimitRecord>();
+	const comments = new Map<
+		string,
+		{
+			artworkId: string;
+			authorId: string;
+			body: string;
+			createdAt: Date;
+			hiddenAt?: Date | null;
+			id: string;
+			isHidden?: boolean;
+			updatedAt: Date;
+		}
+	>();
 
 	const repository: ArtworkRepository = {
+		createContentReport: vi.fn(async (input) => {
+			const record: ContentReportRecord = { ...input };
+			reports.set(record.id, record);
+			return record;
+		}),
 		findVoteByArtworkAndUser: vi.fn(async () => null),
 		upsertVote: vi.fn(async () => {
 			throw new Error('not implemented in publish tests');
@@ -45,6 +65,14 @@ const createRepository = () => {
 			throw new Error('not implemented in publish tests');
 		}),
 		findCommentById: vi.fn(async () => null),
+		findCommentReportCount: vi.fn(
+			async (commentId: string) =>
+				Array.from(reports.values()).filter((report) => report.commentId === commentId).length
+		),
+		findArtworkReportCount: vi.fn(
+			async (artworkId: string) =>
+				Array.from(reports.values()).filter((report) => report.artworkId === artworkId).length
+		),
 		deleteComment: vi.fn(async () => {
 			throw new Error('not implemented in publish tests');
 		}),
@@ -54,6 +82,8 @@ const createRepository = () => {
 		),
 		createArtwork: vi.fn(async (input) => {
 			const record: ArtworkRecord = {
+				hiddenAt: input.hiddenAt ?? null,
+				isHidden: input.isHidden ?? false,
 				createdAt: input.createdAt,
 				updatedAt: input.updatedAt,
 				...input
@@ -94,6 +124,20 @@ const createRepository = () => {
 			}
 			return current;
 		}),
+		setArtworkHiddenState: vi.fn(async (id: string, input) => {
+			const current = artworks.get(id);
+			if (!current) return null;
+			const next = { ...current, ...input };
+			artworks.set(id, next);
+			return next;
+		}),
+		setCommentHiddenState: vi.fn(async (id: string, input) => {
+			const current = comments.get(id);
+			if (!current) return null;
+			const next = { ...current, ...input };
+			comments.set(id, next);
+			return next;
+		}),
 		findPublishRateLimit: vi.fn(async (actorKey: string) => rateLimits.get(actorKey) ?? null),
 		createPublishRateLimit: vi.fn(async (input) => {
 			const record: PublishRateLimitRecord = {
@@ -116,7 +160,7 @@ const createRepository = () => {
 		})
 	};
 
-	return { artworks, rateLimits, repository };
+	return { artworks, comments, rateLimits, reports, repository };
 };
 
 const createStorage = () => {

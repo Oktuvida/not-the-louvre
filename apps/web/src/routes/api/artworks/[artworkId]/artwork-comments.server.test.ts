@@ -5,13 +5,16 @@ const mocked = vi.hoisted(() => ({
 	createArtworkComment: vi.fn(),
 	deleteArtworkComment: vi.fn(),
 	getIp: vi.fn(() => '127.0.0.1'),
-	listArtworkComments: vi.fn()
+	listArtworkCommentsForViewer: vi.fn()
 }));
 
 vi.mock('$lib/server/artwork/service', () => ({
 	createArtworkComment: mocked.createArtworkComment,
-	deleteArtworkComment: mocked.deleteArtworkComment,
-	listArtworkComments: mocked.listArtworkComments
+	deleteArtworkComment: mocked.deleteArtworkComment
+}));
+
+vi.mock('$lib/server/artwork/read.service', () => ({
+	listArtworkCommentsForViewer: mocked.listArtworkCommentsForViewer
 }));
 
 vi.mock('$lib/server/auth', () => ({
@@ -28,7 +31,7 @@ describe('artwork comments endpoints', () => {
 	beforeEach(() => {
 		mocked.createArtworkComment.mockReset();
 		mocked.deleteArtworkComment.mockReset();
-		mocked.listArtworkComments.mockReset();
+		mocked.listArtworkCommentsForViewer.mockReset();
 		mocked.getIp.mockClear();
 	});
 
@@ -60,7 +63,7 @@ describe('artwork comments endpoints', () => {
 	});
 
 	it('lists comments in the public artwork boundary', async () => {
-		mocked.listArtworkComments.mockResolvedValue([
+		mocked.listArtworkCommentsForViewer.mockResolvedValue([
 			{
 				author: { avatarUrl: null, id: 'user-1', nickname: 'artist_1' },
 				artworkId: 'artwork-1',
@@ -72,9 +75,12 @@ describe('artwork comments endpoints', () => {
 		]);
 
 		const { GET } = await import('./comments/+server');
-		const response = await GET({ params: { artworkId: 'artwork-1' } } as never);
+		const response = await GET({ locals: {}, params: { artworkId: 'artwork-1' } } as never);
 
 		expect(response.status).toBe(200);
+		expect(mocked.listArtworkCommentsForViewer).toHaveBeenCalledWith('artwork-1', {
+			user: undefined
+		});
 		expect(await response.json()).toMatchObject({ comments: [{ id: 'comment-1' }] });
 	});
 

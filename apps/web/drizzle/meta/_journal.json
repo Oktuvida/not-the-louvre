@@ -43,6 +43,13 @@
       "when": 1774559190276,
       "tag": "0005_warm_hawkeye",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774577567700,
+      "tag": "0006_steady_vulcan",
+      "breakpoints": true
     }
   ]
 }

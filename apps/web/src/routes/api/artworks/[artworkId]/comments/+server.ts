@@ -3,7 +3,8 @@ import { getIp } from 'better-auth/api';
 import type { RequestHandler } from './$types';
 import { auth } from '$lib/server/auth';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { createArtworkComment, listArtworkComments } from '$lib/server/artwork/service';
+import { listArtworkCommentsForViewer } from '$lib/server/artwork/read.service';
+import { createArtworkComment } from '$lib/server/artwork/service';
 
 const toErrorResponse = (error: unknown) => {
 	if (error instanceof ArtworkFlowError) {
@@ -29,7 +30,9 @@ export const POST: RequestHandler = async (event) => {
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const comments = await listArtworkComments(event.params.artworkId);
+		const comments = await listArtworkCommentsForViewer(event.params.artworkId, {
+			user: event.locals.user
+		});
 		return json({ comments });
 	} catch (error) {
 		return toErrorResponse(error);

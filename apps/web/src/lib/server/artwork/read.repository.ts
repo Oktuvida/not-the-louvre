@@ -1,6 +1,6 @@
-import { and, desc, eq, gte, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { artworks, users } from '$lib/server/db/schema';
+import { artworkComments, artworks, users } from '$lib/server/db/schema';
 import type {
 	ArtworkDiscoveryCursor,
 	ArtworkDiscoveryTopWindow,
@@ -70,6 +70,8 @@ const baseSelect = {
 	storageKey: artworks.storageKey,
 	mediaContentType: artworks.mediaContentType,
 	mediaSizeBytes: artworks.mediaSizeBytes,
+	isHidden: artworks.isHidden,
+	hiddenAt: artworks.hiddenAt,
 	score: artworks.score,
 	commentCount: artworks.commentCount,
 	forkCount: artworks.forkCount,
@@ -85,7 +87,9 @@ type ArtworkReadRow = {
 	authorId: string;
 	authorNickname: string;
 	createdAt: Date;
+	hiddenAt: Date | null;
 	id: string;
+	isHidden: boolean;
 	mediaContentType: string;
 	mediaSizeBytes: number;
 	commentCount: number;
@@ -98,6 +102,31 @@ type ArtworkReadRow = {
 	rankingValue?: number;
 };
 
+const artworkVisibilityWhere = (viewer: { isModerator: boolean; userId: string | null }) =>
+	viewer.isModerator
+		? undefined
+		: viewer.userId
+			? or(eq(artworks.isHidden, false), eq(artworks.authorId, viewer.userId))
+			: eq(artworks.isHidden, false);
+
+const commentVisibilityWhere = (
+	artworkId: string,
+	viewer: { isModerator: boolean; userId: string | null }
+) =>
+	viewer.isModerator
+		? eq(artworkComments.artworkId, artworkId)
+		: viewer.userId
+			? and(
+					eq(artworkComments.artworkId, artworkId),
+					or(eq(artworkComments.isHidden, false), eq(artworkComments.authorId, viewer.userId))
+				)
+			: and(eq(artworkComments.artworkId, artworkId), eq(artworkComments.isHidden, false));
+
+const defaultViewer = (viewer?: { isModerator: boolean; userId: string | null }) => ({
+	isModerator: viewer?.isModerator ?? false,
+	userId: viewer?.userId ?? null
+});
+
 const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	authorAvatarUrl: row.authorAvatarUrl,
 	authorId: row.authorId,
@@ -105,7 +134,9 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	commentCount: row.commentCount,
 	createdAt: row.createdAt,
 	forkCount: row.forkCount,
+	hiddenAt: row.hiddenAt,
 	id: row.id,
+	isHidden: row.isHidden,
 	mediaContentType: row.mediaContentType,
 	mediaSizeBytes: row.mediaSizeBytes,
 	parentId: row.parentId,
@@ -123,29 +154,37 @@ const rankedBaseSelect = (rankingExpression: ReturnType<typeof sql<number>>) => 
 
 export const artworkReadRepository: ArtworkReadRepository = {
 	async listRecentArtworks(input: ListRecentArtworksInput) {
+		const viewer = defaultViewer(input.viewer);
 		const rows = await db
 			.select(baseSelect)
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(recentCursorWhere(input.cursor) ?? undefined)
+			.where(and(artworkVisibilityWhere(viewer), recentCursorWhere(input.cursor) ?? undefined))
 			.orderBy(desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
 		return rows.map(mapRow);
 	},
 	async listHotArtworks(input: ListHotArtworksInput) {
+		const viewer = defaultViewer(input.viewer);
 		const rankingExpression = hotRankingSql(input.now);
 		const rows = await db
 			.select(rankedBaseSelect(rankingExpression))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(rankedCursorWhere(input.cursor, rankingExpression) ?? undefined)
+			.where(
+				and(
+					artworkVisibilityWhere(viewer),
+					rankedCursorWhere(input.cursor, rankingExpression) ?? undefined
+				)
+			)
 			.orderBy(desc(rankingExpression), desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
 		return rows.map(mapRow);
 	},
 	async listTopArtworks(input: ListTopArtworksInput) {
+		const viewer = defaultViewer(input.viewer);
 		const rankingExpression = sql<number>`${artworks.score}::double precision`;
 		const windowStart = getTopWindowStart(input.now, input.window);
 		const rows = await db
@@ -154,6 +193,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(
 				and(
+					artworkVisibilityWhere(viewer),
 					windowStart ? gte(artworks.createdAt, windowStart) : undefined,
 					rankedCursorWhere(input.cursor, rankingExpression) ?? undefined
 				)
@@ -163,12 +203,13 @@ export const artworkReadRepository: ArtworkReadRepository = {
 
 		return rows.map(mapRow);
 	},
-	async findArtworkDetailById(id) {
+	async findArtworkDetailById(id, viewer) {
+		const activeViewer = defaultViewer(viewer);
 		const row = await db
 			.select(baseSelect)
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(eq(artworks.id, id))
+			.where(and(eq(artworks.id, id), artworkVisibilityWhere(activeViewer)))
 			.limit(1);
 
 		const record = row[0] ? mapRow(row[0]) : null;
@@ -185,7 +226,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 					})
 					.from(artworks)
 					.innerJoin(users, eq(users.id, artworks.authorId))
-					.where(eq(artworks.id, record.parentId))
+					.where(and(eq(artworks.id, record.parentId), eq(artworks.isHidden, false)))
 					.limit(1)
 			: [];
 
@@ -200,7 +241,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			})
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(eq(artworks.parentId, record.id))
+			.where(and(eq(artworks.parentId, record.id), eq(artworks.isHidden, false)))
 			.orderBy(desc(artworks.createdAt), desc(artworks.id));
 
 		return {
@@ -212,7 +253,8 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			parentTitle: parent[0]?.title ?? null
 		};
 	},
-	async findArtworkMediaById(id) {
+	async findArtworkMediaById(id, viewer) {
+		const activeViewer = defaultViewer(viewer);
 		const row = await db
 			.select({
 				id: artworks.id,
@@ -220,9 +262,40 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				storageKey: artworks.storageKey
 			})
 			.from(artworks)
-			.where(eq(artworks.id, id))
+			.where(and(eq(artworks.id, id), artworkVisibilityWhere(activeViewer)))
 			.limit(1);
 
 		return row[0] ?? null;
+	},
+	async listArtworkCommentsByArtworkId(artworkId, viewer) {
+		const activeViewer = defaultViewer(viewer);
+		const rows = await db
+			.select({
+				authorAvatarUrl: users.avatarUrl,
+				authorId: artworkComments.authorId,
+				authorNickname: users.nickname,
+				artworkId: artworkComments.artworkId,
+				body: artworkComments.body,
+				createdAt: artworkComments.createdAt,
+				id: artworkComments.id,
+				updatedAt: artworkComments.updatedAt
+			})
+			.from(artworkComments)
+			.innerJoin(users, eq(users.id, artworkComments.authorId))
+			.where(commentVisibilityWhere(artworkId, activeViewer))
+			.orderBy(asc(artworkComments.createdAt), asc(artworkComments.id));
+
+		return rows.map((row) => ({
+			author: {
+				avatarUrl: row.authorAvatarUrl,
+				id: row.authorId,
+				nickname: row.authorNickname
+			},
+			artworkId: row.artworkId,
+			body: row.body,
+			createdAt: row.createdAt,
+			id: row.id,
+			updatedAt: row.updatedAt
+		}));
 	}
 };

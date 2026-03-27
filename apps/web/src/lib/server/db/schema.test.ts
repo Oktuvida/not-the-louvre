@@ -5,10 +5,12 @@ import {
 	artworkComments,
 	artworkEngagementRateLimits,
 	artworkPublishRateLimits,
+	artworkReportReason,
 	artworkVoteValue,
 	artworkVotes,
 	artworks,
 	authRateLimits,
+	contentReports,
 	engagementRateLimitKind,
 	session,
 	user,
@@ -23,10 +25,12 @@ describe('database schema namespaces', () => {
 		expect(getTableConfig(artworks).schema).toBe('app');
 		expect(getTableConfig(artworkVotes).schema).toBe('app');
 		expect(getTableConfig(artworkComments).schema).toBe('app');
+		expect(getTableConfig(contentReports).schema).toBe('app');
 		expect(getTableConfig(artworkEngagementRateLimits).schema).toBe('app');
 		expect(getTableConfig(artworkPublishRateLimits).schema).toBe('app');
 		expect(userRole.schema).toBe('app');
 		expect(artworkVoteValue.schema).toBe('app');
+		expect(artworkReportReason.schema).toBe('app');
 		expect(engagementRateLimitKind.schema).toBe('app');
 	});
 
@@ -101,5 +105,30 @@ describe('database schema namespaces', () => {
 		expect(
 			rateLimitColumns.find((candidate) => candidate.name === 'window_started_at')?.notNull
 		).toBe(true);
+	});
+
+	it('stores hidden-state fields on artworks and comments', () => {
+		const artworkColumns = getTableConfig(artworks).columns;
+		const commentColumns = getTableConfig(artworkComments).columns;
+
+		expect(artworkColumns.find((candidate) => candidate.name === 'is_hidden')?.notNull).toBe(true);
+		expect(artworkColumns.find((candidate) => candidate.name === 'hidden_at')?.notNull).toBe(false);
+		expect(commentColumns.find((candidate) => candidate.name === 'is_hidden')?.notNull).toBe(true);
+		expect(commentColumns.find((candidate) => candidate.name === 'hidden_at')?.notNull).toBe(false);
+	});
+
+	it('stores reports with a single moderation target and structured reason metadata', () => {
+		const reportConfig = getTableConfig(contentReports);
+		const reportColumns = reportConfig.columns;
+
+		expect(reportColumns.find((candidate) => candidate.name === 'reporter_id')?.notNull).toBe(true);
+		expect(reportColumns.find((candidate) => candidate.name === 'artwork_id')?.notNull).toBe(false);
+		expect(reportColumns.find((candidate) => candidate.name === 'comment_id')?.notNull).toBe(false);
+		expect(reportColumns.find((candidate) => candidate.name === 'reason')?.notNull).toBe(true);
+		expect(reportColumns.find((candidate) => candidate.name === 'details')?.notNull).toBe(false);
+
+		expect(reportConfig.checks.map((constraint) => constraint.name)).toContain(
+			'content_reports_single_target_check'
+		);
 	});
 });

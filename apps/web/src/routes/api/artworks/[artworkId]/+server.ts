@@ -44,7 +44,7 @@ export const DELETE: RequestHandler = async (event) => {
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const artwork = await getArtworkDetail(event.params.artworkId);
+		const artwork = await getArtworkDetail(event.params.artworkId, { user: event.locals.user });
 		return json({ artwork });
 	} catch (error) {
 		return toErrorResponse(error);
