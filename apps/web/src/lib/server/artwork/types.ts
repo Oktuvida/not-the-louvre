@@ -337,6 +337,38 @@ export type ArtworkRepository = {
 	): Promise<PublishRateLimitRecord>;
 };
 
+export type ModerationQueueTargetType = 'artwork' | 'comment';
+
+export type ModerationQueueItem = {
+	artworkId: string;
+	authorId: string;
+	authorNickname: string;
+	commentId: string | null;
+	contentSummary: string;
+	isHidden: boolean;
+	reportCount: number;
+	targetType: ModerationQueueTargetType;
+};
+
+export type ModerationQueueCursor = {
+	id: string;
+	reportCount: number;
+	targetType: ModerationQueueTargetType;
+};
+
+export type ModerationQueuePage = {
+	items: ModerationQueueItem[];
+	pageInfo: {
+		hasMore: boolean;
+		nextCursor: string | null;
+	};
+};
+
+export type ListModerationQueueInput = {
+	cursor: ModerationQueueCursor | null;
+	limit: number;
+};
+
 export type ArtworkReadRepository = {
 	findArtworkDetailById(
 		id: string,
@@ -351,6 +383,7 @@ export type ArtworkReadRepository = {
 		viewer?: ArtworkVisibilityActor
 	): Promise<ArtworkCommentView[]>;
 	listHotArtworks(input: ListHotArtworksInput): Promise<ArtworkReadRecord[]>;
+	listModerationQueue(input: ListModerationQueueInput): Promise<ModerationQueueItem[]>;
 	listRecentArtworks(input: ListRecentArtworksInput): Promise<ArtworkReadRecord[]>;
 	listTopArtworks(input: ListTopArtworksInput): Promise<ArtworkReadRecord[]>;
 };
