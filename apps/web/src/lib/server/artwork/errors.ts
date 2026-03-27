@@ -9,6 +9,7 @@ export class ArtworkFlowError extends Error {
 			| 'INVALID_CURSOR'
 			| 'INVALID_LIMIT'
 			| 'INVALID_MEDIA_FORMAT'
+			| 'INVALID_ROLE'
 			| 'INVALID_REPORT_TARGET'
 			| 'INVALID_REPORT_REASON'
 			| 'INVALID_SORT'

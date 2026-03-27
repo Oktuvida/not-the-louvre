@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, lt, or } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { users } from '$lib/server/db/schema';
-import type { UserRecord, UserRepository } from './types';
+import type { ListUsersInput, UserRecord, UserRepository } from './types';
 
 const mapRow = (row: typeof users.$inferSelect): UserRecord => ({
 	avatarUrl: row.avatarUrl ?? null,
@@ -18,10 +18,37 @@ export const userRepository: UserRepository = {
 		return row ? mapRow(row) : null;
 	},
 
+	async listUsers(input: ListUsersInput) {
+		const cursorWhere = input.cursor
+			? or(
+					lt(users.createdAt, input.cursor.createdAt),
+					and(eq(users.createdAt, input.cursor.createdAt), lt(users.id, input.cursor.id))
+				)
+			: undefined;
+
+		const rows = await db
+			.select()
+			.from(users)
+			.where(cursorWhere)
+			.orderBy(desc(users.createdAt), desc(users.id))
+			.limit(input.limit);
+
+		return rows.map(mapRow);
+	},
+
 	async updateUserAvatarUrl(id, avatarUrl, updatedAt) {
 		const rows = await db
 			.update(users)
 			.set({ avatarUrl, updatedAt })
+			.where(eq(users.id, id))
+			.returning();
+		return rows[0] ? mapRow(rows[0]) : null;
+	},
+
+	async updateUserRole(id, role, updatedAt) {
+		const rows = await db
+			.update(users)
+			.set({ role, updatedAt })
 			.where(eq(users.id, id))
 			.returning();
 		return rows[0] ? mapRow(rows[0]) : null;
