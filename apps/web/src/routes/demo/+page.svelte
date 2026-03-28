@@ -1,6 +1,37 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+
+	const demos = [
+		{
+			description: 'Nickname signup, login, logout, availability, and recovery journey.',
+			href: '/demo/better-auth',
+			name: 'Nickname auth demo'
+		},
+		{
+			description: 'Authenticated artwork publish flow with visible read-back results.',
+			href: '/demo/artwork-publish',
+			name: 'Artwork publish demo'
+		},
+		{
+			description: 'Minimal smoke route for Playwright server wiring.',
+			href: '/demo/playwright',
+			name: 'Playwright smoke demo'
+		}
+	] as const;
 </script>
 
-<a href={resolve('/demo/better-auth')}>better-auth</a>
-<a href={resolve('/demo/playwright')}>playwright</a>
+<svelte:head>
+	<title>Backend Journey Demos</title>
+</svelte:head>
+
+<h1>Backend Journey Demos</h1>
+<p>Minimal browser surfaces for backend end-to-end journeys.</p>
+
+<ul>
+	{#each demos as demo (demo.href)}
+		<li>
+			<a href={resolve(demo.href)}>{demo.name}</a>
+			<p>{demo.description}</p>
+		</li>
+	{/each}
+</ul>
