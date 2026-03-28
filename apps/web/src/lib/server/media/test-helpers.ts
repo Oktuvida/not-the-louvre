@@ -94,6 +94,27 @@ export const createJpegTestFile = async ({
 	return new File([Uint8Array.from(buffer)], name, { type: 'image/jpeg' });
 };
 
+export const createWebpTestFile = async ({
+	height,
+	name = 'image.webp',
+	pattern = 'blocks',
+	quality = 95,
+	width
+}: Omit<CreateAvifTestFileOptions, 'effort'>) => {
+	const pixelData = createPixelData(width, height, pattern);
+	const buffer = await sharp(pixelData, {
+		raw: {
+			channels: 4,
+			height,
+			width
+		}
+	})
+		.webp({ quality })
+		.toBuffer();
+
+	return new File([Uint8Array.from(buffer)], name, { type: 'image/webp' });
+};
+
 export const createPngTestFile = async ({
 	height,
 	name = 'image.png',
