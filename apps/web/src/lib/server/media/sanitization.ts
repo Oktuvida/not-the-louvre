@@ -98,7 +98,11 @@ const hasAvifMagicBytes = (input: Uint8Array) => {
 		return true;
 	}
 
-	for (let offset = ISO_BMFF_HEADER_BYTES; offset + ISO_BMFF_BRAND_BYTES <= input.byteLength; offset += 4) {
+	for (
+		let offset = ISO_BMFF_HEADER_BYTES;
+		offset + ISO_BMFF_BRAND_BYTES <= input.byteLength;
+		offset += 4
+	) {
 		if (AVIF_BRANDS.has(readAscii(input, offset, ISO_BMFF_BRAND_BYTES))) {
 			return true;
 		}

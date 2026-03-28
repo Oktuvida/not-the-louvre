@@ -95,11 +95,14 @@ export const streamArtworkStorageObject = async (key: string) => {
 			throw new ArtworkFlowError(404, 'Artwork media not found', 'NOT_FOUND');
 		}
 
-		return new Response(new Blob([Buffer.from(storedObject.body)], { type: storedObject.contentType }), {
-			headers: {
-				'content-type': storedObject.contentType
+		return new Response(
+			new Blob([Buffer.from(storedObject.body)], { type: storedObject.contentType }),
+			{
+				headers: {
+					'content-type': storedObject.contentType
+				}
 			}
-		});
+		);
 	}
 
 	const { baseUrl, bucket, serviceKey } = getRemoteStorageConfig();
