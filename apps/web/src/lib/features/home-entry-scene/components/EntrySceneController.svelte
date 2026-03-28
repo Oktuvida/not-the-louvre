@@ -1,38 +1,137 @@
 <script lang="ts">
-	import AuthOverlay from '$lib/features/home-entry-scene/components/AuthOverlay.svelte';
+	import type {
+		HomeAuthActionForm,
+		HomeAuthBootstrap,
+		HomeAuthUser
+	} from '$lib/features/home-entry-scene/auth-contract';
 	import HomeEntryPage from '$lib/features/home-entry-scene/HomeEntryPage.svelte';
+	import AuthOverlay from '$lib/features/home-entry-scene/components/AuthOverlay.svelte';
 	import MuseumWallOverlay from '$lib/features/home-entry-scene/components/MuseumWallOverlay.svelte';
+	import StudioPanel from '$lib/features/shared-ui/components/StudioPanel.svelte';
 	import {
 		createEntryState,
 		type EntryFlowEvent
 	} from '$lib/features/home-entry-scene/state/entry-state.svelte';
 
-	const entryState = createEntryState();
+	let {
+		auth,
+		form
+	}: {
+		auth: HomeAuthBootstrap;
+		form?: HomeAuthActionForm;
+	} = $props();
+
+	const shouldHoldSignupOverlay = (actionData?: HomeAuthActionForm) =>
+		actionData?.action === 'signUp' && 'success' in actionData && actionData.success;
+	const initialHoldSignupOnboarding = shouldHoldSignupOverlay(form);
+	const getInitialEntryState = () =>
+		shouldHoldSignupOverlay(form)
+			? 'auth-signup'
+			: auth.status === 'authenticated' && auth.onboarding.status === 'needs-avatar'
+				? 'auth-signup'
+				: auth.status === 'authenticated'
+					? 'inside'
+					: 'outside';
+
+	const entryState = createEntryState(getInitialEntryState());
+
 	let authOverlayElement = $state<HTMLDivElement | null>(null);
-	let nickname = $state<string | null>(null);
+	let holdSignupOnboarding = $state(
+		initialHoldSignupOnboarding ||
+			(auth.status === 'authenticated' && auth.onboarding.status === 'needs-avatar')
+	);
+	let user = $state<HomeAuthUser | null>(null);
+	let integrityFailure = $state<HomeAuthBootstrap['integrityFailure']>(null);
 
 	const flowState = $derived(entryState.state);
+	const navUser = $derived(flowState === 'inside' ? user : null);
 
 	const dispatch = (event: EntryFlowEvent) => {
 		entryState.dispatch(event);
 	};
 
-	const handleLogout = () => {
-		nickname = null;
-		entryState.dispatch('LOG_OUT');
-	};
+	$effect(() => {
+		if (shouldHoldSignupOverlay(form)) {
+			holdSignupOnboarding = true;
+		}
 
-	const handleAuthResolved = (nextNickname: string) => {
-		nickname = nextNickname;
-	};
+		if (entryState.state === 'inside') {
+			holdSignupOnboarding = false;
+		}
+	});
+
+	$effect(() => {
+		integrityFailure = auth.status === 'integrity-failure' ? auth.integrityFailure : null;
+
+		if (auth.status === 'integrity-failure') {
+			user = null;
+			if (entryState.state === 'inside') {
+				entryState.dispatch('LOG_OUT');
+			}
+			return;
+		}
+
+		if (auth.status === 'authenticated') {
+			user = auth.user;
+
+			if (auth.onboarding.status === 'needs-avatar') {
+				holdSignupOnboarding = true;
+				if (entryState.state === 'outside') {
+					entryState.dispatch('COME_IN');
+					entryState.dispatch('TRANSITION_DONE');
+				} else if (entryState.state === 'auth-login') {
+					entryState.dispatch('SHOW_SIGN_UP');
+				}
+				return;
+			}
+
+			if (holdSignupOnboarding) {
+				return;
+			}
+
+			if (entryState.state === 'outside') {
+				entryState.dispatch('SESSION_EXISTS');
+			} else if (entryState.state !== 'inside') {
+				entryState.dispatch('AUTH_SUCCESS');
+			}
+			return;
+		}
+
+		user = null;
+		if (entryState.state === 'inside') {
+			entryState.dispatch('LOG_OUT');
+		}
+	});
 </script>
 
-<HomeEntryPage entryState={flowState} {nickname} onlogout={handleLogout}>
-	<MuseumWallOverlay entryState={flowState} {dispatch} {authOverlayElement} />
-	<AuthOverlay
-		bind:overlayElement={authOverlayElement}
-		entryState={flowState}
-		{dispatch}
-		onAuthResolved={handleAuthResolved}
-	/>
+<HomeEntryPage entryState={flowState} user={navUser}>
+	{#if integrityFailure}
+		<div class="absolute inset-0 z-[40] flex items-center justify-center px-6 py-10">
+			<StudioPanel
+				tone="paper"
+				className="w-full max-w-[34rem] border-[#7b3b2a] bg-[rgba(255,248,240,0.98)] text-[#3f2318]"
+			>
+				<div class="space-y-4 p-6 md:p-8">
+					<p class="text-xs font-semibold tracking-[0.22em] text-[#a55b45] uppercase">
+						Session needs repair
+					</p>
+					<h2 class="font-display text-3xl tracking-[0.06em] text-[#3f2318] uppercase">
+						Please sign in again later
+					</h2>
+					<p class="text-sm text-[#6f4b3f]">{integrityFailure.message}</p>
+				</div>
+			</StudioPanel>
+		</div>
+	{:else}
+		<MuseumWallOverlay entryState={flowState} {dispatch} {authOverlayElement} />
+		<AuthOverlay
+			bind:overlayElement={authOverlayElement}
+			authenticatedUser={user}
+			entryState={flowState}
+			{dispatch}
+			{form}
+			resumeAvatarOnboarding={auth.status === 'authenticated' &&
+				auth.onboarding.status === 'needs-avatar'}
+		/>
+	{/if}
 </HomeEntryPage>

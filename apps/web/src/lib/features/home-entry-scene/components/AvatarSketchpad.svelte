@@ -7,13 +7,58 @@
 
 	const CANVAS_WIDTH = 520;
 	const CANVAS_HEIGHT = 320;
+	const EXPORT_SIZE = 256;
+
+	type AvatarSaveResult =
+		| { success: true }
+		| {
+				code?: string;
+				message: string;
+				success: false;
+		  };
 
 	let {
+		createAvatarFile = async (sourceCanvas: HTMLCanvasElement) => {
+			const exportCanvas = document.createElement('canvas');
+			exportCanvas.width = EXPORT_SIZE;
+			exportCanvas.height = EXPORT_SIZE;
+
+			const exportContext = exportCanvas.getContext('2d');
+			if (!exportContext) {
+				throw new Error('Canvas 2D context is unavailable for avatar export.');
+			}
+
+			exportContext.fillStyle = '#f5f0e1';
+			exportContext.fillRect(0, 0, EXPORT_SIZE, EXPORT_SIZE);
+			exportContext.drawImage(sourceCanvas, 0, 0, EXPORT_SIZE, EXPORT_SIZE);
+
+			const blob = await new Promise<Blob | null>((resolve) => {
+				exportCanvas.toBlob((nextBlob) => resolve(nextBlob), 'image/avif', 1);
+			});
+
+			if (!blob) {
+				throw new Error('Canvas export returned no blob for image/avif output.');
+			}
+
+			if (blob.type !== 'image/avif') {
+				throw new Error(
+					`Canvas export returned unexpected blob type: ${blob.type || 'unknown'}.`
+				);
+			}
+
+			return new File([blob], 'avatar.avif', { type: 'image/avif' });
+		},
 		nickname,
-		onContinue
+		onContinue,
+		saveAvatar = async () => ({
+			message: 'Avatar save is unavailable right now.',
+			success: false as const
+		})
 	}: {
+		createAvatarFile?: (sourceCanvas: HTMLCanvasElement) => Promise<File | null>;
 		nickname: string;
 		onContinue?: () => void;
+		saveAvatar?: (file: File) => Promise<AvatarSaveResult>;
 	} = $props();
 
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
@@ -21,6 +66,7 @@
 	let brushSize = $state(brushSizes[1]);
 	let isDrawing = $state(false);
 	let isSaving = $state(false);
+	let saveError = $state('');
 
 	const drawGhostSilhouette = (ctx: CanvasRenderingContext2D) => {
 		ctx.save();
@@ -32,12 +78,10 @@
 		const centerX = CANVAS_WIDTH / 2;
 		const centerY = CANVAS_HEIGHT / 2 - 16;
 
-		// Head — dashed circle
 		ctx.beginPath();
 		ctx.arc(centerX, centerY - 20, 40, 0, Math.PI * 2);
 		ctx.stroke();
 
-		// Shoulders — dashed rounded rectangle
 		const shoulderWidth = 112;
 		const shoulderHeight = 48;
 		const shoulderX = centerX - shoulderWidth / 2;
@@ -148,12 +192,38 @@
 	};
 
 	const handleEnterGallery = async () => {
-		if (isSaving) return;
+		if (isSaving || !canvasElement) return;
 
+		saveError = '';
 		isSaving = true;
-		await new Promise((resolve) => setTimeout(resolve, 220));
-		isSaving = false;
-		onContinue?.();
+
+		try {
+			let avatarFile: File | null;
+
+			try {
+				avatarFile = await createAvatarFile(canvasElement);
+			} catch (error) {
+				console.error('Failed to create avatar file', error);
+				saveError = 'This browser could not export your avatar. Please try again.';
+				return;
+			}
+
+			if (!avatarFile) {
+				console.error('Failed to create avatar file', new Error('createAvatarFile returned no file'));
+				saveError = 'This browser could not export your avatar. Please try again.';
+				return;
+			}
+
+			const result = await saveAvatar(avatarFile);
+			if (!result.success) {
+				saveError = result.message;
+				return;
+			}
+
+			onContinue?.();
+		} finally {
+			isSaving = false;
+		}
 	};
 
 	const handleTouchStart = (event: TouchEvent) => {
@@ -181,6 +251,14 @@
 		<p class="text-xs font-semibold tracking-[0.22em] text-[#8d6c52] uppercase">Step 2 of 2</p>
 		<p class="text-sm text-[#5a554d]">Your first piece in the gallery is a quick self-portrait.</p>
 	</div>
+
+	{#if saveError}
+		<div
+			class="rounded-[1rem] border-2 border-[#9c432b] bg-[#f7e1d7] px-4 py-3 text-sm text-[#6f2413]"
+		>
+			{saveError}
+		</div>
+	{/if}
 
 	<div class="grid gap-4 md:grid-cols-[auto_1fr]">
 		<div class="order-2 flex gap-3 md:order-1 md:flex-col">
@@ -262,7 +340,10 @@
 					<button
 						type="button"
 						class="rounded-[1rem] border-2 border-[#c8af95] bg-white px-4 py-3 text-sm font-semibold text-[#5a554d]"
-						onclick={paintBackground}
+						onclick={() => {
+							saveError = '';
+							paintBackground();
+						}}
 						disabled={isSaving}
 					>
 						Clear

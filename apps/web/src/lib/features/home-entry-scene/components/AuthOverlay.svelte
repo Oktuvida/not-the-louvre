@@ -1,6 +1,13 @@
 <script lang="ts">
+	import { deserialize, enhance } from '$app/forms';
 	import { gsap } from 'gsap';
 	import { NICKNAME_PATTERN, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '$lib/auth/config';
+	import type {
+		HomeAuthActionData,
+		HomeAuthActionForm,
+		HomeAuthUser,
+		HomeAuthAvailability
+	} from '$lib/features/home-entry-scene/auth-contract';
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import StudioPanel from '$lib/features/shared-ui/components/StudioPanel.svelte';
@@ -11,22 +18,26 @@
 
 	type AuthView =
 		| 'login'
-		| 'signup-account'
-		| 'signup-success'
-		| 'signup-avatar'
 		| 'recover'
-		| 'recover-success';
-	type AvailabilityState = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
+		| 'recover-success'
+		| 'signup-account'
+		| 'signup-avatar'
+		| 'signup-success';
+	type AvailabilityState = 'available' | 'checking' | 'idle' | 'invalid' | 'taken';
 
 	let {
 		entryState,
 		dispatch,
-		onAuthResolved,
+		authenticatedUser = null,
+		form,
+		resumeAvatarOnboarding = false,
 		overlayElement = $bindable<HTMLDivElement | null>(null)
 	}: {
 		entryState: EntryFlowState;
 		dispatch: (event: EntryFlowEvent) => void;
-		onAuthResolved?: (nickname: string) => void;
+		authenticatedUser?: HomeAuthUser | null;
+		form?: HomeAuthActionForm;
+		resumeAvatarOnboarding?: boolean;
 		overlayElement?: HTMLDivElement | null;
 	} = $props();
 
@@ -45,17 +56,12 @@
 	let availabilityState = $state<AvailabilityState>('idle');
 	let availabilityMessage = $state('');
 	let checkToken = $state('');
+	let lastHandledFormKey = $state('');
 	let isSubmitting = $state(false);
 	let debounceHandle: ReturnType<typeof setTimeout> | null = null;
-
-	const takenNicknames = new Set(['artist_1', 'museum_owner', 'curator']);
-	const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-	const normalizeNickname = (value: string) => value.trim().toLowerCase();
-	const isValidNickname = (value: string) => NICKNAME_PATTERN.test(normalizeNickname(value));
-	const createMockRecoveryKey = (value: string, prefix: 'studio' | 'recovery') => {
-		const seed = normalizeNickname(value) || 'guest';
-		return `${prefix}-${seed}-key`;
-	};
+	let loginFormElement = $state<HTMLFormElement | null>(null);
+	let signupFormElement = $state<HTMLFormElement | null>(null);
+	let recoveryFormElement = $state<HTMLFormElement | null>(null);
 
 	const isInteractive = $derived(
 		entryState === 'auth-login' || entryState === 'auth-signup' || entryState === 'auth-recovery'
@@ -63,6 +69,9 @@
 	const isSignUpFlow = $derived(
 		view === 'signup-account' || view === 'signup-success' || view === 'signup-avatar'
 	);
+
+	const normalizeNickname = (value: string) => value.trim().toLowerCase();
+	const isValidNickname = (value: string) => NICKNAME_PATTERN.test(normalizeNickname(value));
 
 	const resetMessages = () => {
 		nicknameError = '';
@@ -79,6 +88,14 @@
 	};
 
 	const syncViewWithState = () => {
+		if (resumeAvatarOnboarding && entryState === 'auth-signup') {
+			view = 'signup-avatar';
+			if (authenticatedUser?.nickname) {
+				nickname = authenticatedUser.nickname;
+			}
+			return;
+		}
+
 		if (entryState === 'auth-login') {
 			view = 'login';
 			return;
@@ -93,18 +110,6 @@
 			view = 'recover';
 		}
 	};
-
-	$effect(() => {
-		syncViewWithState();
-	});
-
-	$effect(() => {
-		if (!overlayElement) return;
-		gsap.killTweensOf(overlayElement);
-		if (isInteractive) {
-			gsap.to(overlayElement, { opacity: 1, scale: 1, duration: 0.34, ease: 'power2.out' });
-		}
-	});
 
 	const validateNickname = (value: string) => {
 		if (!value.trim()) return 'Nickname is required';
@@ -129,22 +134,155 @@
 		return '';
 	};
 
-	const applySubmitError = (error: unknown) => {
-		const authError = error as { code?: string; message?: string; status?: number } | undefined;
-		if (authError?.status === 429 || authError?.code === 'RATE_LIMITED') {
-			rateLimitError =
-				authError.message ?? 'Too many attempts. Please wait a moment and try again.';
+	const applyAvailabilityResult = (availability: HomeAuthAvailability) => {
+		availabilityState = availability;
+		availabilityMessage =
+			availability === 'available'
+				? 'Nickname available'
+				: availability === 'taken'
+					? 'That nickname is already taken'
+					: 'Choose a valid nickname first';
+	};
+
+	const applySubmitFailure = (result: Extract<HomeAuthActionData, { message: string }>) => {
+		if (result.code === 'RATE_LIMITED') {
+			rateLimitError = result.message ?? 'Too many attempts. Please wait a moment and try again.';
 			return;
 		}
-		if (authError?.code === 'NICKNAME_TAKEN') {
+
+		if (result.code === 'NICKNAME_TAKEN') {
 			nicknameError = 'That nickname is already taken';
 			return;
 		}
-		if (authError?.code === 'RECOVERY_FAILED') {
+
+		if (result.code === 'RECOVERY_FAILED') {
 			formError = 'Recovery failed. Check your nickname, recovery key, and new password.';
 			return;
 		}
-		formError = authError?.message ?? 'Network error. Please try again.';
+
+		formError = result.message ?? 'Network error. Please try again.';
+	};
+
+	const handleActionResult = (actionData: HomeAuthActionData) => {
+		resetMessages();
+
+		if (actionData.action === 'checkNickname' && 'availability' in actionData) {
+			applyAvailabilityResult(actionData.availability);
+			return;
+		}
+
+		if (actionData.action === 'signUp' && 'success' in actionData) {
+			oneTimeKey = actionData.recoveryKey;
+			view = 'signup-success';
+			return;
+		}
+
+		if (actionData.action === 'recover' && 'success' in actionData) {
+			oneTimeKey = actionData.recoveryKey;
+			password = newPassword;
+			view = 'recover-success';
+			return;
+		}
+
+		if ('message' in actionData) {
+			applySubmitFailure(actionData);
+		}
+	};
+
+	const getFormKey = (actionData?: HomeAuthActionData) => JSON.stringify(actionData ?? null);
+
+	const validateSignIn = () => {
+		const trimmedNickname = normalizeNickname(nickname);
+		nickname = trimmedNickname;
+		nicknameError = validateNickname(trimmedNickname);
+		passwordError = validatePassword(password);
+
+		return !nicknameError && !passwordError;
+	};
+
+	const validateSignUp = () => {
+		const trimmedNickname = normalizeNickname(nickname);
+		nickname = trimmedNickname;
+		nicknameError = validateNickname(trimmedNickname);
+		passwordError = validatePassword(password);
+
+		if (availabilityState === 'taken') {
+			nicknameError = 'That nickname is already taken';
+		}
+
+		return !nicknameError && !passwordError;
+	};
+
+	const validateRecovery = () => {
+		const trimmedNickname = normalizeNickname(nickname);
+		nickname = trimmedNickname;
+		nicknameError = validateNickname(trimmedNickname);
+		recoveryKeyError = validateRecoveryKey(recoveryKey);
+		newPasswordError = validatePassword(newPassword, 'New password');
+
+		return !nicknameError && !recoveryKeyError && !newPasswordError;
+	};
+
+	const createEnhancer = () => {
+		resetMessages();
+		isSubmitting = true;
+
+		return async ({ update }: { update: () => Promise<void> }) => {
+			await update();
+			isSubmitting = false;
+		};
+	};
+
+	const handleLoginSubmit = (event: SubmitEvent) => {
+		if (!validateSignIn()) {
+			event.preventDefault();
+		}
+	};
+
+	const handleSignupSubmit = (event: SubmitEvent) => {
+		if (!validateSignUp()) {
+			event.preventDefault();
+		}
+	};
+
+	const handleRecoverySubmit = (event: SubmitEvent) => {
+		if (!validateRecovery()) {
+			event.preventDefault();
+		}
+	};
+
+	const submitLogin = () => {
+		if (!validateSignIn()) return;
+		loginFormElement?.requestSubmit();
+	};
+
+	const submitSignup = () => {
+		if (!validateSignUp()) return;
+		signupFormElement?.requestSubmit();
+	};
+
+	const submitRecovery = () => {
+		if (!validateRecovery()) return;
+		recoveryFormElement?.requestSubmit();
+	};
+
+	const goToLogin = () => {
+		resetMessages();
+		resetAvailability();
+		view = 'login';
+		dispatch('SHOW_LOGIN');
+	};
+
+	const goToSignup = () => {
+		resetMessages();
+		view = 'signup-account';
+		dispatch('SHOW_SIGN_UP');
+	};
+
+	const goToRecovery = () => {
+		resetMessages();
+		view = 'recover';
+		dispatch('SHOW_RECOVERY');
 	};
 
 	const runAvailabilityCheck = async (value: string) => {
@@ -153,29 +291,97 @@
 		availabilityMessage = 'Checking nickname...';
 
 		try {
-			await wait(180);
 			if (checkToken !== value) return;
 
 			if (!isValidNickname(value)) {
-				availabilityState = 'invalid';
-				availabilityMessage = 'Choose a valid nickname first';
+				applyAvailabilityResult('invalid');
 				return;
 			}
 
-			if (!takenNicknames.has(value)) {
-				availabilityState = 'available';
-				availabilityMessage = 'Nickname available';
+			const formData = new FormData();
+			formData.set('nickname', value);
+
+			const response = await fetch('?/checkNickname', {
+				body: formData,
+				headers: {
+					'x-sveltekit-action': 'true'
+				},
+				method: 'POST'
+			});
+			const result = deserialize(await response.text());
+
+			if (checkToken !== value) return;
+
+			if ((result.type === 'failure' || result.type === 'success') && result.data) {
+				handleActionResult(result.data as HomeAuthActionData);
 				return;
 			}
 
-			availabilityState = 'taken';
-			availabilityMessage = 'That nickname is already taken';
+			availabilityState = 'idle';
+			availabilityMessage = 'Could not check nickname right now';
 		} catch {
 			if (checkToken !== value) return;
 			availabilityState = 'idle';
 			availabilityMessage = 'Could not check nickname right now';
 		}
 	};
+
+	const saveAvatar = async (file: File) => {
+		const formData = new FormData();
+		formData.set('file', file);
+
+		const response = await fetch('?/saveAvatar', {
+			body: formData,
+			headers: {
+				'x-sveltekit-action': 'true'
+			},
+			method: 'POST'
+		});
+		const result = deserialize(await response.text());
+
+		if ((result.type === 'failure' || result.type === 'success') && result.data) {
+			const data = result.data as HomeAuthActionData;
+
+			if (data.action === 'saveAvatar' && 'success' in data && data.success) {
+				return { success: true as const };
+			}
+
+			if ('message' in data) {
+				return {
+					code: data.code,
+					message: data.message,
+					success: false as const
+				};
+			}
+		}
+
+		return {
+			message: 'Avatar save failed. Please try again.',
+			success: false as const
+		};
+	};
+
+	$effect(() => {
+		syncViewWithState();
+	});
+
+	$effect(() => {
+		if (!overlayElement) return;
+		gsap.killTweensOf(overlayElement);
+		if (isInteractive) {
+			gsap.to(overlayElement, { duration: 0.34, ease: 'power2.out', opacity: 1, scale: 1 });
+		}
+	});
+
+	$effect(() => {
+		if (!form) return;
+
+		const nextFormKey = getFormKey(form);
+		if (nextFormKey === lastHandledFormKey) return;
+
+		lastHandledFormKey = nextFormKey;
+		handleActionResult(form);
+	});
 
 	$effect(() => {
 		if (debounceHandle) clearTimeout(debounceHandle);
@@ -201,85 +407,6 @@
 			if (debounceHandle) clearTimeout(debounceHandle);
 		};
 	});
-
-	const submitSignIn = async () => {
-		const trimmedNickname = normalizeNickname(nickname);
-		nickname = trimmedNickname;
-		nicknameError = validateNickname(trimmedNickname);
-		passwordError = validatePassword(password);
-
-		if (nicknameError || passwordError) return;
-
-		await wait(220);
-		onAuthResolved?.(trimmedNickname);
-		dispatch('AUTH_SUCCESS');
-	};
-
-	const submitSignUp = async () => {
-		const trimmedNickname = normalizeNickname(nickname);
-		nickname = trimmedNickname;
-		nicknameError = validateNickname(trimmedNickname);
-		passwordError = validatePassword(password);
-
-		if (availabilityState === 'taken' || takenNicknames.has(trimmedNickname)) {
-			nicknameError = 'That nickname is already taken';
-		}
-
-		if (nicknameError || passwordError) return;
-
-		await wait(260);
-		onAuthResolved?.(trimmedNickname);
-		oneTimeKey = createMockRecoveryKey(trimmedNickname, 'studio');
-		view = 'signup-success';
-	};
-
-	const submitRecovery = async () => {
-		const trimmedNickname = normalizeNickname(nickname);
-		nickname = trimmedNickname;
-		nicknameError = validateNickname(trimmedNickname);
-		recoveryKeyError = validateRecoveryKey(recoveryKey);
-		newPasswordError = validatePassword(newPassword, 'New password');
-
-		if (nicknameError || recoveryKeyError || newPasswordError) return;
-
-		await wait(240);
-		oneTimeKey = createMockRecoveryKey(trimmedNickname, 'recovery');
-		password = newPassword;
-		view = 'recover-success';
-	};
-
-	const handleSubmit = async () => {
-		resetMessages();
-		isSubmitting = true;
-
-		try {
-			if (view === 'login') await submitSignIn();
-			else if (view === 'signup-account') await submitSignUp();
-			else if (view === 'recover') await submitRecovery();
-		} catch (error) {
-			applySubmitError(error);
-		} finally {
-			isSubmitting = false;
-		}
-	};
-
-	const goToLogin = () => {
-		resetMessages();
-		view = 'login';
-		dispatch('SHOW_LOGIN');
-	};
-
-	const goToSignup = () => {
-		resetMessages();
-		view = 'signup-account';
-		dispatch('SHOW_SIGN_UP');
-	};
-
-	const goToRecovery = () => {
-		resetMessages();
-		view = 'recover';
-		dispatch('SHOW_RECOVERY');
-	};
 </script>
 
 <div
@@ -367,14 +494,78 @@
 				</div>
 			{/if}
 
-			{#if view === 'login' || view === 'signup-account'}
-				<div class="space-y-4">
+			{#if view === 'login'}
+				<form
+					bind:this={loginFormElement}
+					method="POST"
+					action="?/signIn"
+					use:enhance={createEnhancer}
+					onsubmit={handleLoginSubmit}
+					class="space-y-4"
+				>
 					<label class="block space-y-2">
 						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
 							>Nickname</span
 						>
 						<input
 							bind:value={nickname}
+							name="nickname"
+							type="text"
+							placeholder="artist_123"
+							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+						/>
+					</label>
+					{#if nicknameError}<p class="text-sm text-[#8f3720]">{nicknameError}</p>{/if}
+
+					<label class="block space-y-2">
+						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+							>Password</span
+						>
+						<input
+							bind:value={password}
+							name="password"
+							type="password"
+							placeholder="Enter your password"
+							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+						/>
+					</label>
+					{#if passwordError}<p class="text-sm text-[#8f3720]">{passwordError}</p>{/if}
+
+					<div class="flex items-center justify-between gap-3 pt-2">
+						<button
+							type="button"
+							onclick={goToRecovery}
+							class="text-xs tracking-[0.18em] text-[#8d6c52] uppercase underline-offset-4 hover:underline"
+						>
+							Use recovery key
+						</button>
+
+						<GameButton
+							type="button"
+							onclick={submitLogin}
+							disabled={isSubmitting}
+							className="gap-3 px-6 py-3 text-sm font-black"
+						>
+							<span>{isSubmitting ? 'Working...' : 'Sign In'}</span>
+						</GameButton>
+					</div>
+				</form>
+			{:else if view === 'signup-account'}
+				<form
+					bind:this={signupFormElement}
+					method="POST"
+					action="?/signUp"
+					use:enhance={createEnhancer}
+					onsubmit={handleSignupSubmit}
+					class="space-y-4"
+				>
+					<label class="block space-y-2">
+						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+							>Nickname</span
+						>
+						<input
+							bind:value={nickname}
+							name="nickname"
 							type="text"
 							placeholder="artist_123"
 							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
@@ -382,7 +573,7 @@
 					</label>
 					{#if nicknameError}
 						<p class="text-sm text-[#8f3720]">{nicknameError}</p>
-					{:else if view === 'signup-account' && availabilityMessage}
+					{:else if availabilityMessage}
 						<p
 							class={`text-sm ${availabilityState === 'taken' ? 'text-[#8f3720]' : availabilityState === 'available' ? 'text-[#35613f]' : 'text-[#6f5846]'}`}
 						>
@@ -396,49 +587,45 @@
 						>
 						<input
 							bind:value={password}
+							name="password"
 							type="password"
 							placeholder="Enter your password"
 							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
 						/>
 					</label>
-					{#if passwordError}
-						<p class="text-sm text-[#8f3720]">{passwordError}</p>
-					{/if}
-				</div>
+					{#if passwordError}<p class="text-sm text-[#8f3720]">{passwordError}</p>{/if}
 
-				<div class="flex items-center justify-between gap-3 pt-2">
-					{#if view === 'login'}
-						<button
-							type="button"
-							onclick={goToRecovery}
-							class="text-xs tracking-[0.18em] text-[#8d6c52] uppercase underline-offset-4 hover:underline"
-						>
-							Use recovery key
-						</button>
-					{:else}
+					<div class="flex items-center justify-between gap-3 pt-2">
 						<p class="text-xs tracking-[0.18em] text-[#8d6c52] uppercase">
 							Step 1: claim your wall
 						</p>
-					{/if}
 
-					<GameButton
-						onclick={handleSubmit}
-						disabled={isSubmitting}
-						className="gap-3 px-6 py-3 text-sm font-black"
-					>
-						<span
-							>{isSubmitting ? 'Working...' : view === 'login' ? 'Sign In' : 'Start account'}</span
+						<GameButton
+							type="button"
+							onclick={submitSignup}
+							disabled={isSubmitting}
+							className="gap-3 px-6 py-3 text-sm font-black"
 						>
-					</GameButton>
-				</div>
+							<span>{isSubmitting ? 'Working...' : 'Start account'}</span>
+						</GameButton>
+					</div>
+				</form>
 			{:else if view === 'recover'}
-				<div class="space-y-4">
+				<form
+					bind:this={recoveryFormElement}
+					method="POST"
+					action="?/recover"
+					use:enhance={createEnhancer}
+					onsubmit={handleRecoverySubmit}
+					class="space-y-4"
+				>
 					<label class="block space-y-2">
 						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
 							>Nickname</span
 						>
 						<input
 							bind:value={nickname}
+							name="nickname"
 							type="text"
 							placeholder="artist_123"
 							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
@@ -452,6 +639,7 @@
 						>
 						<input
 							bind:value={recoveryKey}
+							name="recoveryKey"
 							type="text"
 							placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
@@ -465,30 +653,32 @@
 						>
 						<input
 							bind:value={newPassword}
+							name="newPassword"
 							type="password"
 							placeholder="Choose a new password"
 							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
 						/>
 					</label>
 					{#if newPasswordError}<p class="text-sm text-[#8f3720]">{newPasswordError}</p>{/if}
-				</div>
 
-				<div class="flex items-center justify-between gap-3 pt-2">
-					<button
-						type="button"
-						onclick={goToLogin}
-						class="text-xs tracking-[0.18em] text-[#8d6c52] uppercase underline-offset-4 hover:underline"
-					>
-						Log in
-					</button>
-					<GameButton
-						onclick={handleSubmit}
-						disabled={isSubmitting}
-						className="gap-3 px-6 py-3 text-sm font-black"
-					>
-						<span>{isSubmitting ? 'Working...' : 'Recover Access'}</span>
-					</GameButton>
-				</div>
+					<div class="flex items-center justify-between gap-3 pt-2">
+						<button
+							type="button"
+							onclick={goToLogin}
+							class="text-xs tracking-[0.18em] text-[#8d6c52] uppercase underline-offset-4 hover:underline"
+						>
+							Log in
+						</button>
+						<GameButton
+							type="button"
+							onclick={submitRecovery}
+							disabled={isSubmitting}
+							className="gap-3 px-6 py-3 text-sm font-black"
+						>
+							<span>{isSubmitting ? 'Working...' : 'Recover Access'}</span>
+						</GameButton>
+					</div>
+				</form>
 			{:else if view === 'signup-success' || view === 'recover-success'}
 				<div class="space-y-4 rounded-[1.4rem] border-2 border-[#d7c2ab] bg-[#fff8ef] p-5">
 					<p class="text-sm tracking-[0.18em] text-[#8d6c52] uppercase">One-time key</p>
@@ -520,7 +710,7 @@
 					</GameButton>
 				</div>
 			{:else}
-				<AvatarSketchpad {nickname} onContinue={() => dispatch('AUTH_SUCCESS')} />
+				<AvatarSketchpad {nickname} {saveAvatar} onContinue={() => dispatch('AUTH_SUCCESS')} />
 			{/if}
 		</div>
 	</StudioPanel>

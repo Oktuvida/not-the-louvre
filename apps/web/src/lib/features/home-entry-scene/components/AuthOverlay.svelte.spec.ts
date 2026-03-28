@@ -8,7 +8,11 @@ describe('AuthOverlay', () => {
 
 	it('starts on the sign-in view and validates fields before login submit', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, { entryState: 'auth-login', dispatch });
+		render(AuthOverlay, {
+			dispatch,
+			entryState: 'auth-login',
+			form: undefined
+		});
 
 		await expect.element(page.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
 		await submitButton('Sign In').click();
@@ -16,80 +20,96 @@ describe('AuthOverlay', () => {
 		await expect.element(page.getByText('Password is required')).toBeInTheDocument();
 	});
 
-	it('toggles to sign-up and debounces nickname availability', async () => {
+	it('shows backend-driven sign-in failures without leaving the login context', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, { entryState: 'auth-login', dispatch });
+		render(AuthOverlay, {
+			dispatch,
+			entryState: 'auth-login',
+			form: {
+				action: 'signIn',
+				code: 'INVALID_CREDENTIALS',
+				message: 'Invalid nickname or password'
+			}
+		});
 
-		await page.getByRole('button', { name: 'Sign up' }).click();
-		expect(dispatch).toHaveBeenCalledWith('SHOW_SIGN_UP');
+		await expect.element(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+		await expect.element(page.getByText('Invalid nickname or password')).toBeVisible();
+		expect(dispatch).not.toHaveBeenCalledWith('AUTH_SUCCESS');
 	});
 
-	it('renders the signup account step when the parent enters signup mode', async () => {
+	it('shows duplicate nickname failures in the signup context', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, { entryState: 'auth-signup', dispatch });
+		render(AuthOverlay, {
+			dispatch,
+			entryState: 'auth-signup',
+			form: {
+				action: 'signUp',
+				code: 'NICKNAME_TAKEN',
+				message: 'Nickname is already taken'
+			}
+		});
 
 		await expect.element(page.getByRole('heading', { name: 'Draw yourself' })).toBeInTheDocument();
-		await page.getByPlaceholder('artist_123').fill('new_artist');
-		await new Promise((resolve) => setTimeout(resolve, 350));
-
-		await expect.element(page.getByText('Nickname available')).toBeInTheDocument();
+		await expect.element(page.getByText('That nickname is already taken')).toBeVisible();
 	});
 
-	it('opens the recovery view from sign in and dispatches AUTH_CANCEL on close', async () => {
+	it('shows the backend-issued signup recovery key and waits for acknowledgement', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, { entryState: 'auth-login', dispatch });
-
-		await page.getByRole('button', { name: 'Use recovery key' }).click();
-		expect(dispatch).toHaveBeenCalledWith('SHOW_RECOVERY');
-	});
-
-	it('renders the recovery view when the parent enters recovery mode and dispatches AUTH_CANCEL on close', async () => {
-		const dispatch = vi.fn();
-		render(AuthOverlay, { entryState: 'auth-recovery', dispatch });
-
-		await expect.element(page.getByRole('heading', { name: 'Recover access' })).toBeInTheDocument();
-		await page.getByRole('button', { name: 'Close' }).click();
-		expect(dispatch).toHaveBeenCalledWith('AUTH_CANCEL');
-	});
-
-	it('shows signup-success then avatar onboarding before entry completes', async () => {
-		const dispatch = vi.fn();
-		render(AuthOverlay, { entryState: 'auth-signup', dispatch });
-
-		await page.getByPlaceholder('artist_123').fill('fresh_artist');
-		await page.getByPlaceholder('Enter your password').fill('password123');
-		await new Promise((resolve) => setTimeout(resolve, 350));
-		await submitButton('Start account').click();
+		render(AuthOverlay, {
+			dispatch,
+			entryState: 'auth-signup',
+			form: {
+				action: 'signUp',
+				onboarding: 'needs-avatar',
+				recoveryKey: 'signup-recovery-key',
+				success: true
+			}
+		});
 
 		await expect.element(page.getByRole('heading', { name: 'Keep this key' })).toBeInTheDocument();
-		await expect.element(page.getByText('studio-fresh_artist-key')).toBeInTheDocument();
+		await expect.element(page.getByText('signup-recovery-key')).toBeInTheDocument();
 		expect(dispatch).not.toHaveBeenCalledWith('AUTH_SUCCESS');
-		await page.getByRole('button', { name: 'I Stored It' }).click();
-		await expect
-			.element(page.getByRole('heading', { name: 'Finish your avatar' }))
-			.toBeInTheDocument();
-		await page.getByRole('button', { name: 'Enter the gallery' }).click();
-		await vi.waitFor(() => {
-			expect(dispatch).toHaveBeenCalledWith('AUTH_SUCCESS');
-		});
 	});
 
-	it('shows recover-success with the rotated replacement key', async () => {
+	it('shows the rotated recovery key and returns to login after acknowledgement', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, { entryState: 'auth-recovery', dispatch });
-
-		await page.getByPlaceholder('artist_123').fill('artist_1');
-		await page
-			.getByPlaceholder('xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')
-			.fill('12345678-1234-1234-1234-123456789012');
-		await page.getByPlaceholder('Choose a new password').fill('password123');
-		await submitButton('Recover Access').click();
+		render(AuthOverlay, {
+			dispatch,
+			entryState: 'auth-recovery',
+			form: {
+				action: 'recover',
+				recoveryKey: 'rotated-recovery-key',
+				rotatedRecoveryKey: 'rotated-recovery-key',
+				success: true
+			}
+		});
 
 		await expect
 			.element(page.getByRole('heading', { name: 'Replacement key' }))
 			.toBeInTheDocument();
-		await expect.element(page.getByText('recovery-artist_1-key')).toBeInTheDocument();
+		await expect.element(page.getByText('rotated-recovery-key')).toBeInTheDocument();
 		await page.getByRole('button', { name: 'Back To Sign In' }).click();
 		expect(dispatch).toHaveBeenCalledWith('SHOW_LOGIN');
+	});
+
+	it('reopens directly on the avatar step for authenticated users with incomplete onboarding', async () => {
+		const dispatch = vi.fn();
+		render(AuthOverlay, {
+			authenticatedUser: {
+				authUserId: 'auth-user-1',
+				avatarOnboardingCompletedAt: null,
+				email: 'artist_1@not-the-louvre.local',
+				id: 'product-user-1',
+				nickname: 'artist_1',
+				role: 'user'
+			},
+			dispatch,
+			entryState: 'auth-signup',
+			form: undefined,
+			resumeAvatarOnboarding: true
+		});
+
+		await expect.element(page.getByText('Finish your avatar')).toBeVisible();
+		await expect.element(page.getByRole('textbox')).toHaveValue('artist_1');
 	});
 });
