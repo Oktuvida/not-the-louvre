@@ -13,6 +13,12 @@
 			name: 'Artwork publish demo'
 		},
 		{
+			description:
+				'Publishes one artwork and watches live vote updates arrive in another browser context.',
+			href: '/demo/artwork-realtime-votes',
+			name: 'Artwork realtime vote demo'
+		},
+		{
 			description: 'Minimal smoke route for Playwright server wiring.',
 			href: '/demo/playwright',
 			name: 'Playwright smoke demo'

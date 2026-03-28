@@ -9,6 +9,12 @@ export const deterministicAuthUser = {
 	recoveredPassword: 'newpassword123'
 } as const;
 
+export const deterministicActorUser = {
+	nickname: 'journey_viewer',
+	password: 'password123',
+	recoveredPassword: 'newpassword123'
+} as const;
+
 export const deterministicArtwork = {
 	title: 'Deterministic Gallery Study'
 } as const;
@@ -32,7 +38,7 @@ export const checkNicknameAvailability = async (page: Page, nickname: string) =>
 
 export const signUpThroughNicknameDemo = async (
 	page: Page,
-	credentials: typeof deterministicAuthUser = deterministicAuthUser
+	credentials: { nickname: string; password: string } = deterministicAuthUser
 ) => {
 	await page.locator('form[action="?/signIn"] input[name="nickname"]').fill(credentials.nickname);
 	await page.locator('form[action="?/signIn"] input[name="password"]').fill(credentials.password);
@@ -124,4 +130,29 @@ export const publishArtworkThroughDemo = async (
 		.setInputFiles(input.upload ?? (await createArtworkUpload()));
 	await page.getByRole('button', { name: 'Publish artwork' }).click();
 	await expect(page).toHaveURL(/\/demo\/artwork-publish\?published=/);
+};
+
+export const publishArtworkThroughRealtimeDemo = async (
+	page: Page,
+	input: {
+		title?: string;
+		upload?: Awaited<ReturnType<typeof createArtworkUpload>>;
+	} = {}
+) => {
+	await page.goto('/demo/artwork-realtime-votes');
+	await expect(page.getByText('Realtime vote demo state: authenticated')).toBeVisible();
+	await page.getByLabel('Artwork title').fill(input.title ?? 'Realtime Gallery Study');
+	await page
+		.getByLabel('Artwork media')
+		.setInputFiles(input.upload ?? (await createArtworkUpload()));
+	await page.getByRole('button', { name: 'Publish tracked artwork' }).click();
+	await expect(page).toHaveURL(/\/demo\/artwork-realtime-votes\?artworkId=/);
+
+	const trackedArtworkText = await page.getByText(/Tracked artwork ID:/).textContent();
+	const trackedArtworkId = trackedArtworkText?.split(': ').at(1)?.trim();
+	if (!trackedArtworkId) {
+		throw new Error('Tracked artwork ID was not rendered');
+	}
+
+	return trackedArtworkId;
 };
