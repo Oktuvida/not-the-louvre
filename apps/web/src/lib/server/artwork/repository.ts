@@ -23,6 +23,7 @@ import type {
 	CreateArtworkVoteInput,
 	CreateEngagementRateLimitInput,
 	HiddenStateUpdate,
+	ResolveContentReportsInput,
 	UpdateEngagementRateLimitInput,
 	UpdatePublishRateLimitInput
 } from './types';
@@ -59,7 +60,7 @@ export const artworkRepository: ArtworkRepository = {
 		const [result] = await db
 			.select({ value: count() })
 			.from(contentReports)
-			.where(eq(contentReports.artworkId, artworkId));
+			.where(and(eq(contentReports.artworkId, artworkId), eq(contentReports.status, 'pending')));
 
 		return result?.value ?? 0;
 	},
@@ -192,9 +193,41 @@ export const artworkRepository: ArtworkRepository = {
 		const [result] = await db
 			.select({ value: count() })
 			.from(contentReports)
-			.where(eq(contentReports.commentId, commentId));
+			.where(and(eq(contentReports.commentId, commentId), eq(contentReports.status, 'pending')));
 
 		return result?.value ?? 0;
+	},
+	async resolveArtworkReports(input: ResolveContentReportsInput) {
+		const records = await db
+			.update(contentReports)
+			.set({
+				reviewedAt: input.resolvedAt,
+				reviewedBy: input.resolvedBy,
+				status: input.status,
+				updatedAt: input.resolvedAt
+			})
+			.where(
+				and(eq(contentReports.artworkId, input.targetId), eq(contentReports.status, 'pending'))
+			)
+			.returning({ id: contentReports.id });
+
+		return records.length;
+	},
+	async resolveCommentReports(input: ResolveContentReportsInput) {
+		const records = await db
+			.update(contentReports)
+			.set({
+				reviewedAt: input.resolvedAt,
+				reviewedBy: input.resolvedBy,
+				status: input.status,
+				updatedAt: input.resolvedAt
+			})
+			.where(
+				and(eq(contentReports.commentId, input.targetId), eq(contentReports.status, 'pending'))
+			)
+			.returning({ id: contentReports.id });
+
+		return records.length;
 	},
 	async deleteComment(id) {
 		return db.transaction(async (tx) => {

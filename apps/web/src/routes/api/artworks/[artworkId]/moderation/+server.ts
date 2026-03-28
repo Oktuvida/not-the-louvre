@@ -13,7 +13,7 @@ const toErrorResponse = (error: unknown) => {
 
 export const PATCH: RequestHandler = async (event) => {
 	try {
-		const body = (await event.request.json()) as { action?: 'hide' | 'unhide' };
+		const body = (await event.request.json()) as { action?: 'dismiss' | 'hide' | 'unhide' };
 		const artwork = await moderateArtwork(
 			{ action: body.action ?? 'hide', artworkId: event.params.artworkId },
 			{ user: event.locals.user }

@@ -18,6 +18,7 @@ import type {
 	ArtworkStorage,
 	ArtworkVoteMutationResult,
 	ArtworkVoteRemovalResult,
+	ContentReportStatus,
 	ArtworkVisibilityActor,
 	ArtworkVoteValue
 } from './types';
@@ -65,12 +66,12 @@ type SubmitContentReportInput = {
 };
 
 type ModerateArtworkInput = {
-	action: 'delete' | 'hide' | 'unhide';
+	action: 'delete' | 'dismiss' | 'hide' | 'unhide';
 	artworkId: string;
 };
 
 type ModerateCommentInput = {
-	action: 'delete' | 'hide' | 'unhide';
+	action: 'delete' | 'dismiss' | 'hide' | 'unhide';
 	artworkId: string;
 	commentId: string;
 };
@@ -341,6 +342,31 @@ const assertExactlyOneReportTarget = (artworkId?: string | null, commentId?: str
 	return { artworkId: normalizedArtworkId, commentId: normalizedCommentId };
 };
 
+const isPendingReportUniqueViolation = (error: unknown) => {
+	if (!error || typeof error !== 'object') return false;
+
+	const candidate = error as {
+		code?: string;
+		constraint?: string;
+		constraint_name?: string;
+		message?: string;
+	};
+	const constraint = candidate.constraint_name ?? candidate.constraint ?? candidate.message ?? '';
+
+	return (
+		candidate.code === '23505' &&
+		(typeof constraint !== 'string'
+			? false
+			: constraint.includes('content_reports_pending_artwork_reporter_unique') ||
+				constraint.includes('content_reports_pending_comment_reporter_unique'))
+	);
+};
+
+const getResolutionStatus = (
+	action: ModerateArtworkInput['action'] | ModerateCommentInput['action']
+): Exclude<ContentReportStatus, 'pending'> =>
+	action === 'hide' || action === 'delete' ? 'actioned' : 'reviewed';
+
 export const publishArtwork = async (
 	input: PublishArtworkInput,
 	context: Partial<ArtworkActorContext>,
@@ -609,16 +635,31 @@ export const submitContentReport = async (
 		}
 	}
 
-	const report = await repository.createContentReport({
-		artworkId,
-		commentId,
-		createdAt: now,
-		details: normalizeReportDetails(input.details),
-		id: nextId(),
-		reason: normalizeReportReason(input.reason),
-		reporterId: actor.user.id,
-		updatedAt: now
-	});
+	const report = await repository
+		.createContentReport({
+			artworkId,
+			commentId,
+			createdAt: now,
+			details: normalizeReportDetails(input.details),
+			id: nextId(),
+			reason: normalizeReportReason(input.reason),
+			reporterId: actor.user.id,
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
+			updatedAt: now
+		})
+		.catch((error: unknown) => {
+			if (isPendingReportUniqueViolation(error)) {
+				throw new ArtworkFlowError(
+					409,
+					'An active report already exists for this target',
+					'DUPLICATE_REPORT'
+				);
+			}
+
+			throw error;
+		});
 
 	return report;
 };
@@ -628,13 +669,20 @@ export const moderateArtwork = async (
 	context: Partial<ArtworkActorContext>,
 	dependencies: ServiceDependencies = {}
 ) => {
-	assertModerator(context);
+	const actor = assertModerator(context);
 	const { now: getNow, repository, storage } = getDependencies(dependencies);
 	const now = getNow();
 	const artwork = await getArtworkOrThrow(input.artworkId, repository);
+	const resolution = {
+		resolvedAt: now,
+		resolvedBy: actor.user.id,
+		status: getResolutionStatus(input.action),
+		targetId: artwork.id
+	} as const;
 
 	if (input.action === 'delete') {
 		await storage.delete(artwork.storageKey);
+		await repository.resolveArtworkReports(resolution);
 		const deleted = await repository.deleteArtwork(artwork.id);
 		if (!deleted) {
 			throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
@@ -643,11 +691,17 @@ export const moderateArtwork = async (
 		return deleted;
 	}
 
+	if (input.action === 'dismiss') {
+		await repository.resolveArtworkReports(resolution);
+		return artwork;
+	}
+
 	const updated = await repository.setArtworkHiddenState(artwork.id, {
 		hiddenAt: input.action === 'hide' ? now : null,
 		isHidden: input.action === 'hide',
 		updatedAt: now
 	});
+	await repository.resolveArtworkReports(resolution);
 
 	if (!updated) {
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
@@ -661,17 +715,25 @@ export const moderateComment = async (
 	context: Partial<ArtworkActorContext>,
 	dependencies: ServiceDependencies = {}
 ) => {
-	assertModerator(context);
+	const actor = assertModerator(context);
 	const { now: getNow, repository } = getDependencies(dependencies);
+	const now = getNow();
 	await getArtworkOrThrow(input.artworkId, repository);
 	const comment = await repository.findCommentById(input.commentId);
+	const resolution = {
+		resolvedAt: now,
+		resolvedBy: actor.user.id,
+		status: getResolutionStatus(input.action),
+		targetId: input.commentId
+	} as const;
 
 	if (!comment || comment.artworkId !== input.artworkId) {
 		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 	}
 
 	if (input.action === 'delete') {
-		const deleted = await repository.deleteComment(comment.id, getNow());
+		await repository.resolveCommentReports(resolution);
+		const deleted = await repository.deleteComment(comment.id, now);
 		if (!deleted) {
 			throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 		}
@@ -679,12 +741,17 @@ export const moderateComment = async (
 		return deleted;
 	}
 
-	const now = getNow();
+	if (input.action === 'dismiss') {
+		await repository.resolveCommentReports(resolution);
+		return comment;
+	}
+
 	const updated = await repository.setCommentHiddenState(comment.id, {
 		hiddenAt: input.action === 'hide' ? now : null,
 		isHidden: input.action === 'hide',
 		updatedAt: now
 	});
+	await repository.resolveCommentReports(resolution);
 
 	if (!updated) {
 		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');

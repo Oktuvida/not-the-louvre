@@ -4,6 +4,7 @@ export class ArtworkFlowError extends Error {
 		message: string,
 		readonly code:
 			| 'FORBIDDEN'
+			| 'DUPLICATE_REPORT'
 			| 'INVALID_COMMENT'
 			| 'INVALID_FORK_PARENT'
 			| 'INVALID_CURSOR'
