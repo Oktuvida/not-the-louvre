@@ -11,6 +11,7 @@ const createPngFile = (size = 128) =>
 
 const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
 	avatarUrl: null,
+	avatarOnboardingCompletedAt: null,
 	createdAt: new Date('2026-01-01T00:00:00.000Z'),
 	id: 'user-1',
 	nickname: 'artist',
@@ -21,6 +22,7 @@ const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
 
 const makeCanonicalUser = (overrides: Partial<CanonicalUser> = {}): CanonicalUser => ({
 	avatarUrl: null,
+	avatarOnboardingCompletedAt: null,
 	authUserId: 'auth-user-1',
 	createdAt: new Date('2026-01-01T00:00:00.000Z'),
 	email: 'artist@not-the-louvre.local',
@@ -40,9 +42,9 @@ const createRepository = (initial: UserRecord | null = null): UserRepository => 
 	return {
 		findUserById: vi.fn(async (id) => (stored?.id === id ? stored : null)),
 		listUsers: vi.fn(async () => []),
-		updateUserAvatarUrl: vi.fn(async (id, avatarUrl, updatedAt) => {
+		updateUserAvatarUrl: vi.fn(async (id, avatarUrl, avatarOnboardingCompletedAt, updatedAt) => {
 			if (!stored || stored.id !== id) return null;
-			stored = { ...stored, avatarUrl, updatedAt };
+			stored = { ...stored, avatarOnboardingCompletedAt, avatarUrl, updatedAt };
 			return stored;
 		}),
 		updateUserRole: vi.fn(async () => null)

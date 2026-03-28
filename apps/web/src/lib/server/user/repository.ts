@@ -5,6 +5,7 @@ import type { ListUsersInput, UserRecord, UserRepository } from './types';
 
 const mapRow = (row: typeof users.$inferSelect): UserRecord => ({
 	avatarUrl: row.avatarUrl ?? null,
+	avatarOnboardingCompletedAt: row.avatarOnboardingCompletedAt ?? null,
 	createdAt: row.createdAt,
 	id: row.id,
 	nickname: row.nickname,
@@ -36,10 +37,10 @@ export const userRepository: UserRepository = {
 		return rows.map(mapRow);
 	},
 
-	async updateUserAvatarUrl(id, avatarUrl, updatedAt) {
+	async updateUserAvatarUrl(id, avatarUrl, avatarOnboardingCompletedAt, updatedAt) {
 		const rows = await db
 			.update(users)
-			.set({ avatarUrl, updatedAt })
+			.set({ avatarOnboardingCompletedAt, avatarUrl, updatedAt })
 			.where(eq(users.id, id))
 			.returning();
 		return rows[0] ? mapRow(rows[0]) : null;

@@ -2,6 +2,7 @@ import type { ProductRole } from '$lib/server/auth/types';
 
 export type UserRecord = {
 	avatarUrl: string | null;
+	avatarOnboardingCompletedAt?: Date | null;
 	createdAt: Date;
 	id: string;
 	nickname: string;
@@ -20,6 +21,7 @@ export type UserRepository = {
 	updateUserAvatarUrl(
 		id: string,
 		avatarUrl: string | null,
+		avatarOnboardingCompletedAt: Date | null,
 		updatedAt: Date
 	): Promise<UserRecord | null>;
 	updateUserRole(id: string, role: ProductRole, updatedAt: Date): Promise<UserRecord | null>;

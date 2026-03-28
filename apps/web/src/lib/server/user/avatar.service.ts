@@ -27,8 +27,14 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 
 			const storageKey = getAvatarStorageKey(user.id);
 			await storage.upload(storageKey, sanitizedMedia.file);
+			const completedAt = new Date();
 
-			const updatedUser = await repository.updateUserAvatarUrl(user.id, storageKey, new Date());
+			const updatedUser = await repository.updateUserAvatarUrl(
+				user.id,
+				storageKey,
+				completedAt,
+				completedAt
+			);
 			if (!updatedUser) {
 				await storage.delete(storageKey).catch(() => {});
 				throw new ArtworkFlowError(500, 'Avatar upload failed', 'PUBLISH_FAILED');
@@ -52,7 +58,12 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 			}
 
 			const storageKey = record.avatarUrl;
-			const updatedUser = await repository.updateUserAvatarUrl(user.id, null, new Date());
+			const updatedUser = await repository.updateUserAvatarUrl(
+				user.id,
+				null,
+				record.avatarOnboardingCompletedAt ?? null,
+				new Date()
+			);
 			if (!updatedUser) {
 				throw new ArtworkFlowError(500, 'Avatar deletion failed', 'PUBLISH_FAILED');
 			}
