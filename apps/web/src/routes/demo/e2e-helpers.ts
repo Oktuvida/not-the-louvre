@@ -1,7 +1,11 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { ARTWORK_MEDIA_MAX_BYTES } from '../../lib/server/artwork/config';
-import { createAvifTestFile, createJpegTestFile } from '../../lib/server/media/test-helpers';
+import {
+	createAvifTestFile,
+	createJpegTestFile,
+	createMalformedAvifFile
+} from '../../lib/server/media/test-helpers';
 
 export const deterministicAuthUser = {
 	nickname: 'journey_artist',
@@ -28,6 +32,68 @@ export const resetDemoState = async (request: APIRequestContext) => {
 export const openNicknameAuthDemo = async (page: Page) => {
 	await page.goto('/demo/better-auth/login');
 	await expect(page.getByText('Authentication demo state: signed out')).toBeVisible();
+};
+
+export const openHomeAuthOverlay = async (page: Page) => {
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Come In' }).click();
+	await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+};
+
+export const readVisibleOneTimeKey = async (page: Page) => {
+	const recoveryKey = await page.locator('p.font-mono').textContent();
+	if (!recoveryKey) {
+		throw new Error('One-time recovery key was not rendered');
+	}
+
+	return recoveryKey.trim();
+};
+
+export const installAvatarExportHarness = async (page: Page) => {
+	const validAvatar = await createAvifTestFile({ height: 256, name: 'avatar.avif', width: 256 });
+	const invalidAvatar = createMalformedAvifFile();
+	const validBase64 = Buffer.from(await validAvatar.arrayBuffer()).toString('base64');
+	const invalidBase64 = Buffer.from(await invalidAvatar.arrayBuffer()).toString('base64');
+
+	await page.addInitScript(
+		({ bad, good }) => {
+			const decode = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+			const originalToBlob = HTMLCanvasElement.prototype.toBlob;
+
+			Object.defineProperty(window, '__avatarExportMode', {
+				configurable: true,
+				value: 'good',
+				writable: true
+			});
+
+			HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+				if (type === 'image/avif') {
+					const mode = (window as Window & { __avatarExportMode?: string }).__avatarExportMode;
+
+					if (mode === 'unsupported') {
+						callback(null);
+						return;
+					}
+
+					callback(
+						new Blob([decode(mode === 'bad' ? bad : good)], {
+							type: 'image/avif'
+						})
+					);
+					return;
+				}
+
+				originalToBlob.call(this, callback, type, quality);
+			};
+		},
+		{ bad: invalidBase64, good: validBase64 }
+	);
+};
+
+export const setAvatarExportMode = async (page: Page, mode: 'bad' | 'good' | 'unsupported') => {
+	await page.evaluate((nextMode) => {
+		(window as Window & { __avatarExportMode?: string }).__avatarExportMode = nextMode;
+	}, mode);
 };
 
 export const checkNicknameAvailability = async (page: Page, nickname: string) => {
