@@ -4,7 +4,8 @@ import { ARTWORK_MEDIA_MAX_BYTES } from '../../lib/server/artwork/config';
 import {
 	createAvifTestFile,
 	createJpegTestFile,
-	createMalformedAvifFile
+	createMalformedPngFile,
+	createPngTestFile
 } from '../../lib/server/media/test-helpers';
 
 export const deterministicAuthUser = {
@@ -50,8 +51,8 @@ export const readVisibleOneTimeKey = async (page: Page) => {
 };
 
 export const installAvatarExportHarness = async (page: Page) => {
-	const validAvatar = await createAvifTestFile({ height: 256, name: 'avatar.avif', width: 256 });
-	const invalidAvatar = createMalformedAvifFile();
+	const validAvatar = await createPngTestFile({ height: 256, name: 'avatar.png', width: 256 });
+	const invalidAvatar = createMalformedPngFile();
 	const validBase64 = Buffer.from(await validAvatar.arrayBuffer()).toString('base64');
 	const invalidBase64 = Buffer.from(await invalidAvatar.arrayBuffer()).toString('base64');
 
@@ -67,7 +68,7 @@ export const installAvatarExportHarness = async (page: Page) => {
 			});
 
 			HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
-				if (type === 'image/avif') {
+				if (type === 'image/png') {
 					const mode = (window as Window & { __avatarExportMode?: string }).__avatarExportMode;
 
 					if (mode === 'unsupported') {
@@ -77,7 +78,7 @@ export const installAvatarExportHarness = async (page: Page) => {
 
 					callback(
 						new Blob([decode(mode === 'bad' ? bad : good)], {
-							type: 'image/avif'
+							type: 'image/png'
 						})
 					);
 					return;
