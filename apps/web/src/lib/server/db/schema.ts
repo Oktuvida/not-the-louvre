@@ -45,6 +45,7 @@ export const users = appSchema.table(
 		nickname: text('nickname').notNull(),
 		recoveryHash: text('recovery_hash').notNull(),
 		avatarUrl: text('avatar_url'),
+		avatarOnboardingCompletedAt: timestamp('avatar_onboarding_completed_at'),
 		role: userRole('role').notNull().default('user'),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at')
