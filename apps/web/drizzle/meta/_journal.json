@@ -50,6 +50,20 @@
       "when": 1774577567700,
       "tag": "0006_steady_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1774664842446,
+      "tag": "0007_curly_black_cat",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1774664892850,
+      "tag": "0008_mean_professor_monster",
+      "breakpoints": true
     }
   ]
 }
