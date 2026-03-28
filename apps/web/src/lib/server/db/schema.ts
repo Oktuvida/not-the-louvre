@@ -131,6 +131,23 @@ export const artworkVotes = appSchema.table(
 	]
 );
 
+export const artworkVoteRealtime = appSchema.table(
+	'artwork_vote_realtime',
+	{
+		id: text('id').primaryKey(),
+		artworkId: text('artwork_id')
+			.notNull()
+			.references(() => artworks.id, { onDelete: 'cascade' }),
+		value: artworkVoteValue('value').notNull(),
+		createdAt: timestamp('created_at').defaultNow().notNull(),
+		updatedAt: timestamp('updated_at')
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull()
+	},
+	(table) => [index('artwork_vote_realtime_artwork_id_idx').on(table.artworkId)]
+);
+
 export const artworkComments = appSchema.table(
 	'artwork_comments',
 	{
@@ -154,6 +171,27 @@ export const artworkComments = appSchema.table(
 		index('artwork_comments_artwork_created_idx').on(table.artworkId, table.createdAt, table.id),
 		index('artwork_comments_author_id_idx').on(table.authorId)
 	]
+);
+
+export const artworkCommentRealtime = appSchema.table(
+	'artwork_comment_realtime',
+	{
+		id: text('id').primaryKey(),
+		artworkId: text('artwork_id')
+			.notNull()
+			.references(() => artworks.id, { onDelete: 'cascade' }),
+		authorId: text('author_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		body: text('body'),
+		isVisible: boolean('is_visible').notNull().default(true),
+		createdAt: timestamp('created_at').defaultNow().notNull(),
+		updatedAt: timestamp('updated_at')
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull()
+	},
+	(table) => [index('artwork_comment_realtime_artwork_id_idx').on(table.artworkId)]
 );
 
 export const contentReports = appSchema.table(
@@ -273,6 +311,13 @@ export const artworkVotesRelations = relations(artworkVotes, ({ one }) => ({
 	})
 }));
 
+export const artworkVoteRealtimeRelations = relations(artworkVoteRealtime, ({ one }) => ({
+	artwork: one(artworks, {
+		fields: [artworkVoteRealtime.artworkId],
+		references: [artworks.id]
+	})
+}));
+
 export const artworkCommentsRelations = relations(artworkComments, ({ one }) => ({
 	artwork: one(artworks, {
 		fields: [artworkComments.artworkId],
@@ -280,6 +325,17 @@ export const artworkCommentsRelations = relations(artworkComments, ({ one }) => 
 	}),
 	author: one(users, {
 		fields: [artworkComments.authorId],
+		references: [users.id]
+	})
+}));
+
+export const artworkCommentRealtimeRelations = relations(artworkCommentRealtime, ({ one }) => ({
+	artwork: one(artworks, {
+		fields: [artworkCommentRealtime.artworkId],
+		references: [artworks.id]
+	}),
+	author: one(users, {
+		fields: [artworkCommentRealtime.authorId],
 		references: [users.id]
 	})
 }));
