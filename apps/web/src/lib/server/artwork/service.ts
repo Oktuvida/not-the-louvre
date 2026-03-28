@@ -4,7 +4,6 @@ import {
 	ARTWORK_COMMENT_RATE_LIMIT,
 	ARTWORK_PUBLISH_RATE_LIMIT,
 	ARTWORK_VOTE_RATE_LIMIT,
-	CONTENT_REPORT_AUTO_HIDE_THRESHOLD,
 	CONTENT_REPORT_DETAILS_MAX_LENGTH
 } from './config';
 import { ArtworkFlowError } from './errors';
@@ -342,46 +341,6 @@ const assertExactlyOneReportTarget = (artworkId?: string | null, commentId?: str
 	return { artworkId: normalizedArtworkId, commentId: normalizedCommentId };
 };
 
-const maybeAutoHideArtwork = async (
-	artworkId: string,
-	repository: ArtworkRepository,
-	now: Date
-) => {
-	const artwork = await repository.findArtworkById(artworkId);
-	if (!artwork || artwork.isHidden) return artwork;
-
-	const reportCount = await repository.findArtworkReportCount(artworkId);
-	if (reportCount < CONTENT_REPORT_AUTO_HIDE_THRESHOLD) {
-		return artwork;
-	}
-
-	return repository.setArtworkHiddenState(artworkId, {
-		hiddenAt: now,
-		isHidden: true,
-		updatedAt: now
-	});
-};
-
-const maybeAutoHideComment = async (
-	commentId: string,
-	repository: ArtworkRepository,
-	now: Date
-) => {
-	const comment = await repository.findCommentById(commentId);
-	if (!comment || comment.isHidden) return comment;
-
-	const reportCount = await repository.findCommentReportCount(commentId);
-	if (reportCount < CONTENT_REPORT_AUTO_HIDE_THRESHOLD) {
-		return comment;
-	}
-
-	return repository.setCommentHiddenState(commentId, {
-		hiddenAt: now,
-		isHidden: true,
-		updatedAt: now
-	});
-};
-
 export const publishArtwork = async (
 	input: PublishArtworkInput,
 	context: Partial<ArtworkActorContext>,
@@ -660,14 +619,6 @@ export const submitContentReport = async (
 		reporterId: actor.user.id,
 		updatedAt: now
 	});
-
-	if (artworkId) {
-		await maybeAutoHideArtwork(artworkId, repository, now);
-	}
-
-	if (commentId) {
-		await maybeAutoHideComment(commentId, repository, now);
-	}
 
 	return report;
 };
