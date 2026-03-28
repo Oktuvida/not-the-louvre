@@ -15,6 +15,9 @@ export interface Artwork {
 	upvotes: number;
 	downvotes: number;
 	timestamp: number;
+	commentCount?: number;
 	comments: ArtworkComment[];
+	forkCount?: number;
 	rank?: number;
+	viewerVote?: 'down' | 'up' | null;
 }

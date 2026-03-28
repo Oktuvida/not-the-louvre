@@ -54,6 +54,15 @@
 			</div>
 		{/if}
 
+		<div class="mt-4 space-y-2 border-t-2 border-[#e5dfd5] pt-3 text-[#2d2420]">
+			<h3 class="truncate text-lg font-bold">{artwork.title}</h3>
+			<p class="truncate text-sm text-[#6b625a]">by {artwork.artist}</p>
+			<div class="flex items-center gap-3 text-xs font-semibold text-[#5a5249]">
+				<span>⭐ {artwork.score}</span>
+				<span>💬 {artwork.commentCount ?? artwork.comments.length}</span>
+			</div>
+		</div>
+
 		<!-- Hover Plaque -->
 		{#if hovered}
 			<div
