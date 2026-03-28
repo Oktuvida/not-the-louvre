@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ARTWORK_MEDIA_MAX_BYTES, ARTWORK_PUBLISH_RATE_LIMIT } from './config';
 import { ArtworkFlowError } from './errors';
-import { createAvifTestFile, createMalformedAvifFile, fileToBytes } from '../media/test-helpers';
+import {
+	createAvifTestFile,
+	createJpegTestFile,
+	createMalformedAvifFile,
+	fileToBytes
+} from '../media/test-helpers';
 import type {
 	ArtworkRecord,
 	ArtworkRepository,
@@ -440,6 +445,51 @@ describe('artwork service', () => {
 				{
 					media: createMalformedAvifFile(),
 					title: 'Broken payload'
+				},
+				{
+					ipAddress: '127.0.0.1',
+					user: {
+						id: 'user-1',
+						authUserId: 'user-1',
+						nickname: 'artist_1',
+						role: 'user',
+						avatarUrl: null,
+						name: 'artist_1',
+						email: 'artist_1@not-the-louvre.local',
+						emailVerified: true,
+						image: null,
+						createdAt: new Date(),
+						updatedAt: new Date()
+					}
+				},
+				{ repository, storage }
+			)
+		).rejects.toMatchObject({
+			code: 'INVALID_MEDIA_CONTENT',
+			status: 400
+		});
+
+		expect(storage.upload).not.toHaveBeenCalled();
+	});
+
+	it('rejects JPEG payloads disguised as .avif before touching storage', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage } = createStorage();
+		const jpegPayload = await createJpegTestFile({
+			height: 1024,
+			name: 'artwork.avif',
+			width: 1024
+		});
+		const disguisedFile = new File([await jpegPayload.arrayBuffer()], 'artwork.avif', {
+			type: 'image/avif'
+		});
+
+		await expect(
+			publishArtwork(
+				{
+					media: disguisedFile,
+					title: 'Disguised payload'
 				},
 				{
 					ipAddress: '127.0.0.1',
