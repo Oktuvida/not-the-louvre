@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { createAvifTestFile } from '../../lib/server/media/test-helpers';
+import { ARTWORK_MEDIA_MAX_BYTES } from '../../lib/server/artwork/config';
+import { createAvifTestFile, createJpegTestFile } from '../../lib/server/media/test-helpers';
 
 export const deterministicAuthUser = {
 	nickname: 'journey_artist',
@@ -88,11 +89,37 @@ export const createArtworkUpload = async () => {
 	};
 };
 
-export const publishArtworkThroughDemo = async (page: Page, input: { title?: string } = {}) => {
+export const createDisguisedJpegUpload = async () => {
+	const file = await createJpegTestFile({
+		height: 1024,
+		name: 'renamed-artwork.avif',
+		width: 1024
+	});
+
+	return {
+		buffer: Buffer.from(await file.arrayBuffer()),
+		mimeType: 'image/avif',
+		name: 'renamed-artwork.avif'
+	};
+};
+
+export const createOversizedArtworkUpload = () => ({
+	buffer: Buffer.from(new Uint8Array(ARTWORK_MEDIA_MAX_BYTES + 1)),
+	mimeType: 'image/avif',
+	name: 'oversized-artwork.avif'
+});
+
+export const publishArtworkThroughDemo = async (
+	page: Page,
+	input: {
+		title?: string;
+		upload?: Awaited<ReturnType<typeof createArtworkUpload>>;
+	} = {}
+) => {
 	await page.goto('/demo/artwork-publish');
 	await expect(page.getByText('Artwork demo state: authenticated')).toBeVisible();
 	await page.getByLabel('Artwork title').fill(input.title ?? deterministicArtwork.title);
-	await page.getByLabel('Artwork media').setInputFiles(await createArtworkUpload());
+	await page.getByLabel('Artwork media').setInputFiles(input.upload ?? (await createArtworkUpload()));
 	await page.getByRole('button', { name: 'Publish artwork' }).click();
 	await expect(page).toHaveURL(/\/demo\/artwork-publish\?published=/);
 };
