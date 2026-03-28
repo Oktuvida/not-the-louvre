@@ -236,6 +236,14 @@ export type ArtworkStorage = {
 	upload(key: string, file: File): Promise<void>;
 };
 
+export type SanitizedMedia = {
+	contentType: string;
+	file: File;
+	height: number;
+	sizeBytes: number;
+	width: number;
+};
+
 export type CreateArtworkInput = Omit<ArtworkRecord, 'createdAt' | 'updatedAt'> & {
 	createdAt: Date;
 	updatedAt: Date;
