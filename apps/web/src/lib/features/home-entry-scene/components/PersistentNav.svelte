@@ -1,20 +1,16 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import { homePreviewCards } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 
-	let {
-		nickname = null,
-		onlogout
-	}: {
-		nickname?: string | null;
-		onlogout?: () => void;
-	} = $props();
+	let { user = null }: { user?: HomeAuthUser | null } = $props();
 </script>
 
 <div class="pointer-events-none absolute inset-0 z-[30]">
-	{#if nickname}
+	{#if user}
 		<div
 			class="pointer-events-auto absolute top-8 left-8 flex items-center gap-3 rounded-[1.2rem] border-4 border-[#2d2420] bg-[rgba(253,251,247,0.92)] px-4 py-3 shadow-xl"
 		>
@@ -22,11 +18,15 @@
 				<p class="text-[0.65rem] font-semibold tracking-[0.18em] text-[#8a6c52] uppercase">
 					Signed in as
 				</p>
-				<p class="font-display text-lg tracking-[0.08em] text-[#2d2420] uppercase">{nickname}</p>
+				<p class="font-display text-lg tracking-[0.08em] text-[#2d2420] uppercase">
+					{user.nickname}
+				</p>
 			</div>
-			<GameButton variant="danger" onclick={onlogout} className="px-4 py-2 text-xs font-black">
-				<span>Logout</span>
-			</GameButton>
+			<form method="POST" action="?/signOut" use:enhance>
+				<GameButton type="submit" variant="danger" className="px-4 py-2 text-xs font-black">
+					<span>Logout</span>
+				</GameButton>
+			</form>
 		</div>
 	{/if}
 

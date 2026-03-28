@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
 	import HomeHeroOverlay from '$lib/features/home-entry-scene/components/HomeHeroOverlay.svelte';
 	import PersistentNav from '$lib/features/home-entry-scene/components/PersistentNav.svelte';
 	import StudioScene from '$lib/features/home-entry-scene/scene/StudioScene.svelte';
@@ -8,13 +9,11 @@
 	let {
 		children,
 		entryState = 'outside',
-		nickname = null,
-		onlogout
+		user = null
 	}: {
 		children?: Snippet;
 		entryState?: EntryFlowState;
-		nickname?: string | null;
-		onlogout?: () => void;
+		user?: HomeAuthUser | null;
 	} = $props();
 </script>
 
@@ -30,6 +29,6 @@
 		</div>
 	</div>
 	<HomeHeroOverlay />
-	<PersistentNav {nickname} {onlogout} />
+	<PersistentNav {user} />
 	{@render children?.()}
 </div>

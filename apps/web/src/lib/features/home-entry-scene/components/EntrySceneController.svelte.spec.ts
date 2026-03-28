@@ -3,13 +3,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import EntrySceneController from './EntrySceneController.svelte';
 
+const authenticatedUser = {
+	authUserId: 'auth-user-1',
+	avatarOnboardingCompletedAt: new Date('2026-03-28T10:00:00.000Z'),
+	email: 'artist_1@not-the-louvre.local',
+	id: 'product-user-1',
+	nickname: 'artist_1',
+	role: 'user'
+};
+
 describe('EntrySceneController', () => {
 	beforeEach(() => {
 		vi.unstubAllGlobals();
 	});
 
 	it('shows the wall first and reveals auth after Come In completes', async () => {
-		render(EntrySceneController);
+		render(EntrySceneController, {
+			auth: { integrityFailure: null, onboarding: null, status: 'signed-out', user: null }
+		});
 
 		await expect.element(page.getByRole('button', { name: 'Come In' })).toBeVisible();
 
@@ -17,68 +28,82 @@ describe('EntrySceneController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 2400));
 
 		await expect.element(page.getByText('Welcome back')).toBeVisible();
-		await expect.element(page.getByRole('button', { name: 'Close' })).toBeVisible();
 	});
 
-	it('reverses back outside after dismissing auth', async () => {
-		render(EntrySceneController);
-
-		await page.getByRole('button', { name: 'Come In' }).click();
-		await new Promise((resolve) => setTimeout(resolve, 2400));
-		await page.getByRole('button', { name: 'Close' }).click();
-		await new Promise((resolve) => setTimeout(resolve, 1500));
-
-		await expect.element(page.getByRole('button', { name: 'Come In' })).toBeVisible();
-	});
-
-	it('uses the reduced-motion fallback to reveal auth quickly', async () => {
-		vi.stubGlobal('matchMedia', (query: string) => ({
-			matches: query === '(prefers-reduced-motion: reduce)',
-			media: query,
-			onchange: null,
-			addEventListener: vi.fn(),
-			removeEventListener: vi.fn(),
-			addListener: vi.fn(),
-			removeListener: vi.fn(),
-			dispatchEvent: vi.fn()
-		}));
-
-		render(EntrySceneController);
-
-		await page.getByRole('button', { name: 'Come In' }).click();
-		await new Promise((resolve) => setTimeout(resolve, 800));
-
-		await expect.element(page.getByText('Welcome back')).toBeVisible();
-	});
-
-	it('can switch from login to signup onboarding and back to recovery entry points', async () => {
-		render(EntrySceneController);
-
-		await page.getByRole('button', { name: 'Come In' }).click();
-		await new Promise((resolve) => setTimeout(resolve, 2400));
-
-		await page.getByRole('button', { name: 'Sign up' }).click();
-		await expect.element(page.getByRole('heading', { name: 'Draw yourself' })).toBeVisible();
-
-		await page.getByRole('button', { name: 'Log in' }).click();
-		await expect.element(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
-
-		await page.getByRole('button', { name: 'Use recovery key' }).click();
-		await expect.element(page.getByRole('heading', { name: 'Recover access' })).toBeVisible();
-	});
-
-	it('shows signed-in account controls and returns outside after logout', async () => {
-		render(EntrySceneController);
-		await page.getByRole('button', { name: 'Come In' }).click();
-		await new Promise((resolve) => setTimeout(resolve, 2400));
-		await page.getByPlaceholder('artist_123').fill('artist_1');
-		await page.getByPlaceholder('Enter your password').fill('password123');
-		await page.getByRole('button', { name: 'Sign In' }).last().click();
+	it('bootstraps directly into the signed-in scene when the server session already exists', async () => {
+		render(EntrySceneController, {
+			auth: {
+				integrityFailure: null,
+				onboarding: { status: 'complete' },
+				status: 'authenticated',
+				user: authenticatedUser
+			}
+		});
 
 		await expect.element(page.getByText('Signed in as')).toBeInTheDocument();
 		await expect.element(page.getByText('artist_1')).toBeInTheDocument();
-		await page.getByRole('button', { name: 'Logout' }).click();
+		await expect.element(page.getByRole('button', { name: 'Come In' })).not.toBeInTheDocument();
+	});
 
-		await expect.element(page.getByRole('button', { name: 'Come In' })).toBeInTheDocument();
+	it('keeps the signup overlay visible after backend signup success until the user acknowledges the recovery key', async () => {
+		render(EntrySceneController, {
+			auth: {
+				integrityFailure: null,
+				onboarding: { status: 'complete' },
+				status: 'authenticated',
+				user: authenticatedUser
+			},
+			form: {
+				action: 'signUp',
+				onboarding: 'needs-avatar',
+				recoveryKey: 'signup-recovery-key',
+				success: true
+			}
+		});
+
+		await expect.element(page.getByRole('heading', { name: 'Keep this key' })).toBeVisible();
+		await expect.element(page.getByText('signup-recovery-key')).toBeVisible();
+		await expect.element(page.getByText('Signed in as')).not.toBeInTheDocument();
+	});
+
+	it('renders a safe blocked message when auth bootstrap detects an integrity failure', async () => {
+		render(EntrySceneController, {
+			auth: {
+				integrityFailure: {
+					message: 'Authenticated session is missing its product user profile',
+					reason: 'missing-product-user'
+				},
+				onboarding: null,
+				status: 'integrity-failure',
+				user: null
+			}
+		});
+
+		await expect.element(page.getByText('Session needs repair')).toBeVisible();
+		await expect
+			.element(page.getByText('Authenticated session is missing its product user profile'))
+			.toBeVisible();
+		await expect.element(page.getByText('Signed in as')).not.toBeInTheDocument();
+	});
+
+	it('resumes avatar onboarding for authenticated users who have not completed it yet', async () => {
+		render(EntrySceneController, {
+			auth: {
+				integrityFailure: null,
+				onboarding: { status: 'needs-avatar' },
+				status: 'authenticated',
+				user: {
+					authUserId: 'auth-user-1',
+					avatarOnboardingCompletedAt: null,
+					email: 'artist_1@not-the-louvre.local',
+					id: 'product-user-1',
+					nickname: 'artist_1',
+					role: 'user'
+				}
+			}
+		});
+
+		await expect.element(page.getByText('Finish your avatar')).toBeVisible();
+		await expect.element(page.getByText('Signed in as')).not.toBeInTheDocument();
 	});
 });
