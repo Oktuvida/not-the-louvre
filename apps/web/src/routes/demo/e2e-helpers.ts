@@ -4,8 +4,10 @@ import { ARTWORK_MEDIA_MAX_BYTES } from '../../lib/server/artwork/config';
 import {
 	createAvifTestFile,
 	createJpegTestFile,
+	createMalformedAvifFile,
 	createMalformedPngFile,
-	createPngTestFile
+	createPngTestFile,
+	createWebpTestFile
 } from '../../lib/server/media/test-helpers';
 
 export const deterministicAuthUser = {
@@ -94,6 +96,85 @@ export const installAvatarExportHarness = async (page: Page) => {
 export const setAvatarExportMode = async (page: Page, mode: 'bad' | 'good' | 'unsupported') => {
 	await page.evaluate((nextMode) => {
 		(window as Window & { __avatarExportMode?: string }).__avatarExportMode = nextMode;
+	}, mode);
+};
+
+export const installDrawingExportHarness = async (page: Page) => {
+	const validWebp = await createWebpTestFile({ height: 1024, name: 'drawing.webp', width: 1024 });
+	const validJpeg = await createJpegTestFile({ height: 1024, name: 'drawing.jpg', width: 1024 });
+	const validPng = await createPngTestFile({ height: 1024, name: 'drawing.png', width: 1024 });
+	const invalidBytes = createMalformedAvifFile();
+
+	const payload = {
+		bad: Buffer.from(await invalidBytes.arrayBuffer()).toString('base64'),
+		jpeg: Buffer.from(await validJpeg.arrayBuffer()).toString('base64'),
+		png: Buffer.from(await validPng.arrayBuffer()).toString('base64'),
+		webp: Buffer.from(await validWebp.arrayBuffer()).toString('base64')
+	};
+
+	await page.addInitScript((assets) => {
+		const decode = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+		const originalToBlob = HTMLCanvasElement.prototype.toBlob;
+
+		Object.defineProperty(window, '__drawingExportMode', {
+			configurable: true,
+			value: 'webp',
+			writable: true
+		});
+
+		HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+			const mode = (window as Window & { __drawingExportMode?: string }).__drawingExportMode;
+
+			if (type === 'image/webp' || type === 'image/jpeg' || type === 'image/png') {
+				if (mode === 'unsupported') {
+					callback(null);
+					return;
+				}
+
+				if (mode === 'bad') {
+					callback(new Blob([decode(assets.bad)], { type }));
+					return;
+				}
+
+				if (mode === 'jpeg') {
+					if (type === 'image/webp') {
+						callback(null);
+						return;
+					}
+					if (type === 'image/jpeg') {
+						callback(new Blob([decode(assets.jpeg)], { type }));
+						return;
+					}
+				}
+
+				if (mode === 'png') {
+					if (type === 'image/webp' || type === 'image/jpeg') {
+						callback(null);
+						return;
+					}
+					if (type === 'image/png') {
+						callback(new Blob([decode(assets.png)], { type }));
+						return;
+					}
+				}
+
+				if (mode === 'webp' && type === 'image/webp') {
+					callback(new Blob([decode(assets.webp)], { type }));
+					return;
+				}
+			}
+
+			originalToBlob.call(this, callback, type, quality);
+		};
+	}, payload);
+};
+
+export const setDrawingExportMode = async (
+	page: Page,
+	mode: 'bad' | 'jpeg' | 'png' | 'unsupported' | 'webp'
+) => {
+	await page.evaluate((nextMode) => {
+		(window as Window & { __drawingExportMode?: string }).__drawingExportMode = nextMode;
 	}, mode);
 };
 

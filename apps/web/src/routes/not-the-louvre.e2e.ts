@@ -2,10 +2,12 @@ import { expect, test } from '@playwright/test';
 import {
 	deterministicAuthUser,
 	installAvatarExportHarness,
+	installDrawingExportHarness,
 	openHomeAuthOverlay,
 	readVisibleOneTimeKey,
 	resetDemoState,
 	setAvatarExportMode,
+	setDrawingExportMode,
 	signUpThroughNicknameDemo
 } from './demo/e2e-helpers';
 
@@ -41,6 +43,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expect(page.getByRole('link', { name: 'Studio' })).toBeVisible();
 		await page.getByRole('button', { name: 'Logout' }).click();
 
 		await openHomeAuthOverlay(page);
@@ -74,6 +77,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 
 		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expect(page.getByRole('link', { name: 'Studio' })).toBeVisible();
 		await expect(page.getByText(deterministicAuthUser.nickname)).toBeVisible();
 		await page.reload();
 		await expect(page.getByText('Signed in as')).toBeVisible();
@@ -122,6 +126,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await setAvatarExportMode(page, 'good');
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expect(page.getByRole('link', { name: 'Studio' })).toBeVisible();
 	});
 
 	test('home recovery flow rotates the recovery key and lets the user sign in with the new password', async ({
@@ -193,12 +198,94 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Signed in as')).not.toBeVisible();
 	});
 
-	test('draw route exposes the studio drawing workspace', async ({ page }) => {
+	test('draw route publishes real artwork through the product flow', async ({ page }) => {
+		await installDrawingExportHarness(page);
+
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
 
 		await expect(page.getByRole('link', { name: 'Exit Studio' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
-		await expect(page.getByText('Your character is painting...')).toBeVisible();
+		await page.getByPlaceholder('Give your piece a title').fill('Fresh Paint');
+		await page.getByRole('button', { name: 'Publish' }).click();
+
+		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Fresh Paint' })).toBeVisible();
+		await expect(page.getByRole('link', { name: 'Open gallery' })).toBeVisible();
+		await expect(page.getByText(/Artwork id:/)).toBeVisible();
+	});
+
+	test('gallery shows a newly published artwork from the real product flow', async ({ page }) => {
+		await installDrawingExportHarness(page);
+
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+		await page.getByPlaceholder('Give your piece a title').fill('Gallery Piece');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		const publishedTitle = (
+			await page
+				.getByRole('heading')
+				.filter({ hasText: /^Untitled #|./ })
+				.nth(0)
+				.textContent()
+		)?.trim();
+		expect(publishedTitle).toBeTruthy();
+
+		await page.goto('/gallery/your-studio');
+		await expect(page.getByText(publishedTitle!)).toBeVisible();
+		await page.getByRole('button', { name: new RegExp(publishedTitle!) }).click();
+		await expect(page.getByText('Artwork details')).toBeVisible();
+	});
+
+	test('gallery shows an honest empty state when no persisted artworks exist', async ({ page }) => {
+		await page.goto('/gallery');
+
+		await expect(page.getByText('No artworks have reached this gallery room yet.')).toBeVisible();
+		await expect(page.getByText('Sunset Over Mountains')).not.toBeVisible();
+	});
+
+	test('draw route keeps the user on the page when export fails and allows retry', async ({
+		page
+	}) => {
+		await installDrawingExportHarness(page);
+
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+
+		await setDrawingExportMode(page, 'unsupported');
+		await page.getByPlaceholder('Give your piece a title').fill('Retry Piece');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(
+			page.getByText('This browser could not export your drawing. Please try again.')
+		).toBeVisible();
+		await expect(page).toHaveURL(/\/draw$/);
+
+		await setDrawingExportMode(page, 'jpeg');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+	});
+
+	test('gallery detail can fork into the draw studio with the parent artwork preloaded', async ({ page }) => {
+		await installDrawingExportHarness(page);
+
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+		await page.getByPlaceholder('Give your piece a title').fill('Fork Source');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+
+		await page.goto('/gallery/your-studio');
+		await page.getByRole('button', { name: /Fork Source/ }).click();
+		await page.getByRole('link', { name: 'Fork' }).click();
+
+		await expect(page).toHaveURL(/\/draw\?fork=/);
+		await expect(page.getByText('Forking from')).toBeVisible();
+		await expect(page.getByText('Fork Source')).toBeVisible();
 	});
 
 	test('gallery route exposes room navigation', async ({ page }) => {
@@ -206,15 +293,14 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await expect(page.getByRole('heading', { name: 'THE GALLERY' })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Mystery Room' })).toBeVisible();
-		await expect(page.getByText('The most legendary artworks of all time')).toBeVisible();
-		await expect(page.getByText('CHAMPION')).toBeVisible();
+		await expect(page.getByText('No artworks have reached this gallery room yet.')).toBeVisible();
 	});
 
 	test('room-specific gallery route keeps room context', async ({ page }) => {
 		await page.goto('/gallery/mystery');
 
 		await expect(page.getByRole('link', { name: 'Mystery Room' })).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Spin!' })).toBeVisible();
+		await expect(page.getByText('No artworks have reached this gallery room yet.')).toBeVisible();
 	});
 
 	test('unknown routes render the custom not-found page', async ({ page }) => {
