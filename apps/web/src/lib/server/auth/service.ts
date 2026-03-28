@@ -4,6 +4,7 @@ import { hashPassword } from 'better-auth/crypto';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { account, authRateLimits, users } from '$lib/server/db/schema';
+import { logSecurityEvent } from '$lib/server/security/logging';
 import { AuthFlowError } from './errors';
 import { generateRecoveryKey, hashRecoveryKey, verifyRecoveryKey } from './recovery';
 import { AuthRateLimitError, assertRateLimit, recordFailure, recordSuccess } from './rate-limit';
@@ -27,6 +28,20 @@ const toSafeAuthError = (message: string, code: AuthFlowError['code'], status = 
 
 const toRateLimitFlowError = (error: AuthRateLimitError) =>
 	new AuthFlowError(429, error.message, 'RATE_LIMITED');
+
+const logAuthAbuseLimitDenied = (
+	kind: 'login' | 'recovery',
+	identifier: string,
+	ipAddress: string | null,
+	error: AuthRateLimitError
+) => {
+	logSecurityEvent('auth.abuse_limit_denied', {
+		blockedUntil: error.blockedUntil.toISOString(),
+		identifier,
+		ipAddress,
+		kind
+	});
+};
 
 const mapProfileToCanonicalUser = (
 	profile: typeof users.$inferSelect,
@@ -64,6 +79,7 @@ const safeAuthFailure = async <T>(
 	error: Error
 ): Promise<T> => {
 	if (error instanceof AuthRateLimitError) {
+		logAuthAbuseLimitDenied(kind, identifier, ipAddress, error);
 		throw toRateLimitFlowError(error);
 	}
 
@@ -71,6 +87,7 @@ const safeAuthFailure = async <T>(
 		await recordFailure(kind, identifier, ipAddress);
 	} catch (recordError) {
 		if (recordError instanceof AuthRateLimitError) {
+			logAuthAbuseLimitDenied(kind, identifier, ipAddress, recordError);
 			throw toRateLimitFlowError(recordError);
 		}
 
@@ -157,6 +174,7 @@ export const signInWithNickname = async (
 		await assertRateLimit('login', input.nickname, ipAddress);
 	} catch (error) {
 		if (error instanceof AuthRateLimitError) {
+			logAuthAbuseLimitDenied('login', input.nickname, ipAddress, error);
 			throw toRateLimitFlowError(error);
 		}
 
@@ -210,6 +228,7 @@ export const recoverAccount = async (
 		await assertRateLimit('recovery', input.nickname, ipAddress);
 	} catch (error) {
 		if (error instanceof AuthRateLimitError) {
+			logAuthAbuseLimitDenied('recovery', input.nickname, ipAddress, error);
 			throw toRateLimitFlowError(error);
 		}
 
@@ -254,7 +273,18 @@ export const recoverAccount = async (
 export const resolveSessionContext = async (
 	headers: Headers
 ): Promise<AuthSessionContext | null | AuthIntegrityFailure> => {
-	const session = await auth.api.getSession({ headers });
+	let session;
+
+	try {
+		session = await auth.api.getSession({ headers });
+	} catch (error) {
+		if (error instanceof APIError) {
+			return null;
+		}
+
+		throw error;
+	}
+
 	if (!session) {
 		return null;
 	}

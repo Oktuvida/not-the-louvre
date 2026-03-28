@@ -173,6 +173,10 @@ const mocked = vi.hoisted(() => {
 	return { db, schema, state, APIError };
 });
 
+const securityLogging = vi.hoisted(() => ({
+	logSecurityEvent: vi.fn()
+}));
+
 vi.mock('drizzle-orm', () => ({
 	eq: (column: string, value: unknown) => ({ type: 'eq', column, value }),
 	and: (...conditions: unknown[]) => ({ type: 'and', conditions })
@@ -212,10 +216,13 @@ vi.mock('better-auth/crypto', () => ({
 	)
 }));
 
+vi.mock('$lib/server/security/logging', () => securityLogging);
+
 describe('auth service', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mocked.state.reset();
+		securityLogging.logSecurityEvent.mockReset();
 	});
 
 	it('issues a recovery key and default role on signup', async () => {
@@ -344,6 +351,15 @@ describe('auth service', () => {
 		});
 	});
 
+	it('treats invalid auth sessions as unauthenticated', async () => {
+		mocked.state.authApi.getSession.mockRejectedValue(new mocked.APIError('session expired'));
+
+		const { resolveSessionContext } = await import('./service');
+		const sessionContext = await resolveSessionContext(new Headers());
+
+		expect(sessionContext).toBeNull();
+	});
+
 	it('rejects invalid recovery keys without changing password or rotating the stored hash', async () => {
 		mocked.state.profiles.set('auth-user-1', {
 			id: 'auth-user-1',
@@ -464,5 +480,42 @@ describe('auth service', () => {
 		});
 
 		expect(mocked.state.authApi.signInUsername).toHaveBeenCalledTimes(5);
+	});
+
+	it('logs auth abuse-limit denials without leaking secrets', async () => {
+		mocked.state.authApi.signInUsername.mockRejectedValue(new mocked.APIError('wrong password'));
+
+		const { signInWithNickname } = await import('./service');
+
+		for (let attempt = 0; attempt < 4; attempt += 1) {
+			await expect(
+				signInWithNickname({ nickname: 'artist_1', password: 'wrongpassword123' }, '127.0.0.1')
+			).rejects.toMatchObject({
+				code: 'INVALID_CREDENTIALS',
+				status: 401
+			});
+		}
+
+		await expect(
+			signInWithNickname({ nickname: 'artist_1', password: 'wrongpassword123' }, '127.0.0.1')
+		).rejects.toMatchObject({
+			code: 'RATE_LIMITED',
+			status: 429
+		});
+
+		expect(securityLogging.logSecurityEvent).toHaveBeenCalledWith(
+			'auth.abuse_limit_denied',
+			expect.objectContaining({
+				identifier: 'artist_1',
+				ipAddress: '127.0.0.1',
+				kind: 'login'
+			})
+		);
+		expect(securityLogging.logSecurityEvent).not.toHaveBeenCalledWith(
+			'auth.abuse_limit_denied',
+			expect.objectContaining({
+				password: expect.any(String)
+			})
+		);
 	});
 });
