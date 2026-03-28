@@ -4,10 +4,12 @@ import { createAvatarService } from './avatar.service';
 import type { UserRecord, UserRepository } from './types';
 import type { ArtworkStorage } from '$lib/server/artwork/types';
 import type { CanonicalUser } from '$lib/server/auth/types';
-import { createAvifTestFile, createMalformedAvifFile, fileToBytes } from '../media/test-helpers';
-
-const createPngFile = (size = 128) =>
-	new File([new Uint8Array(size)], 'avatar.png', { type: 'image/png' });
+import {
+	createAvifTestFile,
+	createMalformedPngFile,
+	createPngTestFile,
+	fileToBytes
+} from '../media/test-helpers';
 
 const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
 	avatarUrl: null,
@@ -71,7 +73,7 @@ describe('avatar upload', () => {
 		await expect(
 			service.uploadAvatar(
 				null,
-				await createAvifTestFile({ height: 256, name: 'avatar.avif', width: 256 })
+				await createPngTestFile({ height: 256, name: 'avatar.png', width: 256 })
 			)
 		).rejects.toMatchObject({
 			code: 'UNAUTHENTICATED',
@@ -79,11 +81,16 @@ describe('avatar upload', () => {
 		});
 	});
 
-	it('rejects non-AVIF media', async () => {
+	it('rejects non-PNG media', async () => {
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser();
 
-		await expect(service.uploadAvatar(user, createPngFile())).rejects.toMatchObject({
+		await expect(
+			service.uploadAvatar(
+				user,
+				await createAvifTestFile({ height: 256, name: 'avatar.avif', width: 256 })
+			)
+		).rejects.toMatchObject({
 			code: 'INVALID_MEDIA_FORMAT',
 			status: 400
 		});
@@ -92,8 +99,8 @@ describe('avatar upload', () => {
 	it('rejects media that exceeds the size budget', async () => {
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser();
-		const oversized = new File([new Uint8Array(AVATAR_MEDIA_MAX_BYTES + 1)], 'avatar.avif', {
-			type: 'image/avif'
+		const oversized = new File([new Uint8Array(AVATAR_MEDIA_MAX_BYTES + 1)], 'avatar.png', {
+			type: 'image/png'
 		});
 
 		await expect(service.uploadAvatar(user, oversized)).rejects.toMatchObject({
@@ -105,7 +112,7 @@ describe('avatar upload', () => {
 	it('stores the avatar and updates the user profile on valid upload', async () => {
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser({ id: 'user-1' });
-		const media = await createAvifTestFile({ height: 256, name: 'avatar.avif', width: 256 });
+		const media = await createPngTestFile({ height: 256, name: 'avatar.png', width: 256 });
 
 		const result = await service.uploadAvatar(user, media);
 
@@ -116,11 +123,11 @@ describe('avatar upload', () => {
 		expect(result.avatarUrl).toBe('avatars/user-1.avif');
 	});
 
-	it('rejects malformed AVIF payloads before touching storage', async () => {
+	it('rejects malformed PNG payloads before touching storage', async () => {
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser();
 
-		await expect(service.uploadAvatar(user, createMalformedAvifFile())).rejects.toMatchObject({
+		await expect(service.uploadAvatar(user, createMalformedPngFile())).rejects.toMatchObject({
 			code: 'INVALID_MEDIA_CONTENT',
 			status: 400
 		});
@@ -131,7 +138,7 @@ describe('avatar upload', () => {
 	it('rejects avatar media whose decoded dimensions are not canonical', async () => {
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser();
-		const media = await createAvifTestFile({ height: 320, name: 'avatar.avif', width: 256 });
+		const media = await createPngTestFile({ height: 320, name: 'avatar.png', width: 256 });
 
 		await expect(service.uploadAvatar(user, media)).rejects.toMatchObject({
 			code: 'INVALID_MEDIA_DIMENSIONS',
@@ -144,12 +151,10 @@ describe('avatar upload', () => {
 	it('rejects avatar media when canonical sanitized output exceeds the stored-media budget', async () => {
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser();
-		const media = await createAvifTestFile({
-			effort: 4,
+		const media = await createPngTestFile({
 			height: 256,
-			name: 'avatar.avif',
-			pattern: 'noise',
-			quality: 1,
+			name: 'avatar.png',
+			pattern: 'striped-noise',
 			width: 256
 		});
 
@@ -167,7 +172,7 @@ describe('avatar upload', () => {
 		repository = createRepository(makeUserRecord({ avatarUrl: 'avatars/user-1.avif' }));
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser({ id: 'user-1', avatarUrl: 'avatars/user-1.avif' });
-		const media = await createAvifTestFile({ height: 256, name: 'avatar.avif', width: 256 });
+		const media = await createPngTestFile({ height: 256, name: 'avatar.png', width: 256 });
 
 		const result = await service.uploadAvatar(user, media);
 
@@ -182,7 +187,7 @@ describe('avatar upload', () => {
 
 		await service.uploadAvatar(
 			user,
-			await createAvifTestFile({ height: 256, name: 'avatar.avif', width: 256 })
+			await createPngTestFile({ height: 256, name: 'avatar.png', width: 256 })
 		);
 
 		expect(storage.delete).not.toHaveBeenCalled();
