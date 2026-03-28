@@ -119,7 +119,9 @@ export const publishArtworkThroughDemo = async (
 	await page.goto('/demo/artwork-publish');
 	await expect(page.getByText('Artwork demo state: authenticated')).toBeVisible();
 	await page.getByLabel('Artwork title').fill(input.title ?? deterministicArtwork.title);
-	await page.getByLabel('Artwork media').setInputFiles(input.upload ?? (await createArtworkUpload()));
+	await page
+		.getByLabel('Artwork media')
+		.setInputFiles(input.upload ?? (await createArtworkUpload()));
 	await page.getByRole('button', { name: 'Publish artwork' }).click();
 	await expect(page).toHaveURL(/\/demo\/artwork-publish\?published=/);
 };

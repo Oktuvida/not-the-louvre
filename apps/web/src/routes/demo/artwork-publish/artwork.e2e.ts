@@ -41,7 +41,9 @@ test('rejects a jpg payload disguised as .avif and keeps it out of the visible f
 	await page.getByLabel('Artwork media').setInputFiles(await createDisguisedJpegUpload());
 	await page.getByRole('button', { name: 'Publish artwork' }).click();
 
-	await expect(page.getByText('Artwork media must decode as a single still AVIF image')).toBeVisible();
+	await expect(
+		page.getByText('Artwork media must decode as a single still AVIF image')
+	).toBeVisible();
 	await expect(page.getByText('Published artwork outcome')).not.toBeVisible();
 	await expect(page.getByText('No artworks published yet.')).toBeVisible();
 });
