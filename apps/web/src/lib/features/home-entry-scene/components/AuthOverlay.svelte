@@ -30,6 +30,8 @@
 		dispatch,
 		authenticatedUser = null,
 		form,
+		onAvatarDismiss,
+		onAvatarSaved,
 		resumeAvatarOnboarding = false,
 		overlayElement = $bindable<HTMLDivElement | null>(null)
 	}: {
@@ -37,6 +39,8 @@
 		dispatch: (event: EntryFlowEvent) => void;
 		authenticatedUser?: HomeAuthUser | null;
 		form?: HomeAuthActionForm;
+		onAvatarDismiss?: () => void;
+		onAvatarSaved?: () => void;
 		resumeAvatarOnboarding?: boolean;
 		overlayElement?: HTMLDivElement | null;
 	} = $props();
@@ -285,6 +289,15 @@
 		dispatch('SHOW_RECOVERY');
 	};
 
+	const enterStudio = () => {
+		if (!authenticatedUser) {
+			formError = 'Sign in before entering the studio.';
+			return;
+		}
+
+		dispatch('AUTH_SUCCESS');
+	};
+
 	const runAvailabilityCheck = async (value: string) => {
 		checkToken = value;
 		availabilityState = 'checking';
@@ -343,6 +356,7 @@
 		});
 
 		if (response.ok) {
+			onAvatarSaved?.();
 			return { success: true as const };
 		}
 
@@ -373,7 +387,10 @@
 		gsap.killTweensOf(overlayElement);
 		if (isInteractive) {
 			gsap.to(overlayElement, { duration: 0.34, ease: 'power2.out', opacity: 1, scale: 1 });
+			return;
 		}
+
+		gsap.to(overlayElement, { duration: 0.24, ease: 'power2.in', opacity: 0, scale: 0.95 });
 	});
 
 	$effect(() => {
@@ -454,7 +471,15 @@
 				</div>
 				<button
 					type="button"
-					onclick={() => dispatch('AUTH_CANCEL')}
+					onclick={() => {
+						if (view === 'signup-avatar') {
+							onAvatarDismiss?.();
+							dispatch('AUTH_SUCCESS');
+							return;
+						}
+
+						dispatch('AUTH_CANCEL');
+					}}
 					class="rounded-full border-2 border-[#2d2a26] bg-white/80 px-3 py-2 text-xs font-semibold tracking-[0.18em] text-[#5d4737] uppercase transition hover:-translate-y-0.5"
 				>
 					Close
@@ -713,7 +738,7 @@
 					</GameButton>
 				</div>
 			{:else}
-				<AvatarSketchpad {nickname} {saveAvatar} onContinue={() => dispatch('AUTH_SUCCESS')} />
+				<AvatarSketchpad {nickname} {saveAvatar} onContinue={enterStudio} />
 			{/if}
 		</div>
 	</StudioPanel>

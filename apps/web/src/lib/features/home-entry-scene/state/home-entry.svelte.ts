@@ -2,47 +2,33 @@ export interface HomePreviewCard {
 	id: string;
 	title: string;
 	artist: string;
-	artistAvatar: string;
+	artistAvatar?: string;
 	imageUrl: string;
 	rank: number;
 	accent: string;
 	rotation: number;
 }
 
-export const homePreviewCards: HomePreviewCard[] = [
-	{
-		id: 'sunset-over-mountains',
-		title: 'Sunset Over Mountains',
-		artist: 'PaintMaster42',
-		artistAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=PaintMaster42',
-		imageUrl:
-			'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=80&auto=format&fit=crop',
-		rank: 1,
-		accent: '#f3c64c',
-		rotation: -2
-	},
-	{
-		id: 'abstract-dreams',
-		title: 'Abstract Dreams',
-		artist: 'ArtisticSoul',
-		artistAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=ArtisticSoul',
-		imageUrl:
-			'https://images.unsplash.com/photo-1549887534-1541e9326642?w=600&q=80&auto=format&fit=crop',
-		rank: 2,
-		accent: '#d79f6d',
-		rotation: 2
-	},
-	{
-		id: 'forest-path',
-		title: 'Forest Path',
-		artist: 'ColorWhisperer',
-		artistAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=ColorWhisperer',
-		imageUrl:
-			'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&q=80&auto=format&fit=crop',
-		rank: 3,
-		accent: '#7d9785',
-		rotation: -2
-	}
-];
+type HomePreviewSource = {
+	author: { avatarUrl: string | null; nickname: string };
+	id: string;
+	mediaUrl: string;
+	title: string;
+};
+
+const previewAccents = ['#f3c64c', '#d79f6d', '#7d9785'] as const;
+const previewRotations = [-2, 2, -2] as const;
+
+export const toHomePreviewCards = (artworks: HomePreviewSource[]): HomePreviewCard[] =>
+	artworks.slice(0, 3).map((artwork, index) => ({
+		accent: previewAccents[index] ?? previewAccents[previewAccents.length - 1],
+		artist: artwork.author.nickname,
+		artistAvatar: artwork.author.avatarUrl ?? undefined,
+		id: artwork.id,
+		imageUrl: artwork.mediaUrl,
+		rank: index + 1,
+		rotation: previewRotations[index] ?? 0,
+		title: artwork.title
+	}));
 
 export const homeFloatingPaint = ['#d4834a', '#71917f', '#d9b07b', '#a24d49', '#8f6a49'];

@@ -106,4 +106,28 @@ describe('EntrySceneController', () => {
 		await expect.element(page.getByText('Finish your avatar')).toBeVisible();
 		await expect.element(page.getByText('Signed in as')).not.toBeInTheDocument();
 	});
+
+	it('lets authenticated users close the avatar onboarding overlay into the signed-in scene', async () => {
+		render(EntrySceneController, {
+			auth: {
+				integrityFailure: null,
+				onboarding: { status: 'needs-avatar' },
+				status: 'authenticated',
+				user: {
+					authUserId: 'auth-user-1',
+					avatarOnboardingCompletedAt: null,
+					email: 'artist_1@not-the-louvre.local',
+					id: 'product-user-1',
+					nickname: 'artist_1',
+					role: 'user'
+				}
+			}
+		});
+
+		await expect.element(page.getByText('Finish your avatar')).toBeVisible();
+		await page.getByRole('button', { name: 'Close' }).click();
+		await new Promise((resolve) => setTimeout(resolve, 1400));
+
+		await expect.element(page.getByText('Signed in as')).toBeVisible();
+	});
 });

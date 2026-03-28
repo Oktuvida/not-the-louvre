@@ -1,9 +1,11 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
+import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { avatarService } from '$lib/server/user/avatar.service';
 import { AuthFlowError } from '$lib/server/auth/errors';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { toHomePreviewCards } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 import {
 	getNicknameAvailability,
 	recoverAccount,
@@ -50,6 +52,12 @@ const toFailure = (action: HomeActionName, error: unknown, fallback: string) => 
 };
 
 export const load: PageServerLoad = async ({ locals }) => {
+	const topDiscovery = await listArtworkDiscovery(
+		{ cursor: null, limit: 3, sort: 'top', window: 'all' },
+		{ user: locals.user }
+	);
+	const topArtworks = toHomePreviewCards(topDiscovery.items);
+
 	if (locals.integrityFailure) {
 		return {
 			auth: {
@@ -60,7 +68,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 				onboarding: null,
 				status: 'integrity-failure',
 				user: null
-			}
+			},
+			topArtworks
 		};
 	}
 
@@ -71,7 +80,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 				onboarding: null,
 				status: 'signed-out',
 				user: null
-			}
+			},
+			topArtworks
 		};
 	}
 
@@ -83,7 +93,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 			},
 			status: 'authenticated',
 			user: locals.user
-		}
+		},
+		topArtworks
 	};
 };
 
