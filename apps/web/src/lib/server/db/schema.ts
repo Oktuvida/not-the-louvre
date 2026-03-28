@@ -26,6 +26,11 @@ export const artworkReportReason = appSchema.enum('artwork_report_reason', [
 	'copyright',
 	'other'
 ]);
+export const contentReportStatus = appSchema.enum('content_report_status', [
+	'pending',
+	'reviewed',
+	'actioned'
+]);
 export const engagementRateLimitKind = appSchema.enum('engagement_rate_limit_kind', [
 	'vote',
 	'comment'
@@ -201,9 +206,12 @@ export const contentReports = appSchema.table(
 		reporterId: text('reporter_id')
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
-		artworkId: text('artwork_id').references(() => artworks.id, { onDelete: 'cascade' }),
-		commentId: text('comment_id').references(() => artworkComments.id, { onDelete: 'cascade' }),
+		artworkId: text('artwork_id'),
+		commentId: text('comment_id'),
 		reason: artworkReportReason('reason').notNull(),
+		status: contentReportStatus('status').notNull().default('pending'),
+		reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+		reviewedAt: timestamp('reviewed_at'),
 		details: text('details'),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at')
@@ -215,9 +223,20 @@ export const contentReports = appSchema.table(
 		index('content_reports_artwork_id_idx').on(table.artworkId),
 		index('content_reports_comment_id_idx').on(table.commentId),
 		index('content_reports_reporter_id_idx').on(table.reporterId),
+		index('content_reports_status_idx').on(table.status),
+		uniqueIndex('content_reports_pending_artwork_reporter_unique')
+			.on(table.reporterId, table.artworkId)
+			.where(sql`${table.artworkId} is not null and ${table.status} = 'pending'`),
+		uniqueIndex('content_reports_pending_comment_reporter_unique')
+			.on(table.reporterId, table.commentId)
+			.where(sql`${table.commentId} is not null and ${table.status} = 'pending'`),
 		check(
 			'content_reports_single_target_check',
 			sql`(case when ${table.artworkId} is null then 0 else 1 end + case when ${table.commentId} is null then 0 else 1 end) = 1`
+		),
+		check(
+			'content_reports_review_resolution_check',
+			sql`(${table.status} = 'pending' and ${table.reviewedBy} is null and ${table.reviewedAt} is null) or (${table.status} <> 'pending' and ${table.reviewedBy} is not null and ${table.reviewedAt} is not null)`
 		)
 	]
 );
@@ -343,6 +362,10 @@ export const artworkCommentRealtimeRelations = relations(artworkCommentRealtime,
 export const contentReportsRelations = relations(contentReports, ({ one }) => ({
 	reporter: one(users, {
 		fields: [contentReports.reporterId],
+		references: [users.id]
+	}),
+	reviewer: one(users, {
+		fields: [contentReports.reviewedBy],
 		references: [users.id]
 	}),
 	artwork: one(artworks, {

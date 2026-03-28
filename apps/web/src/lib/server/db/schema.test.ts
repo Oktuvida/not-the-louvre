@@ -6,6 +6,7 @@ import {
 	artworkComments,
 	artworkEngagementRateLimits,
 	artworkPublishRateLimits,
+	contentReportStatus,
 	artworkReportReason,
 	artworkVoteRealtime,
 	artworkVoteValue,
@@ -35,6 +36,7 @@ describe('database schema namespaces', () => {
 		expect(userRole.schema).toBe('app');
 		expect(artworkVoteValue.schema).toBe('app');
 		expect(artworkReportReason.schema).toBe('app');
+		expect(contentReportStatus.schema).toBe('app');
 		expect(engagementRateLimitKind.schema).toBe('app');
 	});
 
@@ -151,10 +153,20 @@ describe('database schema namespaces', () => {
 		expect(reportColumns.find((candidate) => candidate.name === 'artwork_id')?.notNull).toBe(false);
 		expect(reportColumns.find((candidate) => candidate.name === 'comment_id')?.notNull).toBe(false);
 		expect(reportColumns.find((candidate) => candidate.name === 'reason')?.notNull).toBe(true);
+		expect(reportColumns.find((candidate) => candidate.name === 'status')?.notNull).toBe(true);
+		expect(reportColumns.find((candidate) => candidate.name === 'reviewed_by')?.notNull).toBe(
+			false
+		);
+		expect(reportColumns.find((candidate) => candidate.name === 'reviewed_at')?.notNull).toBe(
+			false
+		);
 		expect(reportColumns.find((candidate) => candidate.name === 'details')?.notNull).toBe(false);
 
 		expect(reportConfig.checks.map((constraint) => constraint.name)).toContain(
 			'content_reports_single_target_check'
+		);
+		expect(reportConfig.checks.map((constraint) => constraint.name)).toContain(
+			'content_reports_review_resolution_check'
 		);
 	});
 });
