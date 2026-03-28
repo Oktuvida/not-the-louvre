@@ -22,8 +22,10 @@
 		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes && bun run scripts/generate-auth-schema.ts"
 	},
 	"dependencies": {
+		"@supabase/supabase-js": "^2.100.1",
 		"better-auth": "~1.4.21",
 		"drizzle-orm": "^0.45.1",
+		"jose": "^6.2.2",
 		"postgres": "^3.4.8",
 		"sharp": "^0.34.5",
 		"zod": "^4.3.6"
