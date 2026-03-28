@@ -1,15 +1,137 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import { resolve } from '$app/paths';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import StudioPanel from '$lib/features/shared-ui/components/StudioPanel.svelte';
 
 	let {
 		artwork,
+		viewer = null,
+		onArtworkChange,
 		onClose
 	}: {
 		artwork: Artwork | null;
+		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
+		onArtworkChange?: (artwork: Artwork) => void;
 		onClose?: () => void;
 	} = $props();
+
+	let commentBody = $state('');
+	let actionError = $state<string | null>(null);
+	let isSubmittingComment = $state(false);
+	let isSubmittingVote = $state(false);
+
+	const requireViewer = () => {
+		if (!viewer) {
+			actionError = 'Sign in to interact with artworks.';
+			return false;
+		}
+
+		return true;
+	};
+
+	const syncArtwork = (nextArtwork: Artwork) => {
+		onArtworkChange?.(nextArtwork);
+	};
+
+	const submitVote = async (value: 'down' | 'up') => {
+		if (!artwork || isSubmittingVote || !requireViewer()) return;
+
+		isSubmittingVote = true;
+		actionError = null;
+
+		try {
+			const method = artwork.viewerVote === value ? 'DELETE' : 'POST';
+			const response = await fetch(`/api/artworks/${artwork.id}/vote`, {
+				body: method === 'POST' ? JSON.stringify({ value }) : undefined,
+				headers: method === 'POST' ? { 'content-type': 'application/json' } : undefined,
+				method
+			});
+
+			if (!response.ok) {
+				const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+				throw new Error(payload?.message ?? 'Vote failed');
+			}
+
+			const payload = (await response.json()) as { artwork: { score: number } };
+			const currentVote = artwork.viewerVote;
+			const nextVote = method === 'DELETE' ? null : value;
+			const upvotes =
+				artwork.upvotes +
+				(currentVote === 'up' ? -1 : 0) +
+				(nextVote === 'up' ? 1 : 0);
+			const downvotes =
+				artwork.downvotes +
+				(currentVote === 'down' ? -1 : 0) +
+				(nextVote === 'down' ? 1 : 0);
+
+			syncArtwork({
+				...artwork,
+				downvotes,
+				score: payload.artwork.score,
+				upvotes,
+				viewerVote: nextVote
+			});
+		} catch (error) {
+			actionError = error instanceof Error ? error.message : 'Vote failed';
+		} finally {
+			isSubmittingVote = false;
+		}
+	};
+
+	const submitComment = async () => {
+		if (!artwork || isSubmittingComment || !requireViewer()) return;
+
+		const body = commentBody.trim();
+		if (!body) {
+			actionError = 'Comment cannot be empty.';
+			return;
+		}
+
+		isSubmittingComment = true;
+		actionError = null;
+
+		try {
+			const response = await fetch(`/api/artworks/${artwork.id}/comments`, {
+				body: JSON.stringify({ body }),
+				headers: { 'content-type': 'application/json' },
+				method: 'POST'
+			});
+
+			if (!response.ok) {
+				const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+				throw new Error(payload?.message ?? 'Comment failed');
+			}
+
+			const payload = (await response.json()) as {
+				comment: {
+					author: { nickname: string };
+					body: string;
+					createdAt?: string;
+					id: string;
+				};
+			};
+
+			syncArtwork({
+				...artwork,
+				commentCount: (artwork.commentCount ?? artwork.comments.length) + 1,
+				comments: [
+					...artwork.comments,
+					{
+						author: payload.comment.author.nickname,
+						id: payload.comment.id,
+						text: payload.comment.body,
+						timestamp: payload.comment.createdAt ? Date.parse(payload.comment.createdAt) : Date.now()
+					}
+				]
+			});
+			commentBody = '';
+		} catch (error) {
+			actionError = error instanceof Error ? error.message : 'Comment failed';
+		} finally {
+			isSubmittingComment = false;
+		}
+	};
 </script>
 
 {#if artwork}
@@ -73,16 +195,46 @@
 							<p class="mt-2 text-sm font-semibold text-[#2d2420]">POWER SCORE</p>
 						</div>
 						<div class="mt-6 grid grid-cols-2 gap-4">
-							<GameButton variant="secondary" className="w-full justify-center"
+							<GameButton
+								variant="secondary"
+								className="w-full justify-center"
+								onclick={() => submitVote('up')}
 								>👍 {artwork.upvotes}</GameButton
 							>
-							<GameButton variant="danger" className="w-full justify-center"
+							<GameButton
+								variant="danger"
+								className="w-full justify-center"
+								onclick={() => submitVote('down')}
 								>👎 {artwork.downvotes}</GameButton
 							>
-							<GameButton variant="primary" className="w-full justify-center">💬 Comment</GameButton
+							<GameButton
+								variant="primary"
+								className="w-full justify-center"
+								onclick={submitComment}
+								>💬 Comment</GameButton
 							>
-							<GameButton variant="accent" className="w-full justify-center">📄 Fork</GameButton>
+							<a
+								href={resolve('/draw') + `?fork=${artwork.id}`}
+								class="font-display inline-flex w-full items-center justify-center rounded-[1.1rem] border-4 border-[var(--color-ink)] bg-[var(--color-accent)] px-6 py-3 text-base tracking-[0.08em] uppercase shadow-[var(--shadow-card)] transition duration-200 hover:-translate-y-1 hover:rotate-[-1deg]"
+							>
+								📄 Fork
+							</a>
 						</div>
+						<p class="mt-3 text-sm text-[#6b625a]">Forks: {artwork.forkCount ?? 0}</p>
+						<label class="mt-4 block space-y-2">
+							<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+								>Add a comment</span
+							>
+							<textarea
+								bind:value={commentBody}
+								rows="3"
+								placeholder="Say something about this piece"
+								class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+							></textarea>
+						</label>
+						{#if actionError}
+							<p class="mt-2 text-sm text-[#8f3720]">{actionError}</p>
+						{/if}
 						{#if artwork.comments.length > 0}
 							<div class="mt-6 space-y-3">
 								<h3 class="font-display text-xl text-[#2d2420]">Comments</h3>

@@ -2,61 +2,150 @@
 	import ArtworkCard from '$lib/features/artwork-presentation/components/ArtworkCard.svelte';
 	import ArtworkDetailPanel from '$lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import {
-		artworksByRoom,
-		galleryRooms,
-		topRanked
-	} from '$lib/features/gallery-exploration/fixtures/artworks';
 	import GalleryRoomNav from '$lib/features/gallery-exploration/components/GalleryRoomNav.svelte';
-	import { type GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+	import type {
+		GalleryRoomConfig,
+		GalleryRoomId
+	} from '$lib/features/gallery-exploration/model/rooms';
 	import MysteryRoom from '$lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
+	import { toGalleryArtworkDetail } from '$lib/features/gallery-exploration/gallery-adapter';
 
-	let { roomId }: { roomId: GalleryRoomId } = $props();
+	let {
+		artworks,
+		emptyStateMessage = null,
+		loadArtworkDetail = async (artworkId: string) => {
+			const [detailResponse, commentsResponse] = await Promise.all([
+				fetch(`/api/artworks/${artworkId}`),
+				fetch(`/api/artworks/${artworkId}/comments`)
+			]);
+			if (!detailResponse.ok) {
+				throw new Error('Artwork details could not be loaded');
+			}
 
-	const room = $derived(galleryRooms.find((entry) => entry.id === roomId) ?? galleryRooms[0]);
-	const artworks = $derived(artworksByRoom[roomId]);
+			const payload = (await detailResponse.json()) as {
+				artwork: Parameters<typeof toGalleryArtworkDetail>[0];
+			};
+			const detail = toGalleryArtworkDetail(payload.artwork);
+
+			if (!commentsResponse.ok) {
+				return detail;
+			}
+
+			const commentsPayload = (await commentsResponse.json()) as {
+				comments: Array<{
+					author: { nickname: string };
+					body: string;
+					createdAt: Date | string;
+					id: string;
+				}>;
+			};
+
+			return {
+				...detail,
+				comments: commentsPayload.comments.map((comment) => ({
+					author: comment.author.nickname,
+					id: comment.id,
+					text: comment.body,
+					timestamp:
+						comment.createdAt instanceof Date
+							? comment.createdAt.getTime()
+							: new Date(comment.createdAt).getTime()
+				}))
+			};
+		},
+		room,
+		roomId,
+		viewer = null
+	}: {
+		artworks: Artwork[];
+		emptyStateMessage?: string | null;
+		loadArtworkDetail?: (artworkId: string) => Promise<Artwork>;
+		room: GalleryRoomConfig;
+		roomId: GalleryRoomId;
+		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
+	} = $props();
 
 	let selectedArtwork = $state<Artwork | null>(null);
 	let mysteryIndex = $state(0);
+	let detailErrorMessage = $state<string | null>(null);
 
-	const mysteryArtwork = $derived(artworks[mysteryIndex % artworks.length] ?? artworks[0]);
+	const mysteryArtwork = $derived(
+		artworks.length > 0 ? (artworks[mysteryIndex % artworks.length] ?? artworks[0]) : null
+	);
 
-	const openArtwork = (artwork: Artwork) => {
-		selectedArtwork = artwork;
+	const openArtwork = async (artwork: Artwork) => {
+		detailErrorMessage = null;
+		try {
+			selectedArtwork = await loadArtworkDetail(artwork.id);
+		} catch (error) {
+			selectedArtwork = null;
+			detailErrorMessage =
+				error instanceof Error ? error.message : 'Artwork details could not be loaded';
+		}
+	};
+
+	const syncArtwork = (nextArtwork: Artwork) => {
+		selectedArtwork = nextArtwork;
+		const index = artworks.findIndex((candidate) => candidate.id === nextArtwork.id);
+		if (index === -1) return;
+
+		artworks = artworks.map((candidate, candidateIndex) =>
+			candidateIndex === index
+				? {
+					...candidate,
+					commentCount: nextArtwork.commentCount,
+					comments: nextArtwork.comments,
+					downvotes: nextArtwork.downvotes,
+					forkCount: nextArtwork.forkCount,
+					score: nextArtwork.score,
+					upvotes: nextArtwork.upvotes,
+					viewerVote: nextArtwork.viewerVote
+				}
+				: candidate
+		);
 	};
 
 	const spinMystery = () => {
 		mysteryIndex += 1;
-		selectedArtwork = mysteryArtwork;
+		if (mysteryArtwork) {
+			selectedArtwork = mysteryArtwork;
+		}
 	};
 
 	const podiumMeta = {
 		1: {
-			label: 'CHAMPION',
+			base: 'h-32',
 			color: '#f4c430',
-			medal: '🥇',
-			width: 'w-72',
 			height: 'h-96',
-			base: 'h-32'
+			label: 'CHAMPION',
+			medal: '🥇',
+			width: 'w-72'
 		},
 		2: {
-			label: 'RUNNER UP',
+			base: 'h-24',
 			color: '#c0c0c0',
-			medal: '🥈',
-			width: 'w-64',
 			height: 'h-80',
-			base: 'h-24'
+			label: 'RUNNER UP',
+			medal: '🥈',
+			width: 'w-64'
 		},
 		3: {
-			label: 'BRONZE STAR',
+			base: 'h-20',
 			color: '#cd7f32',
-			medal: '🥉',
-			width: 'w-64',
 			height: 'h-72',
-			base: 'h-20'
+			label: 'BRONZE STAR',
+			medal: '🥉',
+			width: 'w-64'
 		}
 	} as const;
+
+	const hallOfFameArtworks = $derived(artworks);
+	const hallOfFamePodium = $derived([
+		{ artwork: hallOfFameArtworks[1], position: 2 as const },
+		{ artwork: hallOfFameArtworks[0], position: 1 as const },
+		{ artwork: hallOfFameArtworks[2], position: 3 as const }
+	]);
 </script>
 
 <div class="pointer-events-none absolute inset-0 overflow-hidden">
@@ -82,7 +171,6 @@
 					variant="secondary"
 					className="w-fit -rotate-1 border-[3px] px-6 py-3 [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif]"
 				>
-					<!-- ArrowLeft SVG -->
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						width="20"
@@ -109,7 +197,6 @@
 					variant="primary"
 					className="w-fit rotate-1 border-[3px] px-6 py-3 [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif]"
 				>
-					<!-- Sparkles SVG -->
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						width="20"
@@ -134,7 +221,6 @@
 	<div class="mx-auto flex max-w-7xl flex-col gap-8 px-8 py-8">
 		<GalleryRoomNav {roomId} />
 
-		<!-- Room Description -->
 		<div
 			class="group -rotate-1 rounded-lg border-2 border-[#2d2420] bg-[#fdfbf7] p-6 shadow-md transition duration-200 hover:scale-[1.02] hover:rotate-0"
 		>
@@ -143,14 +229,30 @@
 			</p>
 		</div>
 
-		{#if roomId === 'mystery'}
+		{#if detailErrorMessage}
+			<div class="rounded-xl border-4 border-[#2d2420] bg-[#f7d8c7] p-5 text-[#7a2e1c]">
+				{detailErrorMessage}
+			</div>
+		{/if}
+
+		{#if emptyStateMessage}
+			<div
+				class="rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
+			>
+				<p class="font-display text-2xl text-[#2d2420]">{emptyStateMessage}</p>
+				<p class="mt-3 text-[#6b625a]">
+					Publish a new piece from the studio and it will show up here.
+				</p>
+			</div>
+		{:else if roomId === 'mystery' && mysteryArtwork}
 			<MysteryRoom artwork={mysteryArtwork} onReveal={spinMystery} onSelect={openArtwork} />
 		{:else if roomId === 'hall-of-fame'}
 			<div class="space-y-12">
 				<div class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end">
-					{#each [topRanked[1], topRanked[0], topRanked[2]] as artwork, index (artwork?.id)}
+					{#each hallOfFamePodium as entry (`podium-${entry.position}-${entry.artwork?.id ?? 'empty'}`)}
+						{@const artwork = entry.artwork}
 						{#if artwork}
-							{@const position = [2, 1, 3][index] as 1 | 2 | 3}
+							{@const position = entry.position}
 							{@const meta = podiumMeta[position]}
 							<div class="relative flex flex-col items-center">
 								<div class="relative mb-4">
@@ -208,7 +310,7 @@
 				</div>
 
 				<div class="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4">
-					{#each topRanked.slice(3) as artwork (artwork.id)}
+					{#each hallOfFameArtworks.slice(3) as artwork (artwork.id)}
 						<button
 							type="button"
 							class="rotate-1 cursor-pointer rounded-lg border-[3px] border-[#2d2420] bg-[#fdfbf7] p-3 text-left shadow-md transition duration-200 hover:scale-105 hover:rotate-0"
@@ -238,7 +340,7 @@
 								<p class="truncate text-xs text-[#6b625a]">{artwork.artist}</p>
 								<div class="mt-1 flex items-center gap-2 text-xs text-[#2d2420]">
 									<span>⭐ {artwork.score}</span>
-									<span>👍 {artwork.upvotes}</span>
+									<span>💬 {artwork.commentCount ?? artwork.comments.length}</span>
 								</div>
 							</div>
 						</button>
@@ -256,8 +358,10 @@
 
 	<ArtworkDetailPanel
 		artwork={selectedArtwork}
+		onArtworkChange={syncArtwork}
 		onClose={() => {
 			selectedArtwork = null;
 		}}
+		{viewer}
 	/>
 </div>

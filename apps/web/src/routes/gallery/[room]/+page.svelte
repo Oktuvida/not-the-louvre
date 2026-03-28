@@ -1,8 +1,14 @@
 <script lang="ts">
 	import GalleryExplorationPage from '$lib/features/gallery-exploration/GalleryExplorationPage.svelte';
-	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+	import type { PageProps } from './$types';
 
-	let { data } = $props<{ data: { roomId: GalleryRoomId } }>();
+	let { data }: PageProps = $props();
 </script>
 
-<GalleryExplorationPage roomId={data.roomId} />
+<GalleryExplorationPage
+	artworks={data.artworks}
+	emptyStateMessage={data.emptyStateMessage}
+	viewer={data.viewer}
+	room={data.room}
+	roomId={data.roomId}
+/>

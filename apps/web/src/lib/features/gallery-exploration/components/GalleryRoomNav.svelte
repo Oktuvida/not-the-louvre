@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { galleryRooms } from '$lib/features/gallery-exploration/fixtures/artworks';
-	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+	import { galleryRooms, type GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
 
 	let { roomId }: { roomId: GalleryRoomId } = $props();
 
