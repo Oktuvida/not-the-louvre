@@ -327,32 +327,35 @@
 	};
 
 	const saveAvatar = async (file: File) => {
+		if (!authenticatedUser?.id) {
+			return {
+				message: 'Your session is not ready for avatar upload. Please sign in again.',
+				success: false as const
+			};
+		}
+
 		const formData = new FormData();
 		formData.set('file', file);
 
-		const response = await fetch('?/saveAvatar', {
+		const response = await fetch(`/api/users/${authenticatedUser.id}/avatar`, {
 			body: formData,
-			headers: {
-				'x-sveltekit-action': 'true'
-			},
-			method: 'POST'
+			method: 'PUT'
 		});
-		const result = deserialize(await response.text());
 
-		if ((result.type === 'failure' || result.type === 'success') && result.data) {
-			const data = result.data as HomeAuthActionData;
+		if (response.ok) {
+			return { success: true as const };
+		}
 
-			if (data.action === 'saveAvatar' && 'success' in data && data.success) {
-				return { success: true as const };
-			}
+		try {
+			const data = (await response.json()) as { code?: string; message?: string };
 
-			if ('message' in data) {
-				return {
-					code: data.code,
-					message: data.message,
-					success: false as const
-				};
-			}
+			return {
+				code: data.code,
+				message: data.message ?? 'Avatar save failed. Please try again.',
+				success: false as const
+			};
+		} catch {
+			// Ignore invalid error bodies and fall back to a generic message.
 		}
 
 		return {

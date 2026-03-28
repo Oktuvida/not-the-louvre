@@ -269,7 +269,7 @@ describe('home route auth contract', () => {
 		});
 
 		const { actions } = await import('./+page.server');
-		const avatarFile = new File([new Uint8Array([1, 2, 3])], 'avatar.avif', { type: 'image/avif' });
+		const avatarFile = new File([new Uint8Array([1, 2, 3])], 'avatar.png', { type: 'image/png' });
 		const localUser = {
 			id: 'product-user-1',
 			authUserId: 'auth-user-1',
@@ -297,7 +297,10 @@ describe('home route auth contract', () => {
 
 		const result = await actions.saveAvatar(event as never);
 
-		expect(mocked.uploadAvatar).toHaveBeenCalledWith(localUser, avatarFile);
+		expect(mocked.uploadAvatar).toHaveBeenCalledWith(
+			localUser,
+			expect.objectContaining({ name: 'avatar.png', type: 'image/png' })
+		);
 		expect(event.locals.user).toMatchObject({
 			avatarOnboardingCompletedAt: new Date('2026-03-28T12:00:00.000Z'),
 			avatarUrl: 'avatars/product-user-1.avif'
@@ -312,7 +315,7 @@ describe('home route auth contract', () => {
 
 	it('returns backend avatar save failures without dropping the domain code', async () => {
 		mocked.uploadAvatar.mockRejectedValue(
-			new ArtworkFlowError(400, 'Avatar media must be AVIF', 'INVALID_MEDIA_FORMAT')
+			new ArtworkFlowError(400, 'Avatar media must be PNG', 'INVALID_MEDIA_FORMAT')
 		);
 
 		const { actions } = await import('./+page.server');
@@ -344,7 +347,7 @@ describe('home route auth contract', () => {
 			data: {
 				action: 'saveAvatar',
 				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Avatar media must be AVIF'
+				message: 'Avatar media must be PNG'
 			}
 		});
 	});
