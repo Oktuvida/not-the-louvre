@@ -46,6 +46,15 @@ describe('database schema namespaces', () => {
 		expect(getTableConfig(account).schema).toBe('better_auth');
 	});
 
+	it('tracks avatar onboarding completion separately from avatar media presence', () => {
+		const userColumns = getTableConfig(users).columns;
+
+		expect(userColumns.find((candidate) => candidate.name === 'avatar_url')?.notNull).toBe(false);
+		expect(
+			userColumns.find((candidate) => candidate.name === 'avatar_onboarding_completed_at')?.notNull
+		).toBe(false);
+	});
+
 	it('requires artwork ownership, publish metadata, and engagement summary fields', () => {
 		const artworkColumns = getTableConfig(artworks).columns;
 		const requiredColumns = [
