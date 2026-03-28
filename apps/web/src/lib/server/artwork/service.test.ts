@@ -67,12 +67,18 @@ const createRepository = () => {
 		findCommentById: vi.fn(async () => null),
 		findCommentReportCount: vi.fn(
 			async (commentId: string) =>
-				Array.from(reports.values()).filter((report) => report.commentId === commentId).length
+				Array.from(reports.values()).filter(
+					(report) => report.commentId === commentId && report.status === 'pending'
+				).length
 		),
 		findArtworkReportCount: vi.fn(
 			async (artworkId: string) =>
-				Array.from(reports.values()).filter((report) => report.artworkId === artworkId).length
+				Array.from(reports.values()).filter(
+					(report) => report.artworkId === artworkId && report.status === 'pending'
+				).length
 		),
+		resolveArtworkReports: vi.fn(async () => 0),
+		resolveCommentReports: vi.fn(async () => 0),
 		deleteComment: vi.fn(async () => {
 			throw new Error('not implemented in publish tests');
 		}),

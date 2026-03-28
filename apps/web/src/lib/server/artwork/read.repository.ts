@@ -283,7 +283,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				.from(contentReports)
 				.innerJoin(artworks, eq(artworks.id, contentReports.artworkId))
 				.innerJoin(users, eq(users.id, artworks.authorId))
-				.where(isNotNull(contentReports.artworkId))
+				.where(and(isNotNull(contentReports.artworkId), eq(contentReports.status, 'pending')))
 				.groupBy(artworks.id, users.id)
 				.having(gt(count(contentReports.id), 0)),
 
@@ -300,7 +300,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				.from(contentReports)
 				.innerJoin(artworkComments, eq(artworkComments.id, contentReports.commentId))
 				.innerJoin(users, eq(users.id, artworkComments.authorId))
-				.where(isNotNull(contentReports.commentId))
+				.where(and(isNotNull(contentReports.commentId), eq(contentReports.status, 'pending')))
 				.groupBy(artworkComments.id, users.id)
 				.having(gt(count(contentReports.id), 0))
 		]);

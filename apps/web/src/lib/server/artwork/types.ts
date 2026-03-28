@@ -150,6 +150,8 @@ export type ArtworkReportReason =
 	| 'copyright'
 	| 'other';
 
+export type ContentReportStatus = 'pending' | 'reviewed' | 'actioned';
+
 export type ContentReportRecord = {
 	artworkId: string | null;
 	commentId: string | null;
@@ -158,6 +160,9 @@ export type ContentReportRecord = {
 	id: string;
 	reason: ArtworkReportReason;
 	reporterId: string;
+	reviewedAt: Date | null;
+	reviewedBy: string | null;
+	status: ContentReportStatus;
 	updatedAt: Date;
 };
 
@@ -248,6 +253,13 @@ export type CreateContentReportInput = Omit<ContentReportRecord, 'updatedAt'> & 
 	updatedAt: Date;
 };
 
+export type ResolveContentReportsInput = {
+	resolvedAt: Date;
+	resolvedBy: string;
+	status: Exclude<ContentReportStatus, 'pending'>;
+	targetId: string;
+};
+
 export type HiddenStateUpdate = {
 	hiddenAt: Date | null;
 	isHidden: boolean;
@@ -323,6 +335,8 @@ export type ArtworkRepository = {
 		userId: string,
 		updatedAt: Date
 	): Promise<ArtworkVoteRemovalResult | null>;
+	resolveArtworkReports(input: ResolveContentReportsInput): Promise<number>;
+	resolveCommentReports(input: ResolveContentReportsInput): Promise<number>;
 	setArtworkHiddenState(id: string, input: HiddenStateUpdate): Promise<ArtworkRecord | null>;
 	setCommentHiddenState(id: string, input: HiddenStateUpdate): Promise<ArtworkCommentRecord | null>;
 	upsertVote(input: CreateArtworkVoteInput): Promise<ArtworkVoteMutationResult | null>;

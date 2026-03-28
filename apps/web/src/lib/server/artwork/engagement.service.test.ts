@@ -93,6 +93,26 @@ const createRepository = () => {
 
 	const repository = {
 		createContentReport: vi.fn(async (input: ContentReportRecord) => {
+			const duplicate = Array.from(reports.values()).some(
+				(report) =>
+					report.reporterId === input.reporterId &&
+					report.status === 'pending' &&
+					report.artworkId === input.artworkId &&
+					report.commentId === input.commentId
+			);
+
+			if (duplicate) {
+				const error = new Error('duplicate pending report') as Error & {
+					code: string;
+					constraint_name: string;
+				};
+				error.code = '23505';
+				error.constraint_name = input.artworkId
+					? 'content_reports_pending_artwork_reporter_unique'
+					: 'content_reports_pending_comment_reporter_unique';
+				throw error;
+			}
+
 			reports.set(input.id, input);
 			return input;
 		}),
@@ -230,12 +250,50 @@ const createRepository = () => {
 		findCommentById: vi.fn(async (commentId: string) => comments.get(commentId) ?? null),
 		findArtworkReportCount: vi.fn(
 			async (artworkId: string) =>
-				Array.from(reports.values()).filter((report) => report.artworkId === artworkId).length
+				Array.from(reports.values()).filter(
+					(report) => report.artworkId === artworkId && report.status === 'pending'
+				).length
 		),
 		findCommentReportCount: vi.fn(
 			async (commentId: string) =>
-				Array.from(reports.values()).filter((report) => report.commentId === commentId).length
+				Array.from(reports.values()).filter(
+					(report) => report.commentId === commentId && report.status === 'pending'
+				).length
 		),
+		resolveArtworkReports: vi.fn(async ({ resolvedAt, resolvedBy, status, targetId }) => {
+			const pending = Array.from(reports.values()).filter(
+				(report) => report.artworkId === targetId && report.status === 'pending'
+			);
+
+			for (const report of pending) {
+				reports.set(report.id, {
+					...report,
+					reviewedAt: resolvedAt,
+					reviewedBy: resolvedBy,
+					status,
+					updatedAt: resolvedAt
+				});
+			}
+
+			return pending.length;
+		}),
+		resolveCommentReports: vi.fn(async ({ resolvedAt, resolvedBy, status, targetId }) => {
+			const pending = Array.from(reports.values()).filter(
+				(report) => report.commentId === targetId && report.status === 'pending'
+			);
+
+			for (const report of pending) {
+				reports.set(report.id, {
+					...report,
+					reviewedAt: resolvedAt,
+					reviewedBy: resolvedBy,
+					status,
+					updatedAt: resolvedAt
+				});
+			}
+
+			return pending.length;
+		}),
 		deleteArtwork: vi.fn(async (id: string) => {
 			const artwork = artworks.get(id) ?? null;
 			if (artwork) {
@@ -502,22 +560,73 @@ describe('artwork engagement service', () => {
 
 	it('submits artwork reports while leaving auto-hide to the database contract', async () => {
 		const { submitContentReport } = await import('./service');
-		const { artworks, repository } = createRepository();
+		const { artworks, reports, repository } = createRepository();
 		artworks.set('artwork-1', createArtworkRecord());
-		const actor = { ipAddress: '127.0.0.1', user: createUser('user-9') };
 
 		for (let index = 0; index < CONTENT_REPORT_AUTO_HIDE_THRESHOLD; index += 1) {
-			await submitContentReport({ artworkId: 'artwork-1', reason: 'spam' }, actor, {
-				generateId: () => `report-${index}`,
-				now: () => new Date(`2026-03-26T13:0${index}:00.000Z`),
-				repository
-			});
+			await submitContentReport(
+				{
+					artworkId: 'artwork-1',
+					reason: 'spam'
+				},
+				{ ipAddress: '127.0.0.1', user: createUser(`user-${index + 9}`) },
+				{
+					generateId: () => `report-${index}`,
+					now: () => new Date(`2026-03-26T13:0${index}:00.000Z`),
+					repository
+				}
+			);
 		}
 
 		expect(repository.createContentReport).toHaveBeenCalledTimes(
 			CONTENT_REPORT_AUTO_HIDE_THRESHOLD
 		);
+		expect(Array.from(reports.values())).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ reviewedAt: null, reviewedBy: null, status: 'pending' })
+			])
+		);
 		expect(artworks.get('artwork-1')?.isHidden).toBe(false);
+	});
+
+	it('rejects duplicate active reports and allows a new report after dismissal', async () => {
+		const { moderateArtwork, submitContentReport } = await import('./service');
+		const { artworks, reports, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		const actor = { ipAddress: '127.0.0.1', user: createUser('user-9') };
+
+		await submitContentReport({ artworkId: 'artwork-1', reason: 'spam' }, actor, {
+			generateId: () => 'report-1',
+			now: () => new Date('2026-03-26T13:00:00.000Z'),
+			repository
+		});
+
+		await expect(
+			submitContentReport({ artworkId: 'artwork-1', reason: 'spam' }, actor, {
+				generateId: () => 'report-2',
+				now: () => new Date('2026-03-26T13:05:00.000Z'),
+				repository
+			})
+		).rejects.toMatchObject({ code: 'DUPLICATE_REPORT', status: 409 });
+
+		await moderateArtwork(
+			{ action: 'dismiss', artworkId: 'artwork-1' },
+			{ user: createUser('moderator-1', 'moderator') },
+			{ now: () => new Date('2026-03-26T13:10:00.000Z'), repository }
+		);
+
+		expect(reports.get('report-1')).toMatchObject({
+			reviewedBy: 'moderator-1',
+			status: 'reviewed'
+		});
+
+		await expect(
+			submitContentReport({ artworkId: 'artwork-1', reason: 'spam' }, actor, {
+				generateId: () => 'report-3',
+				now: () => new Date('2026-03-26T13:15:00.000Z'),
+				repository
+			})
+		).resolves.toMatchObject({ id: 'report-3', status: 'pending' });
 	});
 
 	it('rejects report submissions that do not target exactly one object', async () => {
@@ -552,14 +661,16 @@ describe('artwork engagement service', () => {
 			isHidden: false,
 			updatedAt: new Date('2026-03-26T12:00:00.000Z')
 		});
-		const actor = { ipAddress: '127.0.0.1', user: createUser('user-9') };
-
 		for (let index = 0; index < CONTENT_REPORT_AUTO_HIDE_THRESHOLD; index += 1) {
-			await submitContentReport({ commentId: 'comment-1', reason: 'harassment' }, actor, {
-				generateId: () => `comment-report-${index}`,
-				now: () => new Date(`2026-03-26T14:0${index}:00.000Z`),
-				repository
-			});
+			await submitContentReport(
+				{ commentId: 'comment-1', reason: 'harassment' },
+				{ ipAddress: '127.0.0.1', user: createUser(`user-${index + 9}`) },
+				{
+					generateId: () => `comment-report-${index}`,
+					now: () => new Date(`2026-03-26T14:0${index}:00.000Z`),
+					repository
+				}
+			);
 		}
 
 		expect(repository.createContentReport).toHaveBeenCalledTimes(
@@ -572,15 +683,18 @@ describe('artwork engagement service', () => {
 		const { deleteArtwork, submitContentReport } = await import('./service');
 		const { artworks, repository } = createRepository();
 		artworks.set('artwork-1', createArtworkRecord({ authorId: 'user-1' }));
-		const reporter = { ipAddress: '127.0.0.1', user: createUser('user-9') };
 
 		for (let index = 0; index < CONTENT_REPORT_AUTO_HIDE_THRESHOLD; index += 1) {
-			await submitContentReport({ artworkId: 'artwork-1', reason: 'spam' }, reporter, {
-				generateId: () => `report-delete-${index}`,
-				now: () => new Date(`2026-03-26T15:0${index}:00.000Z`),
-				repository,
-				storage: { delete: async () => undefined, upload: async () => undefined }
-			});
+			await submitContentReport(
+				{ artworkId: 'artwork-1', reason: 'spam' },
+				{ ipAddress: '127.0.0.1', user: createUser(`user-${index + 9}`) },
+				{
+					generateId: () => `report-delete-${index}`,
+					now: () => new Date(`2026-03-26T15:0${index}:00.000Z`),
+					repository,
+					storage: { delete: async () => undefined, upload: async () => undefined }
+				}
+			);
 		}
 
 		const deleted = await deleteArtwork(
@@ -610,14 +724,16 @@ describe('artwork engagement service', () => {
 			isHidden: false,
 			updatedAt: new Date('2026-03-26T12:00:00.000Z')
 		});
-		const reporter = { ipAddress: '127.0.0.1', user: createUser('user-9') };
-
 		for (let index = 0; index < CONTENT_REPORT_AUTO_HIDE_THRESHOLD; index += 1) {
-			await submitContentReport({ commentId: 'comment-1', reason: 'harassment' }, reporter, {
-				generateId: () => `comment-delete-${index}`,
-				now: () => new Date(`2026-03-26T16:0${index}:00.000Z`),
-				repository
-			});
+			await submitContentReport(
+				{ commentId: 'comment-1', reason: 'harassment' },
+				{ ipAddress: '127.0.0.1', user: createUser(`user-${index + 9}`) },
+				{
+					generateId: () => `comment-delete-${index}`,
+					now: () => new Date(`2026-03-26T16:0${index}:00.000Z`),
+					repository
+				}
+			);
 		}
 
 		const deleted = await deleteArtworkComment(
@@ -632,9 +748,22 @@ describe('artwork engagement service', () => {
 
 	it('allows moderators to hide and unhide artworks', async () => {
 		const { moderateArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
+		const { artworks, reports, repository } = createRepository();
 		artworks.set('artwork-1', createArtworkRecord());
 		const now = new Date('2026-03-26T17:00:00.000Z');
+		reports.set('report-hide-1', {
+			artworkId: 'artwork-1',
+			commentId: null,
+			createdAt: new Date('2026-03-26T16:59:00.000Z'),
+			details: null,
+			id: 'report-hide-1',
+			reason: 'spam',
+			reporterId: 'user-9',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
+			updatedAt: new Date('2026-03-26T16:59:00.000Z')
+		});
 
 		const hidden = await moderateArtwork(
 			{ action: 'hide', artworkId: 'artwork-1' },
@@ -648,6 +777,24 @@ describe('artwork engagement service', () => {
 
 		expect(hidden.isHidden).toBe(true);
 		expect(hidden.hiddenAt).toEqual(now);
+		expect(reports.get('report-hide-1')).toMatchObject({
+			reviewedBy: 'moderator-1',
+			status: 'actioned'
+		});
+
+		reports.set('report-unhide-1', {
+			artworkId: 'artwork-1',
+			commentId: null,
+			createdAt: new Date('2026-03-26T17:01:00.000Z'),
+			details: null,
+			id: 'report-unhide-1',
+			reason: 'spam',
+			reporterId: 'user-8',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
+			updatedAt: new Date('2026-03-26T17:01:00.000Z')
+		});
 
 		const unhidden = await moderateArtwork(
 			{ action: 'unhide', artworkId: 'artwork-1' },
@@ -661,11 +808,15 @@ describe('artwork engagement service', () => {
 
 		expect(unhidden.isHidden).toBe(false);
 		expect(unhidden.hiddenAt).toBeNull();
+		expect(reports.get('report-unhide-1')).toMatchObject({
+			reviewedBy: 'moderator-1',
+			status: 'reviewed'
+		});
 	});
 
 	it('allows moderators to delete artworks and comments', async () => {
 		const { moderateArtwork, moderateComment } = await import('./service');
-		const { artworks, comments, repository } = createRepository();
+		const { artworks, comments, reports, repository } = createRepository();
 		artworks.set('artwork-1', createArtworkRecord());
 		comments.set('comment-1', {
 			authorId: 'author-2',
@@ -676,6 +827,32 @@ describe('artwork engagement service', () => {
 			id: 'comment-1',
 			isHidden: false,
 			updatedAt: new Date('2026-03-26T12:00:00.000Z')
+		});
+		reports.set('report-artwork-delete', {
+			artworkId: 'artwork-1',
+			commentId: null,
+			createdAt: new Date('2026-03-26T16:55:00.000Z'),
+			details: null,
+			id: 'report-artwork-delete',
+			reason: 'spam',
+			reporterId: 'user-9',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
+			updatedAt: new Date('2026-03-26T16:55:00.000Z')
+		});
+		reports.set('report-comment-delete', {
+			artworkId: null,
+			commentId: 'comment-1',
+			createdAt: new Date('2026-03-26T16:56:00.000Z'),
+			details: null,
+			id: 'report-comment-delete',
+			reason: 'harassment',
+			reporterId: 'user-8',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
+			updatedAt: new Date('2026-03-26T16:56:00.000Z')
 		});
 		const storage = { delete: vi.fn(async () => undefined), upload: async () => undefined };
 
@@ -688,6 +865,10 @@ describe('artwork engagement service', () => {
 		expect(deletedArtwork.id).toBe('artwork-1');
 		expect(storage.delete).toHaveBeenCalledWith('artworks/author-1/artwork-1.avif');
 		expect(artworks.has('artwork-1')).toBe(false);
+		expect(reports.get('report-artwork-delete')).toMatchObject({
+			reviewedBy: 'moderator-1',
+			status: 'actioned'
+		});
 
 		artworks.set('artwork-1', createArtworkRecord());
 		const deletedComment = await moderateComment(
@@ -698,6 +879,52 @@ describe('artwork engagement service', () => {
 
 		expect(deletedComment.id).toBe('comment-1');
 		expect(comments.has('comment-1')).toBe(false);
+		expect(reports.get('report-comment-delete')).toMatchObject({
+			reviewedBy: 'moderator-1',
+			status: 'actioned'
+		});
+	});
+
+	it('allows moderators to dismiss reported comments without mutating content', async () => {
+		const { moderateComment } = await import('./service');
+		const { artworks, comments, reports, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		comments.set('comment-1', {
+			authorId: 'author-2',
+			artworkId: 'artwork-1',
+			body: 'Needs review',
+			createdAt: new Date('2026-03-26T12:00:00.000Z'),
+			hiddenAt: null,
+			id: 'comment-1',
+			isHidden: false,
+			updatedAt: new Date('2026-03-26T12:00:00.000Z')
+		});
+		reports.set('report-comment-dismiss', {
+			artworkId: null,
+			commentId: 'comment-1',
+			createdAt: new Date('2026-03-26T16:56:00.000Z'),
+			details: null,
+			id: 'report-comment-dismiss',
+			reason: 'harassment',
+			reporterId: 'user-8',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
+			updatedAt: new Date('2026-03-26T16:56:00.000Z')
+		});
+
+		const result = await moderateComment(
+			{ action: 'dismiss', artworkId: 'artwork-1', commentId: 'comment-1' },
+			{ user: createUser('moderator-1', 'moderator') },
+			{ now: () => new Date('2026-03-26T17:10:00.000Z'), repository }
+		);
+
+		expect(result).toMatchObject({ id: 'comment-1', isHidden: false });
+		expect(comments.get('comment-1')).toMatchObject({ body: 'Needs review', isHidden: false });
+		expect(reports.get('report-comment-dismiss')).toMatchObject({
+			reviewedBy: 'moderator-1',
+			status: 'reviewed'
+		});
 	});
 
 	it('rejects moderation actions for non-moderators', async () => {

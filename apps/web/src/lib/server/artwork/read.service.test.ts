@@ -124,6 +124,8 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 		findCommentById: async () => null,
 		findCommentReportCount: async () => 0,
 		findArtworkReportCount: async () => 0,
+		resolveArtworkReports: async () => 0,
+		resolveCommentReports: async () => 0,
 		deleteComment: async () => {
 			throw new Error('not implemented in read tests');
 		},

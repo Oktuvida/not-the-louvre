@@ -43,6 +43,27 @@ describe('artwork moderation endpoint', () => {
 		expect(await response.json()).toMatchObject({ artwork: { id: 'artwork-1', isHidden: true } });
 	});
 
+	it('allows moderators to dismiss artwork reports without content mutation', async () => {
+		mocked.moderateArtwork.mockResolvedValue({ id: 'artwork-1', isHidden: false });
+
+		const { PATCH } = await import('./moderation/+server');
+		const response = await PATCH({
+			locals: { user: { id: 'moderator-1', role: 'moderator' } },
+			params: { artworkId: 'artwork-1' },
+			request: new Request('http://localhost/api/artworks/artwork-1/moderation', {
+				body: JSON.stringify({ action: 'dismiss' }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			})
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(mocked.moderateArtwork).toHaveBeenCalledWith(
+			{ action: 'dismiss', artworkId: 'artwork-1' },
+			{ user: { id: 'moderator-1', role: 'moderator' } }
+		);
+	});
+
 	it('allows moderators to delete artwork through the moderation boundary', async () => {
 		mocked.moderateArtwork.mockResolvedValue({ id: 'artwork-1' });
 

@@ -9,6 +9,9 @@ const mocked = vi.hoisted(() => {
 		id: string;
 		reason: string;
 		reporterId: string;
+		reviewedAt: Date | null;
+		reviewedBy: string | null;
+		status: 'actioned' | 'pending' | 'reviewed';
 		updatedAt: Date;
 	};
 
@@ -56,15 +59,31 @@ const mocked = vi.hoisted(() => {
 		artworkComments: { id: 'artwork_comments.id' },
 		contentReports: {
 			artworkId: 'content_reports.artwork_id',
-			commentId: 'content_reports.comment_id'
+			commentId: 'content_reports.comment_id',
+			id: 'content_reports.id',
+			reviewedAt: 'content_reports.reviewed_at',
+			reviewedBy: 'content_reports.reviewed_by',
+			status: 'content_reports.status',
+			updatedAt: 'content_reports.updated_at'
 		}
 	};
 
-	const getEqValue = (condition: unknown, column: string) => {
+	const getEqValue = (condition: unknown, column: string): unknown => {
 		if (!condition || typeof condition !== 'object') return undefined;
-		const candidate = condition as { type?: string; column?: string; value?: unknown };
+		const candidate = condition as {
+			column?: string;
+			conditions?: unknown[];
+			type?: string;
+			value?: unknown;
+		};
 		if (candidate.type === 'eq' && candidate.column === column) {
 			return candidate.value;
+		}
+		if (candidate.type === 'and' && Array.isArray(candidate.conditions)) {
+			for (const nested of candidate.conditions) {
+				const value: unknown = getEqValue(nested, column);
+				if (value !== undefined) return value;
+			}
 		}
 
 		return undefined;
@@ -90,7 +109,7 @@ const mocked = vi.hoisted(() => {
 						return [
 							{
 								value: Array.from(state.reports.values()).filter(
-									(report) => report.artworkId === artworkId
+									(report) => report.artworkId === artworkId && report.status === 'pending'
 								).length
 							}
 						];
@@ -101,7 +120,7 @@ const mocked = vi.hoisted(() => {
 						return [
 							{
 								value: Array.from(state.reports.values()).filter(
-									(report) => report.commentId === commentId
+									(report) => report.commentId === commentId && report.status === 'pending'
 								).length
 							}
 						];
@@ -112,9 +131,28 @@ const mocked = vi.hoisted(() => {
 			})
 		})),
 		update: vi.fn((table: unknown) => ({
-			set: (values: { hiddenAt: Date | null; isHidden: boolean; updatedAt: Date }) => ({
+			set: (values: Record<string, unknown>) => ({
 				where: (condition: unknown) => ({
 					returning: async () => {
+						if (table === schema.contentReports) {
+							const artworkId = getEqValue(condition, schema.contentReports.artworkId);
+							const commentId = getEqValue(condition, schema.contentReports.commentId);
+							const nextReports = Array.from(state.reports.values())
+								.filter((report) => {
+									if (report.status !== 'pending') return false;
+									if (typeof artworkId === 'string') return report.artworkId === artworkId;
+									if (typeof commentId === 'string') return report.commentId === commentId;
+									return false;
+								})
+								.map((report) => {
+									const next = { ...report, ...values } as ReportRecord;
+									state.reports.set(next.id, next);
+									return { id: next.id };
+								});
+
+							return nextReports;
+						}
+
 						if (table === schema.artworks) {
 							const id = getEqValue(condition, schema.artworks.id);
 							if (typeof id !== 'string') return [];
@@ -193,6 +231,9 @@ describe('artwork repository reporting persistence', () => {
 			id: 'report-1',
 			reason: 'spam',
 			reporterId: 'user-1',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
 			updatedAt: now
 		});
 
@@ -216,6 +257,9 @@ describe('artwork repository reporting persistence', () => {
 			id: 'report-1',
 			reason: 'spam',
 			reporterId: 'user-1',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
 			updatedAt: now
 		});
 		mocked.state.reports.set('report-2', {
@@ -226,6 +270,9 @@ describe('artwork repository reporting persistence', () => {
 			id: 'report-2',
 			reason: 'harassment',
 			reporterId: 'user-2',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'reviewed',
 			updatedAt: now
 		});
 		mocked.state.reports.set('report-3', {
@@ -236,11 +283,60 @@ describe('artwork repository reporting persistence', () => {
 			id: 'report-3',
 			reason: 'hate',
 			reporterId: 'user-3',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
 			updatedAt: now
 		});
 
-		await expect(artworkRepository.findArtworkReportCount('artwork-1')).resolves.toBe(2);
+		await expect(artworkRepository.findArtworkReportCount('artwork-1')).resolves.toBe(1);
 		await expect(artworkRepository.findCommentReportCount('comment-1')).resolves.toBe(1);
+	});
+
+	it('resolves pending reports for a moderation target with reviewer attribution', async () => {
+		const { artworkRepository } = await import('./repository');
+		const now = new Date('2026-03-27T03:00:00.000Z');
+
+		mocked.state.reports.set('report-1', {
+			artworkId: 'artwork-1',
+			commentId: null,
+			createdAt: now,
+			details: null,
+			id: 'report-1',
+			reason: 'spam',
+			reporterId: 'user-1',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
+			updatedAt: now
+		});
+		mocked.state.reports.set('report-2', {
+			artworkId: 'artwork-1',
+			commentId: null,
+			createdAt: now,
+			details: null,
+			id: 'report-2',
+			reason: 'spam',
+			reporterId: 'user-2',
+			reviewedAt: null,
+			reviewedBy: null,
+			status: 'pending',
+			updatedAt: now
+		});
+
+		const resolvedCount = await artworkRepository.resolveArtworkReports({
+			resolvedAt: now,
+			resolvedBy: 'moderator-1',
+			status: 'reviewed',
+			targetId: 'artwork-1'
+		});
+
+		expect(resolvedCount).toBe(2);
+		expect(Array.from(mocked.state.reports.values())).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ reviewedBy: 'moderator-1', status: 'reviewed' })
+			])
+		);
 	});
 
 	it('persists hidden-state transitions for artworks and comments', async () => {
