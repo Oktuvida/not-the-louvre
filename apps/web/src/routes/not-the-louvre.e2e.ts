@@ -115,7 +115,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await setAvatarExportMode(page, 'bad');
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expect(
-			page.getByText('Avatar media must decode as a single still AVIF image')
+			page.getByText('Avatar media must decode as a single still PNG image')
 		).toBeVisible();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 
