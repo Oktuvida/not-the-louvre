@@ -254,6 +254,38 @@ const getCommentSummary = async (sql: DbClient, commentId: string) => {
 	return row;
 };
 
+const getReportRows = async (sql: DbClient, target: { artworkId?: string; commentId?: string }) => {
+	if (target.artworkId) {
+		return sql<
+			Array<{
+				comment_id: string | null;
+				reviewed_at: Date | null;
+				reviewed_by: string | null;
+				status: 'actioned' | 'pending' | 'reviewed';
+			}>
+		>`
+			select comment_id, reviewed_at, reviewed_by, status
+			from app.content_reports
+			where artwork_id = ${target.artworkId}
+			order by id
+		`;
+	}
+
+	return sql<
+		Array<{
+			comment_id: string | null;
+			reviewed_at: Date | null;
+			reviewed_by: string | null;
+			status: 'actioned' | 'pending' | 'reviewed';
+		}>
+	>`
+		select comment_id, reviewed_at, reviewed_by, status
+		from app.content_reports
+		where comment_id = ${target.commentId ?? null}
+		order by id
+	`;
+};
+
 const asAuthenticated = async <T>(
 	sql: DbClient,
 	userId: string,
@@ -464,6 +496,204 @@ describeWithDatabase('artwork DB contract', () => {
 			await reportClientA.end({ timeout: 1 });
 			await reportClientB.end({ timeout: 1 });
 		}
+	});
+
+	it('enforces one pending report per reporter and target while allowing a new report after resolution', async () => {
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-unique' });
+		await insertComment(sql, {
+			authorId: 'viewer-1',
+			artworkId: 'artwork-unique',
+			id: 'comment-unique'
+		});
+
+		await insertReport(sql, {
+			artworkId: 'artwork-unique',
+			id: 'report-artwork-1',
+			reporterId: 'reporter-1'
+		});
+
+		await expect(
+			insertReport(sql, {
+				artworkId: 'artwork-unique',
+				id: 'report-artwork-2',
+				reporterId: 'reporter-1'
+			})
+		).rejects.toThrow();
+
+		await sql`
+			update app.content_reports
+			set status = 'reviewed', reviewed_by = 'moderator-1', reviewed_at = now(), updated_at = now()
+			where id = 'report-artwork-1'
+		`;
+
+		await expect(
+			insertReport(sql, {
+				artworkId: 'artwork-unique',
+				id: 'report-artwork-3',
+				reporterId: 'reporter-1'
+			})
+		).resolves.toBeUndefined();
+
+		await insertReport(sql, {
+			commentId: 'comment-unique',
+			id: 'report-comment-1',
+			reporterId: 'reporter-2'
+		});
+
+		await expect(
+			insertReport(sql, {
+				commentId: 'comment-unique',
+				id: 'report-comment-2',
+				reporterId: 'reporter-2'
+			})
+		).rejects.toThrow();
+	});
+
+	it('counts only pending reports for auto-hide and moderation queue membership', async () => {
+		const { listModerationQueue } = await import('./read.service');
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-pending-only' });
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-reopens' });
+		await insertComment(sql, {
+			authorId: 'viewer-1',
+			artworkId: 'artwork-pending-only',
+			id: 'comment-pending-only'
+		});
+
+		await sql`
+			insert into app.content_reports (id, reporter_id, artwork_id, reason, status, reviewed_by, reviewed_at, created_at, updated_at)
+			values
+				('report-reviewed-1', 'reporter-1', 'artwork-pending-only', 'spam', 'reviewed', 'moderator-1', now(), now(), now()),
+				('report-reviewed-2', 'reporter-2', 'artwork-pending-only', 'spam', 'reviewed', 'moderator-1', now(), now(), now())
+		`;
+
+		await insertReport(sql, {
+			artworkId: 'artwork-pending-only',
+			id: 'report-pending-1',
+			reporterId: 'reporter-3'
+		});
+		await insertReport(sql, {
+			artworkId: 'artwork-pending-only',
+			id: 'report-pending-2',
+			reporterId: 'viewer-1'
+		});
+
+		let artwork = await getArtworkSummary(sql, 'artwork-pending-only');
+		expect(artwork?.is_hidden).toBe(false);
+
+		await insertReport(sql, {
+			artworkId: 'artwork-pending-only',
+			id: 'report-pending-3',
+			reporterId: 'viewer-2'
+		});
+
+		artwork = await getArtworkSummary(sql, 'artwork-pending-only');
+		expect(artwork?.is_hidden).toBe(true);
+
+		await insertReport(sql, {
+			artworkId: 'artwork-reopens',
+			id: 'report-reopen-1',
+			reporterId: 'reporter-1'
+		});
+		await sql`
+			update app.content_reports
+			set status = 'reviewed', reviewed_by = 'moderator-1', reviewed_at = now(), updated_at = now()
+			where id = 'report-reopen-1'
+		`;
+
+		let queue = await listModerationQueue(
+			{},
+			{ user: createCanonicalUser('moderator-1', 'moderator') }
+		);
+		expect(queue.items.map((item) => item.artworkId)).toEqual(['artwork-pending-only']);
+		expect(queue.items[0]).toMatchObject({ reportCount: 3, targetType: 'artwork' });
+
+		await insertReport(sql, {
+			artworkId: 'artwork-reopens',
+			id: 'report-reopen-2',
+			reporterId: 'reporter-2'
+		});
+
+		queue = await listModerationQueue(
+			{},
+			{ user: createCanonicalUser('moderator-1', 'moderator') }
+		);
+		expect(queue.items.map((item) => item.artworkId)).toEqual([
+			'artwork-pending-only',
+			'artwork-reopens'
+		]);
+		expect(queue.items[1]).toMatchObject({ reportCount: 1, targetType: 'artwork' });
+	});
+
+	it('resolves reports with reviewer attribution for dismiss, hide, and delete moderation outcomes', async () => {
+		const { createArtworkComment, moderateArtwork, moderateComment, submitContentReport } =
+			await import('./service');
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-review-lifecycle' });
+
+		await submitContentReport(
+			{ artworkId: 'artwork-review-lifecycle', reason: 'spam' },
+			{ ipAddress: '127.0.0.1', user: createCanonicalUser('reporter-1') }
+		);
+		await submitContentReport(
+			{ artworkId: 'artwork-review-lifecycle', reason: 'spam' },
+			{ ipAddress: '127.0.0.1', user: createCanonicalUser('reporter-2') }
+		);
+
+		const dismissed = await moderateArtwork(
+			{ action: 'dismiss', artworkId: 'artwork-review-lifecycle' },
+			{ user: createCanonicalUser('moderator-1', 'moderator') }
+		);
+
+		expect(dismissed.id).toBe('artwork-review-lifecycle');
+		expect((await getArtworkSummary(sql, 'artwork-review-lifecycle'))?.is_hidden).toBe(false);
+		expect(await getReportRows(sql, { artworkId: 'artwork-review-lifecycle' })).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ reviewed_by: 'moderator-1', status: 'reviewed' })
+			])
+		);
+
+		await submitContentReport(
+			{ artworkId: 'artwork-review-lifecycle', reason: 'spam' },
+			{ ipAddress: '127.0.0.1', user: createCanonicalUser('reporter-3') }
+		);
+
+		const hidden = await moderateArtwork(
+			{ action: 'hide', artworkId: 'artwork-review-lifecycle' },
+			{ user: createCanonicalUser('moderator-1', 'moderator') }
+		);
+
+		expect(hidden.isHidden).toBe(true);
+		expect(await getReportRows(sql, { artworkId: 'artwork-review-lifecycle' })).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ reviewed_by: 'moderator-1', status: 'actioned' })
+			])
+		);
+
+		const comment = await createArtworkComment(
+			{ artworkId: 'artwork-review-lifecycle', body: 'Reported comment' },
+			{ ipAddress: '127.0.0.1', user: createCanonicalUser('viewer-1') }
+		);
+		await submitContentReport(
+			{ commentId: comment.id, reason: 'harassment' },
+			{ ipAddress: '127.0.0.1', user: createCanonicalUser('reporter-1') }
+		);
+
+		const deletedComment = await moderateComment(
+			{ action: 'delete', artworkId: 'artwork-review-lifecycle', commentId: comment.id },
+			{ user: createCanonicalUser('moderator-1', 'moderator') }
+		);
+
+		expect(deletedComment.id).toBe(comment.id);
+		expect(await getReportRows(sql, { commentId: comment.id })).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					comment_id: comment.id,
+					reviewed_by: 'moderator-1',
+					status: 'actioned'
+				})
+			])
+		);
 	});
 
 	it('exposes only realtime-safe artwork-scoped vote and comment relations with publication and RLS protection', async () => {
