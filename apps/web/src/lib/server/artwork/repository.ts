@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
 	artworkComments,
@@ -32,21 +32,8 @@ export const artworkRepository: ArtworkRepository = {
 		return (await db.query.artworks.findFirst({ where: eq(artworks.id, id) })) ?? null;
 	},
 	async createArtwork(input) {
-		return db.transaction(async (tx) => {
-			const [record] = await tx.insert(artworks).values(input).returning();
-
-			if (input.parentId) {
-				await tx
-					.update(artworks)
-					.set({
-						forkCount: sql`${artworks.forkCount} + 1`,
-						updatedAt: input.updatedAt
-					})
-					.where(eq(artworks.id, input.parentId));
-			}
-
-			return record as ArtworkRecord;
-		});
+		const [record] = await db.insert(artworks).values(input).returning();
+		return record as ArtworkRecord;
 	},
 	async createContentReport(input: CreateContentReportInput) {
 		const [record] = await db.insert(contentReports).values(input).returning();
@@ -62,24 +49,8 @@ export const artworkRepository: ArtworkRepository = {
 		return (record as ArtworkRecord | undefined) ?? null;
 	},
 	async deleteArtwork(id) {
-		return db.transaction(async (tx) => {
-			const artwork = (await tx.query.artworks.findFirst({ where: eq(artworks.id, id) })) ?? null;
-			if (!artwork) return null;
-
-			const [record] = await tx.delete(artworks).where(eq(artworks.id, id)).returning();
-
-			if (artwork.parentId) {
-				await tx
-					.update(artworks)
-					.set({
-						forkCount: sql`greatest(0, ${artworks.forkCount} - 1)`,
-						updatedAt: artwork.updatedAt
-					})
-					.where(eq(artworks.id, artwork.parentId));
-			}
-
-			return (record as ArtworkRecord | undefined) ?? null;
-		});
+		const [record] = await db.delete(artworks).where(eq(artworks.id, id)).returning();
+		return (record as ArtworkRecord | undefined) ?? null;
 	},
 	async findChildForksByParentId(parentId) {
 		return db.query.artworks.findMany({ where: eq(artworks.parentId, parentId) });
@@ -112,9 +83,6 @@ export const artworkRepository: ArtworkRepository = {
 				(await tx.query.artworks.findFirst({ where: eq(artworks.id, input.artworkId) })) ?? null;
 			if (!artwork) return null;
 
-			const previousDelta = existing ? (existing.value === 'up' ? 1 : -1) : 0;
-			const nextDelta = input.value === 'up' ? 1 : -1;
-
 			const [vote] = existing
 				? await tx
 						.update(artworkVotes)
@@ -123,11 +91,9 @@ export const artworkRepository: ArtworkRepository = {
 						.returning()
 				: await tx.insert(artworkVotes).values(input).returning();
 
-			const [updatedArtwork] = await tx
-				.update(artworks)
-				.set({ score: artwork.score - previousDelta + nextDelta, updatedAt: input.updatedAt })
-				.where(eq(artworks.id, input.artworkId))
-				.returning();
+			const updatedArtwork =
+				(await tx.query.artworks.findFirst({ where: eq(artworks.id, input.artworkId) })) ?? null;
+			if (!updatedArtwork) return null;
 
 			return {
 				artwork: updatedArtwork as ArtworkRecord,
@@ -135,7 +101,7 @@ export const artworkRepository: ArtworkRepository = {
 			} satisfies ArtworkVoteMutationResult;
 		});
 	},
-	async removeVote(artworkId, userId, updatedAt) {
+	async removeVote(artworkId, userId) {
 		return db.transaction(async (tx) => {
 			const artwork =
 				(await tx.query.artworks.findFirst({ where: eq(artworks.id, artworkId) })) ?? null;
@@ -151,11 +117,9 @@ export const artworkRepository: ArtworkRepository = {
 			}
 
 			await tx.delete(artworkVotes).where(eq(artworkVotes.id, existing.id));
-			const [updatedArtwork] = await tx
-				.update(artworks)
-				.set({ score: artwork.score - (existing.value === 'up' ? 1 : -1), updatedAt })
-				.where(eq(artworks.id, artworkId))
-				.returning();
+			const updatedArtwork =
+				(await tx.query.artworks.findFirst({ where: eq(artworks.id, artworkId) })) ?? null;
+			if (!updatedArtwork) return null;
 
 			return {
 				artwork: updatedArtwork as ArtworkRecord,
@@ -204,10 +168,6 @@ export const artworkRepository: ArtworkRepository = {
 			if (!author) return null;
 
 			const [comment] = await tx.insert(artworkComments).values(input).returning();
-			await tx
-				.update(artworks)
-				.set({ commentCount: artwork.commentCount + 1, updatedAt: input.updatedAt })
-				.where(eq(artworks.id, input.artworkId));
 
 			return {
 				author: {
@@ -236,24 +196,16 @@ export const artworkRepository: ArtworkRepository = {
 
 		return result?.value ?? 0;
 	},
-	async deleteComment(id, updatedAt) {
+	async deleteComment(id) {
 		return db.transaction(async (tx) => {
 			const comment =
 				(await tx.query.artworkComments.findFirst({ where: eq(artworkComments.id, id) })) ?? null;
 			if (!comment) return null;
 
-			const artwork =
-				(await tx.query.artworks.findFirst({ where: eq(artworks.id, comment.artworkId) })) ?? null;
-			if (!artwork) return null;
-
 			const [deleted] = await tx
 				.delete(artworkComments)
 				.where(eq(artworkComments.id, id))
 				.returning();
-			await tx
-				.update(artworks)
-				.set({ commentCount: Math.max(0, artwork.commentCount - 1), updatedAt })
-				.where(eq(artworks.id, comment.artworkId));
 
 			return deleted as ArtworkCommentRecord;
 		});

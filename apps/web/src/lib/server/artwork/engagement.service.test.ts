@@ -500,7 +500,7 @@ describe('artwork engagement service', () => {
 		expect(error.code).toBe('PUBLISH_FAILED');
 	});
 
-	it('submits reports and auto-hides artworks once the threshold is reached', async () => {
+	it('submits artwork reports while leaving auto-hide to the database contract', async () => {
 		const { submitContentReport } = await import('./service');
 		const { artworks, repository } = createRepository();
 		artworks.set('artwork-1', createArtworkRecord());
@@ -514,7 +514,10 @@ describe('artwork engagement service', () => {
 			});
 		}
 
-		expect(artworks.get('artwork-1')?.isHidden).toBe(true);
+		expect(repository.createContentReport).toHaveBeenCalledTimes(
+			CONTENT_REPORT_AUTO_HIDE_THRESHOLD
+		);
+		expect(artworks.get('artwork-1')?.isHidden).toBe(false);
 	});
 
 	it('rejects report submissions that do not target exactly one object', async () => {
@@ -535,7 +538,7 @@ describe('artwork engagement service', () => {
 		).rejects.toMatchObject({ code: 'INVALID_REPORT_TARGET', status: 400 });
 	});
 
-	it('auto-hides comments once the report threshold is reached', async () => {
+	it('submits comment reports while leaving auto-hide to the database contract', async () => {
 		const { submitContentReport } = await import('./service');
 		const { artworks, comments, repository } = createRepository();
 		artworks.set('artwork-1', createArtworkRecord());
@@ -559,7 +562,10 @@ describe('artwork engagement service', () => {
 			});
 		}
 
-		expect(comments.get('comment-1')?.isHidden).toBe(true);
+		expect(repository.createContentReport).toHaveBeenCalledTimes(
+			CONTENT_REPORT_AUTO_HIDE_THRESHOLD
+		);
+		expect(comments.get('comment-1')?.isHidden).toBe(false);
 	});
 
 	it('keeps hidden artworks deletable by their author after auto-hide', async () => {
