@@ -1,10 +1,17 @@
 <script lang="ts">
 	import { drawingPalette, drawingTools } from '$lib/features/studio-drawing/state/drawing.svelte';
 
-	let { onPublish, onClear }: { onPublish?: () => void; onClear?: () => void } = $props();
+	let {
+		isPublishing = false,
+		onPublish,
+		onClear
+	}: {
+		isPublishing?: boolean;
+		onPublish?: () => void;
+		onClear?: () => void;
+	} = $props();
 </script>
 
-<!-- Color Palette - Wooden Tray -->
 <div class="mb-6 rotate-2 rounded-2xl border-4 border-[#5d4e37] bg-[#8b7355] p-6 shadow-2xl">
 	<div class="mb-4 flex items-center gap-2">
 		<svg
@@ -49,7 +56,6 @@
 		{/each}
 	</div>
 
-	<!-- Brush Size -->
 	<div class="mt-6 border-t-2 border-[#5d4e37] pt-4">
 		<label
 			class="mb-2 block text-sm font-semibold text-[#fdfbf7]"
@@ -68,13 +74,13 @@
 	</div>
 </div>
 
-<!-- Action Buttons - Brushes in Jar Style -->
 <div class="-rotate-1 space-y-3 rounded-2xl border-4 border-[#2d2420] bg-[#d4956c] p-4 shadow-2xl">
 	<button
 		type="button"
-		class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-[#2d2420] bg-[#c84f4f] px-4 py-3 font-semibold text-[#fdfbf7] shadow-md transition-transform hover:scale-105"
+		class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-[#2d2420] bg-[#c84f4f] px-4 py-3 font-semibold text-[#fdfbf7] shadow-md transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
 		style="font-family: 'Baloo 2', sans-serif;"
 		onclick={onClear}
+		disabled={isPublishing}
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -95,9 +101,10 @@
 
 	<button
 		type="button"
-		class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-[#2d2420] bg-[#8b9d91] px-4 py-3 font-semibold text-[#fdfbf7] shadow-md transition-transform hover:scale-105"
+		class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-[#2d2420] bg-[#8b9d91] px-4 py-3 font-semibold text-[#fdfbf7] shadow-md transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
 		style="font-family: 'Baloo 2', sans-serif;"
 		onclick={onPublish}
+		disabled={isPublishing}
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -113,6 +120,6 @@
 				d="M18 18H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"
 			/><path d="M7 15h0" /></svg
 		>
-		Publish
+		{isPublishing ? 'Publishing...' : 'Publish'}
 	</button>
 </div>
