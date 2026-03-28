@@ -100,6 +100,26 @@ describe('GET /api/users/[userId]/avatar', () => {
 
 		expect(response.status).toBe(404);
 	});
+
+	it('returns a JSON error envelope when avatar streaming fails with a domain error', async () => {
+		mocked.findUserById.mockResolvedValue(makeUserRecord({ avatarUrl: 'avatars/user-1.avif' }));
+		mocked.streamAvatarStorageObject.mockRejectedValue(
+			new ArtworkFlowError(404, 'Avatar not found', 'NOT_FOUND')
+		);
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: {},
+			params: { userId: 'user-1' }
+		} as never);
+
+		expect(response.status).toBe(404);
+		expect(response.headers.get('content-type')).toMatch(/application\/json/);
+		expect(await response.json()).toMatchObject({
+			code: 'NOT_FOUND',
+			message: 'Avatar not found'
+		});
+	});
 });
 
 describe('PUT /api/users/[userId]/avatar', () => {
@@ -112,7 +132,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		mocked.avatarService.uploadAvatar.mockResolvedValue(updated);
 
 		const formData = new FormData();
-		formData.append('file', new File([new Uint8Array(128)], 'avatar.avif', { type: 'image/avif' }));
+		formData.append('file', new File([new Uint8Array(128)], 'avatar.png', { type: 'image/png' }));
 
 		const { PUT } = await import('./+server');
 		const response = await PUT({
@@ -126,13 +146,32 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		expect(json.avatarUrl).toBe('avatars/user-1.avif');
 	});
 
+	it('returns 400 JSON when the file field is missing', async () => {
+		const formData = new FormData();
+
+		const { PUT } = await import('./+server');
+		const response = await PUT({
+			locals: { user: makeLocalUser() },
+			params: { userId: 'user-1' },
+			request: new Request('http://localhost', { method: 'PUT', body: formData })
+		} as never);
+
+		expect(response.status).toBe(400);
+		expect(response.headers.get('content-type')).toMatch(/application\/json/);
+		expect(await response.json()).toMatchObject({
+			code: 'INVALID_MEDIA_FORMAT',
+			message: 'Avatar file must be provided'
+		});
+		expect(mocked.avatarService.uploadAvatar).not.toHaveBeenCalled();
+	});
+
 	it('returns 401 for unauthenticated upload attempts', async () => {
 		mocked.avatarService.uploadAvatar.mockRejectedValue(
 			new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED')
 		);
 
 		const formData = new FormData();
-		formData.append('file', new File([new Uint8Array(128)], 'avatar.avif', { type: 'image/avif' }));
+		formData.append('file', new File([new Uint8Array(128)], 'avatar.png', { type: 'image/png' }));
 
 		const { PUT } = await import('./+server');
 		const response = await PUT({
@@ -142,11 +181,39 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		} as never);
 
 		expect(response.status).toBe(401);
+		expect(response.headers.get('content-type')).toMatch(/application\/json/);
+		expect(await response.json()).toMatchObject({
+			code: 'UNAUTHENTICATED',
+			message: 'Authentication required'
+		});
 	});
 
 	it('returns 400 for invalid media format', async () => {
 		mocked.avatarService.uploadAvatar.mockRejectedValue(
-			new ArtworkFlowError(400, 'Avatar media must be AVIF', 'INVALID_MEDIA_FORMAT')
+			new ArtworkFlowError(400, 'Avatar media must be PNG', 'INVALID_MEDIA_FORMAT')
+		);
+
+		const formData = new FormData();
+		formData.append('file', new File([new Uint8Array(128)], 'avatar.avif', { type: 'image/avif' }));
+
+		const { PUT } = await import('./+server');
+		const response = await PUT({
+			locals: { user: makeLocalUser() },
+			params: { userId: 'user-1' },
+			request: new Request('http://localhost', { method: 'PUT', body: formData })
+		} as never);
+
+		expect(response.status).toBe(400);
+		expect(response.headers.get('content-type')).toMatch(/application\/json/);
+		expect(await response.json()).toMatchObject({
+			code: 'INVALID_MEDIA_FORMAT',
+			message: 'Avatar media must be PNG'
+		});
+	});
+
+	it('returns 500 JSON when avatar storage is not configured', async () => {
+		mocked.avatarService.uploadAvatar.mockRejectedValue(
+			new ArtworkFlowError(500, 'Missing storage configuration for avatar upload', 'STORAGE_FAILED')
 		);
 
 		const formData = new FormData();
@@ -159,7 +226,12 @@ describe('PUT /api/users/[userId]/avatar', () => {
 			request: new Request('http://localhost', { method: 'PUT', body: formData })
 		} as never);
 
-		expect(response.status).toBe(400);
+		expect(response.status).toBe(500);
+		expect(response.headers.get('content-type')).toMatch(/application\/json/);
+		expect(await response.json()).toMatchObject({
+			code: 'STORAGE_FAILED',
+			message: 'Missing storage configuration for avatar upload'
+		});
 	});
 });
 
@@ -195,5 +267,10 @@ describe('DELETE /api/users/[userId]/avatar', () => {
 		} as never);
 
 		expect(response.status).toBe(401);
+		expect(response.headers.get('content-type')).toMatch(/application\/json/);
+		expect(await response.json()).toMatchObject({
+			code: 'UNAUTHENTICATED',
+			message: 'Authentication required'
+		});
 	});
 });
