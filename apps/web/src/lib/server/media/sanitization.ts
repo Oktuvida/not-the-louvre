@@ -32,6 +32,13 @@ const CANONICAL_AVIF_OPTIONS = {
 	quality: 100
 } as const;
 
+const ARTWORK_SOURCE_CONTENT_TYPES = new Set([
+	'image/avif',
+	'image/webp',
+	'image/jpeg',
+	'image/png'
+]);
+
 const artworkProfile: MediaSanitizationProfile = {
 	contentType: ARTWORK_MEDIA_CONTENT_TYPE,
 	height: ARTWORK_MEDIA_HEIGHT,
@@ -219,7 +226,66 @@ export const sanitizeAvifUpload = async (
 		isValidMetadata: isCanonicalAvif
 	});
 
-export const sanitizeArtworkMedia = (file: File) => sanitizeAvifUpload(file, artworkProfile);
+export const sanitizeArtworkMedia = async (file: File) => {
+	if (!ARTWORK_SOURCE_CONTENT_TYPES.has(file.type)) {
+		throw new ArtworkFlowError(
+			400,
+			'Artwork media must be AVIF, WebP, JPEG, or PNG',
+			'INVALID_MEDIA_FORMAT'
+		);
+	}
+
+	if (file.type === artworkProfile.contentType) {
+		return sanitizeAvifUpload(file, artworkProfile);
+	}
+
+	if (file.size > artworkProfile.maxBytes) {
+		throw oversizedInputError(artworkProfile);
+	}
+
+	const inputBuffer = new Uint8Array(await file.arrayBuffer());
+
+	let metadata: sharp.Metadata;
+
+	try {
+		metadata = await sharp(inputBuffer, { animated: false }).metadata();
+	} catch {
+		throw invalidContentError(artworkProfile);
+	}
+
+	if (!metadata.width || !metadata.height || (metadata.pages ?? 1) !== 1) {
+		throw invalidContentError(artworkProfile);
+	}
+
+	let outputBuffer: Buffer;
+
+	try {
+		outputBuffer = await sharp(inputBuffer, { animated: false })
+			.resize(artworkProfile.width, artworkProfile.height, {
+				background: '#fdfbf7',
+				fit: 'contain'
+			})
+			.flatten({ background: '#fdfbf7' })
+			.avif(CANONICAL_AVIF_OPTIONS)
+			.toBuffer();
+	} catch {
+		throw invalidContentError(artworkProfile);
+	}
+
+	if (outputBuffer.byteLength > artworkProfile.maxBytes) {
+		throw oversizedOutputError(artworkProfile);
+	}
+
+	return {
+		contentType: artworkProfile.contentType,
+		file: new File([Uint8Array.from(outputBuffer)], artworkProfile.outputFileName, {
+			type: artworkProfile.contentType
+		}),
+		height: artworkProfile.height,
+		sizeBytes: outputBuffer.byteLength,
+		width: artworkProfile.width
+	};
+};
 
 export const sanitizeAvatarMedia = (file: File) =>
 	sanitizeDecodedImageUpload(file, avatarProfile, {

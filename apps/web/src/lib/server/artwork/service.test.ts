@@ -5,6 +5,8 @@ import {
 	createAvifTestFile,
 	createJpegTestFile,
 	createMalformedAvifFile,
+	createPngTestFile,
+	createWebpTestFile,
 	fileToBytes
 } from '../media/test-helpers';
 import type {
@@ -15,8 +17,8 @@ import type {
 	PublishRateLimitRecord
 } from './types';
 
-const createPngFile = (size = 128) =>
-	new File([new Uint8Array(size)], 'artwork.png', { type: 'image/png' });
+const createUnsupportedImageFile = (size = 128) =>
+	new File([new Uint8Array(size)], 'artwork.gif', { type: 'image/gif' });
 
 const createRepository = () => {
 	const artworks = new Map<string, ArtworkRecord>();
@@ -359,7 +361,118 @@ describe('artwork service', () => {
 		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
-	it('rejects non-AVIF media before touching storage', async () => {
+	it('publishes browser-exported WebP source media and stores canonical AVIF output', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage, uploads } = createStorage();
+		const media = await createWebpTestFile({ height: 768, width: 768 });
+		const now = new Date('2026-03-26T10:00:00.000Z');
+
+		const result = await publishArtwork(
+			{
+				media,
+				title: 'Browser export'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-webp',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		expect(result.id).toBe('artwork-webp');
+		expect(uploads).toHaveLength(1);
+		expect(uploads[0]?.file.type).toBe('image/avif');
+		expect(artworks.get('artwork-webp')?.mediaContentType).toBe('image/avif');
+		expect(await fileToBytes(uploads[0]!.file)).not.toEqual(await fileToBytes(media));
+	}, 15000);
+
+	it('publishes browser-exported JPEG source media and stores canonical AVIF output', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage, uploads } = createStorage();
+		const media = await createJpegTestFile({ height: 900, width: 900 });
+
+		await publishArtwork(
+			{
+				media,
+				title: 'JPEG browser export'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{ repository, storage }
+		);
+
+		expect(uploads).toHaveLength(1);
+		expect(uploads[0]?.file.type).toBe('image/avif');
+	});
+
+	it('publishes browser-exported PNG source media as the last fallback and stores canonical AVIF output', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage, uploads } = createStorage();
+		const media = await createPngTestFile({ height: 1024, width: 1024 });
+
+		await publishArtwork(
+			{
+				media,
+				title: 'PNG browser export'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{ repository, storage }
+		);
+
+		expect(uploads).toHaveLength(1);
+		expect(uploads[0]?.file.type).toBe('image/avif');
+	});
+
+	it('rejects unsupported source media before touching storage', async () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { storage } = createStorage();
@@ -367,7 +480,7 @@ describe('artwork service', () => {
 		await expect(
 			publishArtwork(
 				{
-					media: createPngFile(),
+					media: createUnsupportedImageFile(),
 					title: 'Wrong format'
 				},
 				{
@@ -390,6 +503,7 @@ describe('artwork service', () => {
 			)
 		).rejects.toMatchObject({
 			code: 'INVALID_MEDIA_FORMAT',
+			message: 'Artwork media must be AVIF, WebP, JPEG, or PNG',
 			status: 400
 		});
 
