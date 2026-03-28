@@ -75,6 +75,41 @@ const oversizedOutputError = (profile: MediaSanitizationProfile) =>
 		'MEDIA_TOO_LARGE'
 	);
 
+const ISO_BMFF_FTYP_OFFSET = 4;
+const ISO_BMFF_BRAND_OFFSET = 8;
+const ISO_BMFF_HEADER_BYTES = 16;
+const ISO_BMFF_BRAND_BYTES = 4;
+const AVIF_BRANDS = new Set(['avif', 'avis']);
+
+const readAscii = (input: Uint8Array, start: number, length: number) =>
+	String.fromCharCode(...input.subarray(start, start + length));
+
+const hasAvifMagicBytes = (input: Uint8Array) => {
+	if (input.byteLength < ISO_BMFF_HEADER_BYTES) {
+		return false;
+	}
+
+	if (readAscii(input, ISO_BMFF_FTYP_OFFSET, ISO_BMFF_BRAND_BYTES) !== 'ftyp') {
+		return false;
+	}
+
+	const majorBrand = readAscii(input, ISO_BMFF_BRAND_OFFSET, ISO_BMFF_BRAND_BYTES);
+	if (AVIF_BRANDS.has(majorBrand)) {
+		return true;
+	}
+
+	for (let offset = ISO_BMFF_HEADER_BYTES; offset + ISO_BMFF_BRAND_BYTES <= input.byteLength; offset += 4) {
+		if (AVIF_BRANDS.has(readAscii(input, offset, ISO_BMFF_BRAND_BYTES))) {
+			return true;
+		}
+	}
+
+	return false;
+};
+
+const isCanonicalAvif = (metadata: sharp.Metadata) =>
+	metadata.format === 'heif' && metadata.compression === 'av1';
+
 export const sanitizeAvifUpload = async (
 	file: File,
 	profile: MediaSanitizationProfile
@@ -88,11 +123,20 @@ export const sanitizeAvifUpload = async (
 	}
 
 	const inputBuffer = new Uint8Array(await file.arrayBuffer());
+
+	if (!hasAvifMagicBytes(inputBuffer)) {
+		throw invalidContentError(profile);
+	}
+
 	let metadata;
 
 	try {
 		metadata = await sharp(inputBuffer, { animated: false }).metadata();
 	} catch {
+		throw invalidContentError(profile);
+	}
+
+	if (!isCanonicalAvif(metadata)) {
 		throw invalidContentError(profile);
 	}
 

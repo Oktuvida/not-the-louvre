@@ -66,6 +66,27 @@ export const createAvifTestFile = async ({
 	return new File([Uint8Array.from(buffer)], name, { type: 'image/avif' });
 };
 
+export const createJpegTestFile = async ({
+	height,
+	name = 'image.jpg',
+	pattern = 'blocks',
+	quality = 95,
+	width
+}: Omit<CreateAvifTestFileOptions, 'effort'>) => {
+	const pixelData = createPixelData(width, height, pattern);
+	const buffer = await sharp(pixelData, {
+		raw: {
+			channels: 4,
+			height,
+			width
+		}
+	})
+		.jpeg({ quality })
+		.toBuffer();
+
+	return new File([Uint8Array.from(buffer)], name, { type: 'image/jpeg' });
+};
+
 export const createMalformedAvifFile = (size = 128, name = 'invalid.avif') => {
 	const bytes = new Uint8Array(size);
 	bytes.set(AVIF_SIGNATURE_BYTES);
