@@ -28,6 +28,7 @@ vi.mock('$lib/server/user/storage', () => ({
 
 const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
 	avatarUrl: 'avatars/user-1.avif',
+	avatarOnboardingCompletedAt: new Date('2026-01-01T00:00:00.000Z'),
 	createdAt: new Date('2026-01-01T00:00:00.000Z'),
 	id: 'user-1',
 	nickname: 'artist',
@@ -38,6 +39,7 @@ const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
 
 const makeLocalUser = (overrides = {}) => ({
 	avatarUrl: null,
+	avatarOnboardingCompletedAt: null,
 	authUserId: 'auth-user-1',
 	createdAt: new Date('2026-01-01T00:00:00.000Z'),
 	email: 'artist@not-the-louvre.local',

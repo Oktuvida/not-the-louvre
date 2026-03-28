@@ -52,6 +52,7 @@ const mapProfileToCanonicalUser = (
 	nickname: profile.nickname,
 	role: profile.role,
 	avatarUrl: profile.avatarUrl ?? null,
+	avatarOnboardingCompletedAt: profile.avatarOnboardingCompletedAt ?? null,
 	name: authUser.name,
 	email: authUser.email,
 	emailVerified: authUser.emailVerified,
@@ -132,6 +133,7 @@ export const signUpWithNickname = async (
 		id: response.user.id,
 		nickname: input.nickname,
 		recoveryHash,
+		avatarOnboardingCompletedAt: null,
 		role: 'user'
 	});
 
@@ -212,12 +214,9 @@ export const signInWithNickname = async (
 };
 
 export const signOutCurrentSession = async (headers: HeadersInit) => {
-	const result = await auth.api.signOut({
-		headers: new Headers(headers),
-		returnHeaders: true
+	await auth.api.signOut({
+		headers: new Headers(headers)
 	});
-
-	return result.headers;
 };
 
 export const recoverAccount = async (
