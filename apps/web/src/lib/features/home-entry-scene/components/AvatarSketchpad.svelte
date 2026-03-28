@@ -33,20 +33,18 @@
 			exportContext.drawImage(sourceCanvas, 0, 0, EXPORT_SIZE, EXPORT_SIZE);
 
 			const blob = await new Promise<Blob | null>((resolve) => {
-				exportCanvas.toBlob((nextBlob) => resolve(nextBlob), 'image/avif', 1);
+				exportCanvas.toBlob((nextBlob) => resolve(nextBlob), 'image/png');
 			});
 
 			if (!blob) {
-				throw new Error('Canvas export returned no blob for image/avif output.');
+				throw new Error('Canvas export returned no blob for image/png output.');
 			}
 
-			if (blob.type !== 'image/avif') {
-				throw new Error(
-					`Canvas export returned unexpected blob type: ${blob.type || 'unknown'}.`
-				);
+			if (blob.type !== 'image/png') {
+				throw new Error(`Canvas export returned unexpected blob type: ${blob.type || 'unknown'}.`);
 			}
 
-			return new File([blob], 'avatar.avif', { type: 'image/avif' });
+			return new File([blob], 'avatar.png', { type: 'image/png' });
 		},
 		nickname,
 		onContinue,
@@ -209,7 +207,10 @@
 			}
 
 			if (!avatarFile) {
-				console.error('Failed to create avatar file', new Error('createAvatarFile returned no file'));
+				console.error(
+					'Failed to create avatar file',
+					new Error('createAvatarFile returned no file')
+				);
 				saveError = 'This browser could not export your avatar. Please try again.';
 				return;
 			}
