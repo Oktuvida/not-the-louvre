@@ -78,6 +78,13 @@
       "when": 1774727893378,
       "tag": "0010_red_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1774738056209,
+      "tag": "0011_init_storage_buckets",
+      "breakpoints": true
     }
   ]
 }
