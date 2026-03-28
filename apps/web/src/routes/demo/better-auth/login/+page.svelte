@@ -1,14 +1,24 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import type { PageData } from './$types';
 	import type { ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
-<h1>Nickname Auth Demo</h1>
+<svelte:head>
+	<title>Nickname Auth Demo</title>
+</svelte:head>
 
-<form method="post" action="?/signIn" use:enhance>
+<nav>
+	<a href={resolve('/demo')}>Back to demo index</a>
+</nav>
+
+<h1>Nickname Auth Demo</h1>
+<p>Authentication demo state: signed out</p>
+<p>Use this page to test nickname availability, account creation, login, and recovery.</p>
+
+<form method="post" action="?/signIn">
 	<label>
 		Nickname
 		<input
@@ -34,7 +44,7 @@
 	>
 </form>
 
-<form method="post" action="?/checkNickname" use:enhance>
+<form method="post" action="?/checkNickname">
 	<label>
 		Check nickname availability
 		<input
@@ -47,7 +57,7 @@
 	>
 </form>
 
-<form method="post" action="?/recover" use:enhance>
+<form method="post" action="?/recover">
 	<label>
 		Recovery nickname
 		<input
