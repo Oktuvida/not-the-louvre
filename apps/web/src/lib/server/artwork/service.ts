@@ -19,10 +19,12 @@ import type {
 	ArtworkVoteMutationResult,
 	ArtworkVoteRemovalResult,
 	ContentReportStatus,
+	SanitizedMedia,
 	ArtworkVisibilityActor,
 	ArtworkVoteValue
 } from './types';
-import { normalizePublishTitle, normalizeUpdatedTitle, validateArtworkMedia } from './validation';
+import { sanitizeArtworkMedia } from '../media/sanitization';
+import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
 type PublishArtworkInput = {
 	media: File;
@@ -81,6 +83,7 @@ type ServiceDependencies = {
 	now?: () => Date;
 	randomSuffix?: () => number;
 	repository?: ArtworkRepository;
+	sanitizeMedia?: (file: File) => Promise<SanitizedMedia>;
 	storage?: ArtworkStorage;
 };
 
@@ -89,6 +92,7 @@ const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	now: dependencies.now ?? (() => new Date()),
 	randomSuffix: dependencies.randomSuffix ?? (() => Math.floor(Math.random() * 10000)),
 	repository: dependencies.repository ?? artworkRepository,
+	sanitizeMedia: dependencies.sanitizeMedia ?? sanitizeArtworkMedia,
 	storage: dependencies.storage ?? supabaseArtworkStorage
 });
 
@@ -378,6 +382,7 @@ export const publishArtwork = async (
 		now: getNow,
 		randomSuffix,
 		repository,
+		sanitizeMedia,
 		storage
 	} = getDependencies(dependencies);
 	const now = getNow();
@@ -394,11 +399,11 @@ export const publishArtwork = async (
 		}
 	}
 
-	const media = await validateArtworkMedia(input.media);
+	const media = await sanitizeMedia(input.media);
 	const artworkId = nextId();
 	const storageKey = `artworks/${actor.user.id}/${artworkId}.avif`;
 
-	await storage.upload(storageKey, input.media);
+	await storage.upload(storageKey, media.file);
 
 	try {
 		const artwork = await repository.createArtwork({

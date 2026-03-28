@@ -8,6 +8,8 @@ export class ArtworkFlowError extends Error {
 			| 'INVALID_COMMENT'
 			| 'INVALID_FORK_PARENT'
 			| 'INVALID_CURSOR'
+			| 'INVALID_MEDIA_CONTENT'
+			| 'INVALID_MEDIA_DIMENSIONS'
 			| 'INVALID_LIMIT'
 			| 'INVALID_MEDIA_FORMAT'
 			| 'INVALID_ROLE'

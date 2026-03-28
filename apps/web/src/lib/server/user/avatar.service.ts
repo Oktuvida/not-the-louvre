@@ -1,40 +1,11 @@
-import {
-	AVATAR_MEDIA_CONTENT_TYPE,
-	AVATAR_MEDIA_MAX_BYTES,
-	AVATAR_STORAGE_KEY_PREFIX
-} from './config';
+import { AVATAR_STORAGE_KEY_PREFIX } from './config';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { sanitizeAvatarMedia } from '$lib/server/media/sanitization';
 import type { ArtworkStorage } from '$lib/server/artwork/types';
 import type { CanonicalUser } from '$lib/server/auth/types';
 import { userRepository } from './repository';
 import { supabaseAvatarStorage } from './storage';
 import type { UserRecord, UserRepository } from './types';
-
-const AVIF_BRAND = 'ftypavif';
-
-const hasAvifSignature = (bytes: Uint8Array) => {
-	const signature = new TextDecoder().decode(bytes.subarray(0, 32));
-	return signature.includes(AVIF_BRAND);
-};
-
-const validateAvatarMedia = async (file: File) => {
-	if (file.type !== AVATAR_MEDIA_CONTENT_TYPE) {
-		throw new ArtworkFlowError(400, 'Avatar media must be AVIF', 'INVALID_MEDIA_FORMAT');
-	}
-
-	if (file.size > AVATAR_MEDIA_MAX_BYTES) {
-		throw new ArtworkFlowError(
-			400,
-			`Avatar media must be ${AVATAR_MEDIA_MAX_BYTES} bytes or smaller`,
-			'MEDIA_TOO_LARGE'
-		);
-	}
-
-	const bytes = new Uint8Array(await file.arrayBuffer());
-	if (!hasAvifSignature(bytes)) {
-		throw new ArtworkFlowError(400, 'Avatar media must be AVIF', 'INVALID_MEDIA_FORMAT');
-	}
-};
 
 const getAvatarStorageKey = (userId: string) => `${AVATAR_STORAGE_KEY_PREFIX}/${userId}.avif`;
 
@@ -52,10 +23,10 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 				throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
 			}
 
-			await validateAvatarMedia(media);
+			const sanitizedMedia = await sanitizeAvatarMedia(media);
 
 			const storageKey = getAvatarStorageKey(user.id);
-			await storage.upload(storageKey, media);
+			await storage.upload(storageKey, sanitizedMedia.file);
 
 			const updatedUser = await repository.updateUserAvatarUrl(user.id, storageKey, new Date());
 			if (!updatedUser) {

@@ -7,6 +7,7 @@ import type {
 	ArtworkReadRepository,
 	ArtworkRecord,
 	ArtworkRepository,
+	SanitizedMedia,
 	ArtworkStorage,
 	PublishRateLimitRecord
 } from './types';
@@ -410,6 +411,25 @@ const createStorage = () => {
 	return { storage };
 };
 
+const sanitizeMediaForReadTests = async (file: File): Promise<SanitizedMedia> => ({
+	contentType: 'image/avif',
+	file,
+	height: 1024,
+	sizeBytes: 128,
+	width: 1024
+});
+
+const asWriteDeps = (
+	repository: ArtworkRepository,
+	storage: ArtworkStorage,
+	overrides: { generateId?: () => string; now?: () => Date } = {}
+) => ({
+	repository,
+	sanitizeMedia: sanitizeMediaForReadTests,
+	storage,
+	...overrides
+});
+
 const createActor = (profile: ProfileRecord) => {
 	const now = new Date('2026-03-26T10:00:00.000Z');
 
@@ -442,34 +462,28 @@ describe('artwork read service', () => {
 		await publishArtwork(
 			{ media: createAvifFile(), title: 'First in time' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
-			{
-				generateId: () => 'artwork-001',
-				now: () => new Date('2026-03-26T10:00:00.000Z'),
-				repository,
-				storage
-			}
+			asWriteDeps(repository, storage, {
+				generateId: () => 'artwork-1',
+				now: () => new Date('2026-03-26T10:00:00.000Z')
+			})
 		);
 
 		await publishArtwork(
 			{ media: createAvifFile(), title: 'Second in time' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
-			{
-				generateId: () => 'artwork-002',
-				now: () => new Date('2026-03-26T11:00:00.000Z'),
-				repository,
-				storage
-			}
+			asWriteDeps(repository, storage, {
+				generateId: () => 'artwork-2',
+				now: () => new Date('2026-03-26T11:00:00.000Z')
+			})
 		);
 
 		await publishArtwork(
 			{ media: createAvifFile(), title: 'Newest tie-breaker' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-2')!) },
-			{
-				generateId: () => 'artwork-003',
-				now: () => new Date('2026-03-26T11:00:00.000Z'),
-				repository,
-				storage
-			}
+			asWriteDeps(repository, storage, {
+				generateId: () => 'artwork-3',
+				now: () => new Date('2026-03-26T11:00:00.000Z')
+			})
 		);
 
 		const firstPage = await listArtworkDiscovery(
@@ -478,7 +492,7 @@ describe('artwork read service', () => {
 		);
 
 		expect(firstPage.sort).toBe('recent');
-		expect(firstPage.items.map((artwork) => artwork.id)).toEqual(['artwork-003', 'artwork-002']);
+		expect(firstPage.items.map((artwork) => artwork.id)).toEqual(['artwork-3', 'artwork-2']);
 		expect(firstPage.pageInfo.hasMore).toBe(true);
 		expect(firstPage.pageInfo.nextCursor).toEqual(expect.any(String));
 
@@ -487,7 +501,7 @@ describe('artwork read service', () => {
 			asReadDeps(readRepository)
 		);
 
-		expect(secondPage.items.map((artwork) => artwork.id)).toEqual(['artwork-001']);
+		expect(secondPage.items.map((artwork) => artwork.id)).toEqual(['artwork-1']);
 		expect(secondPage.pageInfo.hasMore).toBe(false);
 		expect(secondPage.pageInfo.nextCursor).toBeNull();
 	});
@@ -843,12 +857,10 @@ describe('artwork read service', () => {
 		await publishArtwork(
 			{ media: createAvifFile(), title: 'Projection test' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
-			{
+			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-101',
-				now: () => new Date('2026-03-26T12:00:00.000Z'),
-				repository,
-				storage
-			}
+				now: () => new Date('2026-03-26T12:00:00.000Z')
+			})
 		);
 
 		const discovery = await listArtworkDiscovery(
@@ -916,12 +928,10 @@ describe('artwork read service', () => {
 		await publishArtwork(
 			{ media: createAvifFile(), title: 'Parent artwork' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
-			{
+			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-parent',
-				now: () => new Date('2026-03-26T12:00:00.000Z'),
-				repository,
-				storage
-			}
+				now: () => new Date('2026-03-26T12:00:00.000Z')
+			})
 		);
 
 		await publishArtwork(
@@ -931,12 +941,10 @@ describe('artwork read service', () => {
 				title: 'Fork artwork'
 			},
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-2')!) },
-			{
+			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-child',
-				now: () => new Date('2026-03-26T13:00:00.000Z'),
-				repository,
-				storage
-			}
+				now: () => new Date('2026-03-26T13:00:00.000Z')
+			})
 		);
 
 		await publishArtwork(
@@ -946,12 +954,10 @@ describe('artwork read service', () => {
 				title: 'Second fork artwork'
 			},
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
-			{
+			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-child-2',
-				now: () => new Date('2026-03-26T14:00:00.000Z'),
-				repository,
-				storage
-			}
+				now: () => new Date('2026-03-26T14:00:00.000Z')
+			})
 		);
 
 		const childDetail = await getArtworkDetail(
@@ -995,12 +1001,10 @@ describe('artwork read service', () => {
 		await publishArtwork(
 			{ media: createAvifFile(), title: 'Parent artwork' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
-			{
+			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-parent',
-				now: () => new Date('2026-03-26T12:00:00.000Z'),
-				repository,
-				storage
-			}
+				now: () => new Date('2026-03-26T12:00:00.000Z')
+			})
 		);
 
 		await publishArtwork(
@@ -1010,12 +1014,10 @@ describe('artwork read service', () => {
 				title: 'Fork artwork'
 			},
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-2')!) },
-			{
+			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-child',
-				now: () => new Date('2026-03-26T13:00:00.000Z'),
-				repository,
-				storage
-			}
+				now: () => new Date('2026-03-26T13:00:00.000Z')
+			})
 		);
 
 		await deleteArtwork({ artworkId: 'artwork-parent' }, createActor(profiles.get('user-1')!), {
@@ -1047,23 +1049,19 @@ describe('artwork read service', () => {
 		await publishArtwork(
 			{ media: createAvifFile(), title: 'Keep me' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
-			{
+			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-201',
-				now: () => new Date('2026-03-26T13:00:00.000Z'),
-				repository,
-				storage
-			}
+				now: () => new Date('2026-03-26T13:00:00.000Z')
+			})
 		);
 
 		await publishArtwork(
 			{ media: createAvifFile(), title: 'Delete me' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
-			{
+			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-202',
-				now: () => new Date('2026-03-26T14:00:00.000Z'),
-				repository,
-				storage
-			}
+				now: () => new Date('2026-03-26T14:00:00.000Z')
+			})
 		);
 
 		await deleteArtwork({ artworkId: 'artwork-202' }, createActor(profiles.get('user-1')!), {
@@ -1104,23 +1102,19 @@ describe('artwork read service', () => {
 		await publishArtwork(
 			{ media: createAvifFile(), title: 'Visible ranked artwork' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
-			{
+			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-ranked-visible',
-				now: () => new Date('2026-03-26T12:00:00.000Z'),
-				repository,
-				storage
-			}
+				now: () => new Date('2026-03-26T12:00:00.000Z')
+			})
 		);
 
 		await publishArtwork(
 			{ media: createAvifFile(), title: 'Deleted ranked artwork' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-2')!) },
-			{
+			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-ranked-deleted',
-				now: () => new Date('2026-03-26T11:00:00.000Z'),
-				repository,
-				storage
-			}
+				now: () => new Date('2026-03-26T11:00:00.000Z')
+			})
 		);
 
 		await deleteArtwork(
