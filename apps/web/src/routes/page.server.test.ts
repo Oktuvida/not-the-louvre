@@ -9,6 +9,7 @@ type HomeActionEvent = Parameters<Actions['signUp']>[0];
 const mocked = vi.hoisted(() => ({
 	getIp: vi.fn(() => '127.0.0.1'),
 	getNicknameAvailability: vi.fn(),
+	listArtworkDiscovery: vi.fn(),
 	recoverAccount: vi.fn(),
 	uploadAvatar: vi.fn(),
 	signInWithNickname: vi.fn(),
@@ -28,6 +29,10 @@ vi.mock('$lib/server/auth', () => ({
 	auth: {
 		options: {}
 	}
+}));
+
+vi.mock('$lib/server/artwork/read.service', () => ({
+	listArtworkDiscovery: mocked.listArtworkDiscovery
 }));
 
 vi.mock('$lib/server/user/avatar.service', () => ({
@@ -76,11 +81,29 @@ describe('home route auth contract', () => {
 		vi.resetModules();
 		mocked.getIp.mockClear();
 		mocked.getNicknameAvailability.mockReset();
+		mocked.listArtworkDiscovery.mockReset();
 		mocked.recoverAccount.mockReset();
 		mocked.uploadAvatar.mockReset();
 		mocked.signInWithNickname.mockReset();
 		mocked.signOutCurrentSession.mockReset();
 		mocked.signUpWithNickname.mockReset();
+		mocked.listArtworkDiscovery.mockResolvedValue({
+			items: [
+				{
+					author: { avatarUrl: null, id: 'artist-1', nickname: 'PaintMaster42' },
+					commentCount: 0,
+					createdAt: new Date('2026-03-28T10:00:00.000Z'),
+					forkCount: 0,
+					id: 'artwork-1',
+					lineage: { isFork: false, parent: null, parentStatus: 'none' },
+					mediaUrl: '/api/artworks/artwork-1/media',
+					score: 42,
+					title: 'Sunset Over Mountains'
+				}
+			],
+			pageInfo: { hasMore: false, nextCursor: null },
+			sort: 'top'
+		});
 	});
 
 	it('returns a signed-out bootstrap when the request has no session', async () => {
@@ -93,7 +116,32 @@ describe('home route auth contract', () => {
 				status: 'signed-out',
 				user: null,
 				integrityFailure: null
-			}
+			},
+			topArtworks: [
+				{
+					title: 'Sunset Over Mountains'
+				}
+			]
+		});
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
+			{ cursor: null, limit: 3, sort: 'top', window: 'all' },
+			{ user: undefined }
+		);
+	});
+
+	it('returns an empty homepage teaser when top-ranked discovery has no artworks', async () => {
+		mocked.listArtworkDiscovery.mockResolvedValue({
+			items: [],
+			pageInfo: { hasMore: false, nextCursor: null },
+			sort: 'top'
+		});
+
+		const { load } = await import('./+page.server');
+
+		await expect(
+			load({ locals: {}, url: new URL('http://localhost/') } as never)
+		).resolves.toMatchObject({
+			topArtworks: []
 		});
 	});
 

@@ -112,4 +112,29 @@ describe('AuthOverlay', () => {
 		await expect.element(page.getByText('Finish your avatar')).toBeVisible();
 		await expect.element(page.getByRole('textbox')).toHaveValue('artist_1');
 	});
+
+	it('notifies the controller when the avatar step is dismissed', async () => {
+		const dispatch = vi.fn();
+		const onAvatarDismiss = vi.fn();
+		render(AuthOverlay, {
+			authenticatedUser: {
+				authUserId: 'auth-user-1',
+				avatarOnboardingCompletedAt: null,
+				email: 'artist_1@not-the-louvre.local',
+				id: 'product-user-1',
+				nickname: 'artist_1',
+				role: 'user'
+			},
+			dispatch,
+			entryState: 'auth-signup',
+			form: undefined,
+			onAvatarDismiss,
+			resumeAvatarOnboarding: true
+		});
+
+		await page.getByRole('button', { name: 'Close' }).click();
+
+		expect(onAvatarDismiss).toHaveBeenCalled();
+		expect(dispatch).toHaveBeenCalledWith('AUTH_SUCCESS');
+	});
 });

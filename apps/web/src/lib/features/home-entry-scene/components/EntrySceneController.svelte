@@ -4,6 +4,7 @@
 		HomeAuthBootstrap,
 		HomeAuthUser
 	} from '$lib/features/home-entry-scene/auth-contract';
+	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import HomeEntryPage from '$lib/features/home-entry-scene/HomeEntryPage.svelte';
 	import AuthOverlay from '$lib/features/home-entry-scene/components/AuthOverlay.svelte';
 	import MuseumWallOverlay from '$lib/features/home-entry-scene/components/MuseumWallOverlay.svelte';
@@ -15,10 +16,12 @@
 
 	let {
 		auth,
-		form
+		form,
+		topArtworks = []
 	}: {
 		auth: HomeAuthBootstrap;
 		form?: HomeAuthActionForm;
+		topArtworks?: HomePreviewCard[];
 	} = $props();
 
 	const shouldHoldSignupOverlay = (actionData?: HomeAuthActionForm) =>
@@ -36,6 +39,8 @@
 	const entryState = createEntryState(getInitialEntryState());
 
 	let authOverlayElement = $state<HTMLDivElement | null>(null);
+	let avatarOnboardingDismissed = $state(false);
+	let avatarOnboardingResolved = $state(false);
 	let holdSignupOnboarding = $state(
 		initialHoldSignupOnboarding ||
 			(auth.status === 'authenticated' && auth.onboarding.status === 'needs-avatar')
@@ -44,6 +49,12 @@
 	let integrityFailure = $state<HomeAuthBootstrap['integrityFailure']>(null);
 
 	const flowState = $derived(entryState.state);
+	const needsAvatarOnboarding = $derived(
+		auth.status === 'authenticated' &&
+			auth.onboarding.status === 'needs-avatar' &&
+			!avatarOnboardingDismissed &&
+			!avatarOnboardingResolved
+	);
 	const navUser = $derived(flowState === 'inside' ? user : null);
 
 	const dispatch = (event: EntryFlowEvent) => {
@@ -51,8 +62,15 @@
 	};
 
 	$effect(() => {
+		if (auth.status !== 'authenticated') {
+			avatarOnboardingDismissed = false;
+			avatarOnboardingResolved = false;
+		}
+
 		if (shouldHoldSignupOverlay(form)) {
 			holdSignupOnboarding = true;
+			avatarOnboardingDismissed = false;
+			avatarOnboardingResolved = false;
 		}
 
 		if (entryState.state === 'inside') {
@@ -74,7 +92,7 @@
 		if (auth.status === 'authenticated') {
 			user = auth.user;
 
-			if (auth.onboarding.status === 'needs-avatar') {
+			if (needsAvatarOnboarding) {
 				holdSignupOnboarding = true;
 				if (entryState.state === 'outside') {
 					entryState.dispatch('COME_IN');
@@ -104,7 +122,7 @@
 	});
 </script>
 
-<HomeEntryPage entryState={flowState} user={navUser}>
+<HomeEntryPage entryState={flowState} previewCards={topArtworks} user={navUser}>
 	{#if integrityFailure}
 		<div class="absolute inset-0 z-[40] flex items-center justify-center px-6 py-10">
 			<StudioPanel
@@ -130,8 +148,14 @@
 			entryState={flowState}
 			{dispatch}
 			{form}
-			resumeAvatarOnboarding={auth.status === 'authenticated' &&
-				auth.onboarding.status === 'needs-avatar'}
+			onAvatarDismiss={() => {
+				avatarOnboardingDismissed = true;
+			}}
+			onAvatarSaved={() => {
+				avatarOnboardingResolved = true;
+				avatarOnboardingDismissed = false;
+			}}
+			resumeAvatarOnboarding={needsAvatarOnboarding}
 		/>
 	{/if}
 </HomeEntryPage>

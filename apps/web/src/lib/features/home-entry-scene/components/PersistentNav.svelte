@@ -2,11 +2,17 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
+	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
-	import { homePreviewCards } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 
-	let { user = null }: { user?: HomeAuthUser | null } = $props();
+	let {
+		previewCards = [],
+		user = null
+	}: {
+		previewCards?: HomePreviewCard[];
+		user?: HomeAuthUser | null;
+	} = $props();
 </script>
 
 <div class="pointer-events-none absolute inset-0 z-[30]">
@@ -31,7 +37,7 @@
 	{/if}
 
 	<div class="pointer-events-auto absolute top-8 right-8 space-y-4">
-		{#each homePreviewCards as card (card.id)}
+		{#each previewCards as card (card.id)}
 			<a
 				href={resolve('/gallery')}
 				class="group relative block cursor-pointer"
