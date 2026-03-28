@@ -85,6 +85,22 @@ All structural changes to the database go through migrations:
 
 Never modify the database schema by hand. The migration history is the source of truth.
 
+### Custom Migrations
+
+Custom Drizzle migrations are for database changes that Drizzle cannot express or generate natively from the TypeScript schema.
+
+Use them for SQL-first capabilities such as RLS policies, realtime configuration, triggers, functions, grants, or other Postgres features that live outside Drizzle's normal schema generation flow.
+
+Do not use a custom migration for schema changes that Drizzle can represent directly in `schema.ts`.
+
+Custom Drizzle migrations are created from `apps/web`.
+
+1. Always run `bun run db:generate` first.
+2. Change into `apps/web`.
+3. Generate the custom migration with `bunx drizzle-kit generate --custom`.
+
+Do not skip the standard generation step before creating a custom migration.
+
 ### Data Migrations
 
 - **Small and deterministic** (rename, backfill a column with a derived value, restructure existing rows): include them as a migration.
