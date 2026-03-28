@@ -3,7 +3,15 @@ import { ARTWORK_STORAGE_BUCKET } from './config';
 import { ArtworkFlowError } from './errors';
 import type { ArtworkStorage } from './types';
 
-const getStorageConfig = () => {
+const playwrightArtworkStorage = new Map<string, { body: Uint8Array; contentType: string }>();
+
+const isPlaywrightStorageRuntime = () => process.env.PLAYWRIGHT === '1';
+
+export const resetPlaywrightArtworkStorage = () => {
+	playwrightArtworkStorage.clear();
+};
+
+const getRemoteStorageConfig = () => {
 	const baseUrl = env.SUPABASE_PUBLIC_URL;
 	const serviceKey = env.SUPABASE_SECRET_KEY || env.SERVICE_ROLE_KEY;
 
@@ -33,7 +41,15 @@ const toStorageError = async (response: Response, fallback: string) => {
 
 export const supabaseArtworkStorage: ArtworkStorage = {
 	async upload(key, file) {
-		const { baseUrl, bucket, serviceKey } = getStorageConfig();
+		if (isPlaywrightStorageRuntime()) {
+			playwrightArtworkStorage.set(key, {
+				body: new Uint8Array(await file.arrayBuffer()),
+				contentType: file.type
+			});
+			return;
+		}
+
+		const { baseUrl, bucket, serviceKey } = getRemoteStorageConfig();
 		const response = await fetch(
 			`${baseUrl}/storage/v1/object/${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}`,
 			{
@@ -52,7 +68,12 @@ export const supabaseArtworkStorage: ArtworkStorage = {
 		}
 	},
 	async delete(key) {
-		const { baseUrl, bucket, serviceKey } = getStorageConfig();
+		if (isPlaywrightStorageRuntime()) {
+			playwrightArtworkStorage.delete(key);
+			return;
+		}
+
+		const { baseUrl, bucket, serviceKey } = getRemoteStorageConfig();
 		const response = await fetch(`${baseUrl}/storage/v1/object/${bucket}/${key}`, {
 			headers: {
 				authorization: `Bearer ${serviceKey}`
@@ -67,7 +88,21 @@ export const supabaseArtworkStorage: ArtworkStorage = {
 };
 
 export const streamArtworkStorageObject = async (key: string) => {
-	const { baseUrl, bucket, serviceKey } = getStorageConfig();
+	if (isPlaywrightStorageRuntime()) {
+		const storedObject = playwrightArtworkStorage.get(key);
+
+		if (!storedObject) {
+			throw new ArtworkFlowError(404, 'Artwork media not found', 'NOT_FOUND');
+		}
+
+		return new Response(new Blob([Buffer.from(storedObject.body)], { type: storedObject.contentType }), {
+			headers: {
+				'content-type': storedObject.contentType
+			}
+		});
+	}
+
+	const { baseUrl, bucket, serviceKey } = getRemoteStorageConfig();
 	const response = await fetch(
 		`${baseUrl}/storage/v1/object/${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}`,
 		{
