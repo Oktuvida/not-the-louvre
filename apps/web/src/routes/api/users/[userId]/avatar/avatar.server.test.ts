@@ -132,7 +132,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		mocked.avatarService.uploadAvatar.mockResolvedValue(updated);
 
 		const formData = new FormData();
-		formData.append('file', new File([new Uint8Array(128)], 'avatar.png', { type: 'image/png' }));
+		formData.append('file', new File([new Uint8Array(128)], 'avatar.webp', { type: 'image/webp' }));
 
 		const { PUT } = await import('./+server');
 		const response = await PUT({
@@ -171,7 +171,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		);
 
 		const formData = new FormData();
-		formData.append('file', new File([new Uint8Array(128)], 'avatar.png', { type: 'image/png' }));
+		formData.append('file', new File([new Uint8Array(128)], 'avatar.webp', { type: 'image/webp' }));
 
 		const { PUT } = await import('./+server');
 		const response = await PUT({
@@ -190,7 +190,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 
 	it('returns 400 for invalid media format', async () => {
 		mocked.avatarService.uploadAvatar.mockRejectedValue(
-			new ArtworkFlowError(400, 'Avatar media must be PNG', 'INVALID_MEDIA_FORMAT')
+			new ArtworkFlowError(400, 'Avatar media must be WebP', 'INVALID_MEDIA_FORMAT')
 		);
 
 		const formData = new FormData();
@@ -207,7 +207,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		expect(response.headers.get('content-type')).toMatch(/application\/json/);
 		expect(await response.json()).toMatchObject({
 			code: 'INVALID_MEDIA_FORMAT',
-			message: 'Avatar media must be PNG'
+			message: 'Avatar media must be WebP'
 		});
 	});
 
@@ -217,7 +217,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		);
 
 		const formData = new FormData();
-		formData.append('file', new File([new Uint8Array(128)], 'avatar.png', { type: 'image/png' }));
+		formData.append('file', new File([new Uint8Array(128)], 'avatar.webp', { type: 'image/webp' }));
 
 		const { PUT } = await import('./+server');
 		const response = await PUT({

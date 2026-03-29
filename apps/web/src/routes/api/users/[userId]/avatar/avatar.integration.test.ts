@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
-import { createPngTestFile } from '$lib/server/media/test-helpers';
+import { createWebpTestFile } from '$lib/server/media/test-helpers';
 
 const testFileDirectory = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(testFileDirectory, '../../../../../../');
@@ -145,9 +145,9 @@ describeWithStorage('avatar backend integration', () => {
 	it('uploads avatar media, streams it back through the backend endpoint, and deletes it', async () => {
 		const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 		const userId = `avatar-user-${uniqueSuffix}`;
-		const avatarFile = await createPngTestFile({
+		const avatarFile = await createWebpTestFile({
 			height: 256,
-			name: 'integration-avatar.png',
+			name: 'integration-avatar.webp',
 			width: 256
 		});
 

@@ -33,18 +33,18 @@
 			exportContext.drawImage(sourceCanvas, 0, 0, EXPORT_SIZE, EXPORT_SIZE);
 
 			const blob = await new Promise<Blob | null>((resolve) => {
-				exportCanvas.toBlob((nextBlob) => resolve(nextBlob), 'image/png');
+				exportCanvas.toBlob((nextBlob) => resolve(nextBlob), 'image/webp', 0.68);
 			});
 
 			if (!blob) {
-				throw new Error('Canvas export returned no blob for image/png output.');
+				throw new Error('Canvas export returned no blob for image/webp output.');
 			}
 
-			if (blob.type !== 'image/png') {
+			if (blob.type !== 'image/webp') {
 				throw new Error(`Canvas export returned unexpected blob type: ${blob.type || 'unknown'}.`);
 			}
 
-			return new File([blob], 'avatar.png', { type: 'image/png' });
+			return new File([blob], 'avatar.webp', { type: 'image/webp' });
 		},
 		nickname,
 		onContinue,
