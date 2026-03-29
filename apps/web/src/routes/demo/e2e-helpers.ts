@@ -1,12 +1,15 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { ARTWORK_MEDIA_MAX_BYTES } from '../../lib/server/artwork/config';
+import {
+	ARTWORK_MEDIA_HEIGHT,
+	ARTWORK_MEDIA_MAX_BYTES,
+	ARTWORK_MEDIA_WIDTH
+} from '../../lib/server/artwork/config';
 import {
 	createAvifTestFile,
 	createJpegTestFile,
 	createMalformedAvifFile,
-	createMalformedPngFile,
-	createPngTestFile,
+	createMalformedWebpFile,
 	createWebpTestFile
 } from '../../lib/server/media/test-helpers';
 
@@ -53,8 +56,8 @@ export const readVisibleOneTimeKey = async (page: Page) => {
 };
 
 export const installAvatarExportHarness = async (page: Page) => {
-	const validAvatar = await createPngTestFile({ height: 256, name: 'avatar.png', width: 256 });
-	const invalidAvatar = createMalformedPngFile();
+	const validAvatar = await createWebpTestFile({ height: 256, name: 'avatar.webp', width: 256 });
+	const invalidAvatar = createMalformedWebpFile();
 	const validBase64 = Buffer.from(await validAvatar.arrayBuffer()).toString('base64');
 	const invalidBase64 = Buffer.from(await invalidAvatar.arrayBuffer()).toString('base64');
 
@@ -76,7 +79,7 @@ export const installAvatarExportHarness = async (page: Page) => {
 			});
 
 			HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
-				if (type === 'image/png') {
+				if (type === 'image/webp') {
 					const mode = (window as Window & { __avatarExportMode?: string }).__avatarExportMode;
 
 					if (mode === 'unsupported') {
@@ -86,7 +89,7 @@ export const installAvatarExportHarness = async (page: Page) => {
 
 					callback(
 						new Blob([decode(mode === 'bad' ? bad : good)], {
-							type: 'image/png'
+							type: 'image/webp'
 						})
 					);
 					return;
@@ -106,15 +109,15 @@ export const setAvatarExportMode = async (page: Page, mode: 'bad' | 'good' | 'un
 };
 
 export const installDrawingExportHarness = async (page: Page) => {
-	const validWebp = await createWebpTestFile({ height: 1024, name: 'drawing.webp', width: 1024 });
-	const validJpeg = await createJpegTestFile({ height: 1024, name: 'drawing.jpg', width: 1024 });
-	const validPng = await createPngTestFile({ height: 1024, name: 'drawing.png', width: 1024 });
+	const validWebp = await createWebpTestFile({
+		height: ARTWORK_MEDIA_HEIGHT,
+		name: 'drawing.webp',
+		width: ARTWORK_MEDIA_WIDTH
+	});
 	const invalidBytes = createMalformedAvifFile();
 
 	const payload = {
 		bad: Buffer.from(await invalidBytes.arrayBuffer()).toString('base64'),
-		jpeg: Buffer.from(await validJpeg.arrayBuffer()).toString('base64'),
-		png: Buffer.from(await validPng.arrayBuffer()).toString('base64'),
 		webp: Buffer.from(await validWebp.arrayBuffer()).toString('base64')
 	};
 
@@ -137,7 +140,7 @@ export const installDrawingExportHarness = async (page: Page) => {
 		HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
 			const mode = (window as Window & { __drawingExportMode?: string }).__drawingExportMode;
 
-			if (type === 'image/webp' || type === 'image/jpeg' || type === 'image/png') {
+			if (type === 'image/webp') {
 				if (mode === 'unsupported') {
 					callback(null);
 					return;
@@ -146,28 +149,6 @@ export const installDrawingExportHarness = async (page: Page) => {
 				if (mode === 'bad') {
 					callback(new Blob([decode(assets.bad)], { type }));
 					return;
-				}
-
-				if (mode === 'jpeg') {
-					if (type === 'image/webp') {
-						callback(null);
-						return;
-					}
-					if (type === 'image/jpeg') {
-						callback(new Blob([decode(assets.jpeg)], { type }));
-						return;
-					}
-				}
-
-				if (mode === 'png') {
-					if (type === 'image/webp' || type === 'image/jpeg') {
-						callback(null);
-						return;
-					}
-					if (type === 'image/png') {
-						callback(new Blob([decode(assets.png)], { type }));
-						return;
-					}
 				}
 
 				if (mode === 'webp' && type === 'image/webp') {
@@ -181,10 +162,7 @@ export const installDrawingExportHarness = async (page: Page) => {
 	}, payload);
 };
 
-export const setDrawingExportMode = async (
-	page: Page,
-	mode: 'bad' | 'jpeg' | 'png' | 'unsupported' | 'webp'
-) => {
+export const setDrawingExportMode = async (page: Page, mode: 'bad' | 'unsupported' | 'webp') => {
 	await page.evaluate((nextMode) => {
 		(window as Window & { __drawingExportMode?: string }).__drawingExportMode = nextMode;
 	}, mode);
@@ -243,9 +221,9 @@ export const recoverThroughNicknameDemo = async (
 
 export const createArtworkUpload = async () => {
 	const file = await createAvifTestFile({
-		height: 1024,
+		height: ARTWORK_MEDIA_HEIGHT,
 		name: 'journey-artwork.avif',
-		width: 1024
+		width: ARTWORK_MEDIA_WIDTH
 	});
 
 	return {
@@ -257,9 +235,9 @@ export const createArtworkUpload = async () => {
 
 export const createDisguisedJpegUpload = async () => {
 	const file = await createJpegTestFile({
-		height: 1024,
+		height: ARTWORK_MEDIA_HEIGHT,
 		name: 'renamed-artwork.avif',
-		width: 1024
+		width: ARTWORK_MEDIA_WIDTH
 	});
 
 	return {

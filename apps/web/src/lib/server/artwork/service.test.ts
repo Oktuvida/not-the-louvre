@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ARTWORK_MEDIA_MAX_BYTES, ARTWORK_PUBLISH_RATE_LIMIT } from './config';
+import {
+	ARTWORK_MEDIA_HEIGHT,
+	ARTWORK_MEDIA_MAX_BYTES,
+	ARTWORK_MEDIA_WIDTH,
+	ARTWORK_PUBLISH_RATE_LIMIT
+} from './config';
 import { ArtworkFlowError } from './errors';
 import {
 	createAvifTestFile,
@@ -208,10 +213,10 @@ describe('artwork service', () => {
 		const { storage, uploads } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
 		const media = await createAvifTestFile({
-			height: 1024,
+			height: ARTWORK_MEDIA_HEIGHT,
 			name: 'artwork.avif',
 			quality: 95,
-			width: 1024
+			width: ARTWORK_MEDIA_WIDTH
 		});
 
 		const result = await publishArtwork(
@@ -265,7 +270,11 @@ describe('artwork service', () => {
 		const { artworks, repository } = createRepository();
 		const { storage } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
-		const media = await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 });
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
 
 		const result = await publishArtwork(
 			{
@@ -320,7 +329,11 @@ describe('artwork service', () => {
 		await expect(
 			publishArtwork(
 				{
-					media: await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 }),
+					media: await createAvifTestFile({
+						height: ARTWORK_MEDIA_HEIGHT,
+						name: 'artwork.avif',
+						width: ARTWORK_MEDIA_WIDTH
+					}),
 					title: 'mierda'
 				},
 				{
@@ -350,7 +363,11 @@ describe('artwork service', () => {
 		const { artworks, repository } = createRepository();
 		const { storage } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
-		const media = await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 });
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
 
 		await publishArtwork(
 			{
@@ -426,7 +443,11 @@ describe('artwork service', () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { storage } = createStorage();
-		const media = await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 });
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
 
 		await expect(
 			publishArtwork(
@@ -542,7 +563,10 @@ describe('artwork service', () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { storage, uploads } = createStorage();
-		const media = await createPngTestFile({ height: 1024, width: 1024 });
+		const media = await createPngTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			width: ARTWORK_MEDIA_WIDTH
+		});
 
 		await publishArtwork(
 			{
@@ -691,9 +715,9 @@ describe('artwork service', () => {
 		const { repository } = createRepository();
 		const { storage } = createStorage();
 		const jpegPayload = await createJpegTestFile({
-			height: 1024,
+			height: ARTWORK_MEDIA_HEIGHT,
 			name: 'artwork.avif',
-			width: 1024
+			width: ARTWORK_MEDIA_WIDTH
 		});
 		const disguisedFile = new File([await jpegPayload.arrayBuffer()], 'artwork.avif', {
 			type: 'image/avif'
@@ -735,7 +759,11 @@ describe('artwork service', () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { storage } = createStorage();
-		const media = await createAvifTestFile({ height: 768, name: 'artwork.avif', width: 1024 });
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH + 256
+		});
 
 		await expect(
 			publishArtwork(
@@ -769,57 +797,58 @@ describe('artwork service', () => {
 		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
-	it('rejects artwork media when canonical sanitized output exceeds the stored-media budget', async () => {
+	it('publishes complex artwork media within the stored-media budget after adaptive sanitization', async () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
-		const { storage } = createStorage();
+		const { storage, uploads } = createStorage();
 		const media = await createAvifTestFile({
-			height: 1024,
+			height: ARTWORK_MEDIA_HEIGHT,
 			name: 'artwork.avif',
 			pattern: 'noise',
 			quality: 5,
-			width: 1024
+			width: ARTWORK_MEDIA_WIDTH
 		});
 
 		expect(media.size).toBeLessThanOrEqual(ARTWORK_MEDIA_MAX_BYTES);
 
-		await expect(
-			publishArtwork(
-				{
-					media,
-					title: 'Too complex'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{ repository, storage }
-			)
-		).rejects.toMatchObject({
-			code: 'MEDIA_TOO_LARGE',
-			status: 400
-		});
+		const result = await publishArtwork(
+			{
+				media,
+				title: 'Too complex'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{ repository, storage }
+		);
 
-		expect(storage.upload).not.toHaveBeenCalled();
+		expect(result.mediaSizeBytes).toBeLessThanOrEqual(ARTWORK_MEDIA_MAX_BYTES);
+		expect(uploads).toHaveLength(1);
+		expect(uploads[0]?.file.type).toBe('image/avif');
 	}, 30000);
 
 	it('cleans up uploaded media if record creation fails', async () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { deletes, storage } = createStorage();
-		const media = await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 });
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
 
 		vi.mocked(repository.createArtwork).mockRejectedValueOnce(new Error('db insert failed'));
 
@@ -867,7 +896,11 @@ describe('artwork service', () => {
 
 		await publishArtwork(
 			{
-				media: await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 }),
+				media: await createAvifTestFile({
+					height: ARTWORK_MEDIA_HEIGHT,
+					name: 'artwork.avif',
+					width: ARTWORK_MEDIA_WIDTH
+				}),
 				title: 'Original'
 			},
 			{
@@ -950,7 +983,11 @@ describe('artwork service', () => {
 
 		await publishArtwork(
 			{
-				media: await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 }),
+				media: await createAvifTestFile({
+					height: ARTWORK_MEDIA_HEIGHT,
+					name: 'artwork.avif',
+					width: ARTWORK_MEDIA_WIDTH
+				}),
 				title: 'Original'
 			},
 			{
@@ -1013,7 +1050,11 @@ describe('artwork service', () => {
 
 		await publishArtwork(
 			{
-				media: await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 }),
+				media: await createAvifTestFile({
+					height: ARTWORK_MEDIA_HEIGHT,
+					name: 'artwork.avif',
+					width: ARTWORK_MEDIA_WIDTH
+				}),
 				title: 'Disposable'
 			},
 			{
@@ -1094,7 +1135,11 @@ describe('artwork service', () => {
 		const { artworks, repository } = createRepository();
 		const { storage } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
-		const media = await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 });
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
 
 		await publishArtwork(
 			{
@@ -1190,9 +1235,9 @@ describe('artwork service', () => {
 		const sanitizeMedia = vi.fn(async (file: File) => ({
 			contentType: 'image/avif',
 			file,
-			height: 1024,
+			height: ARTWORK_MEDIA_HEIGHT,
 			sizeBytes: file.size,
-			width: 1024
+			width: ARTWORK_MEDIA_WIDTH
 		}));
 
 		for (let attempt = 0; attempt < ARTWORK_PUBLISH_RATE_LIMIT.maxAttempts; attempt += 1) {

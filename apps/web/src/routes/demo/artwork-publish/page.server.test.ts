@@ -198,7 +198,7 @@ describe('artwork publish demo page', () => {
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(
 			createActionEvent({
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.png', { type: 'image/png' }),
+				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
 				title: 'Bad upload'
 			})
 		);
