@@ -9,7 +9,7 @@ describe('AvatarSketchpad', () => {
 	it('saves the exported avatar and continues into the gallery on success', async () => {
 		const onContinue = vi.fn();
 		const createAvatarFile = vi.fn(
-			async () => new File([new Uint8Array([1, 2, 3])], 'avatar.png', { type: 'image/png' })
+			async () => new File([new Uint8Array([1, 2, 3])], 'avatar.webp', { type: 'image/webp' })
 		);
 		const saveAvatar = vi.fn(async () => ({ success: true as const }));
 
@@ -31,10 +31,10 @@ describe('AvatarSketchpad', () => {
 	it('shows a retryable save error and stays in the avatar step when persistence fails', async () => {
 		const onContinue = vi.fn();
 		const createAvatarFile = vi.fn(
-			async () => new File([new Uint8Array([1, 2, 3])], 'avatar.png', { type: 'image/png' })
+			async () => new File([new Uint8Array([1, 2, 3])], 'avatar.webp', { type: 'image/webp' })
 		);
 		const saveAvatar = vi.fn(async () => ({
-			message: 'Avatar media must be PNG',
+			message: 'Avatar media must be WebP',
 			success: false as const
 		}));
 
@@ -47,7 +47,7 @@ describe('AvatarSketchpad', () => {
 
 		await enterGalleryButton().click();
 
-		await expect.element(page.getByText('Avatar media must be PNG')).toBeVisible();
+		await expect.element(page.getByText('Avatar media must be WebP')).toBeVisible();
 		expect(onContinue).not.toHaveBeenCalled();
 	});
 
@@ -107,7 +107,7 @@ describe('AvatarSketchpad', () => {
 		consoleErrorSpy.mockRestore();
 	});
 
-	it('logs the exact default export error when png blob creation fails', async () => {
+	it('logs the exact default export error when webp blob creation fails', async () => {
 		const onContinue = vi.fn();
 		const saveAvatar = vi.fn();
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -126,7 +126,7 @@ describe('AvatarSketchpad', () => {
 			.toBeVisible();
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
 			'Failed to create avatar file',
-			expect.objectContaining({ message: 'Canvas export returned no blob for image/png output.' })
+			expect.objectContaining({ message: 'Canvas export returned no blob for image/webp output.' })
 		);
 		expect(saveAvatar).not.toHaveBeenCalled();
 		expect(onContinue).not.toHaveBeenCalled();

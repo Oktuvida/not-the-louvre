@@ -317,7 +317,7 @@ describe('home route auth contract', () => {
 		});
 
 		const { actions } = await import('./+page.server');
-		const avatarFile = new File([new Uint8Array([1, 2, 3])], 'avatar.png', { type: 'image/png' });
+		const avatarFile = new File([new Uint8Array([1, 2, 3])], 'avatar.webp', { type: 'image/webp' });
 		const localUser = {
 			id: 'product-user-1',
 			authUserId: 'auth-user-1',
@@ -347,7 +347,7 @@ describe('home route auth contract', () => {
 
 		expect(mocked.uploadAvatar).toHaveBeenCalledWith(
 			localUser,
-			expect.objectContaining({ name: 'avatar.png', type: 'image/png' })
+			expect.objectContaining({ name: 'avatar.webp', type: 'image/webp' })
 		);
 		expect(event.locals.user).toMatchObject({
 			avatarOnboardingCompletedAt: new Date('2026-03-28T12:00:00.000Z'),
@@ -363,11 +363,11 @@ describe('home route auth contract', () => {
 
 	it('returns backend avatar save failures without dropping the domain code', async () => {
 		mocked.uploadAvatar.mockRejectedValue(
-			new ArtworkFlowError(400, 'Avatar media must be PNG', 'INVALID_MEDIA_FORMAT')
+			new ArtworkFlowError(400, 'Avatar media must be WebP', 'INVALID_MEDIA_FORMAT')
 		);
 
 		const { actions } = await import('./+page.server');
-		const avatarFile = new File([new Uint8Array([1, 2, 3])], 'avatar.png', { type: 'image/png' });
+		const avatarFile = new File([new Uint8Array([1, 2, 3])], 'avatar.webp', { type: 'image/webp' });
 		const formData = new FormData();
 		formData.set('file', avatarFile);
 
@@ -395,7 +395,7 @@ describe('home route auth contract', () => {
 			data: {
 				action: 'saveAvatar',
 				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Avatar media must be PNG'
+				message: 'Avatar media must be WebP'
 			}
 		});
 	});

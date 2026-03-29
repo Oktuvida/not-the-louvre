@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { sanitizeAvatarMedia } from './sanitization';
 import {
 	createJpegTestFile,
-	createMalformedPngFile,
-	createPngTestFile,
+	createMalformedWebpFile,
+	createWebpTestFile,
 	fileToBytes
 } from './test-helpers';
 
 describe('sanitizeAvatarMedia', () => {
-	it('accepts canonical PNG uploads and re-encodes them as AVIF', async () => {
-		const input = await createPngTestFile({ height: 256, name: 'avatar.png', width: 256 });
+	it('accepts canonical WebP uploads and re-encodes them as AVIF', async () => {
+		const input = await createWebpTestFile({ height: 256, name: 'avatar.webp', width: 256 });
 
 		const result = await sanitizeAvatarMedia(input);
 
@@ -21,20 +21,20 @@ describe('sanitizeAvatarMedia', () => {
 		expect(await fileToBytes(result.file)).not.toEqual(await fileToBytes(input));
 	});
 
-	it('rejects non-PNG avatar uploads before sanitization', async () => {
+	it('rejects non-WebP avatar uploads before sanitization', async () => {
 		const input = await createJpegTestFile({ height: 256, name: 'avatar.jpg', width: 256 });
 
 		await expect(sanitizeAvatarMedia(input)).rejects.toMatchObject({
 			code: 'INVALID_MEDIA_FORMAT',
-			message: 'Avatar media must be PNG',
+			message: 'Avatar media must be WebP',
 			status: 400
 		});
 	});
 
-	it('rejects PNG uploads with invalid magic bytes payloads', async () => {
-		await expect(sanitizeAvatarMedia(createMalformedPngFile())).rejects.toMatchObject({
+	it('rejects WebP uploads with invalid magic bytes payloads', async () => {
+		await expect(sanitizeAvatarMedia(createMalformedWebpFile())).rejects.toMatchObject({
 			code: 'INVALID_MEDIA_CONTENT',
-			message: 'Avatar media must decode as a single still PNG image',
+			message: 'Avatar media must decode as a single still WebP image',
 			status: 400
 		});
 	});

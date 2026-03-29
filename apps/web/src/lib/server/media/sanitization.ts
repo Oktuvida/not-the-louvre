@@ -32,6 +32,13 @@ const CANONICAL_AVIF_OPTIONS = {
 	quality: 100
 } as const;
 
+const ARTWORK_CANONICAL_AVIF_ATTEMPTS = [
+	{ chromaSubsampling: '4:2:0', effort: 4, quality: 70 },
+	{ chromaSubsampling: '4:2:0', effort: 4, quality: 55 },
+	{ chromaSubsampling: '4:2:0', effort: 4, quality: 42 },
+	{ chromaSubsampling: '4:2:0', effort: 4, quality: 32 }
+] as const;
+
 const ARTWORK_SOURCE_CONTENT_TYPES = new Set([
 	'image/avif',
 	'image/webp',
@@ -53,7 +60,7 @@ const artworkProfile: MediaSanitizationProfile = {
 const avatarProfile: MediaSanitizationProfile = {
 	contentType: AVATAR_MEDIA_CONTENT_TYPE,
 	height: AVATAR_MEDIA_HEIGHT,
-	inputDescription: 'PNG',
+	inputDescription: 'WebP',
 	inputType: AVATAR_UPLOAD_CONTENT_TYPE,
 	label: 'Avatar',
 	maxBytes: AVATAR_MEDIA_MAX_BYTES,
@@ -94,7 +101,8 @@ const ISO_BMFF_BRAND_OFFSET = 8;
 const ISO_BMFF_HEADER_BYTES = 16;
 const ISO_BMFF_BRAND_BYTES = 4;
 const AVIF_BRANDS = new Set(['avif', 'avis']);
-const PNG_SIGNATURE_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const WEBP_RIFF = 'RIFF';
+const WEBP_BRAND = 'WEBP';
 
 const readAscii = (input: Uint8Array, start: number, length: number) =>
 	String.fromCharCode(...input.subarray(start, start + length));
@@ -126,18 +134,32 @@ const hasAvifMagicBytes = (input: Uint8Array) => {
 	return false;
 };
 
-const hasPngMagicBytes = (input: Uint8Array) => {
-	if (input.byteLength < PNG_SIGNATURE_BYTES.byteLength) {
+const hasWebpMagicBytes = (input: Uint8Array) => {
+	if (input.byteLength < 12) {
 		return false;
 	}
 
-	for (let index = 0; index < PNG_SIGNATURE_BYTES.byteLength; index += 1) {
-		if (input[index] !== PNG_SIGNATURE_BYTES[index]) {
-			return false;
-		}
+	return readAscii(input, 0, 4) === WEBP_RIFF && readAscii(input, 8, 4) === WEBP_BRAND;
+};
+
+const expectedMimeTypeForMetadata = (metadata: sharp.Metadata) => {
+	if (metadata.format === 'jpeg') {
+		return 'image/jpeg';
 	}
 
-	return true;
+	if (metadata.format === 'png') {
+		return 'image/png';
+	}
+
+	if (metadata.format === 'webp') {
+		return 'image/webp';
+	}
+
+	if (metadata.format === 'heif' && metadata.compression === 'av1') {
+		return 'image/avif';
+	}
+
+	return null;
 };
 
 const isCanonicalAvif = (metadata: sharp.Metadata) =>
@@ -146,10 +168,33 @@ const isCanonicalAvif = (metadata: sharp.Metadata) =>
 const hasExpectedDimensions = (metadata: sharp.Metadata, profile: MediaSanitizationProfile) =>
 	metadata.width === profile.width && metadata.height === profile.height;
 
+const encodeCanonicalAvif = async (inputBuffer: Uint8Array) =>
+	sharp(inputBuffer, { animated: false }).avif(CANONICAL_AVIF_OPTIONS).toBuffer();
+
+const encodeCanonicalArtworkAvif = async (inputBuffer: Uint8Array) => {
+	for (const avifOptions of ARTWORK_CANONICAL_AVIF_ATTEMPTS) {
+		const outputBuffer = await sharp(inputBuffer, { animated: false })
+			.resize(artworkProfile.width, artworkProfile.height, {
+				background: '#fdfbf7',
+				fit: 'contain'
+			})
+			.flatten({ background: '#fdfbf7' })
+			.avif(avifOptions)
+			.toBuffer();
+
+		if (outputBuffer.byteLength <= artworkProfile.maxBytes) {
+			return outputBuffer;
+		}
+	}
+
+	throw oversizedOutputError(artworkProfile);
+};
+
 const sanitizeDecodedImageUpload = async (
 	file: File,
 	profile: MediaSanitizationProfile,
 	options: {
+		encodeOutput?: (inputBuffer: Uint8Array, profile: MediaSanitizationProfile) => Promise<Buffer>;
 		expectInput: (inputBuffer: Uint8Array) => boolean;
 		isValidMetadata: (metadata: sharp.Metadata) => boolean;
 	}
@@ -188,6 +233,10 @@ const sanitizeDecodedImageUpload = async (
 		throw invalidContentError(profile);
 	}
 
+	if (expectedMimeTypeForMetadata(metadata) !== file.type) {
+		throw invalidContentError(profile);
+	}
+
 	if (!hasExpectedDimensions(metadata, profile)) {
 		throw invalidDimensionsError(profile);
 	}
@@ -195,10 +244,14 @@ const sanitizeDecodedImageUpload = async (
 	let outputBuffer: Buffer;
 
 	try {
-		outputBuffer = await sharp(inputBuffer, { animated: false })
-			.avif(CANONICAL_AVIF_OPTIONS)
-			.toBuffer();
-	} catch {
+		outputBuffer = await (options.encodeOutput
+			? options.encodeOutput(inputBuffer, profile)
+			: encodeCanonicalAvif(inputBuffer));
+	} catch (error) {
+		if (error instanceof ArtworkFlowError) {
+			throw error;
+		}
+
 		throw invalidContentError(profile);
 	}
 
@@ -219,9 +272,13 @@ const sanitizeDecodedImageUpload = async (
 
 export const sanitizeAvifUpload = async (
 	file: File,
-	profile: MediaSanitizationProfile
+	profile: MediaSanitizationProfile,
+	options?: {
+		encodeOutput?: (inputBuffer: Uint8Array, profile: MediaSanitizationProfile) => Promise<Buffer>;
+	}
 ): Promise<SanitizedMedia> =>
 	sanitizeDecodedImageUpload(file, profile, {
+		encodeOutput: options?.encodeOutput,
 		expectInput: hasAvifMagicBytes,
 		isValidMetadata: isCanonicalAvif
 	});
@@ -236,7 +293,9 @@ export const sanitizeArtworkMedia = async (file: File) => {
 	}
 
 	if (file.type === artworkProfile.contentType) {
-		return sanitizeAvifUpload(file, artworkProfile);
+		return sanitizeAvifUpload(file, artworkProfile, {
+			encodeOutput: encodeCanonicalArtworkAvif
+		});
 	}
 
 	if (file.size > artworkProfile.maxBytes) {
@@ -257,23 +316,20 @@ export const sanitizeArtworkMedia = async (file: File) => {
 		throw invalidContentError(artworkProfile);
 	}
 
-	let outputBuffer: Buffer;
-
-	try {
-		outputBuffer = await sharp(inputBuffer, { animated: false })
-			.resize(artworkProfile.width, artworkProfile.height, {
-				background: '#fdfbf7',
-				fit: 'contain'
-			})
-			.flatten({ background: '#fdfbf7' })
-			.avif(CANONICAL_AVIF_OPTIONS)
-			.toBuffer();
-	} catch {
+	if (expectedMimeTypeForMetadata(metadata) !== file.type) {
 		throw invalidContentError(artworkProfile);
 	}
 
-	if (outputBuffer.byteLength > artworkProfile.maxBytes) {
-		throw oversizedOutputError(artworkProfile);
+	let outputBuffer: Buffer;
+
+	try {
+		outputBuffer = await encodeCanonicalArtworkAvif(inputBuffer);
+	} catch (error) {
+		if (error instanceof ArtworkFlowError) {
+			throw error;
+		}
+
+		throw invalidContentError(artworkProfile);
 	}
 
 	return {
@@ -289,6 +345,6 @@ export const sanitizeArtworkMedia = async (file: File) => {
 
 export const sanitizeAvatarMedia = (file: File) =>
 	sanitizeDecodedImageUpload(file, avatarProfile, {
-		expectInput: hasPngMagicBytes,
-		isValidMetadata: (metadata) => metadata.format === 'png'
+		expectInput: hasWebpMagicBytes,
+		isValidMetadata: (metadata) => metadata.format === 'webp'
 	});
