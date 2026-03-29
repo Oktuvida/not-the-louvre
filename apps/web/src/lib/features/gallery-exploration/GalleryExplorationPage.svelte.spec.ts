@@ -84,4 +84,31 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByText('CHAMPION')).toBeVisible();
 		await expect.element(page.getByText('RUNNER UP')).toBeVisible();
 	});
+
+	it('uses premium frames for the top-three podium artworks only', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [
+				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
+				{ ...baseArtwork, id: 'artwork-2', rank: 2, title: 'Runner Up' },
+				{ ...baseArtwork, id: 'artwork-3', rank: 3, title: 'Bronze Star' },
+				{ ...baseArtwork, id: 'artwork-4', rank: 4, title: 'Gallery Favorite' }
+			],
+			emptyStateMessage: null,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame'
+		});
+
+		await expect
+			.element(page.getByTestId('podium-frame-1'))
+			.toHaveAttribute('data-frame-tier', 'premium');
+		await expect
+			.element(page.getByTestId('podium-frame-2'))
+			.toHaveAttribute('data-frame-tier', 'premium');
+		await expect
+			.element(page.getByTestId('podium-frame-3'))
+			.toHaveAttribute('data-frame-tier', 'premium');
+		await expect
+			.element(page.getByTestId('ranked-frame-artwork-4'))
+			.toHaveAttribute('data-frame-tier', 'standard');
+	});
 });

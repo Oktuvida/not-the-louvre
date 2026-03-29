@@ -1,16 +1,21 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
-	import ArtworkCard from '$lib/features/artwork-presentation/components/ArtworkCard.svelte';
+	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
 	import ArtworkDetailPanel from '$lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
 	import GalleryRoomNav from '$lib/features/gallery-exploration/components/GalleryRoomNav.svelte';
 	import type {
 		GalleryRoomConfig,
 		GalleryRoomId
 	} from '$lib/features/gallery-exploration/model/rooms';
 	import MysteryRoom from '$lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
+	import BrassPlaque from '$lib/features/shared-ui/components/BrassPlaque.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
+	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
+	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
+	import WaxSealMedal from '$lib/features/shared-ui/components/WaxSealMedal.svelte';
 	import { toGalleryArtworkDetail } from '$lib/features/gallery-exploration/gallery-adapter';
 
 	let {
@@ -237,26 +242,26 @@
 		1: {
 			base: 'h-32',
 			color: '#f4c430',
-			height: 'h-96',
+			height: 'h-72 md:h-80',
 			label: 'CHAMPION',
 			medal: '🥇',
-			width: 'w-72'
+			width: 'w-72 md:w-80'
 		},
 		2: {
 			base: 'h-24',
 			color: '#c0c0c0',
-			height: 'h-80',
+			height: 'h-64 md:h-72',
 			label: 'RUNNER UP',
 			medal: '🥈',
-			width: 'w-64'
+			width: 'w-64 md:w-72'
 		},
 		3: {
 			base: 'h-20',
 			color: '#cd7f32',
-			height: 'h-72',
+			height: 'h-64 md:h-72',
 			label: 'BRONZE STAR',
 			medal: '🥉',
-			width: 'w-64'
+			width: 'w-64 md:w-72'
 		}
 	} as const;
 
@@ -266,6 +271,16 @@
 		{ artwork: hallOfFameArtworks[0], position: 1 as const },
 		{ artwork: hallOfFameArtworks[2], position: 3 as const }
 	]);
+
+	const frameForArtwork = (artworkId: string, podiumPosition?: 1 | 2 | 3) =>
+		resolveArtworkFrame({ artworkId, podiumPosition });
+
+	const roomNoteClassNames: Record<GalleryRoomId, string> = {
+		'hall-of-fame': '',
+		'hot-wall': '',
+		mystery: '',
+		'your-studio': ''
+	};
 </script>
 
 <div class="pointer-events-none absolute inset-0 overflow-hidden">
@@ -282,15 +297,14 @@
 	{/each}
 </div>
 
-<div class="relative min-h-screen overflow-x-hidden bg-[#f5f0e8]">
-	<div class="sticky top-0 z-40 border-b-4 border-[#2d2420] bg-[#fdfbf7] shadow-lg">
+<div
+	class="relative min-h-screen bg-[#e7dece] bg-cover bg-fixed bg-center bg-no-repeat"
+	style="background-image:url('/gallery-bg.webp');"
+>
+	<div class="cork-bar sticky top-0 z-40">
 		<div class="mx-auto max-w-7xl px-8 py-6">
 			<div class="flex items-center justify-between">
-				<GameLink
-					href="/"
-					variant="secondary"
-					className="w-fit -rotate-1 border-[3px] px-6 py-3 [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif]"
-				>
+				<GameLink href="/" variant="secondary" size="md" className="w-fit -rotate-1 shadow-xl">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						width="20"
@@ -306,17 +320,9 @@
 					<span class="font-semibold">Exit Gallery</span>
 				</GameLink>
 
-				<h1
-					class="font-display text-4xl font-black text-[#2d2420] [text-shadow:3px_3px_0px_#e8b896]"
-				>
-					THE GALLERY
-				</h1>
+				<BrassPlaque text="The Gallery" size="large" className="mx-4 shrink text-center" />
 
-				<GameLink
-					href="/draw"
-					variant="primary"
-					className="w-fit rotate-1 border-[3px] px-6 py-3 [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif]"
-				>
+				<GameLink href="/draw" variant="primary" size="md" className="w-fit rotate-1 shadow-xl">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						width="20"
@@ -339,141 +345,130 @@
 	</div>
 
 	<div class="mx-auto flex max-w-7xl flex-col gap-8 px-8 py-8">
-		<GalleryRoomNav {roomId} />
-
-		<div
-			class="group -rotate-1 rounded-lg border-2 border-[#2d2420] bg-[#fdfbf7] p-6 shadow-md transition duration-200 hover:scale-[1.02] hover:rotate-0"
-		>
-			<p class="[font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif] text-lg text-[#6b625a] italic">
-				{room.description}
-			</p>
+		<div class="cork-bar sticky top-[5.5rem] z-30 -mx-8 px-8 py-2">
+			<GalleryRoomNav {roomId} />
 		</div>
 
-		{#if detailErrorMessage}
-			<div class="rounded-xl border-4 border-[#2d2420] bg-[#f7d8c7] p-5 text-[#7a2e1c]">
-				{detailErrorMessage}
+		<div class="relative">
+			<!-- Post-it overlay — does not displace content -->
+			<div class="pointer-events-none absolute top-2 left-2 z-[25] md:left-4">
+				<PostItNote
+					attachment={room.postItAttachment}
+					className={roomNoteClassNames[roomId]}
+					color={room.postItColor}
+					label={room.name}
+					seedKey={room.id}
+					text={room.description}
+				/>
 			</div>
-		{/if}
 
-		{#if emptyStateMessage}
-			<div
-				class="rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
-			>
-				<p class="font-display text-2xl text-[#2d2420]">{emptyStateMessage}</p>
-				<p class="mt-3 text-[#6b625a]">
-					Publish a new piece from the studio and it will show up here.
-				</p>
-			</div>
-		{:else if roomId === 'mystery' && mysteryArtwork}
-			<MysteryRoom artwork={mysteryArtwork} onReveal={spinMystery} onSelect={openArtwork} />
-		{:else if roomId === 'hall-of-fame'}
-			<div class="space-y-12">
-				<div class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end">
-					{#each hallOfFamePodium as entry (`podium-${entry.position}-${entry.artwork?.id ?? 'empty'}`)}
-						{@const artwork = entry.artwork}
-						{#if artwork}
-							{@const position = entry.position}
-							{@const meta = podiumMeta[position]}
-							<div class="relative flex flex-col items-center">
-								<div class="relative mb-4">
-									<div
-										class="font-display rounded-full border-[3px] border-[#2d2420] px-6 py-2 font-black text-[#2d2420] shadow-lg"
-										style={`background:${meta.color}`}
-									>
-										{meta.label}
-									</div>
-									<div class="absolute -top-2 -right-2 animate-[spin_20s_linear_infinite] text-4xl">
-										{meta.medal}
-									</div>
-								</div>
+			{#if detailErrorMessage}
+				<div class="rounded-xl border-4 border-[#2d2420] bg-[#f7d8c7] p-5 text-[#7a2e1c]">
+					{detailErrorMessage}
+				</div>
+			{/if}
 
-								<button
-									type="button"
-									class={`relative ${meta.width} ${meta.height} cursor-pointer`}
-									onclick={() => openArtwork(artwork)}
-								>
-									<div
-										class="h-full border-[6px] border-[#5d4e37] bg-[#fdfbf7] p-4 shadow-2xl transition duration-200 hover:-translate-y-2 hover:scale-105"
+			{#if emptyStateMessage}
+				<div
+					class="rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
+				>
+					<p class="font-display text-2xl text-[#2d2420]">{emptyStateMessage}</p>
+					<p class="mt-3 text-[#6b625a]">
+						Publish a new piece from the studio and it will show up here.
+					</p>
+				</div>
+			{:else if roomId === 'mystery' && mysteryArtwork}
+				<MysteryRoom artwork={mysteryArtwork} onReveal={spinMystery} onSelect={openArtwork} />
+			{:else if roomId === 'hall-of-fame'}
+				<div class="space-y-12">
+					<div
+						class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end"
+					>
+						{#each hallOfFamePodium as entry (`podium-${entry.position}-${entry.artwork?.id ?? 'empty'}`)}
+							{@const artwork = entry.artwork}
+							{#if artwork}
+								{@const position = entry.position}
+								{@const meta = podiumMeta[position]}
+								{@const frame = frameForArtwork(artwork.id, position)}
+								<div class="relative flex flex-col items-center">
+									<div class="relative mb-5 flex flex-col items-center gap-3">
+										<WaxSealMedal {position} size={position === 1 ? 'large' : 'medium'} />
+										<div
+											class="font-display rounded-full border-[3px] border-[#2d2420] px-6 py-2 font-black text-[#2d2420] shadow-lg"
+											style={`background:${meta.color}`}
+										>
+											{meta.label}
+										</div>
+									</div>
+
+									<button
+										type="button"
+										class={`relative ${meta.width} ${meta.height} cursor-pointer`}
+										data-testid={`podium-artwork-${position}`}
+										onclick={() => openArtwork(artwork)}
 									>
-										<img
-											src={artwork.imageUrl}
-											alt={artwork.title}
-											class="h-full w-full border-2 border-[#2d2420] object-cover"
-										/>
-										{#if artwork.artistAvatar}
-											<div
-												class="absolute -bottom-6 left-1/2 h-20 w-20 -translate-x-1/2 overflow-hidden rounded-full border-4 border-[#2d2420] bg-white shadow-xl"
+										<div
+											class="h-full transition duration-200 hover:-translate-y-2 hover:scale-105"
+										>
+											<ArtworkFrame
+												{frame}
+												className="h-full w-full"
+												openingClass="h-full"
+												testId={`podium-frame-${position}`}
 											>
 												<img
-													src={artwork.artistAvatar}
-													alt={artwork.artist}
-													class="h-full w-full"
+													src={artwork.imageUrl}
+													alt={artwork.title}
+													class="h-full w-full object-cover"
 												/>
-											</div>
-										{/if}
-									</div>
-								</button>
+											</ArtworkFrame>
+											{#if artwork.artistAvatar}
+												<div
+													class="absolute -bottom-6 left-1/2 h-20 w-20 -translate-x-1/2 overflow-hidden rounded-full border-4 border-[#2d2420] bg-white shadow-xl"
+												>
+													<img
+														src={artwork.artistAvatar}
+														alt={artwork.artist}
+														class="h-full w-full"
+													/>
+												</div>
+											{/if}
+										</div>
+									</button>
 
-								<div
-									class={`mt-8 w-full rounded-t-lg border-4 border-[#2d2420] ${meta.base}`}
-									style={`background:${meta.color}`}
-								>
-									<div class="flex h-full flex-col items-center justify-center">
-										<div class="font-display text-5xl font-black text-[#2d2420]">{position}</div>
-										<div class="mt-1 text-sm font-bold text-[#2d2420]">{artwork.artist}</div>
-										<div class="text-xs font-bold text-[#2d2420]">{artwork.score} pts</div>
-									</div>
-								</div>
-							</div>
-						{/if}
-					{/each}
-				</div>
-
-				<div class="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4">
-					{#each hallOfFameArtworks.slice(3) as artwork (artwork.id)}
-						<button
-							type="button"
-							class="rotate-1 cursor-pointer rounded-lg border-[3px] border-[#2d2420] bg-[#fdfbf7] p-3 text-left shadow-md transition duration-200 hover:scale-105 hover:rotate-0"
-							onclick={() => openArtwork(artwork)}
-						>
-							<div class="relative">
-								<img
-									src={artwork.imageUrl}
-									alt={artwork.title}
-									class="aspect-square w-full rounded border-2 border-[#2d2420] object-cover"
-								/>
-								<div
-									class="absolute -top-2 -left-2 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#2d2420] bg-[#d4956c] font-black text-[#2d2420]"
-								>
-									{artwork.rank}
-								</div>
-								{#if artwork.artistAvatar}
 									<div
-										class="absolute -right-2 -bottom-2 h-10 w-10 overflow-hidden rounded-full border-2 border-[#2d2420] bg-white shadow-md"
+										class={`mt-8 w-full rounded-t-lg border-4 border-[#2d2420] ${meta.base}`}
+										style={`background:${meta.color}`}
 									>
-										<img src={artwork.artistAvatar} alt={artwork.artist} class="h-full w-full" />
+										<div class="flex h-full flex-col items-center justify-center">
+											<div class="font-display text-5xl font-black text-[#2d2420]">{position}</div>
+											<div class="mt-1 text-sm font-bold text-[#2d2420]">{artwork.artist}</div>
+											<div class="text-xs font-bold text-[#2d2420]">{artwork.score} pts</div>
+										</div>
 									</div>
-								{/if}
-							</div>
-							<div class="mt-3">
-								<h4 class="truncate font-bold text-[#2d2420]">{artwork.title}</h4>
-								<p class="truncate text-xs text-[#6b625a]">{artwork.artist}</p>
-								<div class="mt-1 flex items-center gap-2 text-xs text-[#2d2420]">
-									<span>⭐ {artwork.score}</span>
-									<span>💬 {artwork.commentCount ?? artwork.comments.length}</span>
 								</div>
-							</div>
-						</button>
+							{/if}
+						{/each}
+					</div>
+
+					<div class="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
+						{#each hallOfFameArtworks.slice(3) as artwork (artwork.id)}
+							<PolaroidCard
+								{artwork}
+								testId={`ranked-frame-${artwork.id}`}
+								onclick={() => openArtwork(artwork)}
+							/>
+						{/each}
+					</div>
+				</div>
+			{:else}
+				<div class="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-3">
+					{#each artworks as artwork (artwork.id)}
+						<PolaroidCard {artwork} onclick={() => openArtwork(artwork)} />
 					{/each}
 				</div>
-			</div>
-		{:else}
-			<div class="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
-				{#each artworks as artwork, index (artwork.id)}
-					<ArtworkCard {artwork} {index} onclick={() => openArtwork(artwork)} />
-				{/each}
-			</div>
-		{/if}
+			{/if}
+		</div>
 	</div>
 
 	<ArtworkDetailPanel
@@ -485,3 +480,29 @@
 		{viewer}
 	/>
 </div>
+
+<style>
+	.cork-bar {
+		background-color: #b8956e;
+		background-image:
+			repeating-linear-gradient(
+				0deg,
+				transparent,
+				transparent 28px,
+				rgba(0, 0, 0, 0.04) 28px,
+				rgba(0, 0, 0, 0.04) 30px
+			),
+			repeating-linear-gradient(
+				90deg,
+				transparent,
+				transparent 60px,
+				rgba(0, 0, 0, 0.03) 60px,
+				rgba(0, 0, 0, 0.03) 62px
+			),
+			radial-gradient(circle at 80% 20%, rgba(255, 248, 225, 0.15) 0%, transparent 40%);
+		border-bottom: 3px solid #8a6944;
+		box-shadow:
+			0 2px 8px rgba(0, 0, 0, 0.18),
+			inset 0 1px 0 rgba(255, 248, 225, 0.15);
+	}
+</style>
