@@ -1,6 +1,11 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+
+const { goto } = vi.hoisted(() => ({ goto: vi.fn() }));
+
+vi.mock('$app/navigation', () => ({ goto }));
+
 import ArtworkDetailPanel from './ArtworkDetailPanel.svelte';
 
 const artwork = {
@@ -21,14 +26,15 @@ const artwork = {
 
 describe('ArtworkDetailPanel', () => {
 	it('links forking into the draw studio with the parent artwork id', async () => {
+		goto.mockReset();
+
 		render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await expect
-			.element(page.getByRole('link', { name: 'Fork' }))
-			.toHaveAttribute('href', '/draw?fork=artwork-1');
+		await page.getByRole('button', { name: 'Fork' }).click();
+		expect(goto).toHaveBeenCalledWith('/draw?fork=artwork-1');
 		await expect.element(page.getByText('Forks: 2')).toBeVisible();
 	});
 
