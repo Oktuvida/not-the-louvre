@@ -73,6 +73,7 @@ const baseSelect = {
 	mediaContentType: artworks.mediaContentType,
 	mediaSizeBytes: artworks.mediaSizeBytes,
 	isHidden: artworks.isHidden,
+	isNsfw: artworks.isNsfw,
 	hiddenAt: artworks.hiddenAt,
 	score: artworks.score,
 	commentCount: artworks.commentCount,
@@ -118,6 +119,7 @@ type ArtworkReadRow = {
 	hiddenAt: Date | null;
 	id: string;
 	isHidden: boolean;
+	isNsfw: boolean;
 	mediaContentType: string;
 	mediaSizeBytes: number;
 	commentCount: number;
@@ -168,6 +170,7 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	hiddenAt: row.hiddenAt,
 	id: row.id,
 	isHidden: row.isHidden,
+	isNsfw: row.isNsfw,
 	mediaContentType: row.mediaContentType,
 	mediaSizeBytes: row.mediaSizeBytes,
 	parentId: row.parentId,
@@ -274,6 +277,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				authorNickname: users.nickname,
 				createdAt: artworks.createdAt,
 				id: artworks.id,
+				isNsfw: artworks.isNsfw,
 				title: artworks.title
 			})
 			.from(artworks)

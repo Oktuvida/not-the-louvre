@@ -211,6 +211,7 @@ describe('artwork publish endpoint', () => {
 	it('passes an optional fork parent reference through the publish endpoint', async () => {
 		const { POST } = await import('./+server');
 		const formData = new FormData();
+		formData.set('isNsfw', 'true');
 		formData.set('title', 'Forked artwork');
 		formData.set('parentArtworkId', 'artwork-parent');
 		formData.set(
@@ -233,6 +234,7 @@ describe('artwork publish endpoint', () => {
 		expect(response.status).toBe(201);
 		expect(mocked.publishArtwork).toHaveBeenCalledTimes(1);
 		expect(mocked.publishArtwork.mock.calls[0]?.[0]).toMatchObject({
+			isNsfw: true,
 			parentArtworkId: 'artwork-parent'
 		});
 	});

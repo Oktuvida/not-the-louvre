@@ -43,6 +43,7 @@ export const load: PageServerLoad = async (event) => {
 	const forkParent = forkArtworkId
 		? await getArtworkDetail(forkArtworkId, { user: event.locals.user }).then((artwork) => ({
 				id: artwork.id,
+				isNsfw: artwork.isNsfw,
 				mediaUrl: artwork.mediaUrl,
 				title: artwork.title
 			}))
@@ -60,6 +61,7 @@ export const actions: Actions = {
 		const media = formData.get('media');
 		const title = formData.get('title')?.toString() ?? '';
 		const parentArtworkId = formData.get('parentArtworkId')?.toString() ?? null;
+		const isNsfw = formData.get('isNsfw')?.toString() === 'true';
 
 		if (!(media instanceof File)) {
 			return fail(400, {
@@ -72,6 +74,7 @@ export const actions: Actions = {
 		try {
 			const artwork = await publishArtwork(
 				{
+					isNsfw,
 					media,
 					parentArtworkId,
 					title
@@ -86,6 +89,7 @@ export const actions: Actions = {
 				action: 'publish',
 				artwork: {
 					id: artwork.id,
+					isNsfw: artwork.isNsfw,
 					mediaUrl: `/api/artworks/${artwork.id}/media`,
 					title: artwork.title
 				},

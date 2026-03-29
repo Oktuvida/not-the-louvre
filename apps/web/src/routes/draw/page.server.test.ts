@@ -198,6 +198,7 @@ describe('draw route page', () => {
 		const { actions } = await import('./+page.server');
 		await actions.publish(
 			createActionEvent({
+				isNsfw: 'true',
 				media: new File([new Uint8Array([1, 2, 3])], 'artwork.png', { type: 'image/png' }),
 				parentArtworkId: 'artwork-parent',
 				title: 'Forked Piece'
@@ -206,6 +207,7 @@ describe('draw route page', () => {
 
 		expect(mocked.publishArtwork).toHaveBeenCalledWith(
 			expect.objectContaining({
+				isNsfw: true,
 				parentArtworkId: 'artwork-parent',
 				title: 'Forked Piece'
 			}),

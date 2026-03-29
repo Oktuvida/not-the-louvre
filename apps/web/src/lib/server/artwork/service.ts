@@ -9,6 +9,7 @@ import {
 import { ArtworkFlowError } from './errors';
 import { artworkRepository } from './repository';
 import { supabaseArtworkStorage } from './storage';
+import { checkTextModeration } from '$lib/server/moderation/service';
 import type {
 	ArtworkActorContext,
 	ArtworkCommentView,
@@ -27,6 +28,7 @@ import { sanitizeArtworkMedia } from '../media/sanitization';
 import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
 type PublishArtworkInput = {
+	isNsfw?: boolean;
 	media: File;
 	parentArtworkId?: string | null;
 	title?: string | null;
@@ -390,6 +392,11 @@ export const publishArtwork = async (
 	await assertPublishRateLimit(actor, repository, now);
 
 	const title = normalizePublishTitle(input.title, randomSuffix());
+	const titleModeration = await checkTextModeration(title, 'artwork_title');
+	if (titleModeration.status !== 'allowed') {
+		throw new ArtworkFlowError(400, titleModeration.message, 'INVALID_TITLE');
+	}
+
 	const parentArtworkId = input.parentArtworkId?.trim() ? input.parentArtworkId.trim() : null;
 
 	if (parentArtworkId) {
@@ -412,8 +419,11 @@ export const publishArtwork = async (
 			createdAt: now,
 			forkCount: 0,
 			id: artworkId,
+			isNsfw: Boolean(input.isNsfw),
 			mediaContentType: media.contentType,
 			mediaSizeBytes: media.sizeBytes,
+			nsfwLabeledAt: input.isNsfw ? now : null,
+			nsfwSource: input.isNsfw ? 'creator' : null,
 			parentId: parentArtworkId,
 			score: 0,
 			storageKey,
@@ -450,12 +460,13 @@ export const updateArtworkTitle = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 	assertAuthor(artwork.authorId, actor.user.id);
+	const title = normalizeUpdatedTitle(input.title);
+	const titleModeration = await checkTextModeration(title, 'artwork_title');
+	if (titleModeration.status !== 'allowed') {
+		throw new ArtworkFlowError(400, titleModeration.message, 'INVALID_TITLE');
+	}
 
-	const updated = await repository.updateArtworkTitle(
-		artwork.id,
-		normalizeUpdatedTitle(input.title),
-		getNow()
-	);
+	const updated = await repository.updateArtworkTitle(artwork.id, title, getNow());
 
 	if (!updated) {
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
@@ -555,11 +566,16 @@ export const createArtworkComment = async (
 		ARTWORK_COMMENT_RATE_LIMIT,
 		'Too many comment attempts. Please wait before trying again.'
 	);
+	const body = normalizeCommentBody(input.body);
+	const textModeration = await checkTextModeration(body, 'comment');
+	if (textModeration.status !== 'allowed') {
+		throw new ArtworkFlowError(400, textModeration.message, 'INVALID_COMMENT');
+	}
 
 	const comment = await repository.createComment({
 		authorId: actor.user.id,
 		artworkId: artwork.id,
-		body: normalizeCommentBody(input.body),
+		body,
 		createdAt: now,
 		id: nextId(),
 		updatedAt: now

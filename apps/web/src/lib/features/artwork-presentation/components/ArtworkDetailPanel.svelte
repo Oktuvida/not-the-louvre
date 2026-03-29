@@ -10,13 +10,17 @@
 
 	let {
 		artwork,
+		adultContentEnabled = false,
 		checkTextContent = defaultCheckTextContent,
+		onAdultContentToggle,
 		viewer = null,
 		onArtworkChange,
 		onClose
 	}: {
 		artwork: Artwork | null;
+		adultContentEnabled?: boolean;
 		checkTextContent?: TextContentChecker;
+		onAdultContentToggle?: (enabled: boolean) => Promise<void> | void;
 		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
 		onArtworkChange?: (artwork: Artwork) => void;
 		onClose?: () => void;
@@ -24,8 +28,11 @@
 
 	let commentBody = $state('');
 	let actionError = $state<string | null>(null);
+	let isUpdatingAdultContentPreference = $state(false);
 	let isSubmittingComment = $state(false);
 	let isSubmittingVote = $state(false);
+
+	const isSensitiveBlurred = $derived(Boolean(artwork?.isNsfw) && !adultContentEnabled);
 
 	const requireViewer = () => {
 		if (!viewer) {
@@ -38,6 +45,22 @@
 
 	const syncArtwork = (nextArtwork: Artwork) => {
 		onArtworkChange?.(nextArtwork);
+	};
+
+	const updateAdultContentVisibility = async (enabled: boolean) => {
+		if (!onAdultContentToggle || isUpdatingAdultContentPreference) return;
+
+		isUpdatingAdultContentPreference = true;
+		actionError = null;
+
+		try {
+			await onAdultContentToggle(enabled);
+		} catch (error) {
+			actionError =
+				error instanceof Error ? error.message : '18+ artwork preference could not be updated.';
+		} finally {
+			isUpdatingAdultContentPreference = false;
+		}
 	};
 
 	const submitVote = async (value: 'down' | 'up') => {
@@ -165,11 +188,37 @@
 				<div class="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
 					<div class="relative">
 						<div class="border-4 border-[#2d2420] bg-white p-4 shadow-lg">
-							<img
-								class="aspect-square w-full object-cover"
-								src={artwork.imageUrl}
-								alt={artwork.title}
-							/>
+							<div class="relative">
+								<img
+									class={`aspect-square w-full object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
+									src={artwork.imageUrl}
+									alt={artwork.title}
+								/>
+								{#if isSensitiveBlurred}
+									<div
+										class="absolute inset-0 flex flex-col items-center justify-center bg-[rgba(45,36,32,0.72)] px-6 text-center text-[#fdfbf7]"
+									>
+										<span
+											class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
+											>18+</span
+										>
+										<p class="mt-3 text-lg font-bold uppercase">Sensitive artwork</p>
+										<p class="mt-2 text-sm">Reveal 18+ artworks to view this piece in full.</p>
+										{#if viewer}
+											<button
+												type="button"
+												class="mt-4 rounded-[0.95rem] border-3 border-[#fdfbf7] bg-[#d68a49] px-4 py-2 text-sm font-black text-[#2d2420]"
+												disabled={isUpdatingAdultContentPreference}
+												onclick={() => updateAdultContentVisibility(true)}
+											>
+												Reveal 18+ artworks
+											</button>
+										{:else}
+											<p class="mt-4 text-xs font-semibold">Sign in to reveal 18+ artworks.</p>
+										{/if}
+									</div>
+								{/if}
+							</div>
 						</div>
 						{#if artwork.rank && artwork.rank <= 3}
 							<div
