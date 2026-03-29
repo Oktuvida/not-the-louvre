@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { deserialize, enhance } from '$app/forms';
 	import { gsap } from 'gsap';
+	import {
+		checkTextContent as defaultCheckTextContent,
+		type TextContentChecker
+	} from '$lib/client/content-filter';
 	import { NICKNAME_PATTERN, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '$lib/auth/config';
 	import type {
 		HomeAuthActionData,
@@ -29,6 +33,7 @@
 		entryState,
 		dispatch,
 		authenticatedUser = null,
+		checkTextContent = defaultCheckTextContent,
 		form,
 		onAvatarDismiss,
 		onAvatarSaved,
@@ -38,6 +43,7 @@
 		entryState: EntryFlowState;
 		dispatch: (event: EntryFlowEvent) => void;
 		authenticatedUser?: HomeAuthUser | null;
+		checkTextContent?: TextContentChecker;
 		form?: HomeAuthActionForm;
 		onAvatarDismiss?: () => void;
 		onAvatarSaved?: () => void;
@@ -66,6 +72,7 @@
 	let loginFormElement = $state<HTMLFormElement | null>(null);
 	let signupFormElement = $state<HTMLFormElement | null>(null);
 	let recoveryFormElement = $state<HTMLFormElement | null>(null);
+	let allowValidatedSignupSubmit = $state(false);
 
 	const isInteractive = $derived(
 		entryState === 'auth-login' || entryState === 'auth-signup' || entryState === 'auth-recovery'
@@ -204,7 +211,7 @@
 		return !nicknameError && !passwordError;
 	};
 
-	const validateSignUp = () => {
+	const validateSignUp = async () => {
 		const trimmedNickname = normalizeNickname(nickname);
 		nickname = trimmedNickname;
 		nicknameError = validateNickname(trimmedNickname);
@@ -214,7 +221,17 @@
 			nicknameError = 'That nickname is already taken';
 		}
 
-		return !nicknameError && !passwordError;
+		if (nicknameError || passwordError) {
+			return false;
+		}
+
+		const moderationResult = await checkTextContent(trimmedNickname, 'nickname');
+		if (moderationResult.status !== 'allowed') {
+			nicknameError = moderationResult.message;
+			return false;
+		}
+
+		return true;
 	};
 
 	const validateRecovery = () => {
@@ -243,10 +260,20 @@
 		}
 	};
 
-	const handleSignupSubmit = (event: SubmitEvent) => {
-		if (!validateSignUp()) {
-			event.preventDefault();
+	const handleSignupSubmit = async (event: SubmitEvent) => {
+		if (allowValidatedSignupSubmit) {
+			allowValidatedSignupSubmit = false;
+			return;
 		}
+
+		event.preventDefault();
+
+		if (!(await validateSignUp())) {
+			return;
+		}
+
+		allowValidatedSignupSubmit = true;
+		signupFormElement?.requestSubmit();
 	};
 
 	const handleRecoverySubmit = (event: SubmitEvent) => {
@@ -260,8 +287,8 @@
 		loginFormElement?.requestSubmit();
 	};
 
-	const submitSignup = () => {
-		if (!validateSignUp()) return;
+	const submitSignup = async () => {
+		if (!(await validateSignUp())) return;
 		signupFormElement?.requestSubmit();
 	};
 
@@ -630,7 +657,9 @@
 
 						<GameButton
 							type="button"
-							onclick={submitSignup}
+							onclick={() => {
+								void submitSignup();
+							}}
 							disabled={isSubmitting}
 							className="gap-3 px-6 py-3 text-sm font-black"
 						>

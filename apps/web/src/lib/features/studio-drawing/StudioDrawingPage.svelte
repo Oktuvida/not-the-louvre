@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import {
+		checkImageContent as defaultCheckImageContent,
+		type ImageContentChecker
+	} from '$lib/client/content-filter';
 	import type {
 		DrawForkParent,
 		DrawPageUser,
@@ -12,6 +16,7 @@
 	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 
 	let {
+		checkImageContent = defaultCheckImageContent,
 		createArtworkFile = exportArtworkFile,
 		forkParent = null,
 		publishDrawing = async (
@@ -42,6 +47,7 @@
 		},
 		user
 	}: {
+		checkImageContent?: ImageContentChecker;
 		createArtworkFile?: (canvas: HTMLCanvasElement) => Promise<File | null>;
 		forkParent?: DrawForkParent | null;
 		publishDrawing?: (
@@ -88,6 +94,13 @@
 			const file = await createArtworkFile(canvasRef);
 			if (!file) {
 				statusMessage = 'This browser could not export your drawing. Please try again.';
+				statusTone = 'error';
+				return;
+			}
+
+			const moderationResult = await checkImageContent(file, 'artwork');
+			if (moderationResult.status !== 'allowed') {
+				statusMessage = moderationResult.message;
 				statusTone = 'error';
 				return;
 			}

@@ -1,16 +1,22 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import {
+		checkTextContent as defaultCheckTextContent,
+		type TextContentChecker
+	} from '$lib/client/content-filter';
 	import { resolve } from '$app/paths';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import StudioPanel from '$lib/features/shared-ui/components/StudioPanel.svelte';
 
 	let {
 		artwork,
+		checkTextContent = defaultCheckTextContent,
 		viewer = null,
 		onArtworkChange,
 		onClose
 	}: {
 		artwork: Artwork | null;
+		checkTextContent?: TextContentChecker;
 		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
 		onArtworkChange?: (artwork: Artwork) => void;
 		onClose?: () => void;
@@ -81,6 +87,12 @@
 		const body = commentBody.trim();
 		if (!body) {
 			actionError = 'Comment cannot be empty.';
+			return;
+		}
+
+		const moderationResult = await checkTextContent(body, 'comment');
+		if (moderationResult.status !== 'allowed') {
+			actionError = moderationResult.message;
 			return;
 		}
 
