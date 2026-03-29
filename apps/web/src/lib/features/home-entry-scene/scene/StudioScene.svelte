@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { gsap } from 'gsap';
 	import { Canvas, T } from '@threlte/core';
-	import { GLTF, OrbitControls } from '@threlte/extras';
+	import { GLTF, OrbitControls, useDraco } from '@threlte/extras';
 	import type { Group, Object3D } from 'three';
 	import type { HomeSceneArtworkSlot } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import SceneTextureBindings from '$lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
@@ -30,6 +30,7 @@
 		zoom: 40,
 		rotationY: 0
 	};
+	const studioDracoLoader = useDraco();
 
 	$effect(() => {
 		const isInside =
@@ -124,7 +125,8 @@
 		<GLTF
 			bind:nodes={studioNodes}
 			bind:scene={studioSceneRoot}
-			url="/models/studio.glb"
+			dracoLoader={studioDracoLoader}
+			url="/models/studio-transformed.glb"
 			scale={5.7}
 			position={[0, -6, 0]}
 			rotation={[-0.22, modelRotationY, 0]}
