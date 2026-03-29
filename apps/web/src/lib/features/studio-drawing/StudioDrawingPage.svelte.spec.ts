@@ -3,7 +3,36 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import StudioDrawingPage from './StudioDrawingPage.svelte';
 
+async function openSketchbook() {
+	await page.getByRole('button', { name: 'Open sketchbook' }).click();
+	await expect.element(page.getByPlaceholder('Give your piece a title')).toBeVisible();
+}
+
 describe('StudioDrawingPage', () => {
+	it('starts with a closed sketchbook and hides active studio controls', async () => {
+		render(StudioDrawingPage, {
+			openingDurationMs: 1,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Open sketchbook' })).toBeVisible();
+		await expect.element(page.getByPlaceholder('Give your piece a title')).toBeDisabled();
+		await expect.element(page.getByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+	});
+
+	it('reveals the drawing controls after the sketchbook opens', async () => {
+		render(StudioDrawingPage, {
+			openingDurationMs: 1,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await openSketchbook();
+
+		await expect.element(page.getByRole('button', { name: 'Clear' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+		await expect.element(page.getByLabelText('Title')).toBeVisible();
+	});
+
 	it('publishes the current drawing and shows a minimal success state', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const createArtworkFile = vi.fn(
@@ -20,11 +49,13 @@ describe('StudioDrawingPage', () => {
 		}));
 
 		render(StudioDrawingPage, {
+			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkFile,
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
+		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('My First Piece');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
@@ -50,12 +81,14 @@ describe('StudioDrawingPage', () => {
 		}));
 
 		render(StudioDrawingPage, {
+			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
+		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('Problem Piece');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
@@ -69,11 +102,13 @@ describe('StudioDrawingPage', () => {
 		const publishDrawing = vi.fn();
 
 		render(StudioDrawingPage, {
+			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkFile: async () => null,
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
+		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('Export Trouble');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
@@ -90,12 +125,15 @@ describe('StudioDrawingPage', () => {
 		const publishDrawing = vi.fn();
 
 		render(StudioDrawingPage, {
+			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
+
+		await openSketchbook();
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
@@ -117,6 +155,7 @@ describe('StudioDrawingPage', () => {
 		}));
 
 		render(StudioDrawingPage, {
+			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
@@ -129,6 +168,7 @@ describe('StudioDrawingPage', () => {
 			user: { nickname: 'journey_artist' }
 		});
 
+		await openSketchbook();
 		await expect.element(page.getByText('Forking from')).toBeVisible();
 		await expect.element(page.getByText('Parent Artwork')).toBeVisible();
 		await page.getByPlaceholder('Give your piece a title').fill('Forked Piece');
@@ -149,12 +189,14 @@ describe('StudioDrawingPage', () => {
 		const publishDrawing = vi.fn();
 
 		render(StudioDrawingPage, {
+			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
+		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('Blocked Piece');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
@@ -171,12 +213,14 @@ describe('StudioDrawingPage', () => {
 		const publishDrawing = vi.fn();
 
 		render(StudioDrawingPage, {
+			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
+		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('Retry Later Piece');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
@@ -203,6 +247,7 @@ describe('StudioDrawingPage', () => {
 		}));
 
 		render(StudioDrawingPage, {
+			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
@@ -210,6 +255,7 @@ describe('StudioDrawingPage', () => {
 			user: { nickname: 'journey_artist' }
 		});
 
+		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('Figure Study');
 		await page.getByRole('checkbox').click();
 		await page.getByRole('button', { name: 'Publish' }).click();
