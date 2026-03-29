@@ -119,12 +119,15 @@ const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 	author: toAuthorSummary(record),
 	commentCount: record.commentCount,
 	createdAt: record.createdAt,
+	downvotes: record.downvotes ?? 0,
 	forkCount: record.forkCount,
 	id: record.id,
 	lineage: toLineage(record),
 	mediaUrl: getArtworkMediaUrl(record.id),
 	score: record.score,
-	title: record.title
+	title: record.title,
+	upvotes: record.upvotes ?? 0,
+	viewerVote: record.viewerVote ?? null
 });
 
 const toDetail = (record: ArtworkReadRecord): ArtworkDetail => ({

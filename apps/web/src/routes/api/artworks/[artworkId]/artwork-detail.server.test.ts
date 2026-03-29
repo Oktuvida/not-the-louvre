@@ -51,9 +51,12 @@ describe('artwork detail endpoints', () => {
 			mediaContentType: 'image/avif',
 			mediaSizeBytes: 128,
 			mediaUrl: '/api/artworks/artwork-1/media',
+			downvotes: 1,
 			score: 7,
 			title: 'Detail artwork',
-			updatedAt: new Date('2026-03-26T12:00:00.000Z')
+			updatedAt: new Date('2026-03-26T12:00:00.000Z'),
+			upvotes: 8,
+			viewerVote: 'up'
 		});
 
 		const { GET } = await import('./+server');
@@ -70,8 +73,11 @@ describe('artwork detail endpoints', () => {
 					parentStatus: 'available'
 				},
 				mediaUrl: '/api/artworks/artwork-1/media',
+				downvotes: 1,
 				score: 7,
-				commentCount: 3
+				commentCount: 3,
+				upvotes: 8,
+				viewerVote: 'up'
 			}
 		});
 	});

@@ -84,6 +84,32 @@ const baseSelect = {
 	authorAvatarUrl: users.avatarUrl
 };
 
+const voteCountSql = (value: 'down' | 'up') =>
+	sql<number>`coalesce((
+		select count(*)::int
+		from "app"."artwork_votes" vote
+		where vote.artwork_id = ${artworks.id}
+			and vote.value = ${sql.raw(`'${value}'::app.artwork_vote_value`)}
+	), 0)`;
+
+const viewerVoteSql = (viewer: { isModerator: boolean; userId: string | null }) =>
+	viewer.userId
+		? sql<'down' | 'up' | null>`(
+			select vote.value
+			from "app"."artwork_votes" vote
+			where vote.artwork_id = ${artworks.id}
+				and vote.user_id = ${viewer.userId}
+			limit 1
+		)`
+		: sql<null>`null`;
+
+const buildBaseSelect = (viewer: { isModerator: boolean; userId: string | null }) => ({
+	...baseSelect,
+	downvotes: voteCountSql('down').as('downvotes'),
+	upvotes: voteCountSql('up').as('upvotes'),
+	viewerVote: viewerVoteSql(viewer).as('viewerVote')
+});
+
 type ArtworkReadRow = {
 	authorAvatarUrl: string | null;
 	authorId: string;
@@ -101,6 +127,9 @@ type ArtworkReadRow = {
 	storageKey: string;
 	title: string;
 	updatedAt: Date;
+	downvotes?: number;
+	upvotes?: number;
+	viewerVote?: 'down' | 'up' | null;
 	rankingValue?: number;
 };
 
@@ -145,12 +174,18 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	score: row.score,
 	storageKey: row.storageKey,
 	title: row.title,
+	downvotes: row.downvotes,
+	upvotes: row.upvotes,
+	viewerVote: row.viewerVote ?? null,
 	rankingValue: row.rankingValue,
 	updatedAt: row.updatedAt
 });
 
-const rankedBaseSelect = (rankingExpression: ReturnType<typeof sql<number>>) => ({
-	...baseSelect,
+const buildRankedBaseSelect = (
+	viewer: { isModerator: boolean; userId: string | null },
+	rankingExpression: ReturnType<typeof sql<number>>
+) => ({
+	...buildBaseSelect(viewer),
 	rankingValue: rankingExpression.as('rankingValue')
 });
 
@@ -158,7 +193,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 	async listRecentArtworks(input: ListRecentArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
 		const rows = await db
-			.select(baseSelect)
+			.select(buildBaseSelect(viewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(and(artworkVisibilityWhere(viewer), recentCursorWhere(input.cursor) ?? undefined))
@@ -171,7 +206,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 		const viewer = defaultViewer(input.viewer);
 		const rankingExpression = hotRankingSql(input.now);
 		const rows = await db
-			.select(rankedBaseSelect(rankingExpression))
+			.select(buildRankedBaseSelect(viewer, rankingExpression))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(
@@ -190,7 +225,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 		const rankingExpression = sql<number>`${artworks.score}::double precision`;
 		const windowStart = getTopWindowStart(input.now, input.window);
 		const rows = await db
-			.select(rankedBaseSelect(rankingExpression))
+			.select(buildRankedBaseSelect(viewer, rankingExpression))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(
@@ -208,7 +243,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 	async findArtworkDetailById(id, viewer) {
 		const activeViewer = defaultViewer(viewer);
 		const row = await db
-			.select(baseSelect)
+			.select(buildBaseSelect(activeViewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(and(eq(artworks.id, id), artworkVisibilityWhere(activeViewer)))
