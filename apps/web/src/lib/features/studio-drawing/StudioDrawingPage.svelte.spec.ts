@@ -31,7 +31,13 @@ describe('StudioDrawingPage', () => {
 
 		await expect.element(page.getByText('Artwork published', { exact: true })).toBeVisible();
 		await expect.element(page.getByRole('heading', { name: 'Untitled #0001' })).toBeVisible();
+		await expect
+			.element(page.getByRole('link', { name: 'Exit Studio' }))
+			.toHaveAttribute('data-sticker-variant', 'secondary');
 		await expect.element(page.getByRole('link', { name: 'Open gallery' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Draw again' }))
+			.toHaveAttribute('data-sticker-variant', 'accent');
 		expect(createArtworkFile).toHaveBeenCalled();
 		expect(checkImageContent).toHaveBeenCalledWith(expect.any(File), 'artwork');
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(File), {

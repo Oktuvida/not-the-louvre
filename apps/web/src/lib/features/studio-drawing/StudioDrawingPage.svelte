@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
-	import { resolve } from '$app/paths';
 	import {
 		checkImageContent as defaultCheckImageContent,
 		type ImageContentChecker
@@ -12,6 +11,8 @@
 		DrawPublishedArtwork
 	} from '$lib/features/studio-drawing/publish-contract';
 	import { exportArtworkFile } from '$lib/features/studio-drawing/canvas-export';
+	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import DrawingCanvas from '$lib/features/studio-drawing/components/DrawingCanvas.svelte';
 	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 
@@ -134,24 +135,22 @@
 		></div>
 	</div>
 
-	<a
-		href={resolve('/')}
-		class="absolute top-8 left-8 z-30 flex -rotate-1 items-center gap-2 rounded-lg border-3 border-[#2d2420] bg-[#8b9d91] px-6 py-3 font-semibold text-[#fdfbf7] shadow-lg transition-transform hover:scale-105"
-		style="font-family: 'Baloo 2', sans-serif;"
-	>
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			width="20"
-			height="20"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg
-		>
-		<span>Exit Studio</span>
-	</a>
+	<div class="absolute top-8 left-8 z-30">
+		<GameLink href="/" variant="secondary" size="md" className="-rotate-1 shadow-lg">
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="20"
+				height="20"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg
+			>
+			<span>Exit Studio</span>
+		</GameLink>
+	</div>
 
 	{#if user}
 		<div
@@ -205,19 +204,12 @@
 			<h2 class="mt-2 text-2xl font-black text-[#2d2420]">{publishedArtwork.title}</h2>
 			<p class="mt-2 text-sm text-[#6b625a]">Artwork id: {publishedArtwork.id}</p>
 			<div class="mt-4 flex gap-3">
-				<button
-					type="button"
-					class="rounded-lg border-2 border-[#2d2420] bg-[#d4956c] px-4 py-2 font-semibold text-[#fdfbf7]"
-					onclick={clearCanvas}
-				>
-					Draw again
-				</button>
-				<a
-					href={resolve('/gallery')}
-					class="rounded-lg border-2 border-[#2d2420] bg-[#8b9d91] px-4 py-2 font-semibold text-[#fdfbf7]"
-				>
-					Open gallery
-				</a>
+				<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
+					<span>Draw again</span>
+				</GameButton>
+				<GameLink href="/gallery" variant="secondary" size="sm">
+					<span>Open gallery</span>
+				</GameLink>
 			</div>
 		</div>
 	{/if}
