@@ -168,7 +168,7 @@ describe('draw route page', () => {
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(
 			createActionEvent({
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.png', { type: 'image/png' }),
+				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
 				title: 'My First Piece'
 			})
 		);
@@ -199,7 +199,7 @@ describe('draw route page', () => {
 		await actions.publish(
 			createActionEvent({
 				isNsfw: 'true',
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.png', { type: 'image/png' }),
+				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
 				parentArtworkId: 'artwork-parent',
 				title: 'Forked Piece'
 			})
@@ -227,7 +227,7 @@ describe('draw route page', () => {
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(
 			createActionEvent({
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.jpg', { type: 'image/jpeg' }),
+				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
 				title: 'Bad upload'
 			})
 		);

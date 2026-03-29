@@ -127,7 +127,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await setAvatarExportMode(page, 'bad');
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expect(
-			page.getByText('Avatar media must decode as a single still PNG image')
+			page.getByText('Avatar media must decode as a single still WebP image')
 		).toBeVisible();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 
@@ -386,7 +386,7 @@ test.describe('Not the Louvre frontend port', () => {
 		).toBeVisible();
 		await expect(page).toHaveURL(/\/draw$/);
 
-		await setDrawingExportMode(page, 'jpeg');
+		await setDrawingExportMode(page, 'webp');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
 	});
