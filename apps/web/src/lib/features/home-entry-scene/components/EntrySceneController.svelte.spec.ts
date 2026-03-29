@@ -41,7 +41,7 @@ describe('EntrySceneController', () => {
 		});
 
 		await expect.element(page.getByText('Signed in as')).toBeInTheDocument();
-		await expect.element(page.getByText('artist_1')).toBeInTheDocument();
+		await expect.element(page.getByText(/Signed in as/)).toHaveTextContent('artist_1');
 		await expect.element(page.getByRole('button', { name: 'Come In' })).not.toBeInTheDocument();
 	});
 
@@ -126,7 +126,7 @@ describe('EntrySceneController', () => {
 
 		await expect.element(page.getByText('Finish your avatar')).toBeVisible();
 		await page.getByRole('button', { name: 'Close' }).click();
-		await new Promise((resolve) => setTimeout(resolve, 1400));
+		await new Promise((resolve) => setTimeout(resolve, 1800));
 
 		await expect.element(page.getByText('Signed in as')).toBeVisible();
 	});

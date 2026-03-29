@@ -338,22 +338,19 @@
 				</label>
 
 				<div class="flex gap-3">
-					<button
+					<GameButton
 						type="button"
-						class="rounded-[1rem] border-2 border-[#c8af95] bg-white px-4 py-3 text-sm font-semibold text-[#5a554d]"
+						variant="ghost"
+						size="sm"
 						onclick={() => {
 							saveError = '';
 							paintBackground();
 						}}
 						disabled={isSaving}
 					>
-						Clear
-					</button>
-					<GameButton
-						onclick={handleEnterGallery}
-						disabled={isSaving}
-						className="gap-3 px-6 py-3 text-sm font-black"
-					>
+						<span>Clear</span>
+					</GameButton>
+					<GameButton onclick={handleEnterGallery} disabled={isSaving} size="md">
 						<span>{isSaving ? 'Saving...' : 'Enter the gallery'}</span>
 					</GameButton>
 				</div>

@@ -19,6 +19,7 @@ import type {
 } from './types';
 
 type ListArtworkDiscoveryInput = {
+	authorId?: string | null;
 	cursor?: string | null;
 	limit?: number;
 	sort: ArtworkDiscoverySort;
@@ -299,6 +300,7 @@ export const listArtworkDiscovery = async (
 						viewer
 					})
 				: await repository.listTopArtworks({
+						authorId: input.authorId,
 						cursor: cursor?.sort === 'top' ? cursor : null,
 						limit: limit + 1,
 						now: snapshotAt,

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Detail: Polaroid Cards — Not the Louvre</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@400;500;600;700;800&family=Caveat:wght@400;500;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Baloo 2', 'Trebuchet MS', sans-serif;
+    color: #2d2420;
+    background-color: #b8956e;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 56px, rgba(0,0,0,0.06) 56px, rgba(0,0,0,0.06) 59px),
+      repeating-linear-gradient(90deg, transparent, transparent 124px, rgba(0,0,0,0.04) 124px, rgba(0,0,0,0.04) 127px),
+      radial-gradient(circle at 85% 15%, rgba(255,248,225,0.2) 0%, transparent 45%);
+    padding: 2rem;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-family: 'Fredoka', sans-serif;
+    color: #fdfbf7;
+    text-align: center;
+    font-size: 1.6rem;
+    margin-bottom: 0.3rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+  .subtitle {
+    text-align: center;
+    color: rgba(253,251,247,0.7);
+    font-size: 0.85rem;
+    margin-bottom: 2rem;
+  }
+
+  .section-label {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(253,251,247,0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-align: center;
+    margin: 2.5rem 0 1rem;
+  }
+
+  /* ============================================= */
+  /*   POLAROID BASE                               */
+  /* ============================================= */
+
+  .polaroid-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 2.5rem;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 1rem 0;
+  }
+
+  .polaroid {
+    position: relative;
+    background: #fdfbf7;
+    padding: 8px 8px 0 8px;
+    box-shadow: 3px 4px 12px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+  .polaroid:hover {
+    transform: scale(1.06) rotate(0deg) !important;
+    z-index: 5;
+  }
+
+  /* Image area */
+  .polaroid-image {
+    width: 100%;
+    aspect-ratio: 1;
+    overflow: hidden;
+    position: relative;
+  }
+  .polaroid-image .artwork-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+  }
+
+  /* Caption area (white bottom) */
+  .polaroid-caption {
+    padding: 8px 6px 10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* Avatar in the caption area */
+  .polaroid-avatar {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    border: 2.5px solid #2d2420;
+    background: #e8ddd0;
+    box-shadow: 1px 2px 4px rgba(0,0,0,0.15);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .polaroid-avatar img,
+  .polaroid-avatar .avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .avatar-placeholder {
+    background: linear-gradient(135deg, #c4b5a0, #a89680);
+  }
+
+  .polaroid-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .polaroid-title {
+    font-family: 'Caveat', cursive;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #2d2420;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .polaroid-artist {
+    font-family: 'Caveat', cursive;
+    font-size: 0.82rem;
+    color: #8a6c52;
+  }
+  .polaroid-stats {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.55rem;
+    color: #8a6c52;
+    margin-top: 1px;
+    letter-spacing: 0.04em;
+  }
+
+  /* Rank badge */
+  .rank-circle {
+    position: absolute;
+    top: -6px;
+    left: -6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #d4956c;
+    border: 2px solid #2d2420;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #2d2420;
+    z-index: 4;
+    box-shadow: 1px 2px 4px rgba(0,0,0,0.2);
+  }
+
+  /* ============================================= */
+  /*   ATTACHMENT METHODS                          */
+  /* ============================================= */
+
+  /* Tape */
+  .polaroid-tape {
+    position: absolute;
+    width: 48px;
+    height: 16px;
+    background: rgba(255,255,240,0.55);
+    border: 1px solid rgba(200,190,170,0.3);
+    z-index: 3;
+  }
+  .tape-top-center { top: -7px; left: 50%; transform: translateX(-50%) rotate(-3deg); }
+  .tape-top-left { top: -6px; left: 8px; transform: rotate(12deg); }
+  .tape-top-right { top: -6px; right: 6px; transform: rotate(-8deg); }
+
+  /* Pin */
+  .polaroid-pin {
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.3);
+    z-index: 4;
+  }
+  .polaroid-pin::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 4px;
+    width: 4px; height: 4px;
+    background: rgba(255,255,255,0.35);
+    border-radius: 50%;
+  }
+  .pin-blue { background: radial-gradient(circle at 4px 4px, #4a90d9, #2d6bb5); }
+  .pin-red { background: radial-gradient(circle at 4px 4px, #e74c3c, #c0392b); }
+  .pin-green { background: radial-gradient(circle at 4px 4px, #5dba5d, #3a8f3a); }
+  .pin-yellow { background: radial-gradient(circle at 4px 4px, #f4c430, #d4a017); }
+
+  /* ============================================= */
+  /*   ANNOTATIONS                                 */
+  /* ============================================= */
+
+  .note {
+    text-align: center;
+    font-family: 'Caveat', cursive;
+    font-size: 1rem;
+    color: rgba(253,251,247,0.6);
+    margin-top: 0.5rem;
+    font-style: italic;
+  }
+
+  .detail-callout {
+    max-width: 700px;
+    margin: 2rem auto;
+    background: rgba(253,251,247,0.08);
+    border: 1px solid rgba(253,251,247,0.15);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    color: rgba(253,251,247,0.75);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .detail-callout strong {
+    color: #fdfbf7;
+    font-weight: 600;
+  }
+  .detail-callout ul {
+    margin: 0.5rem 0 0 1.2rem;
+  }
+  .detail-callout li {
+    margin-bottom: 0.3rem;
+  }
+</style>
+</head>
+<body>
+
+<h1>Polaroid Cards — Detailed Spec</h1>
+<p class="subtitle">Non-ranked artwork cards for the gallery grid</p>
+
+<div class="detail-callout">
+  <strong>Key design points:</strong>
+  <ul>
+    <li><strong>Avatar in the white caption area</strong> — small circle (32px) next to the title/artist text, not floating on the corner</li>
+    <li><strong>Handwritten font</strong> — Caveat for title and artist name, Fredoka for stats</li>
+    <li><strong>Each card has unique personality</strong> — different rotation, different attachment method (tape or pin), different pin color</li>
+    <li><strong>Rank badge</strong> — small circle on top-left corner for positions #4+</li>
+    <li><strong>White border</strong> — thicker at bottom to hold caption + avatar (classic Polaroid proportions)</li>
+  </ul>
+</div>
+
+<!-- ============================================= -->
+<!--   ROW 1: TAPE VARIATIONS                     -->
+<!-- ============================================= -->
+<p class="section-label">Tape attachment variations</p>
+
+<div class="polaroid-grid">
+
+  <!-- Card: Tape top-center -->
+  <div class="polaroid" style="transform: rotate(-2deg);">
+    <div class="polaroid-tape tape-top-center"></div>
+    <div class="rank-circle">4</div>
+    <div class="polaroid-image">
+      <div class="artwork-img" style="background: linear-gradient(135deg, #f4c430, #d4a017);"></div>
+    </div>
+    <div class="polaroid-caption">
+      <div class="polaroid-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #d4c4b0, #b8a890);"></div></div>
+      <div class="polaroid-text">
+        <div class="polaroid-title">Sunset Dreams</div>
+        <div class="polaroid-artist">by InkWizard</div>
+        <div class="polaroid-stats">⭐ 42 · 💬 8</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card: Tape top-left -->
+  <div class="polaroid" style="transform: rotate(1.5deg);">
+    <div class="polaroid-tape tape-top-left"></div>
+    <div class="rank-circle">5</div>
+    <div class="polaroid-image">
+      <div class="artwork-img" style="background: linear-gradient(135deg, #b8d4e3, #6b9db5);"></div>
+    </div>
+    <div class="polaroid-caption">
+      <div class="polaroid-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #b8d4e3, #8bb8d0);"></div></div>
+      <div class="polaroid-text">
+        <div class="polaroid-title">Ocean Whispers</div>
+        <div class="polaroid-artist">by WaveRider</div>
+        <div class="polaroid-stats">⭐ 38 · 💬 5</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card: Tape top-right -->
+  <div class="polaroid" style="transform: rotate(-1deg);">
+    <div class="polaroid-tape tape-top-right"></div>
+    <div class="rank-circle">6</div>
+    <div class="polaroid-image">
+      <div class="artwork-img" style="background: linear-gradient(135deg, #c8e6c9, #6b9d6d);"></div>
+    </div>
+    <div class="polaroid-caption">
+      <div class="polaroid-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #c8e6c9, #8bba8d);"></div></div>
+      <div class="polaroid-text">
+        <div class="polaroid-title">Forest Path</div>
+        <div class="polaroid-artist">by TreeHugger</div>
+        <div class="polaroid-stats">⭐ 35 · 💬 12</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card: Two tapes (crossed) -->
+  <div class="polaroid" style="transform: rotate(2.2deg);">
+    <div class="polaroid-tape tape-top-left" style="width: 38px;"></div>
+    <div class="polaroid-tape tape-top-right" style="width: 38px;"></div>
+    <div class="rank-circle">7</div>
+    <div class="polaroid-image">
+      <div class="artwork-img" style="background: linear-gradient(135deg, #ffb6c1, #c84f6f);"></div>
+    </div>
+    <div class="polaroid-caption">
+      <div class="polaroid-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #ffb6c1, #e87a8a);"></div></div>
+      <div class="polaroid-text">
+        <div class="polaroid-title">Cotton Candy Sky</div>
+        <div class="polaroid-artist">by PinkDreamer</div>
+        <div class="polaroid-stats">⭐ 31 · 💬 3</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="note">Each tape is slightly angled differently — no two cards look the same</p>
+
+<!-- ============================================= -->
+<!--   ROW 2: PIN VARIATIONS                       -->
+<!-- ============================================= -->
+<p class="section-label">Pin attachment variations</p>
+
+<div class="polaroid-grid">
+
+  <!-- Blue pin -->
+  <div class="polaroid" style="transform: rotate(-1.8deg);">
+    <div class="polaroid-pin pin-blue"></div>
+    <div class="rank-circle">8</div>
+    <div class="polaroid-image">
+      <div class="artwork-img" style="background: linear-gradient(135deg, #2d2420, #5a4a3a);"></div>
+    </div>
+    <div class="polaroid-caption">
+      <div class="polaroid-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #d4c4b0, #a89680);"></div></div>
+      <div class="polaroid-text">
+        <div class="polaroid-title">Midnight Study</div>
+        <div class="polaroid-artist">by DarkCanvas</div>
+        <div class="polaroid-stats">⭐ 28 · 💬 7</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Red pin -->
+  <div class="polaroid" style="transform: rotate(0.8deg);">
+    <div class="polaroid-pin pin-red"></div>
+    <div class="rank-circle">9</div>
+    <div class="polaroid-image">
+      <div class="artwork-img" style="background: linear-gradient(135deg, #fef49c, #d4b82c);"></div>
+    </div>
+    <div class="polaroid-caption">
+      <div class="polaroid-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #fef49c, #e8d86c);"></div></div>
+      <div class="polaroid-text">
+        <div class="polaroid-title">Lemon Grove</div>
+        <div class="polaroid-artist">by SourArtist</div>
+        <div class="polaroid-stats">⭐ 24 · 💬 2</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Green pin -->
+  <div class="polaroid" style="transform: rotate(-2.5deg);">
+    <div class="polaroid-pin pin-green"></div>
+    <div class="rank-circle">10</div>
+    <div class="polaroid-image">
+      <div class="artwork-img" style="background: linear-gradient(135deg, #a5d6a7, #4caf50);"></div>
+    </div>
+    <div class="polaroid-caption">
+      <div class="polaroid-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #a5d6a7, #66bb6a);"></div></div>
+      <div class="polaroid-text">
+        <div class="polaroid-title">Morning Dew</div>
+        <div class="polaroid-artist">by GardenGuru</div>
+        <div class="polaroid-stats">⭐ 21 · 💬 4</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Yellow pin -->
+  <div class="polaroid" style="transform: rotate(1.2deg);">
+    <div class="polaroid-pin pin-yellow"></div>
+    <div class="rank-circle">11</div>
+    <div class="polaroid-image">
+      <div class="artwork-img" style="background: linear-gradient(135deg, #e8b896, #d4956c);"></div>
+    </div>
+    <div class="polaroid-caption">
+      <div class="polaroid-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #e8b896, #c4845c);"></div></div>
+      <div class="polaroid-text">
+        <div class="polaroid-title">Warm Glow</div>
+        <div class="polaroid-artist">by SketchFolk</div>
+        <div class="polaroid-stats">⭐ 19 · 💬 1</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="note">Pin colors are randomized per card — blue, red, green, yellow</p>
+
+<!-- ============================================= -->
+<!--   IMPLEMENTATION NOTES                        -->
+<!-- ============================================= -->
+<div class="detail-callout" style="margin-top: 3rem;">
+  <strong>Implementation notes:</strong>
+  <ul>
+    <li><strong>Rotation:</strong> Deterministic from artwork ID hash — range [-3, 3] degrees, avoiding 0 (never perfectly straight)</li>
+    <li><strong>Attachment method:</strong> Deterministic from artwork ID hash — alternates tape/pin, tape position varies (center/left/right/double)</li>
+    <li><strong>Pin color:</strong> Deterministic from artwork ID hash — cycles through blue/red/green/yellow</li>
+    <li><strong>Hover:</strong> Scale 1.06, rotation snaps to 0, z-index rises above neighbors</li>
+    <li><strong>Caption area:</strong> Avatar (32px circle) on the left, text block (title, artist, stats) on the right</li>
+    <li><strong>No torn/ragged edges</strong> — clean, straight polaroid borders</li>
+  </ul>
+</div>
+
+</body>
+</html>

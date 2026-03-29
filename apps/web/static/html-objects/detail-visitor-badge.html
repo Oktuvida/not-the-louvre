@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Detail: Visitor Badge — Not the Louvre</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@400;500;600;700;800&family=Caveat:wght@400;500;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Baloo 2', 'Trebuchet MS', sans-serif;
+    color: #2d2420;
+    background-color: #b8956e;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 56px, rgba(0,0,0,0.06) 56px, rgba(0,0,0,0.06) 59px),
+      repeating-linear-gradient(90deg, transparent, transparent 124px, rgba(0,0,0,0.04) 124px, rgba(0,0,0,0.04) 127px),
+      radial-gradient(circle at 85% 15%, rgba(255,248,225,0.2) 0%, transparent 45%);
+    padding: 2rem;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-family: 'Fredoka', sans-serif;
+    color: #fdfbf7;
+    text-align: center;
+    font-size: 1.6rem;
+    margin-bottom: 0.3rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+  .subtitle {
+    text-align: center;
+    color: rgba(253,251,247,0.7);
+    font-size: 0.85rem;
+    margin-bottom: 2rem;
+  }
+
+  .section-label {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(253,251,247,0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-align: center;
+    margin: 2.5rem 0 1rem;
+  }
+
+  .detail-callout {
+    max-width: 700px;
+    margin: 2rem auto;
+    background: rgba(253,251,247,0.08);
+    border: 1px solid rgba(253,251,247,0.15);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    color: rgba(253,251,247,0.75);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .detail-callout strong { color: #fdfbf7; font-weight: 600; }
+  .detail-callout ul { margin: 0.5rem 0 0 1.2rem; }
+  .detail-callout li { margin-bottom: 0.3rem; }
+  .detail-callout code {
+    background: rgba(253,251,247,0.12);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+  }
+
+  .note {
+    text-align: center;
+    font-family: 'Caveat', cursive;
+    font-size: 1rem;
+    color: rgba(253,251,247,0.6);
+    margin-top: 0.5rem;
+    font-style: italic;
+  }
+
+  .showcase-row {
+    display: flex;
+    gap: 2.5rem;
+    justify-content: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 1.5rem 0;
+  }
+
+  .showcase-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  /* ============================================= */
+  /*   VISITOR BADGE — "HELLO MY NAME IS"          */
+  /* ============================================= */
+
+  .visitor-badge {
+    position: relative;
+    width: 270px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 3px 4px 12px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.1);
+    border: 2px solid rgba(0,0,0,0.08);
+  }
+
+  /* Header band — default (overridden by color variant) */
+  .badge-header {
+    position: relative;
+  }
+
+  /* Tape on top of the badge (attaching it to the wall) */
+  .badge-tape {
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%) rotate(-2deg);
+    width: 54px;
+    height: 18px;
+    background: rgba(255,255,240,0.55);
+    border: 1px solid rgba(200,190,170,0.3);
+    z-index: 3;
+  }
+
+  .badge-hello {
+    color: #fdfbf7;
+    padding: 0.55rem 1rem 0.15rem;
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+    text-align: center;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .badge-myname {
+    color: rgba(253,251,247,0.8);
+    padding: 0 1rem 0.5rem;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-align: center;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  /* White body area */
+  .badge-body {
+    background: #fdfbf7;
+    padding: 0.9rem 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  /* ============================================= */
+  /*   COLOR VARIANTS                              */
+  /* ============================================= */
+
+  /* Red (classic) */
+  .badge-red .badge-header { background: #c84f4f; }
+  .badge-red .badge-footer { background: #c84f4f; }
+
+  /* Blue */
+  .badge-blue .badge-header { background: #4a7fb5; }
+  .badge-blue .badge-footer { background: #4a7fb5; }
+
+  /* Green */
+  .badge-green .badge-header { background: #5a9a5a; }
+  .badge-green .badge-footer { background: #5a9a5a; }
+
+  /* Orange */
+  .badge-orange .badge-header { background: #d4874d; }
+  .badge-orange .badge-footer { background: #d4874d; }
+
+  /* Purple */
+  .badge-purple .badge-header { background: #8b6aae; }
+  .badge-purple .badge-footer { background: #8b6aae; }
+
+  /* Avatar circle */
+  .badge-avatar {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    border-radius: 50%;
+    border: 3px solid #2d2420;
+    background: #e8ddd0;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .badge-avatar img,
+  .badge-avatar .avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .avatar-placeholder {
+    background: linear-gradient(135deg, #c4b5a0, #a89680);
+  }
+  /* Fallback icon for no-avatar users */
+  .avatar-icon {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #e8ddd0;
+  }
+  .avatar-icon svg {
+    width: 28px;
+    height: 28px;
+    stroke: #8a6c52;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* Nickname in handwriting font */
+  .badge-nickname {
+    font-family: 'Caveat', cursive;
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: #2d2420;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Footer strip — color set by variant class */
+  .badge-footer {
+    padding: 0.3rem;
+  }
+
+  /* ============================================= */
+  /*   LOGOUT BUTTON — below nav buttons           */
+  /* ============================================= */
+
+  .logout-btn {
+    border: 2.5px solid #2d2420;
+    border-radius: 12px;
+    padding: 0.35rem 0.9rem;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: #e8b896;
+    color: #2d2420;
+    box-shadow: 2px 3px 6px rgba(0,0,0,0.2);
+    cursor: pointer;
+    transform: rotate(1deg);
+    transition: transform 0.15s;
+  }
+  .logout-btn:hover {
+    transform: translateY(-2px) rotate(-1deg);
+  }
+
+  /* ============================================= */
+  /*   CONTEXT DEMO: HOMEPAGE CORNER               */
+  /* ============================================= */
+
+  .context-demo {
+    position: relative;
+    width: 360px;
+    height: 420px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    /* Simulated museum wall background */
+    background-color: #b8956e;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 56px, rgba(0,0,0,0.06) 56px, rgba(0,0,0,0.06) 59px),
+      repeating-linear-gradient(90deg, transparent, transparent 124px, rgba(0,0,0,0.04) 124px, rgba(0,0,0,0.04) 127px);
+  }
+  .context-badge {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    transform: rotate(-2deg);
+  }
+  .context-nav {
+    position: absolute;
+    bottom: 50px;
+    left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .context-nav-btn {
+    border: 2.5px solid #2d2420;
+    border-radius: 12px;
+    padding: 0.5rem 1.2rem;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    box-shadow: 2px 3px 6px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .context-gallery {
+    background: #e8b896;
+    color: #2d2420;
+    transform: rotate(-1deg);
+  }
+  .context-mystery {
+    background: #f4c430;
+    color: #2d2420;
+    transform: rotate(1deg);
+  }
+  .context-logout {
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Visitor Badge — Detailed Spec</h1>
+<p class="subtitle">"HELLO MY NAME IS" badge replacing the plain "Signed in as" card</p>
+
+<div class="detail-callout">
+  <strong>Key design points:</strong>
+  <ul>
+    <li><strong>"HELLO MY NAME IS"</strong> — classic visitor name badge layout with colored header band</li>
+    <li><strong>5 color variants</strong> — red, blue, green, orange, purple — deterministically chosen from user ID hash</li>
+    <li><strong>Avatar circle</strong> — 52px, dark border, in the white body area next to the nickname</li>
+    <li><strong>Handwritten nickname</strong> — Caveat font, large, as if someone wrote their name on the badge</li>
+    <li><strong>Red header/footer strips</strong> — or blue, green, orange, purple depending on the user's assigned color</li>
+    <li><strong>Rounded corners</strong> — 12px border-radius, like a real sticker badge</li>
+    <li><strong>Tape attachment</strong> — translucent tape strip on top attaching the badge to the wall</li>
+    <li><strong>Slight rotation</strong> — -2deg, as if stuck on casually</li>
+    <li><strong>Logout button moves out</strong> — becomes a separate sticker button below the Gallery/Mystery nav buttons</li>
+  </ul>
+</div>
+
+<!-- ============================================= -->
+<!--   COLOR VARIANTS                              -->
+<!-- ============================================= -->
+<p class="section-label">Color variants — randomly chosen per user</p>
+
+<div class="showcase-row">
+  <div class="showcase-item">
+    <div class="visitor-badge badge-red" style="transform: rotate(-2deg);">
+      <div class="badge-tape"></div>
+      <div class="badge-header">
+        <div class="badge-hello">Hello</div>
+        <div class="badge-myname">my name is</div>
+      </div>
+      <div class="badge-body">
+        <div class="badge-avatar"><div class="avatar-placeholder"></div></div>
+        <div class="badge-nickname">Picasso42</div>
+      </div>
+      <div class="badge-footer"></div>
+    </div>
+    <div class="note">Red (classic)</div>
+  </div>
+
+  <div class="showcase-item">
+    <div class="visitor-badge badge-blue" style="transform: rotate(1.5deg);">
+      <div class="badge-tape" style="transform: translateX(-50%) rotate(3deg);"></div>
+      <div class="badge-header">
+        <div class="badge-hello">Hello</div>
+        <div class="badge-myname">my name is</div>
+      </div>
+      <div class="badge-body">
+        <div class="badge-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #b8d4e3, #8bb8d0);"></div></div>
+        <div class="badge-nickname">WaveRider</div>
+      </div>
+      <div class="badge-footer"></div>
+    </div>
+    <div class="note">Blue</div>
+  </div>
+
+  <div class="showcase-item">
+    <div class="visitor-badge badge-green" style="transform: rotate(-1deg);">
+      <div class="badge-tape" style="transform: translateX(-50%) rotate(-4deg);"></div>
+      <div class="badge-header">
+        <div class="badge-hello">Hello</div>
+        <div class="badge-myname">my name is</div>
+      </div>
+      <div class="badge-body">
+        <div class="badge-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #c8e6c9, #8bba8d);"></div></div>
+        <div class="badge-nickname">TreeHugger</div>
+      </div>
+      <div class="badge-footer"></div>
+    </div>
+    <div class="note">Green</div>
+  </div>
+</div>
+
+<div class="showcase-row">
+  <div class="showcase-item">
+    <div class="visitor-badge badge-orange" style="transform: rotate(0.8deg);">
+      <div class="badge-tape" style="transform: translateX(-50%) rotate(1deg);"></div>
+      <div class="badge-header">
+        <div class="badge-hello">Hello</div>
+        <div class="badge-myname">my name is</div>
+      </div>
+      <div class="badge-body">
+        <div class="badge-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #e8b896, #c4845c);"></div></div>
+        <div class="badge-nickname">InkWizard</div>
+      </div>
+      <div class="badge-footer"></div>
+    </div>
+    <div class="note">Orange</div>
+  </div>
+
+  <div class="showcase-item">
+    <div class="visitor-badge badge-purple" style="transform: rotate(-1.5deg);">
+      <div class="badge-tape" style="transform: translateX(-50%) rotate(-2deg);"></div>
+      <div class="badge-header">
+        <div class="badge-hello">Hello</div>
+        <div class="badge-myname">my name is</div>
+      </div>
+      <div class="badge-body">
+        <div class="badge-avatar"><div class="avatar-placeholder" style="background: linear-gradient(135deg, #d4b8e8, #a880c4);"></div></div>
+        <div class="badge-nickname">DarkCanvas</div>
+      </div>
+      <div class="badge-footer"></div>
+    </div>
+    <div class="note">Purple</div>
+  </div>
+</div>
+
+<p class="note">Color is deterministic from user ID hash — same user always gets the same color</p>
+
+<!-- ============================================= -->
+<!--   AVATAR FALLBACK                             -->
+<!-- ============================================= -->
+<p class="section-label">Avatar fallback — no avatar set</p>
+
+<div class="showcase-row">
+  <div class="showcase-item">
+    <div class="visitor-badge badge-red" style="transform: rotate(-2deg);">
+      <div class="badge-tape"></div>
+      <div class="badge-header">
+        <div class="badge-hello">Hello</div>
+        <div class="badge-myname">my name is</div>
+      </div>
+      <div class="badge-body">
+        <div class="badge-avatar">
+          <div class="avatar-placeholder"></div>
+        </div>
+        <div class="badge-nickname">Picasso42</div>
+      </div>
+      <div class="badge-footer"></div>
+    </div>
+    <div class="note">With avatar image</div>
+  </div>
+
+  <div class="showcase-item">
+    <div class="visitor-badge badge-blue" style="transform: rotate(1deg);">
+      <div class="badge-tape" style="transform: translateX(-50%) rotate(3deg);"></div>
+      <div class="badge-header">
+        <div class="badge-hello">Hello</div>
+        <div class="badge-myname">my name is</div>
+      </div>
+      <div class="badge-body">
+        <div class="badge-avatar">
+          <div class="avatar-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+          </div>
+        </div>
+        <div class="badge-nickname">BlobArtist</div>
+      </div>
+      <div class="badge-footer"></div>
+    </div>
+    <div class="note">Without avatar (fallback icon)</div>
+  </div>
+</div>
+
+<!-- ============================================= -->
+<!--   LONG NICKNAME HANDLING                      -->
+<!-- ============================================= -->
+<p class="section-label">Long nickname handling</p>
+
+<div class="showcase-row">
+  <div class="showcase-item">
+    <div class="visitor-badge badge-orange" style="transform: rotate(-1deg);">
+      <div class="badge-tape" style="transform: translateX(-50%) rotate(-4deg);"></div>
+      <div class="badge-header">
+        <div class="badge-hello">Hello</div>
+        <div class="badge-myname">my name is</div>
+      </div>
+      <div class="badge-body">
+        <div class="badge-avatar">
+          <div class="avatar-placeholder" style="background: linear-gradient(135deg, #b8d4e3, #8bb8d0);"></div>
+        </div>
+        <div class="badge-nickname">SuperLongArtistName99</div>
+      </div>
+      <div class="badge-footer"></div>
+    </div>
+    <div class="note">Truncates with ellipsis</div>
+  </div>
+
+  <div class="showcase-item">
+    <div class="visitor-badge badge-purple" style="transform: rotate(0.5deg);">
+      <div class="badge-tape" style="transform: translateX(-50%) rotate(1deg);"></div>
+      <div class="badge-header">
+        <div class="badge-hello">Hello</div>
+        <div class="badge-myname">my name is</div>
+      </div>
+      <div class="badge-body">
+        <div class="badge-avatar">
+          <div class="avatar-placeholder" style="background: linear-gradient(135deg, #c8e6c9, #8bba8d);"></div>
+        </div>
+        <div class="badge-nickname">Jo</div>
+      </div>
+      <div class="badge-footer"></div>
+    </div>
+    <div class="note">Short names work fine too</div>
+  </div>
+</div>
+
+<!-- ============================================= -->
+<!--   IN CONTEXT: HOMEPAGE CORNER                 -->
+<!-- ============================================= -->
+<p class="section-label">In context — homepage top-left corner</p>
+
+<div class="showcase-row">
+  <div class="showcase-item">
+    <div class="context-demo">
+      <!-- Badge in top-left -->
+      <div class="context-badge">
+        <div class="visitor-badge badge-green" style="width: 240px;">
+          <div class="badge-tape"></div>
+          <div class="badge-header">
+            <div class="badge-hello" style="font-size: 1rem; padding: 0.45rem 0.8rem 0.1rem;">Hello</div>
+            <div class="badge-myname" style="padding: 0 0.8rem 0.4rem;">my name is</div>
+          </div>
+          <div class="badge-body" style="padding: 0.7rem 1rem;">
+            <div class="badge-avatar" style="width: 44px; height: 44px; min-width: 44px;">
+              <div class="avatar-placeholder"></div>
+            </div>
+            <div class="badge-nickname" style="font-size: 1.5rem;">Picasso42</div>
+          </div>
+          <div class="badge-footer"></div>
+        </div>
+      </div>
+
+      <!-- Nav buttons bottom-left -->
+      <div class="context-nav">
+        <div class="context-nav-btn context-gallery">Gallery</div>
+        <div class="context-nav-btn context-mystery">Mystery</div>
+        <div class="context-logout">
+          <div class="logout-btn">Logout</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">Badge top-left, logout below nav buttons</div>
+  </div>
+</div>
+
+<!-- ============================================= -->
+<!--   BADGE ANATOMY                               -->
+<!-- ============================================= -->
+<p class="section-label">Badge anatomy</p>
+
+<div class="showcase-row">
+  <div class="showcase-item">
+    <div style="width: 340px; position: relative;">
+      <!-- The badge -->
+      <div class="visitor-badge badge-red" style="transform: none; width: 270px; margin: 0 auto;">
+        <div class="badge-header">
+          <div class="badge-hello">Hello</div>
+          <div class="badge-myname">my name is</div>
+        </div>
+        <div class="badge-body">
+          <div class="badge-avatar">
+            <div class="avatar-placeholder"></div>
+          </div>
+          <div class="badge-nickname">Picasso42</div>
+        </div>
+        <div class="badge-footer"></div>
+      </div>
+      <!-- Annotations -->
+      <div style="position: absolute; top: 4px; right: -10px; font-family: 'Caveat', cursive; font-size: 0.85rem; color: rgba(253,251,247,0.6); transform: rotate(3deg);">
+        ← red header #c84f4f
+      </div>
+      <div style="position: absolute; top: 45px; right: -10px; font-family: 'Caveat', cursive; font-size: 0.85rem; color: rgba(253,251,247,0.6); transform: rotate(2deg);">
+        ← Fredoka 700
+      </div>
+      <div style="position: absolute; top: 80px; right: -10px; font-family: 'Caveat', cursive; font-size: 0.85rem; color: rgba(253,251,247,0.6); transform: rotate(-1deg);">
+        ← 52px avatar + 3px border
+      </div>
+      <div style="position: absolute; top: 100px; right: -10px; font-family: 'Caveat', cursive; font-size: 0.85rem; color: rgba(253,251,247,0.6); transform: rotate(1deg);">
+        ← Caveat 1.7rem
+      </div>
+      <div style="position: absolute; bottom: 2px; right: -10px; font-family: 'Caveat', cursive; font-size: 0.85rem; color: rgba(253,251,247,0.6); transform: rotate(-2deg);">
+        ← red footer strip
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================= -->
+<!--   IMPLEMENTATION NOTES                        -->
+<!-- ============================================= -->
+<div class="detail-callout" style="margin-top: 3rem;">
+  <strong>Implementation notes:</strong>
+  <ul>
+    <li><strong>Replaces</strong> the current <code>PersistentNav.svelte</code> signed-in card (lines 22-38)</li>
+    <li><strong>Create a <code>VisitorBadge</code> Svelte component</strong> with props: <code>nickname: string</code>, <code>avatarUrl?: string</code>, <code>userId: string</code></li>
+    <li><strong>5 color variants:</strong> red (<code>#c84f4f</code>), blue (<code>#4a7fb5</code>), green (<code>#5a9a5a</code>), orange (<code>#d4874d</code>), purple (<code>#8b6aae</code>)</li>
+    <li><strong>Color is deterministic</strong> — derived from user ID hash (<code>hashString(userId) % 5</code>), so the same user always gets the same badge color</li>
+    <li><strong>CSS-only</strong> — rounded container with overflow hidden, colored divs for header/footer, flex body</li>
+    <li><strong>Tape attachment</strong> — same translucent tape style used on post-its and polaroids</li>
+    <li><strong>Fallback avatar</strong> — when <code>avatarUrl</code> is null, show a simple person icon SVG on the beige background</li>
+    <li><strong>Logout button moves out of the badge</strong> — becomes a small sticker button below the Gallery and Mystery nav buttons in the bottom-left corner</li>
+    <li><strong>Rotation:</strong> slight -2deg tilt, consistent with the "objects stuck on the wall" aesthetic</li>
+    <li><strong>Position:</strong> absolute top-left corner of the homepage overlay, same as current card</li>
+  </ul>
+</div>
+
+</body>
+</html>

@@ -1048,3 +1048,303 @@ export function createArtworkFrameUrl(
 
 	return { url: canvas.toDataURL('image/png'), opening };
 }
+
+/* ══════════════════════════════════════════════════════════ *
+ *  Sticker / tape-label button background                    *
+ * ══════════════════════════════════════════════════════════ */
+
+export type StickerVariant = 'primary' | 'secondary' | 'accent' | 'danger' | 'ghost';
+
+export interface StickerBackgroundOptions {
+	variant?: StickerVariant;
+}
+
+const STICKER_COLORS = {
+	ink: [47, 36, 28] as Rgb,
+	paper: [251, 247, 240] as Rgb,
+	primary: [212, 131, 74] as Rgb,
+	secondary: [113, 145, 127] as Rgb,
+	accent: [217, 176, 123] as Rgb,
+	danger: [162, 77, 73] as Rgb
+};
+
+const PAINT_STAIN_COLORS: Rgb[] = [
+	[244, 196, 48],
+	[212, 149, 108],
+	[139, 157, 145],
+	[200, 79, 79],
+	[212, 131, 74],
+	[217, 176, 123]
+];
+
+const STICKER_TAPE_TINTS: Record<StickerVariant, Rgb> = {
+	primary: [255, 250, 230],
+	secondary: [240, 245, 242],
+	accent: [255, 250, 235],
+	danger: [250, 235, 233],
+	ghost: [245, 240, 232]
+};
+
+/** Park-Miller LCG seeded PRNG — returns values in (0, 1). */
+function makeRng(seed: number) {
+	return () => {
+		seed = (seed * 16807) % 2147483647;
+		return (seed & 0x7fffffff) / 2147483647;
+	};
+}
+
+/** Apply per-pixel luminance noise to existing canvas content. */
+function applyNoise(
+	ctx: CanvasRenderingContext2D,
+	w: number,
+	h: number,
+	amplitude = 4,
+	seed = 77341
+) {
+	const rng = makeRng(seed);
+	const imageData = ctx.getImageData(0, 0, w, h);
+	const d = imageData.data;
+
+	for (let i = 0; i < d.length; i += 4) {
+		if (d[i + 3] > 0) {
+			const n = (rng() - 0.5) * amplitude;
+			d[i] = Math.max(0, Math.min(255, d[i] + n));
+			d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + n));
+			d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + n));
+		}
+	}
+
+	ctx.putImageData(imageData, 0, 0);
+}
+
+/** Scatter small paint-stain ellipses over the canvas area. */
+function drawPaintStains(
+	ctx: CanvasRenderingContext2D,
+	w: number,
+	h: number,
+	count: number,
+	seed = 12345
+) {
+	const rng = makeRng(seed);
+
+	for (let i = 0; i < count; i++) {
+		const c = PAINT_STAIN_COLORS[Math.floor(rng() * PAINT_STAIN_COLORS.length)];
+		const cx = rng() * w;
+		const cy = rng() * h;
+		const r = 2 + rng() * 8;
+		const a = 0.06 + rng() * 0.1;
+
+		ctx.fillStyle = rgb(c, a);
+		ctx.beginPath();
+		ctx.ellipse(cx, cy, r, r * (0.5 + rng() * 0.7), rng() * Math.PI, 0, Math.PI * 2);
+		ctx.fill();
+
+		/* drip / satellite drop */
+		if (rng() > 0.5) {
+			const dx = cx + (rng() - 0.5) * r * 3;
+			const dy = cy + rng() * r * 2;
+			ctx.fillStyle = rgb(c, a * 0.6);
+			ctx.beginPath();
+			ctx.ellipse(dx, dy, r * 0.25, r * 0.4, rng() * Math.PI, 0, Math.PI * 2);
+			ctx.fill();
+		}
+
+		/* micro-splatter */
+		if (rng() > 0.6) {
+			for (let s = 0; s < 2; s++) {
+				const sx = cx + (rng() - 0.5) * r * 4;
+				const sy = cy + (rng() - 0.5) * r * 4;
+				ctx.fillStyle = rgb(c, a * 0.4);
+				ctx.beginPath();
+				ctx.arc(sx, sy, 0.5 + rng(), 0, Math.PI * 2);
+				ctx.fill();
+			}
+		}
+	}
+}
+
+/** Trace a rounded-rectangle sub-path (does beginPath + closePath). */
+function roundRect(
+	ctx: CanvasRenderingContext2D,
+	x: number,
+	y: number,
+	w: number,
+	h: number,
+	r: number
+) {
+	ctx.beginPath();
+	ctx.moveTo(x + r, y);
+	ctx.lineTo(x + w - r, y);
+	ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+	ctx.lineTo(x + w, y + h - r);
+	ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+	ctx.lineTo(x + r, y + h);
+	ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+	ctx.lineTo(x, y + r);
+	ctx.quadraticCurveTo(x, y, x + r, y);
+	ctx.closePath();
+}
+
+/**
+ * Draw a sticker / tape-label background onto a canvas.
+ *
+ * Renders the paper body, colour band, masking-tape strips at corners,
+ * torn paper edges, paint stains, an optional coffee-ring mark, and
+ * per-pixel noise.  Text and icons are overlaid as HTML — this function
+ * draws only the visual background.
+ *
+ * Output is deterministic for a given (w, h, variant) triple.
+ */
+export function drawStickerBackground(
+	ctx: CanvasRenderingContext2D,
+	w: number,
+	h: number,
+	options: StickerBackgroundOptions = {}
+) {
+	const { variant = 'primary' } = options;
+	const bandColor = variant === 'ghost' ? STICKER_COLORS.paper : STICKER_COLORS[variant];
+	const tapeColor = STICKER_TAPE_TINTS[variant];
+	const rng = makeRng(99887 + w * 7 + h * 13 + (variant.charCodeAt(0) || 0) * 31);
+
+	ctx.clearRect(0, 0, w, h);
+
+	/* ── shadow as if slightly lifted from wall ─────── */
+	ctx.save();
+	ctx.shadowColor = 'rgba(47,36,28,0.12)';
+	ctx.shadowOffsetX = 1;
+	ctx.shadowOffsetY = 3;
+	ctx.shadowBlur = 6;
+	ctx.fillStyle = 'rgba(0,0,0,0)';
+	ctx.fillRect(3, 3, w - 6, h - 6);
+	ctx.restore();
+
+	/* ── paper body ─────────────────────────────────── */
+	roundRect(ctx, 2, 2, w - 4, h - 4, 2);
+	ctx.fillStyle = rgb(STICKER_COLORS.paper);
+	ctx.fill();
+
+	/* ── colour band ────────────────────────────────── */
+	const bandM = Math.round(h * 0.1);
+	roundRect(ctx, 2 + bandM, 2 + bandM, w - 4 - bandM * 2, h - 4 - bandM * 2, 1);
+	ctx.fillStyle = rgb(bandColor, 0.82);
+	ctx.fill();
+
+	/* highlight across top of colour band */
+	ctx.save();
+	roundRect(ctx, 2 + bandM, 2 + bandM, w - 4 - bandM * 2, h - 4 - bandM * 2, 1);
+	ctx.clip();
+	const hiGrad = ctx.createLinearGradient(0, bandM, 0, h * 0.42);
+	hiGrad.addColorStop(0, 'rgba(255,255,255,0.22)');
+	hiGrad.addColorStop(1, 'rgba(255,255,255,0)');
+	ctx.fillStyle = hiGrad;
+	ctx.fillRect(2 + bandM, 2 + bandM, w - 4 - bandM * 2, h * 0.3);
+	ctx.restore();
+
+	/* subtle bottom darkening */
+	ctx.save();
+	roundRect(ctx, 2 + bandM, 2 + bandM, w - 4 - bandM * 2, h - 4 - bandM * 2, 1);
+	ctx.clip();
+	const loGrad = ctx.createLinearGradient(0, h * 0.7, 0, h - bandM);
+	loGrad.addColorStop(0, 'rgba(0,0,0,0)');
+	loGrad.addColorStop(1, 'rgba(0,0,0,0.06)');
+	ctx.fillStyle = loGrad;
+	ctx.fillRect(2 + bandM, h * 0.7, w - 4 - bandM * 2, h * 0.3);
+	ctx.restore();
+
+	/* ── torn / rough paper edges ───────────────────── */
+	ctx.fillStyle = rgb(STICKER_COLORS.paper);
+	for (let x = 6; x < w - 6; x += 4 + rng() * 6) {
+		if (rng() > 0.6) {
+			const sz = 1 + rng() * 2;
+			ctx.fillRect(x, 1, sz, 1 + rng());
+			ctx.fillRect(x, h - 2 - rng(), sz, 1 + rng());
+		}
+	}
+	for (let y = 6; y < h - 6; y += 4 + rng() * 6) {
+		if (rng() > 0.7) {
+			const sz = 1 + rng() * 1.5;
+			ctx.fillRect(1, y, 1 + rng(), sz);
+			ctx.fillRect(w - 2 - rng(), y, 1 + rng(), sz);
+		}
+	}
+
+	/* ── tape strip — top-left corner ───────────────── */
+	const tapeW = Math.round(Math.max(16, w * 0.12));
+	const tapeH = Math.round(Math.max(20, h * 0.35));
+
+	ctx.save();
+	ctx.translate(6, 5);
+	ctx.rotate(-0.12 - rng() * 0.1);
+	ctx.fillStyle = rgb(tapeColor, 0.4 + rng() * 0.12);
+	ctx.fillRect(-tapeW / 2, -tapeH / 2, tapeW, tapeH);
+	ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+	ctx.lineWidth = 0.5;
+	ctx.strokeRect(-tapeW / 2, -tapeH / 2, tapeW, tapeH);
+	/* tape wrinkle */
+	ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+	ctx.beginPath();
+	ctx.moveTo(-tapeW / 2 + 2, -tapeH * 0.1);
+	ctx.lineTo(tapeW / 2 - 2, tapeH * 0.05);
+	ctx.stroke();
+	ctx.restore();
+
+	/* ── tape strip — bottom-right corner ───────────── */
+	ctx.save();
+	ctx.translate(w - 6, h - 5);
+	ctx.rotate(0.1 + rng() * 0.12);
+	ctx.fillStyle = rgb(tapeColor, 0.38 + rng() * 0.12);
+	ctx.fillRect(-tapeW / 2, -tapeH / 2, tapeW, tapeH);
+	ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+	ctx.lineWidth = 0.5;
+	ctx.strokeRect(-tapeW / 2, -tapeH / 2, tapeW, tapeH);
+	ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+	ctx.beginPath();
+	ctx.moveTo(-tapeW / 2 + 2, tapeH * 0.08);
+	ctx.lineTo(tapeW / 2 - 2, -tapeH * 0.06);
+	ctx.stroke();
+	ctx.restore();
+
+	/* ── paint stains ───────────────────────────────── */
+	drawPaintStains(ctx, w, h, 3, 45612 + w * 3 + h * 7);
+
+	/* ── coffee ring stain (random chance) ──────────── */
+	if (rng() > 0.35) {
+		const cx = w * 0.55 + rng() * w * 0.3;
+		const cy = h * 0.25 + rng() * h * 0.5;
+		const cr = 5 + rng() * 7;
+		ctx.strokeStyle = 'rgba(140,110,70,0.06)';
+		ctx.lineWidth = 1.2 + rng() * 0.8;
+		ctx.beginPath();
+		ctx.arc(cx, cy, cr, rng() * 0.5, Math.PI * 2 - rng() * 0.3);
+		ctx.stroke();
+	}
+
+	/* ── per-pixel noise ────────────────────────────── */
+	applyNoise(ctx, w, h, 4, 12211 + w);
+}
+
+/**
+ * Create a data URL of a sticker background for use as a CSS
+ * `background-image`.
+ *
+ * @param width   Canvas width in pixels
+ * @param height  Canvas height in pixels
+ * @param options Sticker variant and future options
+ * @returns A `data:image/png;base64,…` string
+ */
+export function createStickerBackgroundUrl(
+	width: number,
+	height: number,
+	options: StickerBackgroundOptions = {}
+): string {
+	const canvas = document.createElement('canvas');
+	canvas.width = width;
+	canvas.height = height;
+
+	const ctx = canvas.getContext('2d');
+	if (!ctx) return '';
+
+	drawStickerBackground(ctx, width, height, options);
+
+	return canvas.toDataURL('image/png');
+}

@@ -1,7 +1,10 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
-	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
+	import type {
+		HomePreviewCard,
+		HomeSceneArtworkSlot
+	} from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import HomeHeroOverlay from '$lib/features/home-entry-scene/components/HomeHeroOverlay.svelte';
 	import PersistentNav from '$lib/features/home-entry-scene/components/PersistentNav.svelte';
 	import StudioScene from '$lib/features/home-entry-scene/scene/StudioScene.svelte';
@@ -13,12 +16,14 @@
 		adultContentEnabled = false,
 		entryState = 'outside',
 		previewCards = [],
+		sceneArtworks = [],
 		user = null
 	}: {
 		children?: Snippet;
 		adultContentEnabled?: boolean;
 		entryState?: EntryFlowState;
 		previewCards?: HomePreviewCard[];
+		sceneArtworks?: HomeSceneArtworkSlot[];
 		user?: HomeAuthUser | null;
 	} = $props();
 </script>
@@ -28,7 +33,7 @@
 >
 	<div class="absolute inset-0 flex items-center justify-center">
 		<div class="relative h-full w-full opacity-80">
-			<StudioScene {entryState} />
+			<StudioScene {entryState} avatarUrl={user?.avatarUrl ?? null} artworkSlots={sceneArtworks} />
 			<div
 				class="bg-gradient-radial absolute inset-0 from-transparent via-transparent to-[#f5f0e8]"
 			></div>
@@ -41,7 +46,8 @@
 			<GameLink
 				href="/draw"
 				variant="primary"
-				className="gap-3 bg-[#d68a49] px-10 py-5 text-xl font-black text-[#2d2420] shadow-[0_16px_40px_rgba(0,0,0,0.35)]"
+				size="hero"
+				className="shadow-[0_16px_40px_rgba(0,0,0,0.35)]"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"

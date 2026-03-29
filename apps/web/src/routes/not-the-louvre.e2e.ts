@@ -60,7 +60,9 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByRole('button', { name: 'Sign In' }).last().click();
 
 		await expect(page.getByText('Signed in as')).toBeVisible();
-		await expect(page.getByText(deterministicAuthUser.nickname)).toBeVisible();
+		await expect(
+			page.getByText(new RegExp(`Signed in as\\s*${deterministicAuthUser.nickname}`))
+		).toBeVisible();
 	});
 
 	test('home signup flow uses the backend recovery key and keeps the avatar onboarding step', async ({
@@ -86,7 +88,9 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await expect(page.getByText('Signed in as')).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Studio' })).toBeVisible();
-		await expect(page.getByText(deterministicAuthUser.nickname)).toBeVisible();
+		await expect(
+			page.getByText(new RegExp(`Signed in as\\s*${deterministicAuthUser.nickname}`))
+		).toBeVisible();
 		await page.reload();
 		await expect(page.getByText('Signed in as')).toBeVisible();
 		await expect(page.getByText('Finish your avatar')).not.toBeVisible();
@@ -199,7 +203,9 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/');
 		await expect(page.getByText('Signed in as')).toBeVisible();
-		await expect(page.getByText(deterministicAuthUser.nickname)).toBeVisible();
+		await expect(
+			page.getByText(new RegExp(`Signed in as\\s*${deterministicAuthUser.nickname}`))
+		).toBeVisible();
 		await page.getByRole('button', { name: 'Logout' }).click();
 
 		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
@@ -350,7 +356,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByRole('button', { name: '💬 Comment' }).click();
 		await commentResponse;
 		await expect(page.getByText('Mystery room comment')).toBeVisible();
-		await page.getByRole('button', { name: 'Close artwork details' }).click();
+		await page.getByRole('dialog').press('Escape');
 
 		await page.goto('/gallery/mystery');
 		await page.getByRole('button', { name: 'Spin!' }).click();
@@ -406,7 +412,7 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/gallery/your-studio');
 		await page.getByRole('button', { name: /Fork Source/ }).click();
-		await page.getByRole('link', { name: 'Fork' }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Fork' }).click();
 
 		await expect(page).toHaveURL(/\/draw\?fork=/);
 		await openDrawSketchbook(page);
@@ -417,7 +423,7 @@ test.describe('Not the Louvre frontend port', () => {
 	test('gallery route exposes room navigation', async ({ page }) => {
 		await page.goto('/gallery');
 
-		await expect(page.getByRole('heading', { name: 'THE GALLERY' })).toBeVisible();
+		await expect(page.getByText('The Gallery', { exact: true })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Mystery Room' })).toBeVisible();
 		await expect(page.getByText('No artworks have reached this gallery room yet.')).toBeVisible();
 	});

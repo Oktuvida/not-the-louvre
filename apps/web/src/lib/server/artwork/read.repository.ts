@@ -234,6 +234,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.where(
 				and(
 					artworkVisibilityWhere(viewer),
+					input.authorId ? eq(artworks.authorId, input.authorId) : undefined,
 					windowStart ? gte(artworks.createdAt, windowStart) : undefined,
 					rankedCursorWhere(input.cursor, rankingExpression) ?? undefined
 				)

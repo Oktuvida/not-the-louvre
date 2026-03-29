@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 
 	let {
 		adultContentEnabled = false,
@@ -82,14 +83,16 @@
 		</div>
 
 		<!-- Spin Button -->
-		<button
+		<GameButton
 			type="button"
-			class="font-display rounded-full border-4 border-[#2d2420] bg-[#c84f4f] px-12 py-5 text-2xl font-black text-white shadow-2xl transition duration-200 hover:scale-110 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+			variant="danger"
+			size="hero"
+			className="shadow-2xl"
 			disabled={isSpinning}
 			onclick={handleSpin}
 		>
-			{isSpinning ? 'SPINNING...' : 'Spin!'}
-		</button>
+			<span>{isSpinning ? 'SPINNING...' : 'Spin!'}</span>
+		</GameButton>
 
 		<p
 			class="text-center [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif] text-[#6b625a] italic"

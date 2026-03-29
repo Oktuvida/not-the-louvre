@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Detail: Wax Seal Medals — Not the Louvre</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@400;500;600;700;800&family=Caveat:wght@400;500;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Baloo 2', 'Trebuchet MS', sans-serif;
+    color: #2d2420;
+    background-color: #b8956e;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 56px, rgba(0,0,0,0.06) 56px, rgba(0,0,0,0.06) 59px),
+      repeating-linear-gradient(90deg, transparent, transparent 124px, rgba(0,0,0,0.04) 124px, rgba(0,0,0,0.04) 127px),
+      radial-gradient(circle at 85% 15%, rgba(255,248,225,0.2) 0%, transparent 45%);
+    padding: 2rem;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-family: 'Fredoka', sans-serif;
+    color: #fdfbf7;
+    text-align: center;
+    font-size: 1.6rem;
+    margin-bottom: 0.3rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+  .subtitle {
+    text-align: center;
+    color: rgba(253,251,247,0.7);
+    font-size: 0.85rem;
+    margin-bottom: 2rem;
+  }
+
+  .section-label {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(253,251,247,0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-align: center;
+    margin: 2.5rem 0 1rem;
+  }
+
+  .detail-callout {
+    max-width: 700px;
+    margin: 2rem auto;
+    background: rgba(253,251,247,0.08);
+    border: 1px solid rgba(253,251,247,0.15);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    color: rgba(253,251,247,0.75);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .detail-callout strong { color: #fdfbf7; font-weight: 600; }
+  .detail-callout ul { margin: 0.5rem 0 0 1.2rem; }
+  .detail-callout li { margin-bottom: 0.3rem; }
+
+  .note {
+    text-align: center;
+    font-family: 'Caveat', cursive;
+    font-size: 1rem;
+    color: rgba(253,251,247,0.6);
+    margin-top: 0.5rem;
+    font-style: italic;
+  }
+
+  /* ============================================= */
+  /*   WAX SEAL BASE                               */
+  /* ============================================= */
+
+  .seal-row {
+    display: flex;
+    gap: 3rem;
+    justify-content: center;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    padding: 1rem 0;
+  }
+
+  .seal-showcase {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .seal-label {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: rgba(253,251,247,0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* Scalloped edge via clip-path */
+  .wax-seal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    clip-path: polygon(
+      50% 0%, 61% 4%, 70% 0%, 78% 7%, 87% 5%, 91% 15%, 100% 17%, 98% 28%, 105% 35%, 100% 44%,
+      103% 54%, 96% 60%, 97% 70%, 89% 74%, 87% 84%, 78% 84%, 73% 93%, 63% 90%, 55% 97%, 46% 92%,
+      37% 97%, 30% 90%, 22% 94%, 17% 85%, 8% 84%, 7% 75%, 0% 68%, 4% 59%, -2% 50%, 3% 42%,
+      -1% 33%, 5% 26%, 3% 17%, 12% 13%, 15% 4%, 24% 3%, 30% -3%, 39% 3%, 47% -2%
+    );
+  }
+
+  /* Inner circle with number */
+  .wax-inner {
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 700;
+    border: 2px solid rgba(255,255,255,0.2);
+    position: relative;
+  }
+
+  /* Stamped texture overlay */
+  .wax-inner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15) 0%, transparent 50%),
+      radial-gradient(circle at 70% 70%, rgba(0,0,0,0.08) 0%, transparent 40%);
+    pointer-events: none;
+  }
+
+  /* Gold */
+  .wax-gold {
+    background: linear-gradient(135deg, #f7dc6f 0%, #f4c430 40%, #d4a017 80%);
+    color: #5a4000;
+    box-shadow: 0 3px 10px rgba(180,130,0,0.35);
+  }
+
+  /* Silver */
+  .wax-silver {
+    background: linear-gradient(135deg, #e8e8e8 0%, #c0c0c0 40%, #a8a8a8 80%);
+    color: #404040;
+    box-shadow: 0 3px 10px rgba(100,100,100,0.35);
+  }
+
+  /* Bronze */
+  .wax-bronze {
+    background: linear-gradient(135deg, #e0a068 0%, #cd7f32 40%, #a0622e 80%);
+    color: #4a2f10;
+    box-shadow: 0 3px 10px rgba(140,90,30,0.35);
+  }
+
+  /* ============================================= */
+  /*   SIZE VARIATIONS                             */
+  /* ============================================= */
+
+  /* Standard (podium use) */
+  .seal-standard .wax-seal {
+    width: 52px;
+    height: 52px;
+  }
+  .seal-standard .wax-inner {
+    width: 44px;
+    height: 44px;
+    font-size: 1.2rem;
+  }
+
+  /* Large (first place emphasis) */
+  .seal-large .wax-seal {
+    width: 64px;
+    height: 64px;
+  }
+  .seal-large .wax-inner {
+    width: 54px;
+    height: 54px;
+    font-size: 1.5rem;
+  }
+
+  /* Small (inline / detail panel use) */
+  .seal-small .wax-seal {
+    width: 36px;
+    height: 36px;
+  }
+  .seal-small .wax-inner {
+    width: 30px;
+    height: 30px;
+    font-size: 0.8rem;
+    border-width: 1.5px;
+  }
+
+  /* ============================================= */
+  /*   CONTEXT DEMO: ON A FRAME                    */
+  /* ============================================= */
+
+  .frame-context {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .mini-frame {
+    width: 120px;
+    height: 120px;
+    padding: 5px;
+    border-radius: 3px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 1px 2px rgba(255,255,255,0.3);
+  }
+  .mini-frame-gold {
+    background: linear-gradient(135deg, #f7dc6f 0%, #d4a017 25%, #f4c430 50%, #d4a017 75%, #f7dc6f 100%);
+    border: 2.5px solid #8b6914;
+  }
+  .mini-frame-silver {
+    background: linear-gradient(135deg, #e8e8e8 0%, #a8a8a8 25%, #d0d0d0 50%, #a8a8a8 75%, #e8e8e8 100%);
+    border: 2.5px solid #707070;
+  }
+  .mini-frame-bronze {
+    background: linear-gradient(135deg, #e0a068 0%, #a0622e 25%, #cd7f32 50%, #a0622e 75%, #e0a068 100%);
+    border: 2.5px solid #7a4a1a;
+  }
+  .mini-frame-inner {
+    width: 100%;
+    height: 100%;
+    border: 1px solid rgba(0,0,0,0.15);
+    overflow: hidden;
+  }
+  .mini-artwork {
+    width: 100%;
+    height: 100%;
+  }
+</style>
+</head>
+<body>
+
+<h1>Wax Seal Medals — Detailed Spec</h1>
+<p class="subtitle">CSS-rendered medals replacing emoji 🥇🥈🥉</p>
+
+<div class="detail-callout">
+  <strong>Key design points:</strong>
+  <ul>
+    <li><strong>Scalloped edge</strong> — irregular waxy polygon via <code>clip-path</code>, looks like a pressed wax seal</li>
+    <li><strong>Inner circle</strong> — smooth border-radius circle with the rank number, slight transparent border</li>
+    <li><strong>Metallic gradient</strong> — gold (#f4c430 → #d4a017), silver (#c0c0c0 → #a8a8a8), bronze (#cd7f32 → #a0622e)</li>
+    <li><strong>Stamped highlight</strong> — subtle radial gradient overlay simulating light hitting the wax surface</li>
+    <li><strong>No ribbons or cords</strong> — just the seal itself, clean and simple</li>
+    <li><strong>Three sizes:</strong> large (1st place), standard (podium), small (inline/detail panel)</li>
+  </ul>
+</div>
+
+<!-- ============================================= -->
+<!--   STANDARD SIZE (podium use)                  -->
+<!-- ============================================= -->
+<p class="section-label">Standard size — podium display</p>
+
+<div class="seal-row">
+  <div class="seal-showcase seal-standard">
+    <div class="wax-seal wax-gold"><div class="wax-inner wax-gold">1</div></div>
+    <div class="seal-label">Gold</div>
+  </div>
+  <div class="seal-showcase seal-standard">
+    <div class="wax-seal wax-silver"><div class="wax-inner wax-silver">2</div></div>
+    <div class="seal-label">Silver</div>
+  </div>
+  <div class="seal-showcase seal-standard">
+    <div class="wax-seal wax-bronze"><div class="wax-inner wax-bronze">3</div></div>
+    <div class="seal-label">Bronze</div>
+  </div>
+</div>
+
+<!-- ============================================= -->
+<!--   LARGE SIZE (first place emphasis)           -->
+<!-- ============================================= -->
+<p class="section-label">Large size — first place emphasis</p>
+
+<div class="seal-row">
+  <div class="seal-showcase seal-large">
+    <div class="wax-seal wax-gold"><div class="wax-inner wax-gold">1</div></div>
+    <div class="seal-label">Champion seal</div>
+  </div>
+</div>
+
+<p class="note">First place gets a bigger seal to emphasize the winner</p>
+
+<!-- ============================================= -->
+<!--   SMALL SIZE (inline / detail panel)          -->
+<!-- ============================================= -->
+<p class="section-label">Small size — inline / detail panel use</p>
+
+<div class="seal-row">
+  <div class="seal-showcase seal-small">
+    <div class="wax-seal wax-gold"><div class="wax-inner wax-gold">1</div></div>
+    <div class="seal-label">Gold</div>
+  </div>
+  <div class="seal-showcase seal-small">
+    <div class="wax-seal wax-silver"><div class="wax-inner wax-silver">2</div></div>
+    <div class="seal-label">Silver</div>
+  </div>
+  <div class="seal-showcase seal-small">
+    <div class="wax-seal wax-bronze"><div class="wax-inner wax-bronze">3</div></div>
+    <div class="seal-label">Bronze</div>
+  </div>
+</div>
+
+<p class="note">Small seals replace emoji medals in the ArtworkDetailPanel and anywhere rank is shown inline</p>
+
+<!-- ============================================= -->
+<!--   IN CONTEXT: ABOVE FRAMES                   -->
+<!-- ============================================= -->
+<p class="section-label">In context — seal above metallic frame</p>
+
+<div class="seal-row" style="gap: 2.5rem; align-items: flex-end;">
+
+  <!-- 2nd place -->
+  <div class="frame-context">
+    <div class="seal-showcase seal-standard" style="gap: 0.3rem;">
+      <div class="wax-seal wax-silver"><div class="wax-inner wax-silver">2</div></div>
+    </div>
+    <div class="mini-frame mini-frame-silver">
+      <div class="mini-frame-inner">
+        <div class="mini-artwork" style="background: linear-gradient(135deg, #8b9d91, #6b8577);"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1st place (bigger) -->
+  <div class="frame-context">
+    <div class="seal-showcase seal-large" style="gap: 0.3rem;">
+      <div class="wax-seal wax-gold"><div class="wax-inner wax-gold">1</div></div>
+    </div>
+    <div class="mini-frame mini-frame-gold" style="width: 140px; height: 140px;">
+      <div class="mini-frame-inner">
+        <div class="mini-artwork" style="background: linear-gradient(135deg, #e8b896, #d4956c);"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3rd place -->
+  <div class="frame-context">
+    <div class="seal-showcase seal-standard" style="gap: 0.3rem;">
+      <div class="wax-seal wax-bronze"><div class="wax-inner wax-bronze">3</div></div>
+    </div>
+    <div class="mini-frame mini-frame-bronze">
+      <div class="mini-frame-inner">
+        <div class="mini-artwork" style="background: linear-gradient(135deg, #c84f4f, #a03c3c);"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================= -->
+<!--   IMPLEMENTATION NOTES                        -->
+<!-- ============================================= -->
+<div class="detail-callout" style="margin-top: 3rem;">
+  <strong>Implementation notes:</strong>
+  <ul>
+    <li><strong>CSS-only</strong> — <code>clip-path: polygon()</code> for the scalloped edge, gradients for the metallic look, pseudo-element for the stamped highlight</li>
+    <li><strong>Replaces emoji medals</strong> — currently <code>🥇🥈🥉</code> in <code>ArtworkCard.svelte:26-28</code> and <code>ArtworkDetailPanel.svelte</code></li>
+    <li><strong>Create a <code>WaxSealMedal</code> Svelte component</strong> with props: <code>rank: 1|2|3</code>, <code>size: 'sm'|'md'|'lg'</code></li>
+    <li><strong>Remove <code>animate-pulse</code> and <code>animate-spin</code></strong> from the current medal rendering</li>
+    <li><strong>Podium position:</strong> 1st place gets <code>lg</code>, 2nd and 3rd get <code>md</code>. Detail panel uses <code>sm</code>.</li>
+  </ul>
+</div>
+
+</body>
+</html>
