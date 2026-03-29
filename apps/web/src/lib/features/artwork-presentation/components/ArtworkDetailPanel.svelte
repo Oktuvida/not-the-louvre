@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import {
 		checkTextContent as defaultCheckTextContent,
@@ -38,6 +39,13 @@
 
 	const syncArtwork = (nextArtwork: Artwork) => {
 		onArtworkChange?.(nextArtwork);
+	};
+
+	const goToFork = async () => {
+		if (!artwork) return;
+
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		await goto(`${resolve('/draw')}?fork=${artwork.id}`);
 	};
 
 	const submitVote = async (value: 'down' | 'up') => {
@@ -207,25 +215,28 @@
 						<div class="mt-6 grid grid-cols-2 gap-4">
 							<GameButton
 								variant="secondary"
+								size="sm"
 								className="w-full justify-center"
 								onclick={() => submitVote('up')}>👍 {artwork.upvotes}</GameButton
 							>
 							<GameButton
 								variant="danger"
+								size="sm"
 								className="w-full justify-center"
 								onclick={() => submitVote('down')}>👎 {artwork.downvotes}</GameButton
 							>
 							<GameButton
 								variant="primary"
+								size="sm"
 								className="w-full justify-center"
 								onclick={submitComment}>💬 Comment</GameButton
 							>
-							<a
-								href={resolve(`/draw?fork=${artwork.id}`)}
-								class="font-display inline-flex w-full items-center justify-center rounded-[1.1rem] border-4 border-[var(--color-ink)] bg-[var(--color-accent)] px-6 py-3 text-base tracking-[0.08em] uppercase shadow-[var(--shadow-card)] transition duration-200 hover:-translate-y-1 hover:rotate-[-1deg]"
+							<GameButton
+								variant="accent"
+								size="sm"
+								className="w-full justify-center"
+								onclick={goToFork}>📄 Fork</GameButton
 							>
-								📄 Fork
-							</a>
 						</div>
 						<p class="mt-3 text-sm text-[#6b625a]">Forks: {artwork.forkCount ?? 0}</p>
 						<label class="mt-4 block space-y-2">
@@ -254,7 +265,7 @@
 							</div>
 						{/if}
 						<div class="mt-6 flex justify-end">
-							<GameButton variant="danger" onclick={onClose}>Close</GameButton>
+							<GameButton variant="ghost" size="sm" onclick={onClose}>Close</GameButton>
 						</div>
 					</div>
 				</div>

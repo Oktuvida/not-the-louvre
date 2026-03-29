@@ -393,7 +393,7 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/gallery/your-studio');
 		await page.getByRole('button', { name: /Fork Source/ }).click();
-		await page.getByRole('link', { name: 'Fork' }).click();
+		await page.getByRole('button', { name: 'Fork' }).click();
 
 		await expect(page).toHaveURL(/\/draw\?fork=/);
 		await expect(page.getByText('Forking from')).toBeVisible();
