@@ -27,12 +27,15 @@ export type ArtworkFeedCard = {
 	author: ArtworkAuthorSummary;
 	commentCount: number;
 	createdAt: Date;
+	downvotes?: number;
 	forkCount: number;
 	id: string;
 	lineage: ArtworkLineageSummary;
 	mediaUrl: string;
 	score: number;
 	title: string;
+	upvotes?: number;
+	viewerVote?: ArtworkVoteValue | null;
 };
 
 export type ArtworkLineageParentSummary = {
@@ -116,6 +119,9 @@ export type ArtworkReadRecord = ArtworkRecord & {
 	parentAuthorNickname?: string | null;
 	parentTitle?: string | null;
 	rankingValue?: number;
+	downvotes?: number;
+	upvotes?: number;
+	viewerVote?: ArtworkVoteValue | null;
 };
 
 export type ArtworkVoteValue = 'down' | 'up';

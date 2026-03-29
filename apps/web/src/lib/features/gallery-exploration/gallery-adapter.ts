@@ -19,15 +19,15 @@ const baseArtwork = (
 	artistAvatar: artwork.author.avatarUrl ?? undefined,
 	comments: [],
 	commentCount: artwork.commentCount,
-	downvotes: 0,
+	downvotes: artwork.downvotes ?? 0,
 	forkCount: artwork.forkCount,
 	id: artwork.id,
 	imageUrl: artwork.mediaUrl,
 	score: artwork.score,
 	timestamp: toTimestamp(artwork.createdAt),
 	title: artwork.title,
-	upvotes: 0,
-	viewerVote: null
+	upvotes: artwork.upvotes ?? 0,
+	viewerVote: artwork.viewerVote ?? null
 });
 
 export const toGalleryArtwork = (artwork: SerializableArtworkFeedCard, rank?: number): Artwork => ({
