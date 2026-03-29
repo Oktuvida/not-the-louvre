@@ -8,6 +8,7 @@
 <GalleryExplorationPage
 	artworks={data.artworks}
 	emptyStateMessage={data.emptyStateMessage}
+	realtimeConfig={data.realtimeConfig}
 	viewer={data.viewer}
 	room={data.room}
 	roomId={data.roomId}

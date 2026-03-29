@@ -1,3 +1,4 @@
+import { env } from '$env/dynamic/private';
 import { error } from '@sveltejs/kit';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { toGalleryArtwork } from '$lib/features/gallery-exploration/gallery-adapter';
@@ -15,6 +16,10 @@ type ProductUser = {
 type GalleryRoomData = {
 	artworks: ReturnType<typeof toGalleryArtwork>[];
 	emptyStateMessage: string | null;
+	realtimeConfig: {
+		anonKey: string | null;
+		url: string | null;
+	};
 	room: ReturnType<typeof getGalleryRoom>;
 	roomId: GalleryRoomId;
 	viewer: ProductUser | null;
@@ -60,6 +65,10 @@ export const loadGalleryRoomData = async (
 			toGalleryArtwork(item, roomId === 'hall-of-fame' ? index + 1 : undefined)
 		),
 		emptyStateMessage: visibleItems.length === 0 ? emptyStateMessageForRoom(roomId) : null,
+		realtimeConfig: {
+			anonKey: env.PUBLIC_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || env.ANON_KEY || null,
+			url: env.PUBLIC_SUPABASE_URL || env.SUPABASE_PUBLIC_URL || null
+		},
 		room,
 		roomId,
 		viewer: user ?? null
