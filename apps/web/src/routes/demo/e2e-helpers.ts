@@ -60,6 +60,12 @@ export const installAvatarExportHarness = async (page: Page) => {
 
 	await page.addInitScript(
 		({ bad, good }) => {
+			Object.defineProperty(window, '__ntlBypassClientContentFilters', {
+				configurable: true,
+				value: true,
+				writable: true
+			});
+
 			const decode = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
 			const originalToBlob = HTMLCanvasElement.prototype.toBlob;
 
@@ -113,6 +119,12 @@ export const installDrawingExportHarness = async (page: Page) => {
 	};
 
 	await page.addInitScript((assets) => {
+		Object.defineProperty(window, '__ntlBypassClientContentFilters', {
+			configurable: true,
+			value: true,
+			writable: true
+		});
+
 		const decode = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
 		const originalToBlob = HTMLCanvasElement.prototype.toBlob;
 

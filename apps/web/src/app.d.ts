@@ -4,6 +4,10 @@ import type { AuthIntegrityFailure, CanonicalUser } from '$lib/server/auth/types
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
+	interface Window {
+		__ntlBypassClientContentFilters?: boolean;
+	}
+
 	namespace App {
 		interface Locals {
 			authUser?: User;
