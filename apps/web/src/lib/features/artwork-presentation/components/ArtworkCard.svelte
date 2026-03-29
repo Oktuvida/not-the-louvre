@@ -1,17 +1,27 @@
 <script lang="ts">
+	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
+	import {
+		resolveArtworkFrame,
+		type ArtworkPodiumPosition
+	} from '$lib/features/artwork-presentation/model/frame';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 
 	let {
 		artwork,
 		index = 0,
+		frameTestId = 'artwork-card-frame',
+		podiumPosition,
 		onclick
 	}: {
 		artwork: Artwork;
+		frameTestId?: string;
 		index?: number;
+		podiumPosition?: ArtworkPodiumPosition;
 		onclick?: () => void;
 	} = $props();
 
 	const rotation = $derived(index % 3 === 0 ? -2 : index % 3 === 1 ? 2 : 0);
+	const frame = $derived(resolveArtworkFrame({ artworkId: artwork.id, podiumPosition }));
 	const medal = $derived(
 		artwork.rank && artwork.rank <= 3
 			? { 1: '\u{1F947}', 2: '\u{1F948}', 3: '\u{1F949}' }[artwork.rank as 1 | 2 | 3]
@@ -30,13 +40,11 @@
 	{onclick}
 >
 	<div
-		class="relative border-[6px] border-[#5d4e37] bg-[#fdfbf7] p-4 shadow-[0_24px_34px_rgba(45,36,32,0.2)] transition duration-300 group-hover:-translate-y-2 group-hover:scale-110 group-hover:rotate-0"
+		class="relative transition duration-300 group-hover:-translate-y-2 group-hover:scale-110 group-hover:rotate-0"
 	>
-		<img
-			src={artwork.imageUrl}
-			alt={artwork.title}
-			class="aspect-square w-full border-2 border-[#2d2420] object-cover"
-		/>
+		<ArtworkFrame {frame} className="aspect-square w-full" testId={frameTestId}>
+			<img src={artwork.imageUrl} alt={artwork.title} class="h-full w-full object-cover" />
+		</ArtworkFrame>
 
 		{#if artwork.artistAvatar}
 			<div
