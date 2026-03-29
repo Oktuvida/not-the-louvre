@@ -57,13 +57,9 @@
 			const currentVote = artwork.viewerVote;
 			const nextVote = method === 'DELETE' ? null : value;
 			const upvotes =
-				artwork.upvotes +
-				(currentVote === 'up' ? -1 : 0) +
-				(nextVote === 'up' ? 1 : 0);
+				artwork.upvotes + (currentVote === 'up' ? -1 : 0) + (nextVote === 'up' ? 1 : 0);
 			const downvotes =
-				artwork.downvotes +
-				(currentVote === 'down' ? -1 : 0) +
-				(nextVote === 'down' ? 1 : 0);
+				artwork.downvotes + (currentVote === 'down' ? -1 : 0) + (nextVote === 'down' ? 1 : 0);
 
 			syncArtwork({
 				...artwork,
@@ -121,7 +117,9 @@
 						author: payload.comment.author.nickname,
 						id: payload.comment.id,
 						text: payload.comment.body,
-						timestamp: payload.comment.createdAt ? Date.parse(payload.comment.createdAt) : Date.now()
+						timestamp: payload.comment.createdAt
+							? Date.parse(payload.comment.createdAt)
+							: Date.now()
 					}
 				]
 			});
@@ -198,23 +196,20 @@
 							<GameButton
 								variant="secondary"
 								className="w-full justify-center"
-								onclick={() => submitVote('up')}
-								>👍 {artwork.upvotes}</GameButton
+								onclick={() => submitVote('up')}>👍 {artwork.upvotes}</GameButton
 							>
 							<GameButton
 								variant="danger"
 								className="w-full justify-center"
-								onclick={() => submitVote('down')}
-								>👎 {artwork.downvotes}</GameButton
+								onclick={() => submitVote('down')}>👎 {artwork.downvotes}</GameButton
 							>
 							<GameButton
 								variant="primary"
 								className="w-full justify-center"
-								onclick={submitComment}
-								>💬 Comment</GameButton
+								onclick={submitComment}>💬 Comment</GameButton
 							>
 							<a
-								href={resolve('/draw') + `?fork=${artwork.id}`}
+								href={resolve(`/draw?fork=${artwork.id}`)}
 								class="font-display inline-flex w-full items-center justify-center rounded-[1.1rem] border-4 border-[var(--color-ink)] bg-[var(--color-accent)] px-6 py-3 text-base tracking-[0.08em] uppercase shadow-[var(--shadow-card)] transition duration-200 hover:-translate-y-1 hover:rotate-[-1deg]"
 							>
 								📄 Fork

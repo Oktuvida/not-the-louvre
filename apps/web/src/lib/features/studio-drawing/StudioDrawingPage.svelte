@@ -148,7 +148,9 @@
 		</div>
 	{/if}
 
-	<div class="absolute top-28 left-8 z-30 w-full max-w-sm rounded-2xl border-4 border-[#2d2420] bg-[#fdfbf7] p-5 shadow-2xl">
+	<div
+		class="absolute top-28 left-8 z-30 w-full max-w-sm rounded-2xl border-4 border-[#2d2420] bg-[#fdfbf7] p-5 shadow-2xl"
+	>
 		<p class="text-xs font-semibold tracking-[0.18em] text-[#8b9d91] uppercase">
 			{forkParent ? 'Fork in progress' : 'Artwork details'}
 		</p>

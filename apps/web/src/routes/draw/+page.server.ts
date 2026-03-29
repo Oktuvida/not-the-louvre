@@ -42,10 +42,10 @@ export const load: PageServerLoad = async (event) => {
 	const forkArtworkId = event.url.searchParams.get('fork');
 	const forkParent = forkArtworkId
 		? await getArtworkDetail(forkArtworkId, { user: event.locals.user }).then((artwork) => ({
-			id: artwork.id,
-			mediaUrl: artwork.mediaUrl,
-			title: artwork.title
-		}))
+				id: artwork.id,
+				mediaUrl: artwork.mediaUrl,
+				title: artwork.title
+			}))
 		: null;
 
 	return {

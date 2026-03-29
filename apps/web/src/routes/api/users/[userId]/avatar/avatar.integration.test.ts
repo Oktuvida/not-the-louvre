@@ -44,7 +44,8 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const STORAGE_BASE_URL = process.env.SUPABASE_PUBLIC_URL;
 const STORAGE_SERVICE_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SERVICE_ROLE_KEY;
 
-const describeWithStorage = DATABASE_URL && STORAGE_BASE_URL && STORAGE_SERVICE_KEY ? describe : describe.skip;
+const describeWithStorage =
+	DATABASE_URL && STORAGE_BASE_URL && STORAGE_SERVICE_KEY ? describe : describe.skip;
 
 type DbClient = Sql<Record<string, unknown>>;
 

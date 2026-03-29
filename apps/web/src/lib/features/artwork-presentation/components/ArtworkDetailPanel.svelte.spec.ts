@@ -26,10 +26,9 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await expect.element(page.getByRole('link', { name: 'Fork' })).toHaveAttribute(
-			'href',
-			'/draw?fork=artwork-1'
-		);
+		await expect
+			.element(page.getByRole('link', { name: 'Fork' }))
+			.toHaveAttribute('href', '/draw?fork=artwork-1');
 		await expect.element(page.getByText('Forks: 2')).toBeVisible();
 	});
 
@@ -37,18 +36,19 @@ describe('ArtworkDetailPanel', () => {
 		const onArtworkChange = vi.fn();
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(async () =>
-				new Response(
-					JSON.stringify({
-						comment: {
-							author: { nickname: 'journey_artist' },
-							body: 'Great work',
-							createdAt: '2026-03-28T12:00:00.000Z',
-							id: 'comment-1'
-						}
-					}),
-					{ status: 201 }
-				)
+			vi.fn(
+				async () =>
+					new Response(
+						JSON.stringify({
+							comment: {
+								author: { nickname: 'journey_artist' },
+								body: 'Great work',
+								createdAt: '2026-03-28T12:00:00.000Z',
+								id: 'comment-1'
+							}
+						}),
+						{ status: 201 }
+					)
 			)
 		);
 
