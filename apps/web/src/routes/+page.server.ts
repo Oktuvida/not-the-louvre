@@ -5,7 +5,10 @@ import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { avatarService } from '$lib/server/user/avatar.service';
 import { AuthFlowError } from '$lib/server/auth/errors';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { toHomePreviewCards } from '$lib/features/home-entry-scene/state/home-entry.svelte';
+import {
+	toHomePreviewCards,
+	toHomeSceneArtworkSlots
+} from '$lib/features/home-entry-scene/state/home-entry.svelte';
 import {
 	getNicknameAvailability,
 	recoverAccount,
@@ -22,6 +25,8 @@ import {
 import { getIp } from 'better-auth/api';
 
 const INTEGRITY_FAILURE_MESSAGE = 'Authenticated session is missing its product user profile';
+const resolveHomeAvatarUrl = (userId: string, storageKey: string | null | undefined) =>
+	storageKey ? `/api/users/${userId}/avatar` : null;
 
 type HomeActionName = 'checkNickname' | 'recover' | 'saveAvatar' | 'signIn' | 'signOut' | 'signUp';
 
@@ -57,6 +62,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 		{ user: locals.user }
 	);
 	const topArtworks = toHomePreviewCards(topDiscovery.items);
+	const studioArtworks = locals.user
+		? await listArtworkDiscovery(
+				{ authorId: locals.user.id, cursor: null, limit: 50, sort: 'top', window: 'all' },
+				{ user: locals.user }
+			).then((discovery) => toHomeSceneArtworkSlots(discovery.items))
+		: [];
 
 	if (locals.integrityFailure) {
 		return {
@@ -69,6 +80,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				status: 'integrity-failure',
 				user: null
 			},
+			studioArtworks: [],
 			topArtworks
 		};
 	}
@@ -81,6 +93,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				status: 'signed-out',
 				user: null
 			},
+			studioArtworks: [],
 			topArtworks
 		};
 	}
@@ -92,8 +105,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 				status: locals.user.avatarOnboardingCompletedAt ? 'complete' : 'needs-avatar'
 			},
 			status: 'authenticated',
-			user: locals.user
+			user: {
+				...locals.user,
+				avatarUrl: resolveHomeAvatarUrl(locals.user.id, locals.user.avatarUrl)
+			}
 		},
+		studioArtworks,
 		topArtworks
 	};
 };

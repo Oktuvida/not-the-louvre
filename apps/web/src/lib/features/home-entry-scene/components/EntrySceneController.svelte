@@ -4,7 +4,10 @@
 		HomeAuthBootstrap,
 		HomeAuthUser
 	} from '$lib/features/home-entry-scene/auth-contract';
-	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
+	import type {
+		HomePreviewCard,
+		HomeSceneArtworkSlot
+	} from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import HomeEntryPage from '$lib/features/home-entry-scene/HomeEntryPage.svelte';
 	import AuthOverlay from '$lib/features/home-entry-scene/components/AuthOverlay.svelte';
 	import MuseumWallOverlay from '$lib/features/home-entry-scene/components/MuseumWallOverlay.svelte';
@@ -17,10 +20,12 @@
 	let {
 		auth,
 		form,
+		studioArtworks = [],
 		topArtworks = []
 	}: {
 		auth: HomeAuthBootstrap;
 		form?: HomeAuthActionForm;
+		studioArtworks?: HomeSceneArtworkSlot[];
 		topArtworks?: HomePreviewCard[];
 	} = $props();
 
@@ -122,7 +127,12 @@
 	});
 </script>
 
-<HomeEntryPage entryState={flowState} previewCards={topArtworks} user={navUser}>
+<HomeEntryPage
+	entryState={flowState}
+	previewCards={topArtworks}
+	sceneArtworks={studioArtworks}
+	user={navUser}
+>
 	{#if integrityFailure}
 		<div class="absolute inset-0 z-[40] flex items-center justify-center px-6 py-10">
 			<StudioPanel
