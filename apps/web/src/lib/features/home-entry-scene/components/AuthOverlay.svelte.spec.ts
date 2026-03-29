@@ -1,10 +1,80 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import AuthOverlay from './AuthOverlay.svelte';
 
 describe('AuthOverlay', () => {
 	const submitButton = (label: string) => page.getByRole('button', { name: label }).last();
+
+	beforeEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('blocks signup when the nickname filter rejects the chosen nickname', async () => {
+		const checkTextContent = vi.fn(async () => ({
+			message: 'Choose a different nickname.',
+			status: 'blocked' as const
+		}));
+		const requestSubmit = vi.fn();
+		const fetchSpy = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({
+						type: 'success',
+						data: { action: 'checkNickname', availability: 'available' }
+					})
+				)
+		);
+		vi.stubGlobal('fetch', fetchSpy);
+		vi.spyOn(HTMLFormElement.prototype, 'requestSubmit').mockImplementation(requestSubmit);
+
+		render(AuthOverlay, {
+			checkTextContent,
+			dispatch: vi.fn(),
+			entryState: 'auth-signup'
+		});
+
+		await page.getByPlaceholder('artist_123').fill('blocked_name');
+		await page.getByPlaceholder('Enter your password').fill('password123');
+		await submitButton('Start account').click();
+
+		await expect.element(page.getByText('Choose a different nickname.')).toBeVisible();
+		expect(requestSubmit).not.toHaveBeenCalled();
+	});
+
+	it('blocks signup when the nickname filter is unavailable', async () => {
+		const checkTextContent = vi.fn(async () => ({
+			message: 'Nickname safety check is unavailable right now. Please try again.',
+			status: 'unavailable' as const
+		}));
+		const requestSubmit = vi.fn();
+		const fetchSpy = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({
+						type: 'success',
+						data: { action: 'checkNickname', availability: 'available' }
+					})
+				)
+		);
+		vi.stubGlobal('fetch', fetchSpy);
+		vi.spyOn(HTMLFormElement.prototype, 'requestSubmit').mockImplementation(requestSubmit);
+
+		render(AuthOverlay, {
+			checkTextContent,
+			dispatch: vi.fn(),
+			entryState: 'auth-signup'
+		});
+
+		await page.getByPlaceholder('artist_123').fill('uncertain_name');
+		await page.getByPlaceholder('Enter your password').fill('password123');
+		await submitButton('Start account').click();
+
+		await expect
+			.element(page.getByText('Nickname safety check is unavailable right now. Please try again.'))
+			.toBeVisible();
+		expect(requestSubmit).not.toHaveBeenCalled();
+	});
 
 	it('starts on the sign-in view and validates fields before login submit', async () => {
 		const dispatch = vi.fn();

@@ -34,6 +34,7 @@ describe('ArtworkDetailPanel', () => {
 
 	it('posts comments and syncs the artwork detail state', async () => {
 		const onArtworkChange = vi.fn();
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(
@@ -53,6 +54,7 @@ describe('ArtworkDetailPanel', () => {
 		);
 
 		render(ArtworkDetailPanel, {
+			checkTextContent,
 			artwork,
 			onArtworkChange,
 			viewer: { id: 'user-1', role: 'user' }
@@ -67,5 +69,56 @@ describe('ArtworkDetailPanel', () => {
 				comments: [expect.objectContaining({ id: 'comment-1', text: 'Great work' })]
 			})
 		);
+		expect(checkTextContent).toHaveBeenCalledWith('Great work', 'comment');
+	});
+
+	it('blocks comment submission when the text filter rejects the body', async () => {
+		const onArtworkChange = vi.fn();
+		const fetchSpy = vi.fn();
+		const checkTextContent = vi.fn(async () => ({
+			message: 'This comment breaks the gallery rules.',
+			status: 'blocked' as const
+		}));
+		vi.stubGlobal('fetch', fetchSpy);
+
+		render(ArtworkDetailPanel, {
+			checkTextContent,
+			artwork,
+			onArtworkChange,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByPlaceholder('Say something about this piece').fill('blocked text');
+		await page.getByRole('button', { name: /Comment/ }).click();
+
+		await expect.element(page.getByText('This comment breaks the gallery rules.')).toBeVisible();
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(onArtworkChange).not.toHaveBeenCalled();
+	});
+
+	it('blocks comment submission when the text filter is unavailable', async () => {
+		const onArtworkChange = vi.fn();
+		const fetchSpy = vi.fn();
+		const checkTextContent = vi.fn(async () => ({
+			message: 'Comment safety check is unavailable right now. Please try again.',
+			status: 'unavailable' as const
+		}));
+		vi.stubGlobal('fetch', fetchSpy);
+
+		render(ArtworkDetailPanel, {
+			checkTextContent,
+			artwork,
+			onArtworkChange,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByPlaceholder('Say something about this piece').fill('retry later');
+		await page.getByRole('button', { name: /Comment/ }).click();
+
+		await expect
+			.element(page.getByText('Comment safety check is unavailable right now. Please try again.'))
+			.toBeVisible();
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(onArtworkChange).not.toHaveBeenCalled();
 	});
 });
