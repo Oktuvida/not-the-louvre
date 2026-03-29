@@ -1,35 +1,16 @@
+import {
+	buildBaselineProfanityMatcher,
+	buildPhraseMatcher
+} from '$lib/shared/moderation/text-policy';
 import type { TextContentChecker, TextFilterContext } from './types';
 
-type ObscenityModule = typeof import('obscenity');
+type MatcherMap = Record<TextFilterContext, ReturnType<typeof buildPhraseMatcher>>;
 
-let matcherPromise: Promise<ObscenityMatcher> | null = null;
-
-type ObscenityMatcher = {
-	hasMatch(input: string): boolean;
-};
-
-const spanishProfanity = [
-	'cabron',
-	'coño',
-	'culero',
-	'gilipollas',
-	'hijoputa',
-	'joder',
-	'malparido',
-	'maricon',
-	'mierda',
-	'pendejo',
-	'puta',
-	'puto',
-	'verga'
-] as const;
-
-const unavailableMessages: Record<TextFilterContext, string> = {
-	comment: 'Comment safety check is unavailable right now. Please try again.',
-	nickname: 'Nickname safety check is unavailable right now. Please try again.'
-};
+let matcherPromise: Promise<MatcherMap> | null = null;
+const baselineMatcher = buildBaselineProfanityMatcher();
 
 const blockedMessages: Record<TextFilterContext, string> = {
+	artwork_title: 'Choose a different artwork title.',
 	comment: 'This comment breaks the gallery rules.',
 	nickname: 'Choose a different nickname.'
 };
@@ -37,27 +18,39 @@ const blockedMessages: Record<TextFilterContext, string> = {
 const shouldBypassClientContentFilters = () =>
 	typeof window !== 'undefined' && Boolean(window.__ntlBypassClientContentFilters);
 
-const createMatcher = async (): Promise<ObscenityMatcher> => {
-	const obscenity = (await import('obscenity')) as ObscenityModule;
-	const dataset = new obscenity.DataSet<{ originalWord: string }>().addAll(
-		obscenity.englishDataset
-	);
+const createMatchers = async (): Promise<MatcherMap> => {
+	try {
+		const response = await fetch('/api/moderation/text-policy', {
+			headers: { accept: 'application/json' }
+		});
 
-	for (const word of spanishProfanity) {
-		dataset.addPhrase((phrase) =>
-			phrase.setMetadata({ originalWord: word }).addPattern(obscenity.pattern`|${word}|`)
-		);
+		if (!response.ok) {
+			throw new Error('Moderation policy snapshot failed');
+		}
+
+		const snapshot = (await response.json()) as {
+			policies: Record<TextFilterContext, { allowlist: string[]; blocklist: string[] }>;
+		};
+
+		return {
+			artwork_title: buildPhraseMatcher(snapshot.policies.artwork_title),
+			comment: buildPhraseMatcher(snapshot.policies.comment),
+			nickname: buildPhraseMatcher(snapshot.policies.nickname)
+		};
+	} catch {
+		const fallbackMatcher = buildPhraseMatcher({ allowlist: [], blocklist: [] });
+
+		return {
+			artwork_title: fallbackMatcher,
+			comment: fallbackMatcher,
+			nickname: fallbackMatcher
+		};
 	}
-
-	return new obscenity.RegExpMatcher({
-		...dataset.build(),
-		...obscenity.englishRecommendedTransformers
-	});
 };
 
-const getMatcher = async () => {
+const getMatchers = async () => {
 	if (!matcherPromise) {
-		matcherPromise = createMatcher().catch((error) => {
+		matcherPromise = createMatchers().catch((error) => {
 			matcherPromise = null;
 			throw error;
 		});
@@ -71,8 +64,15 @@ export const checkTextContent: TextContentChecker = async (value, context) => {
 		return { status: 'allowed' };
 	}
 
+	if (baselineMatcher.hasMatch(value)) {
+		return {
+			message: blockedMessages[context],
+			status: 'blocked'
+		};
+	}
+
 	try {
-		const matcher = await getMatcher();
+		const matcher = (await getMatchers())[context];
 		if (!matcher.hasMatch(value)) {
 			return { status: 'allowed' };
 		}
@@ -82,9 +82,6 @@ export const checkTextContent: TextContentChecker = async (value, context) => {
 			status: 'blocked'
 		};
 	} catch {
-		return {
-			message: unavailableMessages[context],
-			status: 'unavailable'
-		};
+		return { status: 'allowed' };
 	}
 };

@@ -16,6 +16,7 @@ const appSchema = pgSchema('app');
 export const userRole = appSchema.enum('user_role', ['user', 'moderator', 'admin']);
 export const authAttemptKind = appSchema.enum('auth_attempt_kind', ['login', 'recovery']);
 export const artworkVoteValue = appSchema.enum('artwork_vote_value', ['up', 'down']);
+export const artworkNsfwSource = appSchema.enum('artwork_nsfw_source', ['creator', 'moderator']);
 export const artworkReportReason = appSchema.enum('artwork_report_reason', [
 	'spam',
 	'harassment',
@@ -35,6 +36,11 @@ export const engagementRateLimitKind = appSchema.enum('engagement_rate_limit_kin
 	'vote',
 	'comment'
 ]);
+export const moderationTextPolicyContext = appSchema.enum('moderation_text_policy_context', [
+	'nickname',
+	'comment',
+	'artwork_title'
+]);
 
 export const users = appSchema.table(
 	'users',
@@ -46,6 +52,11 @@ export const users = appSchema.table(
 		recoveryHash: text('recovery_hash').notNull(),
 		avatarUrl: text('avatar_url'),
 		avatarOnboardingCompletedAt: timestamp('avatar_onboarding_completed_at'),
+		avatarIsNsfw: boolean('avatar_is_nsfw').notNull().default(false),
+		avatarIsHidden: boolean('avatar_is_hidden').notNull().default(false),
+		isBanned: boolean('is_banned').notNull().default(false),
+		bannedAt: timestamp('banned_at'),
+		banReason: text('ban_reason'),
 		role: userRole('role').notNull().default('user'),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at')
@@ -93,6 +104,9 @@ export const artworks = appSchema.table(
 		storageKey: text('storage_key').notNull(),
 		mediaContentType: text('media_content_type').notNull(),
 		mediaSizeBytes: integer('media_size_bytes').notNull(),
+		isNsfw: boolean('is_nsfw').notNull().default(false),
+		nsfwSource: artworkNsfwSource('nsfw_source'),
+		nsfwLabeledAt: timestamp('nsfw_labeled_at'),
 		isHidden: boolean('is_hidden').notNull().default(false),
 		hiddenAt: timestamp('hidden_at'),
 		score: integer('score').notNull().default(0),
@@ -285,6 +299,43 @@ export const artworkPublishRateLimits = appSchema.table(
 	]
 );
 
+export const moderationTextPolicies = appSchema.table(
+	'moderation_text_policies',
+	{
+		context: moderationTextPolicyContext('context').primaryKey(),
+		allowlist: text('allowlist')
+			.array()
+			.notNull()
+			.default(sql`ARRAY[]::text[]`),
+		blocklist: text('blocklist')
+			.array()
+			.notNull()
+			.default(sql`ARRAY[]::text[]`),
+		version: integer('version').notNull().default(1),
+		updatedBy: text('updated_by').references(() => users.id, { onDelete: 'set null' }),
+		createdAt: timestamp('created_at').defaultNow().notNull(),
+		updatedAt: timestamp('updated_at')
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull()
+	},
+	(table) => [index('moderation_text_policies_updated_by_idx').on(table.updatedBy)]
+);
+
+export const viewerContentPreferences = appSchema.table('viewer_content_preferences', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	adultContentEnabled: boolean('adult_content_enabled').notNull().default(false),
+	adultContentConsentedAt: timestamp('adult_content_consented_at'),
+	adultContentRevokedAt: timestamp('adult_content_revoked_at'),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at')
+		.defaultNow()
+		.$onUpdate(() => new Date())
+		.notNull()
+});
+
 export const authUsersRelations = relations(user, ({ one, many }) => ({
 	profile: one(users, {
 		fields: [user.id],
@@ -302,7 +353,12 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 	artworks: many(artworks),
 	votes: many(artworkVotes),
 	comments: many(artworkComments),
-	reports: many(contentReports)
+	reports: many(contentReports),
+	moderationPoliciesUpdated: many(moderationTextPolicies),
+	viewerContentPreferences: one(viewerContentPreferences, {
+		fields: [users.id],
+		references: [viewerContentPreferences.userId]
+	})
 }));
 
 export const artworksRelations = relations(artworks, ({ many, one }) => ({
@@ -376,6 +432,20 @@ export const contentReportsRelations = relations(contentReports, ({ one }) => ({
 	comment: one(artworkComments, {
 		fields: [contentReports.commentId],
 		references: [artworkComments.id]
+	})
+}));
+
+export const moderationTextPoliciesRelations = relations(moderationTextPolicies, ({ one }) => ({
+	updatedByUser: one(users, {
+		fields: [moderationTextPolicies.updatedBy],
+		references: [users.id]
+	})
+}));
+
+export const viewerContentPreferencesRelations = relations(viewerContentPreferences, ({ one }) => ({
+	user: one(users, {
+		fields: [viewerContentPreferences.userId],
+		references: [users.id]
 	})
 }));
 

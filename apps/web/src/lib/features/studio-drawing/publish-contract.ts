@@ -1,11 +1,13 @@
 export type DrawPublishedArtwork = {
 	id: string;
+	isNsfw?: boolean;
 	mediaUrl: string;
 	title: string;
 };
 
 export type DrawForkParent = {
 	id: string;
+	isNsfw?: boolean;
 	mediaUrl: string;
 	title: string;
 };

@@ -35,7 +35,8 @@ const makeCanonicalUser = (overrides: Partial<CanonicalUser> = {}): CanonicalUse
 	nickname: 'artist',
 	role: 'user',
 	updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-	...overrides
+	...overrides,
+	isBanned: overrides.isBanned ?? false
 });
 
 const createRepository = (initial: UserRecord | null = null): UserRepository => {

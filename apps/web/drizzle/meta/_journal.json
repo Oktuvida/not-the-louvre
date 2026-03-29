@@ -85,6 +85,13 @@
       "when": 1774738056209,
       "tag": "0011_init_storage_buckets",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1774766284364,
+      "tag": "0012_panoramic_wasp",
+      "breakpoints": true
     }
   ]
 }

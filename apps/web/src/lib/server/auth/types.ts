@@ -9,6 +9,7 @@ export type CanonicalUser = {
 	role: ProductRole;
 	avatarUrl: string | null;
 	avatarOnboardingCompletedAt?: Date | null;
+	isBanned: boolean;
 	name: string;
 	email: string;
 	emailVerified: boolean;
