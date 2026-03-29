@@ -29,7 +29,7 @@ describe('PersistentNav', () => {
 			}
 		});
 
-		await expect.element(page.getByText('Signed in as')).toBeVisible();
+		await expect.element(page.getByText('HELLO')).toBeVisible();
 		await expect.element(page.getByText('artist_1')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Logout' })).toBeVisible();
 	});
@@ -37,20 +37,33 @@ describe('PersistentNav', () => {
 	it('hides signed-in chrome when no canonical backend user exists', async () => {
 		render(PersistentNav, { previewCards: [], user: null });
 
-		await expect.element(page.getByText('Signed in as')).not.toBeInTheDocument();
+		await expect.element(page.getByText('HELLO')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Logout' })).not.toBeInTheDocument();
 	});
 
 	it('renders real homepage top-artwork preview cards from route data', async () => {
 		render(PersistentNav, { previewCards: topArtworks, user: null });
 
-		await expect.element(page.getByAltText('Sunset Over Mountains')).toBeVisible();
-		await expect.element(page.getByText('#1')).toBeVisible();
+		await expect.element(page.getByTestId('home-preview-frame-1')).toBeVisible();
+		await expect
+			.element(page.getByTestId('home-preview-frame-1'))
+			.toHaveAttribute('data-frame-tier', 'premium');
 	});
 
 	it('does not render fake preview cards when the homepage teaser is empty', async () => {
 		render(PersistentNav, { previewCards: [], user: null });
 
 		await expect.element(page.getByAltText('Sunset Over Mountains')).not.toBeInTheDocument();
+	});
+
+	it('uses shared sticker links for the primary homepage CTAs', async () => {
+		render(PersistentNav, { previewCards: [], user: null });
+
+		await expect
+			.element(page.getByRole('link', { name: 'GALLERY' }))
+			.toHaveAttribute('data-sticker-size', 'lg');
+		await expect
+			.element(page.getByRole('link', { name: 'MYSTERY' }))
+			.toHaveAttribute('data-sticker-variant', 'accent');
 	});
 });

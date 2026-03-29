@@ -556,7 +556,8 @@
 					<div class="pointer-events-none absolute top-full left-1/2 z-[25] mt-8 -translate-x-1/2">
 						<GameButton
 							onclick={() => dispatch('COME_IN')}
-							className={`pointer-events-auto gap-3 bg-[#d68a49] px-10 py-5 text-xl font-black text-[#2d2420] shadow-[0_16px_40px_rgba(0,0,0,0.35)] transition-[opacity,transform] duration-300 ${showCta ? 'opacity-100 translate-y-0' : 'pointer-events-none opacity-0 -translate-y-3'}`}
+							size="hero"
+							className={`pointer-events-auto shadow-[0_16px_40px_rgba(0,0,0,0.35)] transition-[opacity,transform] duration-300 ${showCta ? 'opacity-100 translate-y-0' : 'pointer-events-none opacity-0 -translate-y-3'}`}
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
