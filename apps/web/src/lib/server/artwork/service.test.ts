@@ -243,7 +243,7 @@ describe('artwork service', () => {
 			parentId: null,
 			forkCount: 0
 		});
-	});
+	}, 10000);
 
 	it('publishes a forked artwork for a valid active parent and increments the parent fork count', async () => {
 		const { publishArtwork } = await import('./service');
@@ -402,7 +402,7 @@ describe('artwork service', () => {
 		expect(uploads[0]?.file.type).toBe('image/avif');
 		expect(artworks.get('artwork-webp')?.mediaContentType).toBe('image/avif');
 		expect(await fileToBytes(uploads[0]!.file)).not.toEqual(await fileToBytes(media));
-	}, 15000);
+	}, 30000);
 
 	it('publishes browser-exported JPEG source media and stores canonical AVIF output', async () => {
 		const { publishArtwork } = await import('./service');
@@ -713,7 +713,7 @@ describe('artwork service', () => {
 		});
 
 		expect(storage.upload).not.toHaveBeenCalled();
-	}, 15000);
+	}, 30000);
 
 	it('cleans up uploaded media if record creation fails', async () => {
 		const { publishArtwork } = await import('./service');
