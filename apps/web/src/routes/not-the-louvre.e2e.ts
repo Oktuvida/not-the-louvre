@@ -16,6 +16,13 @@ const enableReducedMotion = async (page: import('@playwright/test').Page) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 };
 
+const openDrawSketchbook = async (page: import('@playwright/test').Page) => {
+	await enableReducedMotion(page);
+	await expect(page.getByRole('button', { name: 'Open sketchbook' })).toBeVisible();
+	await page.getByRole('button', { name: 'Open sketchbook' }).click();
+	await expect(page.getByPlaceholder('Give your piece a title')).toBeVisible();
+};
+
 test.describe('Not the Louvre frontend port', () => {
 	test.beforeEach(async ({ request }) => {
 		await resetDemoState(request);
@@ -205,6 +212,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
+		await openDrawSketchbook(page);
 
 		await expect(page.getByRole('link', { name: 'Exit Studio' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
@@ -223,6 +231,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
+		await openDrawSketchbook(page);
 		await page.getByPlaceholder('Give your piece a title').fill('Gallery Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
@@ -250,6 +259,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
+		await openDrawSketchbook(page);
 		await page.getByPlaceholder('Give your piece a title').fill('Realtime Product Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
@@ -322,6 +332,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
+		await openDrawSketchbook(page);
 		await page.getByPlaceholder('Give your piece a title').fill('Mystery Comment Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
@@ -365,6 +376,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
+		await openDrawSketchbook(page);
 
 		await setDrawingExportMode(page, 'unsupported');
 		await page.getByPlaceholder('Give your piece a title').fill('Retry Piece');
@@ -387,6 +399,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
+		await openDrawSketchbook(page);
 		await page.getByPlaceholder('Give your piece a title').fill('Fork Source');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
@@ -396,6 +409,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByRole('link', { name: 'Fork' }).click();
 
 		await expect(page).toHaveURL(/\/draw\?fork=/);
+		await openDrawSketchbook(page);
 		await expect(page.getByText('Forking from')).toBeVisible();
 		await expect(page.getByText('Fork Source')).toBeVisible();
 	});
