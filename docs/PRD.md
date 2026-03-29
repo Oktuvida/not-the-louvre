@@ -171,12 +171,12 @@ fully custom session system.
   eye placement dots, mouth line) as a guide. The template is purely visual and
   not part of the final avatar.
 - **Tools**: Same minimalist toolset as the main canvas (see 5.3).
-- **Client upload format**: The browser exports and uploads avatars as PNG only.
-  This avoids relying on direct AVIF encoding support in the canvas API, which
-  is not portable enough across browsers for the onboarding flow.
-- **Ingress validation**: The backend accepts only PNG avatar uploads, verifies
-  PNG magic bytes, and rejects payloads that do not decode as a single still
-  256x256 PNG image.
+- **Client upload format**: The browser exports and uploads avatars as WebP.
+  WebP preserves transparency while reducing upload size enough to fit the
+  product's image budget for simple canvas drawings.
+- **Ingress validation**: The backend accepts WebP avatar uploads, verifies the
+  declared media type against the decoded payload, and rejects payloads that do
+  not decode as a single still 256x256 image.
 - **Canonical output**: After validation, the backend re-encodes the avatar to
   256x256 AVIF, capped at roughly 100KB per image, and stores that canonical
   AVIF in Supabase Storage behind a cache layer.
@@ -208,8 +208,8 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
 
 | Property      | Value                                        |
 | ------------- | -------------------------------------------- |
-| Resolution    | 1024x1024 internal, responsive display        |
-| Format        | Exported as AVIF                              |
+| Resolution    | 768x768 canonical artwork size                |
+| Format        | Browser upload uses compressed WebP           |
 | Max file size | ~100KB after compression                      |
 | Stroke data   | Stored as vector paths for replay (optional)  |
 
@@ -230,9 +230,18 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
   publish or later from artwork management. NSFW artworks render blurred by
   default in feeds and detail views until the viewer confirms they are 18+ and
   wants to reveal the piece.
-- **Publish**: Encodes the final image as AVIF, enforces the ~100KB size budget,
-  uploads it to object storage, and creates the DB record through the
-  application server.
+- **Client upload format**: The browser exports draw-canvas content as
+  compressed WebP before submission to the backend.
+- **Ingress validation**: The backend validates that the uploaded artwork media
+  decodes safely as a single still image, matches the declared media type, and
+  can be normalized into the canonical 768x768 artwork image.
+- **Publish**: The application server re-encodes the validated upload to
+  canonical AVIF, tries progressively lower AVIF quality levels with 4:2:0
+  chroma subsampling to stay within the roughly 100KB stored-image budget, and
+  rejects the publish only if the sanitized result still exceeds that budget.
+  The canonical AVIF is then uploaded to object storage and the DB record is
+  created.
+- **Delivery format**: Artwork reads from the backend remain AVIF.
 - **Edit**: Title can be edited post-publish. Artwork image cannot be changed
   (fork instead).
 - **Delete**: Author can delete their own artwork. Forks remain but show
@@ -398,17 +407,21 @@ onto a 3D plane in the Threlte scene. This gives us:
 - Full Canvas 2D API performance for drawing (no WebGL overhead on strokes).
 - The ability to wrap the canvas in a 3D scene with lighting, particles, and
   camera effects.
-- A deterministic media pipeline where artwork canvases are exported as AVIF,
-  while avatar canvases are exported as PNG and then canonicalized to AVIF in
-  backend sanitization before persistence.
+- A deterministic media pipeline where canvas-based client uploads are exported
+  as compressed WebP, then canonicalized to AVIF in backend sanitization before
+  persistence.
+
+All canvas-generated media in the MVP follow the same contract: compressed WebP
+for browser-to-backend ingress and canonical AVIF for backend persistence and
+delivery.
 
 **Storage and egress budget first**: The storage tier is capped at 1GB capacity
 and 5GB of egress, so image handling must optimize for both footprint and
 delivery efficiency from day one.
 
 - All persisted artwork and avatar images should be stored as AVIF.
-- Avatar ingress is PNG-only at the public API boundary, with magic-byte and
-  decode validation before AVIF re-encoding.
+- Canvas-based media ingress uses WebP at the public API boundary, with media
+  type and decode validation before AVIF re-encoding.
 - Each stored image should target a hard ceiling of roughly 100KB.
 - Users should fetch media through cached application-controlled URLs rather
   than downloading directly from the storage bucket.
@@ -814,9 +827,9 @@ Every phase is only complete when the standard repository scripts pass:
 - The MVP must fit within a storage ceiling of 1GB and an egress ceiling of 5GB.
 - Artwork and avatar media are stored as AVIF to maximize compression quality
   for the available budget.
-- Avatar uploads from browsers are accepted as PNG first, then normalized to
-  AVIF on the backend so storage and egress remain canonical while client
-  compatibility stays broad.
+- Browser uploads generated from canvas are accepted as compressed WebP first,
+  then normalized to AVIF on the backend so storage and egress remain canonical
+  while ingress payloads stay small.
 - The publish pipeline must enforce an image size budget of roughly 100KB per
   stored image.
 - Media delivery should go through a cache layer in front of object storage;
