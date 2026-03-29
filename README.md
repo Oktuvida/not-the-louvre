@@ -25,7 +25,7 @@ You open the app, sketch something mildly unhinged, hit publish, and wait for th
 - 🍴 **Forking, or tasteful art vandalism**: See something beautiful? Fork it, keep the original as a locked background, and add the moustache it was clearly missing. The full ancestry stays visible, so credit and blame are both preserved.
 - 🎩 **Needlessly elegant 2.5D presentation**: Built with **Threlte**. The gallery glows, moves, and shows off like a millionaire's foyer. The artwork is still a flat little PNG. That mismatch is the whole point.
 - 🍅 **Public curation with produce**: Upvote what deserves applause, downvote what deserves a tomato. Yes, the tomato actually drops on screen. We believe in responsive feedback.
-- 🛡️ **A small AI doorman**: Client-side NSFWJS checks whether you're trying to upload something that would get the museum shut down by lunchtime. Go on, try it. It still won't let you publish.
+- 🛡️ **Community-first moderation**: creators label sensitive work, viewers opt into 18+ reveals, and moderators can step in when a piece or profile crosses the line.
 
 ## 🛠️ The stack behind the nonsense
 
@@ -34,7 +34,7 @@ Because even a joke needs plumbing:
 - **3D / Graphics:** Threlte + HTML5 Canvas 2D API.
 - **Backend / Database:** Supabase.
 - **Realtime:** Supabase Realtime.
-- **Moderation:** NSFWJS in the browser.
+- **Moderation:** DB-backed text policies, creator-applied NSFW labels, and persisted 18+ reveal gating.
 
 ## 📦 Repository layout
 
