@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
-	import { resolve } from '$app/paths';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
@@ -13,6 +12,8 @@
 	} from '$lib/features/studio-drawing/publish-contract';
 	import { exportArtworkFile } from '$lib/features/studio-drawing/canvas-export';
 	import DrawingBookStage from '$lib/features/studio-drawing/components/DrawingBookStage.svelte';
+	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import DrawingCanvas from '$lib/features/studio-drawing/components/DrawingCanvas.svelte';
 	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 
@@ -165,15 +166,11 @@
 	<header
 		class="relative z-30 flex flex-shrink-0 items-start justify-between gap-4 px-4 pt-4 sm:px-6"
 	>
-		<a
-			href={resolve('/')}
-			class="flex -rotate-1 items-center gap-2 rounded-xl border-3 border-[#2d2420] bg-[#8b9d91] px-4 py-2.5 text-sm font-semibold text-[#fdfbf7] shadow-lg transition-transform hover:scale-[1.02]"
-			style="font-family: 'Baloo 2', sans-serif;"
-		>
+		<GameLink href="/" variant="secondary" size="md" className="-rotate-1 shadow-lg">
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
-				width="18"
-				height="18"
+				width="20"
+				height="20"
 				viewBox="0 0 24 24"
 				fill="none"
 				stroke="currentColor"
@@ -182,7 +179,7 @@
 				stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg
 			>
 			<span>Exit Studio</span>
-		</a>
+		</GameLink>
 
 		{#if user}
 			<div
@@ -295,19 +292,12 @@
 						<h2 class="mt-0.5 text-base font-black text-[#2d2420]">{publishedArtwork.title}</h2>
 						<p class="text-xs text-[#6b625a]">Artwork id: {publishedArtwork.id}</p>
 						<div class="mt-1.5 flex flex-wrap gap-2">
-							<button
-								type="button"
-								class="rounded-lg border-2 border-[#2d2420] bg-[#d4956c] px-3 py-1.5 text-sm font-semibold text-[#fdfbf7]"
-								onclick={clearCanvas}
-							>
-								Draw again
-							</button>
-							<a
-								href={resolve('/gallery')}
-								class="rounded-lg border-2 border-[#2d2420] bg-[#8b9d91] px-3 py-1.5 text-sm font-semibold text-[#fdfbf7]"
-							>
-								Open gallery
-							</a>
+							<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
+								<span>Draw again</span>
+							</GameButton>
+							<GameLink href="/gallery" variant="secondary" size="sm">
+								<span>Open gallery</span>
+							</GameLink>
 						</div>
 					</div>
 				{/if}

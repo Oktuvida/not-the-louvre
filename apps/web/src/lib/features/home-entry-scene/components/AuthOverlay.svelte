@@ -80,6 +80,15 @@
 	const isSignUpFlow = $derived(
 		view === 'signup-account' || view === 'signup-success' || view === 'signup-avatar'
 	);
+	const isAvatarView = $derived(view === 'signup-avatar');
+	const panelClassName = $derived(
+		isAvatarView
+			? 'w-full max-w-[68rem] border-[#2d2a26] bg-[linear-gradient(180deg,rgba(255,252,246,0.98),rgba(247,239,228,0.98))] text-[#2d2a26]'
+			: 'w-full max-w-[44rem] border-[#2d2a26] bg-[linear-gradient(180deg,rgba(255,252,246,0.97),rgba(248,241,230,0.97))] text-[#2d2a26]'
+	);
+	const contentClassName = $derived(
+		isAvatarView ? 'space-y-6 p-6 md:p-8 lg:p-10' : 'space-y-5 p-6 md:p-8'
+	);
 
 	const normalizeNickname = (value: string) => value.trim().toLowerCase();
 	const isValidNickname = (value: string) => NICKNAME_PATTERN.test(normalizeNickname(value));
@@ -459,21 +468,24 @@
 <div
 	bind:this={overlayElement}
 	data-testid="auth-overlay"
-	class={`absolute inset-0 z-[40] flex items-center justify-center bg-[rgba(24,15,8,0.16)] px-6 py-10 opacity-0 ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
+	class={`absolute inset-0 z-[40] flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(255,240,214,0.24),rgba(24,15,8,0.58))] px-4 py-6 opacity-0 md:px-6 md:py-10 ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
 	style="transform: scale(0.95);"
 	aria-hidden={!isInteractive}
 >
 	<StudioPanel
 		tone="paper"
-		className="pointer-events-auto w-full max-w-[40rem] border-[#2d2a26] bg-[rgba(255,252,246,0.97)] text-[#2d2a26]"
+		className={`${panelClassName} ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
 	>
-		<div class="space-y-5 p-6 md:p-8">
+		<div
+			class="pointer-events-none absolute inset-x-8 top-0 h-20 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.42),transparent_72%)]"
+		></div>
+		<div class={contentClassName}>
 			<div class="flex items-start justify-between gap-4">
 				<div class="space-y-2">
-					<p class="text-xs font-semibold tracking-[0.22em] text-[#8d6c52] uppercase">
+					<p class="text-xs font-semibold tracking-[0.28em] text-[#8d6c52] uppercase">
 						Studio Access
 					</p>
-					<h2 class="font-display text-3xl tracking-[0.06em] text-[#2d2a26] uppercase">
+					<h2 class="font-display text-3xl tracking-[0.06em] text-[#2d2a26] uppercase md:text-4xl">
 						{view === 'signup-account'
 							? 'Draw yourself'
 							: view === 'signup-success'
@@ -486,7 +498,7 @@
 											? 'Replacement key'
 											: 'Welcome back'}
 					</h2>
-					<p class="text-sm text-[#5a554d]">
+					<p class="max-w-2xl text-sm text-[#5a554d] md:text-base">
 						{view === 'login'
 							? 'The room missed you. Probably.'
 							: view === 'signup-account'
@@ -496,8 +508,10 @@
 									: 'One more step and you are in.'}
 					</p>
 				</div>
-				<button
+				<GameButton
 					type="button"
+					variant="ghost"
+					size="sm"
 					onclick={() => {
 						if (view === 'signup-avatar') {
 							onAvatarDismiss?.();
@@ -507,268 +521,255 @@
 
 						dispatch('AUTH_CANCEL');
 					}}
-					class="rounded-full border-2 border-[#2d2a26] bg-white/80 px-3 py-2 text-xs font-semibold tracking-[0.18em] text-[#5d4737] uppercase transition hover:-translate-y-0.5"
 				>
-					Close
-				</button>
+					<span>Close</span>
+				</GameButton>
 			</div>
 
 			{#if view === 'login' || view === 'signup-account'}
-				<div
-					class="grid grid-cols-2 gap-2 rounded-[1rem] border-2 border-[#2d2a26] bg-[#f3ebdd] p-1.5"
-				>
-					<button
-						type="button"
-						onclick={goToLogin}
-						class={`rounded-[0.8rem] px-4 py-2 text-sm font-bold tracking-[0.12em] uppercase transition ${view === 'login' ? 'bg-[#2d2a26] text-[#f5f0e1]' : 'text-[#5a554d]'}`}
-					>
-						Log in
-					</button>
-					<button
-						type="button"
-						onclick={goToSignup}
-						class={`rounded-[0.8rem] px-4 py-2 text-sm font-bold tracking-[0.12em] uppercase transition ${view === 'signup-account' ? 'bg-[#2d2a26] text-[#f5f0e1]' : 'text-[#5a554d]'}`}
-					>
-						Sign up
-					</button>
-				</div>
-			{/if}
-
-			{#if rateLimitError}
-				<div
-					class="rounded-[1rem] border-2 border-[#9c432b] bg-[#f4d0bf] px-4 py-3 text-sm text-[#6f2413]"
-				>
-					{rateLimitError}
-				</div>
-			{/if}
-			{#if formError}
-				<div
-					class="rounded-[1rem] border-2 border-[#9c432b] bg-[#f7e1d7] px-4 py-3 text-sm text-[#6f2413]"
-				>
-					{formError}
-				</div>
-			{/if}
-
-			{#if view === 'login'}
-				<form
-					bind:this={loginFormElement}
-					method="POST"
-					action="?/signIn"
-					use:enhance={createEnhancer}
-					onsubmit={handleLoginSubmit}
-					class="space-y-4"
-				>
-					<label class="block space-y-2">
-						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-							>Nickname</span
-						>
-						<input
-							bind:value={nickname}
-							name="nickname"
-							type="text"
-							placeholder="artist_123"
-							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-						/>
-					</label>
-					{#if nicknameError}<p class="text-sm text-[#8f3720]">{nicknameError}</p>{/if}
-
-					<label class="block space-y-2">
-						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-							>Password</span
-						>
-						<input
-							bind:value={password}
-							name="password"
-							type="password"
-							placeholder="Enter your password"
-							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-						/>
-					</label>
-					{#if passwordError}<p class="text-sm text-[#8f3720]">{passwordError}</p>{/if}
-
-					<div class="flex items-center justify-between gap-3 pt-2">
-						<button
-							type="button"
-							onclick={goToRecovery}
-							class="text-xs tracking-[0.18em] text-[#8d6c52] uppercase underline-offset-4 hover:underline"
-						>
-							Use recovery key
-						</button>
-
-						<GameButton
-							type="button"
-							onclick={submitLogin}
-							disabled={isSubmitting}
-							className="gap-3 px-6 py-3 text-sm font-black"
-						>
-							<span>{isSubmitting ? 'Working...' : 'Sign In'}</span>
-						</GameButton>
-					</div>
-				</form>
-			{:else if view === 'signup-account'}
-				<form
-					bind:this={signupFormElement}
-					method="POST"
-					action="?/signUp"
-					use:enhance={createEnhancer}
-					onsubmit={handleSignupSubmit}
-					class="space-y-4"
-				>
-					<label class="block space-y-2">
-						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-							>Nickname</span
-						>
-						<input
-							bind:value={nickname}
-							name="nickname"
-							type="text"
-							placeholder="artist_123"
-							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-						/>
-					</label>
-					{#if nicknameError}
-						<p class="text-sm text-[#8f3720]">{nicknameError}</p>
-					{:else if availabilityMessage}
-						<p
-							class={`text-sm ${availabilityState === 'taken' ? 'text-[#8f3720]' : availabilityState === 'available' ? 'text-[#35613f]' : 'text-[#6f5846]'}`}
-						>
-							{availabilityMessage}
-						</p>
-					{/if}
-
-					<label class="block space-y-2">
-						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-							>Password</span
-						>
-						<input
-							bind:value={password}
-							name="password"
-							type="password"
-							placeholder="Enter your password"
-							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-						/>
-					</label>
-					{#if passwordError}<p class="text-sm text-[#8f3720]">{passwordError}</p>{/if}
-
-					<div class="flex items-center justify-between gap-3 pt-2">
-						<p class="text-xs tracking-[0.18em] text-[#8d6c52] uppercase">
-							Step 1: claim your wall
-						</p>
-
-						<GameButton
-							type="button"
-							onclick={() => {
-								void submitSignup();
-							}}
-							disabled={isSubmitting}
-							className="gap-3 px-6 py-3 text-sm font-black"
-						>
-							<span>{isSubmitting ? 'Working...' : 'Start account'}</span>
-						</GameButton>
-					</div>
-				</form>
-			{:else if view === 'recover'}
-				<form
-					bind:this={recoveryFormElement}
-					method="POST"
-					action="?/recover"
-					use:enhance={createEnhancer}
-					onsubmit={handleRecoverySubmit}
-					class="space-y-4"
-				>
-					<label class="block space-y-2">
-						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-							>Nickname</span
-						>
-						<input
-							bind:value={nickname}
-							name="nickname"
-							type="text"
-							placeholder="artist_123"
-							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-						/>
-					</label>
-					{#if nicknameError}<p class="text-sm text-[#8f3720]">{nicknameError}</p>{/if}
-
-					<label class="block space-y-2">
-						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-							>Recovery Key</span
-						>
-						<input
-							bind:value={recoveryKey}
-							name="recoveryKey"
-							type="text"
-							placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-						/>
-					</label>
-					{#if recoveryKeyError}<p class="text-sm text-[#8f3720]">{recoveryKeyError}</p>{/if}
-
-					<label class="block space-y-2">
-						<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-							>New Password</span
-						>
-						<input
-							bind:value={newPassword}
-							name="newPassword"
-							type="password"
-							placeholder="Choose a new password"
-							class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-						/>
-					</label>
-					{#if newPasswordError}<p class="text-sm text-[#8f3720]">{newPasswordError}</p>{/if}
-
-					<div class="flex items-center justify-between gap-3 pt-2">
-						<button
-							type="button"
-							onclick={goToLogin}
-							class="text-xs tracking-[0.18em] text-[#8d6c52] uppercase underline-offset-4 hover:underline"
-						>
-							Log in
-						</button>
-						<GameButton
-							type="button"
-							onclick={submitRecovery}
-							disabled={isSubmitting}
-							className="gap-3 px-6 py-3 text-sm font-black"
-						>
-							<span>{isSubmitting ? 'Working...' : 'Recover Access'}</span>
-						</GameButton>
-					</div>
-				</form>
-			{:else if view === 'signup-success' || view === 'recover-success'}
-				<div class="space-y-4 rounded-[1.4rem] border-2 border-[#d7c2ab] bg-[#fff8ef] p-5">
-					<p class="text-sm tracking-[0.18em] text-[#8d6c52] uppercase">One-time key</p>
-					<p
-						class="rounded-[1rem] border-2 border-[#2d2a26] bg-[#2d2a26] px-4 py-4 font-mono text-sm text-[#f5f0e1]"
-					>
-						{oneTimeKey}
-					</p>
-					<p class="text-sm text-[#5d4737]">
-						{view === 'signup-success'
-							? 'Store this recovery key now. It will not be shown again after you continue.'
-							: 'Your password was reset and your old recovery key is now invalid. Store this replacement key now.'}
-					</p>
-				</div>
-
-				<div class="flex items-center justify-end pt-2">
+				<div class="grid grid-cols-2 gap-3">
 					<GameButton
-						onclick={() => {
-							if (view === 'signup-success') {
-								view = 'signup-avatar';
-								return;
-							}
-
-							goToLogin();
-						}}
-						className="gap-3 px-6 py-3 text-sm font-black"
+						type="button"
+						variant={view === 'login' ? 'secondary' : 'ghost'}
+						size="sm"
+						onclick={goToLogin}
 					>
-						<span>{view === 'signup-success' ? 'I Stored It' : 'Back To Sign In'}</span>
+						<span>Log in</span>
+					</GameButton>
+					<GameButton
+						type="button"
+						variant={view === 'signup-account' ? 'primary' : 'ghost'}
+						size="sm"
+						onclick={goToSignup}
+					>
+						<span>Sign up</span>
 					</GameButton>
 				</div>
-			{:else}
-				<AvatarSketchpad {nickname} {saveAvatar} onContinue={enterStudio} />
 			{/if}
+
+			<div
+				class="rounded-[1.25rem] border border-[rgba(141,108,82,0.22)] bg-[rgba(255,255,255,0.38)] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]"
+			>
+				<div
+					class="rounded-[1rem] border border-[rgba(141,108,82,0.18)] bg-[linear-gradient(180deg,rgba(255,248,238,0.92),rgba(245,235,220,0.92))] p-4 md:p-5"
+				>
+					{#if rateLimitError}
+						<div
+							class="rounded-[1rem] border-2 border-[#9c432b] bg-[#f4d0bf] px-4 py-3 text-sm text-[#6f2413]"
+						>
+							{rateLimitError}
+						</div>
+					{/if}
+					{#if formError}
+						<div
+							class="rounded-[1rem] border-2 border-[#9c432b] bg-[#f7e1d7] px-4 py-3 text-sm text-[#6f2413]"
+						>
+							{formError}
+						</div>
+					{/if}
+
+					{#if view === 'login'}
+						<form
+							bind:this={loginFormElement}
+							method="POST"
+							action="?/signIn"
+							use:enhance={createEnhancer}
+							onsubmit={handleLoginSubmit}
+							class="space-y-4"
+						>
+							<label class="block space-y-2">
+								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+									>Nickname</span
+								>
+								<input
+									bind:value={nickname}
+									name="nickname"
+									type="text"
+									placeholder="artist_123"
+									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+								/>
+							</label>
+							{#if nicknameError}<p class="text-sm text-[#8f3720]">{nicknameError}</p>{/if}
+
+							<label class="block space-y-2">
+								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+									>Password</span
+								>
+								<input
+									bind:value={password}
+									name="password"
+									type="password"
+									placeholder="Enter your password"
+									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+								/>
+							</label>
+							{#if passwordError}<p class="text-sm text-[#8f3720]">{passwordError}</p>{/if}
+
+							<div class="flex items-center justify-between gap-3 pt-2">
+								<GameButton type="button" variant="ghost" size="sm" onclick={goToRecovery}>
+									<span>Use recovery key</span>
+								</GameButton>
+
+								<GameButton type="button" onclick={submitLogin} disabled={isSubmitting} size="md">
+									<span>{isSubmitting ? 'Working...' : 'Sign In'}</span>
+								</GameButton>
+							</div>
+						</form>
+					{:else if view === 'signup-account'}
+						<form
+							bind:this={signupFormElement}
+							method="POST"
+							action="?/signUp"
+							use:enhance={createEnhancer}
+							onsubmit={handleSignupSubmit}
+							class="space-y-4"
+						>
+							<label class="block space-y-2">
+								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+									>Nickname</span
+								>
+								<input
+									bind:value={nickname}
+									name="nickname"
+									type="text"
+									placeholder="artist_123"
+									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+								/>
+							</label>
+							{#if nicknameError}
+								<p class="text-sm text-[#8f3720]">{nicknameError}</p>
+							{:else if availabilityMessage}
+								<p
+									class={`text-sm ${availabilityState === 'taken' ? 'text-[#8f3720]' : availabilityState === 'available' ? 'text-[#35613f]' : 'text-[#6f5846]'}`}
+								>
+									{availabilityMessage}
+								</p>
+							{/if}
+
+							<label class="block space-y-2">
+								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+									>Password</span
+								>
+								<input
+									bind:value={password}
+									name="password"
+									type="password"
+									placeholder="Enter your password"
+									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+								/>
+							</label>
+							{#if passwordError}<p class="text-sm text-[#8f3720]">{passwordError}</p>{/if}
+
+							<div class="flex items-center justify-between gap-3 pt-2">
+								<p class="text-xs tracking-[0.18em] text-[#8d6c52] uppercase">
+									Step 1: claim your wall
+								</p>
+
+								<GameButton type="button" onclick={submitSignup} disabled={isSubmitting} size="md">
+									<span>{isSubmitting ? 'Working...' : 'Start account'}</span>
+								</GameButton>
+							</div>
+						</form>
+					{:else if view === 'recover'}
+						<form
+							bind:this={recoveryFormElement}
+							method="POST"
+							action="?/recover"
+							use:enhance={createEnhancer}
+							onsubmit={handleRecoverySubmit}
+							class="space-y-4"
+						>
+							<label class="block space-y-2">
+								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+									>Nickname</span
+								>
+								<input
+									bind:value={nickname}
+									name="nickname"
+									type="text"
+									placeholder="artist_123"
+									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+								/>
+							</label>
+							{#if nicknameError}<p class="text-sm text-[#8f3720]">{nicknameError}</p>{/if}
+
+							<label class="block space-y-2">
+								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+									>Recovery Key</span
+								>
+								<input
+									bind:value={recoveryKey}
+									name="recoveryKey"
+									type="text"
+									placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+								/>
+							</label>
+							{#if recoveryKeyError}<p class="text-sm text-[#8f3720]">{recoveryKeyError}</p>{/if}
+
+							<label class="block space-y-2">
+								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+									>New Password</span
+								>
+								<input
+									bind:value={newPassword}
+									name="newPassword"
+									type="password"
+									placeholder="Choose a new password"
+									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+								/>
+							</label>
+							{#if newPasswordError}<p class="text-sm text-[#8f3720]">{newPasswordError}</p>{/if}
+
+							<div class="flex items-center justify-between gap-3 pt-2">
+								<GameButton type="button" variant="ghost" size="sm" onclick={goToLogin}>
+									<span>Log in</span>
+								</GameButton>
+								<GameButton
+									type="button"
+									onclick={submitRecovery}
+									disabled={isSubmitting}
+									size="md"
+								>
+									<span>{isSubmitting ? 'Working...' : 'Recover Access'}</span>
+								</GameButton>
+							</div>
+						</form>
+					{:else if view === 'signup-success' || view === 'recover-success'}
+						<div class="space-y-4 rounded-[1.4rem] border-2 border-[#d7c2ab] bg-[#fff8ef] p-5">
+							<p class="text-sm tracking-[0.18em] text-[#8d6c52] uppercase">One-time key</p>
+							<p
+								class="rounded-[1rem] border-2 border-[#2d2a26] bg-[#2d2a26] px-4 py-4 font-mono text-sm text-[#f5f0e1]"
+							>
+								{oneTimeKey}
+							</p>
+							<p class="text-sm text-[#5d4737]">
+								{view === 'signup-success'
+									? 'Store this recovery key now. It will not be shown again after you continue.'
+									: 'Your password was reset and your old recovery key is now invalid. Store this replacement key now.'}
+							</p>
+						</div>
+
+						<div class="flex items-center justify-end pt-2">
+							<GameButton
+								onclick={() => {
+									if (view === 'signup-success') {
+										view = 'signup-avatar';
+										return;
+									}
+
+									goToLogin();
+								}}
+								size="md"
+							>
+								<span>{view === 'signup-success' ? 'I Stored It' : 'Back To Sign In'}</span>
+							</GameButton>
+						</div>
+					{:else}
+						<AvatarSketchpad {nickname} {saveAvatar} onContinue={enterStudio} />
+					{/if}
+				</div>
+			</div>
 		</div>
 	</StudioPanel>
 </div>

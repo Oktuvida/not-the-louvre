@@ -225,6 +225,7 @@ export type ListHotArtworksInput = {
 };
 
 export type ListTopArtworksInput = {
+	authorId?: string | null;
 	cursor: Extract<ArtworkRankedDiscoveryCursor, { sort: 'top' }> | null;
 	limit: number;
 	now: Date;

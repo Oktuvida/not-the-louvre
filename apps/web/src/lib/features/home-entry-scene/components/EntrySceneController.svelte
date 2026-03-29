@@ -4,7 +4,10 @@
 		HomeAuthBootstrap,
 		HomeAuthUser
 	} from '$lib/features/home-entry-scene/auth-contract';
-	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
+	import type {
+		HomePreviewCard,
+		HomeSceneArtworkSlot
+	} from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import HomeEntryPage from '$lib/features/home-entry-scene/HomeEntryPage.svelte';
 	import AuthOverlay from '$lib/features/home-entry-scene/components/AuthOverlay.svelte';
 	import MuseumWallOverlay from '$lib/features/home-entry-scene/components/MuseumWallOverlay.svelte';
@@ -18,11 +21,13 @@
 		auth,
 		adultContentEnabled = false,
 		form,
+		studioArtworks = [],
 		topArtworks = []
 	}: {
 		auth: HomeAuthBootstrap;
 		adultContentEnabled?: boolean;
 		form?: HomeAuthActionForm;
+		studioArtworks?: HomeSceneArtworkSlot[];
 		topArtworks?: HomePreviewCard[];
 	} = $props();
 
@@ -127,6 +132,7 @@
 	{adultContentEnabled}
 	entryState={flowState}
 	previewCards={topArtworks}
+	sceneArtworks={studioArtworks}
 	user={navUser}
 >
 	{#if integrityFailure}

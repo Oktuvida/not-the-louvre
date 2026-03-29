@@ -1,4 +1,5 @@
 <script lang="ts">
+	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import { drawingPalette, drawingTools } from '$lib/features/studio-drawing/state/drawing.svelte';
 
 	let {
@@ -75,10 +76,11 @@
 </div>
 
 <div class="-rotate-1 space-y-3 rounded-2xl border-4 border-[#2d2420] bg-[#d4956c] p-4 shadow-2xl">
-	<button
+	<GameButton
 		type="button"
-		class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-[#2d2420] bg-[#c84f4f] px-4 py-3 font-semibold text-[#fdfbf7] shadow-md transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
-		style="font-family: 'Baloo 2', sans-serif;"
+		variant="danger"
+		size="sm"
+		className="w-full"
 		onclick={onClear}
 		disabled={isPublishing}
 	>
@@ -96,13 +98,14 @@
 				d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"
 			/></svg
 		>
-		Clear
-	</button>
+		<span>Clear</span>
+	</GameButton>
 
-	<button
+	<GameButton
 		type="button"
-		class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-[#2d2420] bg-[#8b9d91] px-4 py-3 font-semibold text-[#fdfbf7] shadow-md transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
-		style="font-family: 'Baloo 2', sans-serif;"
+		variant="secondary"
+		size="sm"
+		className="w-full"
 		onclick={onPublish}
 		disabled={isPublishing}
 	>
@@ -120,6 +123,6 @@
 				d="M18 18H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"
 			/><path d="M7 15h0" /></svg
 		>
-		{isPublishing ? 'Publishing...' : 'Publish'}
-	</button>
+		<span>{isPublishing ? 'Publishing...' : 'Publish'}</span>
+	</GameButton>
 </div>

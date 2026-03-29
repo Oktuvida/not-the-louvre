@@ -1,20 +1,30 @@
 <script lang="ts">
+	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
+	import {
+		resolveArtworkFrame,
+		type ArtworkPodiumPosition
+	} from '$lib/features/artwork-presentation/model/frame';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 
 	let {
 		artwork,
 		adultContentEnabled = false,
 		index = 0,
+		frameTestId = 'artwork-card-frame',
+		podiumPosition,
 		onclick
 	}: {
 		artwork: Artwork;
 		adultContentEnabled?: boolean;
+		frameTestId?: string;
 		index?: number;
+		podiumPosition?: ArtworkPodiumPosition;
 		onclick?: () => void;
 	} = $props();
 
 	const rotation = $derived(index % 3 === 0 ? -2 : index % 3 === 1 ? 2 : 0);
 	const isSensitiveBlurred = $derived(artwork.isNsfw && !adultContentEnabled);
+	const frame = $derived(resolveArtworkFrame({ artworkId: artwork.id, podiumPosition }));
 	const medal = $derived(
 		artwork.rank && artwork.rank <= 3
 			? { 1: '\u{1F947}', 2: '\u{1F948}', 3: '\u{1F949}' }[artwork.rank as 1 | 2 | 3]
@@ -33,22 +43,28 @@
 	{onclick}
 >
 	<div
-		class="relative border-[6px] border-[#5d4e37] bg-[#fdfbf7] p-4 shadow-[0_24px_34px_rgba(45,36,32,0.2)] transition duration-300 group-hover:-translate-y-2 group-hover:scale-110 group-hover:rotate-0"
+		class="relative transition duration-300 group-hover:-translate-y-2 group-hover:scale-110 group-hover:rotate-0"
 	>
-		<img
-			src={artwork.imageUrl}
-			alt={artwork.title}
-			class={`aspect-square w-full border-2 border-[#2d2420] object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
-		/>
-		{#if isSensitiveBlurred}
-			<div
-				class="absolute inset-4 flex flex-col items-center justify-center border-2 border-dashed border-[#2d2420] bg-[rgba(45,36,32,0.72)] text-center text-[#fdfbf7]"
-			>
-				<span class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black">18+</span>
-				<p class="mt-3 text-sm font-bold uppercase">Sensitive artwork</p>
-				<p class="mt-1 max-w-[12rem] text-xs">Reveal 18+ artworks to view this piece.</p>
+		<ArtworkFrame {frame} className="aspect-square w-full" testId={frameTestId}>
+			<div class="relative h-full w-full">
+				<img
+					src={artwork.imageUrl}
+					alt={artwork.title}
+					class={`h-full w-full object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
+				/>
+				{#if isSensitiveBlurred}
+					<div
+						class="absolute inset-0 flex flex-col items-center justify-center border-2 border-dashed border-[#2d2420] bg-[rgba(45,36,32,0.72)] px-4 text-center text-[#fdfbf7]"
+					>
+						<span class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
+							>18+</span
+						>
+						<p class="mt-3 text-sm font-bold uppercase">Sensitive artwork</p>
+						<p class="mt-1 max-w-[12rem] text-xs">Reveal 18+ artworks to view this piece.</p>
+					</div>
+				{/if}
 			</div>
-		{/if}
+		</ArtworkFrame>
 
 		{#if artwork.artistAvatar}
 			<div

@@ -4,11 +4,11 @@
 
 	let props = $props<{ error?: App.Error; status?: number }>();
 
-	const status = $derived(props.status ?? page.status ?? 404);
+	const status = $derived(props.status ?? page.status ?? 500);
 	const message = $derived(
 		props.error?.message ??
 			page.error?.message ??
-			"Looks like this masterpiece doesn't exist yet. Why not create it yourself?"
+			'Something broke behind the velvet rope. Please try again in a moment.'
 	);
 </script>
 

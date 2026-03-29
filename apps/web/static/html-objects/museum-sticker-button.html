@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sticker Button — Preview (All Variants + States)</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@400;500;600;700&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: linear-gradient(180deg, #f4ede0 0%, #e7dccf 100%);
+  min-height: 100vh;
+  padding: 48px 32px;
+  font-family: 'Baloo 2', sans-serif;
+  color: #2f241c;
+}
+h2 { text-align: center; margin: 0 0 8px; font-size: 18px; letter-spacing: 2px;
+  text-transform: uppercase; opacity: 0.5; font-family: monospace; }
+.subtitle { text-align: center; margin: 0 0 32px; font-size: 13px; opacity: 0.38;
+  font-family: monospace; max-width: 640px; margin-left: auto; margin-right: auto; }
+.row { display: flex; align-items: center; justify-content: center;
+  gap: 20px; flex-wrap: wrap; margin-bottom: 28px; }
+.divider { border: none; border-top: 1px solid rgba(47,36,28,0.12);
+  margin: 28px auto 40px; width: 60%; }
+
+/* ── Sticker button container ── */
+.sticker-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.sticker-btn:hover {
+  transform: translateY(-3px) rotate(0.8deg) !important;
+  filter: brightness(1.04);
+}
+.sticker-btn:active {
+  transform: translateY(1px) scale(0.97) rotate(-0.3deg) !important;
+  filter: brightness(0.97);
+  transition-duration: 0.06s;
+}
+.sticker-btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: grayscale(0.3);
+}
+.sticker-btn[disabled]:hover {
+  transform: none !important;
+  filter: grayscale(0.3);
+}
+.sticker-btn canvas {
+  display: block;
+  pointer-events: none;
+}
+.sticker-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sticker-content svg {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.sticker-btn:hover .sticker-content svg {
+  transform: rotate(-8deg) scale(1.1);
+}
+label { display: block; text-align: center; margin-top: 8px;
+  font: 12px/1.4 monospace; color: #2f241c; opacity: 0.4; }
+.note { max-width: 660px; margin: 0 auto 32px; padding: 16px 20px;
+  background: rgba(47,36,28,0.06); font: 13px/1.7 monospace; opacity: 0.6;
+  text-align: left; border-radius: 4px; }
+.note strong { opacity: 1; }
+</style>
+</head>
+<body>
+
+<script>
+/* ── Palette (mirrors museum-canvas.ts STICKER_COLORS) ── */
+const C = {
+  ink: [47,36,28],
+  paper: [251,247,240],
+  primary: [212,131,74],
+  secondary: [113,145,127],
+  accent: [217,176,123],
+  danger: [162,77,73],
+};
+const PAINT = [
+  [244,196,48],[212,149,108],[139,157,145],
+  [200,79,79],[212,131,74],[217,176,123],
+];
+const TAPE_TINTS = {
+  primary: [255,250,230],
+  secondary: [240,245,242],
+  accent: [255,250,235],
+  danger: [250,235,233],
+  ghost: [245,240,232],
+};
+const rgb = (c,a=1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+function makeRng(seed){ return()=>{seed=(seed*16807)%2147483647;return(seed&0x7fffffff)/2147483647;}; }
+
+function applyNoise(ctx,w,h,amp=4,seed=77341){
+  const rng=makeRng(seed);const fd=ctx.getImageData(0,0,w,h);const d=fd.data;
+  for(let i=0;i<d.length;i+=4){if(d[i+3]>0){const n=(rng()-0.5)*amp;
+    d[i]=Math.max(0,Math.min(255,d[i]+n));d[i+1]=Math.max(0,Math.min(255,d[i+1]+n));
+    d[i+2]=Math.max(0,Math.min(255,d[i+2]+n));}}
+  ctx.putImageData(fd,0,0);
+}
+
+function drawPaintStains(ctx,w,h,count,seed=12345){
+  const rng=makeRng(seed);
+  for(let i=0;i<count;i++){
+    const c=PAINT[Math.floor(rng()*PAINT.length)];
+    const cx=rng()*w, cy=rng()*h, r=2+rng()*8, a=0.06+rng()*0.10;
+    ctx.fillStyle=rgb(c,a);
+    ctx.beginPath(); ctx.ellipse(cx,cy,r,r*(0.5+rng()*0.7),rng()*Math.PI,0,Math.PI*2); ctx.fill();
+    if(rng()>0.5){const dx=cx+(rng()-0.5)*r*3, dy=cy+rng()*r*2;
+      ctx.fillStyle=rgb(c,a*0.6); ctx.beginPath(); ctx.ellipse(dx,dy,r*0.25,r*0.4,rng()*Math.PI,0,Math.PI*2); ctx.fill();}
+    if(rng()>0.6){for(let s=0;s<2;s++){const sx=cx+(rng()-0.5)*r*4,sy=cy+(rng()-0.5)*r*4;
+      ctx.fillStyle=rgb(c,a*0.4); ctx.beginPath(); ctx.arc(sx,sy,0.5+rng(),0,Math.PI*2); ctx.fill();}}
+  }
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+/* ── drawStickerBackground (mirrors museum-canvas.ts) ─── */
+function drawStickerBg(ctx, w, h, opts={}){
+  const {variant='primary'} = opts;
+  const bandColor = variant === 'ghost' ? C.paper : C[variant];
+  const tapeColor = TAPE_TINTS[variant];
+  const rng = makeRng(99887 + w*7 + h*13 + (variant.charCodeAt(0)||0)*31);
+
+  ctx.clearRect(0,0,w,h);
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(47,36,28,0.12)';
+  ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 3; ctx.shadowBlur = 6;
+  ctx.fillStyle = 'rgba(0,0,0,0)';
+  ctx.fillRect(3, 3, w-6, h-6);
+  ctx.restore();
+
+  roundRect(ctx, 2, 2, w-4, h-4, 2);
+  ctx.fillStyle = rgb(C.paper);
+  ctx.fill();
+
+  const bandM = Math.round(h*0.10);
+  roundRect(ctx, 2+bandM, 2+bandM, w-4-bandM*2, h-4-bandM*2, 1);
+  ctx.fillStyle = rgb(bandColor, 0.82);
+  ctx.fill();
+
+  ctx.save();
+  roundRect(ctx, 2+bandM, 2+bandM, w-4-bandM*2, h-4-bandM*2, 1);
+  ctx.clip();
+  const shi = ctx.createLinearGradient(0, bandM, 0, h*0.42);
+  shi.addColorStop(0, 'rgba(255,255,255,0.22)');
+  shi.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = shi;
+  ctx.fillRect(2+bandM, 2+bandM, w-4-bandM*2, h*0.3);
+  ctx.restore();
+
+  ctx.save();
+  roundRect(ctx, 2+bandM, 2+bandM, w-4-bandM*2, h-4-bandM*2, 1);
+  ctx.clip();
+  const shb = ctx.createLinearGradient(0, h*0.7, 0, h-bandM);
+  shb.addColorStop(0, 'rgba(0,0,0,0)');
+  shb.addColorStop(1, 'rgba(0,0,0,0.06)');
+  ctx.fillStyle = shb;
+  ctx.fillRect(2+bandM, h*0.7, w-4-bandM*2, h*0.3);
+  ctx.restore();
+
+  ctx.fillStyle = rgb(C.paper);
+  for(let x=6; x<w-6; x+=4+rng()*6){
+    if(rng()>0.6){
+      const sz = 1+rng()*2;
+      ctx.fillRect(x, 1, sz, 1+rng());
+      ctx.fillRect(x, h-2-rng(), sz, 1+rng());
+    }
+  }
+  for(let y=6; y<h-6; y+=4+rng()*6){
+    if(rng()>0.7){
+      const sz = 1+rng()*1.5;
+      ctx.fillRect(1, y, 1+rng(), sz);
+      ctx.fillRect(w-2-rng(), y, 1+rng(), sz);
+    }
+  }
+
+  const tapeW = Math.round(Math.max(16, w*0.12));
+  const tapeH = Math.round(Math.max(20, h*0.35));
+
+  ctx.save();
+  ctx.translate(6, 5);
+  ctx.rotate(-0.12 - rng()*0.1);
+  ctx.fillStyle = rgb(tapeColor, 0.40 + rng()*0.12);
+  ctx.fillRect(-tapeW/2, -tapeH/2, tapeW, tapeH);
+  ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(-tapeW/2, -tapeH/2, tapeW, tapeH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.beginPath();
+  ctx.moveTo(-tapeW/2+2, -tapeH*0.1);
+  ctx.lineTo(tapeW/2-2, tapeH*0.05);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(w-6, h-5);
+  ctx.rotate(0.10 + rng()*0.12);
+  ctx.fillStyle = rgb(tapeColor, 0.38 + rng()*0.12);
+  ctx.fillRect(-tapeW/2, -tapeH/2, tapeW, tapeH);
+  ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(-tapeW/2, -tapeH/2, tapeW, tapeH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.beginPath();
+  ctx.moveTo(-tapeW/2+2, tapeH*0.08);
+  ctx.lineTo(tapeW/2-2, -tapeH*0.06);
+  ctx.stroke();
+  ctx.restore();
+
+  drawPaintStains(ctx, w, h, 3, 45612 + w*3 + h*7);
+
+  if(rng() > 0.35){
+    const cx = w*0.55 + rng()*w*0.3;
+    const cy = h*0.25 + rng()*h*0.5;
+    const cr = 5 + rng()*7;
+    ctx.strokeStyle = 'rgba(140,110,70,0.06)';
+    ctx.lineWidth = 1.2 + rng()*0.8;
+    ctx.beginPath(); ctx.arc(cx, cy, cr, rng()*0.5, Math.PI*2 - rng()*0.3); ctx.stroke();
+  }
+
+  applyNoise(ctx, w, h, 4, 12211 + w);
+}
+
+
+/* ── Create a sticker button element ────────────────── */
+function createStickerButton(w, h, text, variant, iconSvg, labelText){
+  const rng = makeRng(w*13 + h*7 + (variant.charCodeAt(0)||0)*41);
+  const rotation = (rng() - 0.5) * 3;
+
+  const btn = document.createElement('button');
+  btn.className = 'sticker-btn';
+  btn.style.transform = `rotate(${rotation.toFixed(1)}deg)`;
+  btn.style.width = w + 'px';
+  btn.style.height = h + 'px';
+
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  drawStickerBg(cv.getContext('2d'), w, h, {variant});
+  btn.appendChild(cv);
+
+  const textColors = {
+    primary: '#2f241c',
+    secondary: '#fdfbf7',
+    accent: '#2f241c',
+    danger: '#fdfbf7',
+    ghost: '#2f241c',
+  };
+  const content = document.createElement('div');
+  content.className = 'sticker-content';
+  content.style.color = textColors[variant] || '#2f241c';
+  content.style.fontSize = Math.round(h * 0.28) + 'px';
+
+  if(iconSvg){
+    const iconWrap = document.createElement('span');
+    iconWrap.innerHTML = iconSvg;
+    content.appendChild(iconWrap);
+  }
+  const span = document.createElement('span');
+  span.textContent = text;
+  content.appendChild(span);
+  btn.appendChild(content);
+
+  const wrap = document.createElement('div');
+  wrap.style.display = 'inline-flex';
+  wrap.style.flexDirection = 'column';
+  wrap.style.alignItems = 'center';
+  wrap.appendChild(btn);
+  if(labelText){
+    const lbl = document.createElement('label');
+    lbl.textContent = labelText;
+    wrap.appendChild(lbl);
+  }
+  return wrap;
+}
+
+/* ── Icon SVGs (Lucide-style) ──────────────────────── */
+const ICONS = {
+  trophy: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>',
+  shuffle: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18l-4 4-4-4"/><path d="M16.8 18h-.4c-1.3 0-2.5-.6-3.3-1.7l-.6-.9"/></svg>',
+  sparkle: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>',
+  logout: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>',
+  home: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+  x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+  brush: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>',
+  arrowLeft: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>',
+  thumbsUp: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>',
+  thumbsDown: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>',
+};
+
+
+/* ══════════════════════════════════════════════════════════ *
+ *                    RENDER SECTIONS                        *
+ * ══════════════════════════════════════════════════════════ */
+
+/* Section 1: With icons */
+const h1 = document.createElement('h2');
+h1.textContent = 'Buttons with Icons';
+document.body.appendChild(h1);
+const s1 = document.createElement('p');
+s1.className = 'subtitle';
+s1.textContent = 'Canvas background + HTML text/icons overlaid. Icons animate independently on hover.';
+document.body.appendChild(s1);
+
+const row1 = document.createElement('div');
+row1.className = 'row';
+row1.appendChild(createStickerButton(220, 56, 'GALLERY', 'primary', ICONS.trophy, 'primary + icon'));
+row1.appendChild(createStickerButton(220, 56, 'MYSTERY', 'secondary', ICONS.shuffle, 'secondary + icon'));
+row1.appendChild(createStickerButton(220, 56, 'CREATE ART', 'accent', ICONS.sparkle, 'accent + icon'));
+row1.appendChild(createStickerButton(180, 56, 'SIGN OUT', 'danger', ICONS.logout, 'danger + icon'));
+document.body.appendChild(row1);
+
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+
+/* Section 2: Without icons */
+const h2 = document.createElement('h2');
+h2.textContent = 'Text Only';
+document.body.appendChild(h2);
+
+const row2 = document.createElement('div');
+row2.className = 'row';
+row2.appendChild(createStickerButton(200, 52, 'UPVOTE', 'primary', null, 'primary'));
+row2.appendChild(createStickerButton(200, 52, 'COMMENT', 'secondary', null, 'secondary'));
+row2.appendChild(createStickerButton(200, 52, 'FORK IT', 'accent', null, 'accent'));
+row2.appendChild(createStickerButton(160, 52, 'CLOSE', 'danger', null, 'danger'));
+document.body.appendChild(row2);
+
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+
+/* Section 3: Various sizes */
+const h3 = document.createElement('h2');
+h3.textContent = 'Size Variations';
+document.body.appendChild(h3);
+
+const row3 = document.createElement('div');
+row3.className = 'row';
+row3.appendChild(createStickerButton(320, 64, 'ENTER THE GALLERY', 'primary', ICONS.sparkle, 'large CTA'));
+row3.appendChild(createStickerButton(180, 48, 'GO HOME', 'secondary', ICONS.home, 'medium'));
+row3.appendChild(createStickerButton(120, 44, 'CLOSE', 'danger', ICONS.x, 'small'));
+document.body.appendChild(row3);
+
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+
+/* Section 4: Ghost variant */
+const h4 = document.createElement('h2');
+h4.textContent = 'Ghost Variant';
+document.body.appendChild(h4);
+
+const row4 = document.createElement('div');
+row4.className = 'row';
+row4.appendChild(createStickerButton(200, 52, 'GO BACK', 'ghost', ICONS.arrowLeft, 'ghost + icon'));
+row4.appendChild(createStickerButton(160, 48, 'CANCEL', 'ghost', null, 'ghost text-only'));
+document.body.appendChild(row4);
+
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+
+/* Section 5: Disabled state */
+const h5 = document.createElement('h2');
+h5.textContent = 'Disabled State';
+document.body.appendChild(h5);
+
+const row5 = document.createElement('div');
+row5.className = 'row';
+const disBtn = createStickerButton(220, 56, 'PUBLISHING...', 'primary', ICONS.sparkle, 'disabled');
+disBtn.querySelector('.sticker-btn').disabled = true;
+row5.appendChild(disBtn);
+const disBtn2 = createStickerButton(180, 52, 'SIGN OUT', 'danger', ICONS.logout, 'disabled');
+disBtn2.querySelector('.sticker-btn').disabled = true;
+row5.appendChild(disBtn2);
+document.body.appendChild(row5);
+
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+
+/* Section 6: In context — simulated gallery nav */
+const h6 = document.createElement('h2');
+h6.textContent = 'In Context — Gallery Nav Bar';
+document.body.appendChild(h6);
+
+const navBar = document.createElement('div');
+navBar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;max-width:700px;margin:0 auto 20px;padding:16px 24px;background:rgba(251,247,240,0.92);border-bottom:3px solid rgba(47,36,28,0.12);';
+
+const navLeft = document.createElement('div');
+navLeft.appendChild(createStickerButton(180, 48, 'EXIT', 'secondary', ICONS.arrowLeft));
+navBar.appendChild(navLeft);
+
+const navTitle = document.createElement('div');
+navTitle.style.cssText = "font-family:'Fredoka',sans-serif;font-size:28px;font-weight:700;color:#2f241c;text-shadow:2px 2px 0 rgba(212,131,74,0.2);letter-spacing:0.04em;";
+navTitle.textContent = 'THE GALLERY';
+navBar.appendChild(navTitle);
+
+const navRight = document.createElement('div');
+navRight.appendChild(createStickerButton(200, 48, 'CREATE ART', 'primary', ICONS.sparkle));
+navBar.appendChild(navRight);
+
+document.body.appendChild(navBar);
+
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+
+/* Section 7: In context — artwork detail actions */
+const h7 = document.createElement('h2');
+h7.textContent = 'In Context — Artwork Detail Actions';
+document.body.appendChild(h7);
+
+const actionGrid = document.createElement('div');
+actionGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:360px;margin:0 auto 20px;padding:20px;background:rgba(251,247,240,0.85);border-radius:12px;border:2px solid rgba(47,36,28,0.08);';
+actionGrid.appendChild(createStickerButton(170, 48, 'UPVOTE', 'secondary', ICONS.thumbsUp));
+actionGrid.appendChild(createStickerButton(170, 48, 'DOWNVOTE', 'danger', ICONS.thumbsDown));
+actionGrid.appendChild(createStickerButton(170, 48, 'COMMENT', 'primary', null));
+actionGrid.appendChild(createStickerButton(170, 48, 'FORK', 'accent', ICONS.brush));
+document.body.appendChild(actionGrid);
+
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+
+/* Note */
+const note = document.createElement('div');
+note.className = 'note';
+note.innerHTML = `<strong>Architecture:</strong><br>
+Canvas renders the sticker background once (paper, tape, stains, noise) — cached, never re-rendered.<br>
+Text + icons are HTML/SVG overlaid via absolute positioning.<br>
+Hover = CSS transform on container (lift + rotate wobble), icons rotate independently.<br>
+Press = CSS squish (translateY + scale), instant transition.<br>
+Disabled = CSS opacity + grayscale, hover blocked.<br>
+Each button gets a slight random rotation for the "casually stuck" feel.<br>
+<strong>No canvas re-rendering on interaction</strong> — all states are CSS.`;
+document.body.appendChild(note);
+</script>
+</body>
+</html>

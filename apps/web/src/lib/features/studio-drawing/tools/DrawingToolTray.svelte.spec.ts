@@ -10,6 +10,12 @@ describe('DrawingToolTray', () => {
 
 		render(DrawingToolTray, { onClear, onPublish });
 
+		await expect
+			.element(page.getByRole('button', { name: 'Clear' }))
+			.toHaveAttribute('data-sticker-variant', 'danger');
+		await expect
+			.element(page.getByRole('button', { name: 'Publish' }))
+			.toHaveAttribute('data-sticker-variant', 'secondary');
 		await page.getByRole('button', { name: 'Clear' }).click();
 		await page.getByRole('button', { name: 'Publish' }).click();
 
