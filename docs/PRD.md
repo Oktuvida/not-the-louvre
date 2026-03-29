@@ -183,6 +183,9 @@ fully custom session system.
 - **Delivery format**: Avatar reads from backend to frontend remain AVIF.
 - **Display**: Shown next to every artwork, comment, and in the feed.
 - **Edit**: Users can re-draw their avatar at any time from settings.
+- **Moderation**: Avatars are not self-labeled by users as NSFW. Moderators can
+  mark an avatar as NSFW, hide it from public surfaces, require replacement,
+  or escalate to profile bans for abusive cases.
 
 ### 5.3 Canvas / Drawing Engine
 
@@ -223,6 +226,10 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
   suffix (e.g., "Untitled #4827").
 - **Preview**: Before publishing, show a preview of how it will look in the
   feed (with frame, avatar, title).
+- **NSFW category**: The creator can explicitly mark an artwork as NSFW during
+  publish or later from artwork management. NSFW artworks render blurred by
+  default in feeds and detail views until the viewer confirms they are 18+ and
+  wants to reveal the piece.
 - **Publish**: Encodes the final image as AVIF, enforces the ~100KB size budget,
   uploads it to object storage, and creates the DB record through the
   application server.
@@ -231,6 +238,17 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
 - **Delete**: Author can delete their own artwork. Forks remain but show
   "original deleted" in attribution.
 - **Rate limit**: Max 20 publishes per hour per user (prevent storage abuse).
+
+### 5.4.1 NSFW Reveal Experience
+
+- NSFW artworks remain publishable when labeled honestly by the creator.
+- Artwork cards and detail views show blurred media plus a clear adult-content
+  indicator.
+- Revealing NSFW content requires an explicit +18 confirmation flow with
+  consent capture appropriate for GDPR-facing age-gate expectations.
+- The reveal interaction should be reversible, and the product should retain a
+  minimal auditable record that the viewer acknowledged the adult-content gate.
+- Unlabeled adult content remains a moderation violation.
 
 ### 5.5 Fork System
 
@@ -305,6 +323,8 @@ Full-screen view of a single artwork:
 - Direct forks carousel (horizontal scroll).
 - Comments section below.
 - Action buttons: Fork, Share (copy link), Report.
+- If the artwork is NSFW, the media remains blurred until the viewer confirms
+  the adult-content gate.
 
 ---
 
@@ -322,7 +342,7 @@ Full-screen view of a single artwork:
 | Auth           | Better Auth with nickname-first UX                |
 | Real-time      | Supabase Realtime for votes/comments only (RLS-protected) |
 | Storage        | Supabase Storage + cache layer (AVIF artworks, avatars) |
-| NSFW Filter    | NSFWJS (client-side pre-publish check)            |
+| Content Safety | User-applied NSFW artwork labeling + moderator review |
 | Hosting        | TBD (any Node-compatible host)                    |
 
 ### 6.2 Architecture Diagram
@@ -341,9 +361,9 @@ Full-screen view of a single artwork:
 │        └──────────┬───┘───────────────┘          │
 │                   │                              │
 │         ┌─────────▼──────────┐                   │
-│         │    NSFWJS          │                   │
-│         │  (pre-publish      │                   │
-│         │   client filter)   │                   │
+│         │ NSFW Label + 18+   │                   │
+│         │ Reveal Gate        │                   │
+│         │ (blur + consent)   │                   │
 │         └─────────┬──────────┘                   │
 └───────────────────┼──────────────────────────────┘
                     │  HTTPS + WebSocket
@@ -411,11 +431,19 @@ Schema boundary for MVP:
 - `better-auth` schema: auth/session internals owned by Better Auth.
 - Realtime-facing relations: only the minimum set needed for live vote/comment updates, protected with RLS.
 
-**NSFWJS client-side**: Running the NSFW check on the client before upload
-avoids server-side image processing infra for MVP. The model (~3MB) is loaded
-once and cached. If the image is flagged above a threshold, the publish button
-is blocked with a message. This is the first line of defense — moderators
-handle the rest.
+**User-labeled NSFW with moderated enforcement**: The product does not attempt
+automatic NSFW classification for drawings in MVP. Instead, creators can mark
+artworks as NSFW at publish time, and the product treats that label as a first-
+class content state.
+
+- NSFW-labeled artworks are blurred by default in browse and detail surfaces.
+- Viewers must explicitly pass a +18 reveal gate before seeing the media.
+- The reveal gate should be implemented in a GDPR-conscious way with explicit
+  acknowledgement rather than implicit exposure.
+- Moderators can mark artworks or avatars as NSFW retroactively, hide them,
+  delete them, or ban abusive accounts.
+- Backend moderation state is the trust boundary; the UI label is only one
+  input into that state.
 
 ### 6.4 Real-time Strategy
 
@@ -497,7 +525,12 @@ generated migrations.
 | password_hash   | text         | Argon2id hash                           |
 | recovery_hash   | text         | Argon2id hash of recovery key           |
 | avatar_url      | text         | Path in Supabase Storage                |
+| avatar_is_nsfw  | boolean      | Default false. Set by moderator review  |
+| avatar_is_hidden| boolean      | Default false. Hidden when moderated    |
 | role            | enum         | `user` \| `moderator` \| `admin`        |
+| is_banned       | boolean      | Default false                           |
+| banned_at       | timestamptz  | Nullable                                |
+| ban_reason      | varchar(200) | Nullable                                |
 | created_at      | timestamptz  | Default `now()`                         |
 
 #### `artworks`
@@ -509,6 +542,8 @@ generated migrations.
 | parent_id    | uuid FK      | Nullable. References `artworks.id` (fork)  |
 | title        | varchar(100) | Default "Untitled #XXXX"                   |
 | image_url    | text         | Path in Supabase Storage                   |
+| is_nsfw      | boolean      | Default false                              |
+| nsfw_source  | enum         | `user` \| `moderator` \| null              |
 | score        | int          | Denormalized. Default 0. Updated by trigger|
 | comment_count| int          | Denormalized. Default 0. Updated by trigger|
 | fork_count   | int          | Denormalized. Default 0. Updated by trigger|
@@ -591,19 +626,23 @@ Moderators/admins bypass `is_hidden` filtering where moderation policy allows it
 
 ## 8. Content Moderation
 
-### 8.1 Automated (First Line)
+### 8.1 Creator-Labeled NSFW + Viewer Age Gate
 
-**NSFWJS** runs client-side before publish:
+Creators can explicitly label an artwork as NSFW when publishing it or editing
+its metadata later.
 
-- Model categories: `Porn`, `Hentai`, `Sexy` (flag), `Drawing`, `Neutral`.
-- Threshold: Block if `Porn > 0.7` or `Hentai > 0.7`. Warn (but allow) if
-  `Sexy > 0.6`.
-- This is a soft gate — it catches obvious cases. Users can bypass if
-  determined (it's client-side). That's acceptable.
+- NSFW-labeled artworks are blurred by default anywhere public media is shown.
+- Revealing them requires an explicit +18 confirmation flow.
+- The reveal flow should capture a minimal acknowledgement record suitable for
+  GDPR-conscious age-gate handling.
+- Unlabeled adult content is still a moderation violation.
+- The MVP intentionally avoids automatic drawing classification because false
+  positives are worse than the value provided by the model in this product.
 
 ### 8.2 Community Reporting
 
 - Any authenticated user can report an artwork or comment.
+- Reports can also be used for unlabeled NSFW content or offensive avatars.
 - Report requires selecting a reason (predefined list + optional free text).
 - Reports go into the `reports` table with `status = pending`.
 - After N reports (configurable, start with 3), auto-hide the content pending
@@ -614,17 +653,23 @@ Moderators/admins bypass `is_hidden` filtering where moderation policy allows it
 Moderators (assigned by admins) can:
 
 - View a moderation queue (pending reports sorted by count).
+- **Mark artwork as NSFW** when the creator failed to label it correctly.
+- **Mark avatar as NSFW** and remove it from public display.
 - **Hide** an artwork or comment (sets `is_hidden = true`). Content is not
   deleted — it's hidden from public but visible to author with a "hidden by
   moderator" notice.
 - **Unhide** (false positive).
 - **Delete** (permanent removal from DB + storage).
+- **Ban** user profiles for repeated or severe abuse, including abusive avatar
+  uploads or repeated unlabeled adult content.
 - **Warn** user (future: notification system, for now just a log).
 
 ### 8.4 Moderation Principles
 
 - Err on the side of leniency. This is an art game, not a corporate platform.
-- Obvious NSFW/hate content: remove.
+- Honestly labeled adult artwork can exist behind the blur + 18+ reveal gate.
+- Unlabeled adult content, abusive avatars, and hate content should be removed.
+- Repeated abuse should escalate from hide/delete to profile bans.
 - Edgy but not harmful: leave it. Let votes handle it.
 - Moderators should be active community members who understand the vibe.
 
@@ -783,6 +828,8 @@ Every phase is only complete when the standard repository scripts pass:
 - **Canvas flows**: publish, fork, undo/redo, and title validation.
 - **Social flows**: vote transitions, comments, feed sorting, and moderation
   permissions.
+- **Sensitive content flows**: NSFW labeling, blur/reveal gating, moderator
+  overrides, and ban enforcement.
 - **Infrastructure-sensitive features**: migrations, storage integration, and
   realtime subscriptions should have automated validation where practical.
 
@@ -872,9 +919,10 @@ completed in a different phase.
 ### Phase 4 — Moderation (Week 8)
 
 - [ ] Failing tests for report thresholds and moderator permissions
-- [ ] NSFWJS integration (client-side pre-publish gate)
+- [ ] Creator-applied NSFW artwork labeling with blurred feed/detail rendering
+- [ ] +18 reveal confirmation flow for NSFW artwork
 - [ ] Report system (create report, auto-hide threshold)
-- [ ] Moderator dashboard (queue, hide/unhide/delete)
+- [ ] Moderator dashboard (queue, mark NSFW, hide/unhide/delete, ban)
 - [ ] Moderator role assignment (admin only)
 
 ### Phase 5 — Polish & Animation (Weeks 9-10)
