@@ -12,6 +12,7 @@ const artwork = {
 	forkCount: 2,
 	id: 'artwork-1',
 	imageUrl: '/api/artworks/artwork-1/media',
+	isNsfw: false,
 	score: 4,
 	timestamp: Date.now(),
 	title: 'Detail artwork',

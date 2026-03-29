@@ -17,6 +17,18 @@ import type {
 	PublishRateLimitRecord
 } from './types';
 
+type ModerationCheckResult = { status: 'allowed' } | { message: string; status: 'blocked' };
+
+const moderation = vi.hoisted(() => ({
+	checkTextModeration: vi.fn<() => Promise<ModerationCheckResult>>(async () => ({
+		status: 'allowed'
+	}))
+}));
+
+vi.mock('$lib/server/moderation/service', () => ({
+	checkTextModeration: moderation.checkTextModeration
+}));
+
 const createUnsupportedImageFile = (size = 128) =>
 	new File([new Uint8Array(size)], 'artwork.gif', { type: 'image/gif' });
 
@@ -186,6 +198,8 @@ const createStorage = () => {
 describe('artwork service', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		moderation.checkTextModeration.mockReset();
+		moderation.checkTextModeration.mockResolvedValue({ status: 'allowed' });
 	});
 
 	it('publishes an artwork with a stable ownership-aware storage key', async () => {
@@ -239,11 +253,97 @@ describe('artwork service', () => {
 		expect(artworks.get('artwork-1')).toMatchObject({
 			title: 'Evening Light',
 			authorId: 'user-1',
+			isNsfw: false,
 			storageKey: 'artworks/user-1/artwork-1.avif',
 			parentId: null,
 			forkCount: 0
 		});
 	}, 10000);
+
+	it('persists creator-labeled nsfw metadata on publish', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+		const media = await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 });
+
+		const result = await publishArtwork(
+			{
+				isNsfw: true,
+				media,
+				title: 'Figure Study'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		expect(result).toMatchObject({
+			isNsfw: true,
+			nsfwSource: 'creator'
+		});
+		expect(artworks.get('artwork-1')).toMatchObject({
+			isNsfw: true,
+			nsfwSource: 'creator'
+		});
+	});
+
+	it('rejects artwork titles blocked by backend moderation before upload', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage, uploads } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+		moderation.checkTextModeration.mockResolvedValue({
+			message: 'Choose a different artwork title.',
+			status: 'blocked'
+		});
+
+		await expect(
+			publishArtwork(
+				{
+					media: await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 }),
+					title: 'mierda'
+				},
+				{
+					ipAddress: '127.0.0.1',
+					user: {
+						id: 'user-1',
+						authUserId: 'user-1',
+						nickname: 'artist_1',
+						role: 'user',
+						avatarUrl: null,
+						name: 'artist_1',
+						email: 'artist_1@not-the-louvre.local',
+						emailVerified: true,
+						image: null,
+						createdAt: now,
+						updatedAt: now
+					}
+				},
+				{ repository, storage }
+			)
+		).rejects.toMatchObject({ code: 'INVALID_TITLE', status: 400 });
+		expect(uploads).toHaveLength(0);
+	});
 
 	it('publishes a forked artwork for a valid active parent and increments the parent fork count', async () => {
 		const { publishArtwork } = await import('./service');
@@ -840,6 +940,69 @@ describe('artwork service', () => {
 			code: 'FORBIDDEN',
 			status: 403
 		});
+	});
+
+	it('rejects updated titles blocked by backend moderation', async () => {
+		const { publishArtwork, updateArtworkTitle } = await import('./service');
+		const { repository } = createRepository();
+		const { storage } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+
+		await publishArtwork(
+			{
+				media: await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 }),
+				title: 'Original'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		moderation.checkTextModeration.mockResolvedValue({
+			message: 'Choose a different artwork title.',
+			status: 'blocked'
+		});
+
+		await expect(
+			updateArtworkTitle(
+				{ artworkId: 'artwork-1', title: 'mierda' },
+				{
+					user: {
+						id: 'user-1',
+						authUserId: 'user-1',
+						nickname: 'artist_1',
+						role: 'user',
+						avatarUrl: null,
+						name: 'artist_1',
+						email: 'artist_1@not-the-louvre.local',
+						emailVerified: true,
+						image: null,
+						createdAt: now,
+						updatedAt: now
+					}
+				},
+				{ now: () => now, repository }
+			)
+		).rejects.toMatchObject({ code: 'INVALID_TITLE', status: 400 });
 	});
 
 	it('allows only the author to delete an artwork and removes stored media', async () => {

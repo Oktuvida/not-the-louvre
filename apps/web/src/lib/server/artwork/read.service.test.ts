@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ArtworkFlowError } from './errors';
 import { deleteArtwork, publishArtwork } from './service';
 import type {
@@ -11,6 +11,10 @@ import type {
 	ArtworkStorage,
 	PublishRateLimitRecord
 } from './types';
+
+vi.mock('$lib/server/moderation/service', () => ({
+	checkTextModeration: vi.fn(async () => ({ status: 'allowed' as const }))
+}));
 
 const createAvifFile = (size = 128, type = 'image/avif') => {
 	const bytes = new Uint8Array(size);
@@ -310,6 +314,7 @@ const createReadRepository = (
 					authorNickname: childProfile.nickname,
 					createdAt: child.createdAt,
 					id: child.id,
+					isNsfw: child.isNsfw,
 					title: child.title
 				};
 			});
@@ -573,6 +578,7 @@ describe('artwork read service', () => {
 					createdAt: new Date('2026-03-24T12:00:00.000Z'),
 					forkCount: 0,
 					id: 'artwork-old-high',
+					isNsfw: false,
 					mediaContentType: 'image/avif',
 					mediaSizeBytes: 128,
 					parentId: null,
@@ -590,6 +596,7 @@ describe('artwork read service', () => {
 					createdAt: new Date('2026-03-26T11:00:00.000Z'),
 					forkCount: 1,
 					id: 'artwork-fresh-mid',
+					isNsfw: false,
 					mediaContentType: 'image/avif',
 					mediaSizeBytes: 128,
 					parentId: null,
@@ -607,6 +614,7 @@ describe('artwork read service', () => {
 					createdAt: new Date('2026-03-26T10:00:00.000Z'),
 					forkCount: 0,
 					id: 'artwork-hot-tie-b',
+					isNsfw: false,
 					mediaContentType: 'image/avif',
 					mediaSizeBytes: 128,
 					parentId: null,
@@ -624,6 +632,7 @@ describe('artwork read service', () => {
 					createdAt: new Date('2026-03-26T10:00:00.000Z'),
 					forkCount: 0,
 					id: 'artwork-hot-tie-a',
+					isNsfw: false,
 					mediaContentType: 'image/avif',
 					mediaSizeBytes: 128,
 					parentId: null,
@@ -679,6 +688,7 @@ describe('artwork read service', () => {
 					createdAt: new Date('2026-03-26T10:30:00.000Z'),
 					forkCount: 1,
 					id: 'artwork-today-top',
+					isNsfw: false,
 					mediaContentType: 'image/avif',
 					mediaSizeBytes: 128,
 					parentId: null,
@@ -696,6 +706,7 @@ describe('artwork read service', () => {
 					createdAt: new Date('2026-03-26T08:00:00.000Z'),
 					forkCount: 0,
 					id: 'artwork-today-tie-b',
+					isNsfw: false,
 					mediaContentType: 'image/avif',
 					mediaSizeBytes: 128,
 					parentId: null,
@@ -713,6 +724,7 @@ describe('artwork read service', () => {
 					createdAt: new Date('2026-03-26T08:00:00.000Z'),
 					forkCount: 0,
 					id: 'artwork-today-tie-a',
+					isNsfw: false,
 					mediaContentType: 'image/avif',
 					mediaSizeBytes: 128,
 					parentId: null,
@@ -730,6 +742,7 @@ describe('artwork read service', () => {
 					createdAt: new Date('2026-03-24T09:00:00.000Z'),
 					forkCount: 0,
 					id: 'artwork-this-week',
+					isNsfw: false,
 					mediaContentType: 'image/avif',
 					mediaSizeBytes: 128,
 					parentId: null,
@@ -747,6 +760,7 @@ describe('artwork read service', () => {
 					createdAt: new Date('2026-03-18T09:00:00.000Z'),
 					forkCount: 2,
 					id: 'artwork-old-all-time',
+					isNsfw: false,
 					mediaContentType: 'image/avif',
 					mediaSizeBytes: 128,
 					parentId: null,
@@ -875,6 +889,7 @@ describe('artwork read service', () => {
 
 		expect(discovery.items[0]).toMatchObject({
 			id: 'artwork-101',
+			isNsfw: false,
 			title: 'Projection test',
 			mediaUrl: '/api/artworks/artwork-101/media',
 			commentCount: 0,
@@ -895,6 +910,7 @@ describe('artwork read service', () => {
 
 		expect(detail).toMatchObject({
 			id: 'artwork-101',
+			isNsfw: false,
 			title: 'Projection test',
 			mediaUrl: '/api/artworks/artwork-101/media',
 			mediaContentType: 'image/avif',
@@ -1035,6 +1051,45 @@ describe('artwork read service', () => {
 			isFork: true,
 			parent: null,
 			parentStatus: 'deleted'
+		});
+	});
+
+	it('keeps creator nsfw labels in discovery and detail projections', async () => {
+		const { getArtworkDetail, listArtworkDiscovery } = await import('./read.service');
+		const artworks = new Map<string, ArtworkRecord>();
+		const profiles = createProfiles();
+		const { repository } = createWriteRepository(artworks);
+		const readRepository = createReadRepository(artworks, profiles);
+		const { storage } = createStorage();
+
+		await publishArtwork(
+			{ isNsfw: true, media: createAvifFile(), title: 'Adults only study' },
+			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
+			asWriteDeps(repository, storage, {
+				generateId: () => 'artwork-nsfw-1',
+				now: () => new Date('2026-03-26T12:00:00.000Z')
+			})
+		);
+
+		const discovery = await listArtworkDiscovery(
+			{ limit: 10, sort: 'recent' },
+			asReadDeps(readRepository)
+		);
+		const detail = await getArtworkDetail(
+			'artwork-nsfw-1',
+			asViewer(profiles.get('user-1')!),
+			asReadDeps(readRepository)
+		);
+
+		expect(discovery.items[0]).toMatchObject({
+			id: 'artwork-nsfw-1',
+			isNsfw: true,
+			title: 'Adults only study'
+		});
+		expect(detail).toMatchObject({
+			id: 'artwork-nsfw-1',
+			isNsfw: true,
+			title: 'Adults only study'
 		});
 	});
 

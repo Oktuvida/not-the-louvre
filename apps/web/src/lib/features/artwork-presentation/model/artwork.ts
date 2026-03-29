@@ -15,6 +15,7 @@ export interface Artwork {
 	upvotes: number;
 	downvotes: number;
 	timestamp: number;
+	isNsfw: boolean;
 	commentCount?: number;
 	comments: ArtworkComment[];
 	forkCount?: number;

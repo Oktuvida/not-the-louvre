@@ -111,6 +111,7 @@ const toChildForkSummary = (
 	},
 	createdAt: record.createdAt,
 	id: record.id,
+	isNsfw: record.isNsfw,
 	mediaUrl: getArtworkMediaUrl(record.id),
 	title: record.title
 });
@@ -122,6 +123,7 @@ const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 	downvotes: record.downvotes ?? 0,
 	forkCount: record.forkCount,
 	id: record.id,
+	isNsfw: record.isNsfw,
 	lineage: toLineage(record),
 	mediaUrl: getArtworkMediaUrl(record.id),
 	score: record.score,

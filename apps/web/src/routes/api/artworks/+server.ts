@@ -28,6 +28,7 @@ export const POST: RequestHandler = async (event) => {
 	try {
 		const artwork = await publishArtwork(
 			{
+				isNsfw: formData.get('isNsfw')?.toString() === 'true',
 				media,
 				parentArtworkId: formData.get('parentArtworkId')?.toString(),
 				title: formData.get('title')?.toString()
