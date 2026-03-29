@@ -320,13 +320,7 @@
 							</div>
 						{/if}
 						<div class="mt-6 flex justify-end">
-							<GameButton
-								variant="ghost"
-								size="sm"
-								onclick={onClose}
-							>
-								Close
-							</GameButton>
+							<GameButton variant="ghost" size="sm" onclick={onClose}>Close</GameButton>
 						</div>
 					</div>
 				</div>
