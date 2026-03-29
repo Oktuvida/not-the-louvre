@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
+import { getViewerContentPreferences } from '$lib/server/moderation/service';
 import { avatarService } from '$lib/server/user/avatar.service';
 import { AuthFlowError } from '$lib/server/auth/errors';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
@@ -52,11 +53,17 @@ const toFailure = (action: HomeActionName, error: unknown, fallback: string) => 
 };
 
 export const load: PageServerLoad = async ({ locals }) => {
-	const topDiscovery = await listArtworkDiscovery(
-		{ cursor: null, limit: 3, sort: 'top', window: 'all' },
-		{ user: locals.user }
-	);
+	const [topDiscovery, viewerContentPreferences] = await Promise.all([
+		listArtworkDiscovery(
+			{ cursor: null, limit: 3, sort: 'top', window: 'all' },
+			{ user: locals.user }
+		),
+		locals.user
+			? getViewerContentPreferences({ user: locals.user })
+			: Promise.resolve({ adultContentEnabled: false })
+	]);
 	const topArtworks = toHomePreviewCards(topDiscovery.items);
+	const adultContentEnabled = viewerContentPreferences.adultContentEnabled;
 
 	if (locals.integrityFailure) {
 		return {
@@ -69,6 +76,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				status: 'integrity-failure',
 				user: null
 			},
+			adultContentEnabled,
 			topArtworks
 		};
 	}
@@ -81,6 +89,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				status: 'signed-out',
 				user: null
 			},
+			adultContentEnabled,
 			topArtworks
 		};
 	}
@@ -94,6 +103,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			status: 'authenticated',
 			user: locals.user
 		},
+		adultContentEnabled,
 		topArtworks
 	};
 };

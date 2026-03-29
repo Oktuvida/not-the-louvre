@@ -4,6 +4,7 @@ export interface HomePreviewCard {
 	artist: string;
 	artistAvatar?: string;
 	imageUrl: string;
+	isNsfw: boolean;
 	rank: number;
 	accent: string;
 	rotation: number;
@@ -12,6 +13,7 @@ export interface HomePreviewCard {
 type HomePreviewSource = {
 	author: { avatarUrl: string | null; nickname: string };
 	id: string;
+	isNsfw: boolean;
 	mediaUrl: string;
 	title: string;
 };
@@ -26,6 +28,7 @@ export const toHomePreviewCards = (artworks: HomePreviewSource[]): HomePreviewCa
 		artistAvatar: artwork.author.avatarUrl ?? undefined,
 		id: artwork.id,
 		imageUrl: artwork.mediaUrl,
+		isNsfw: artwork.isNsfw,
 		rank: index + 1,
 		rotation: previewRotations[index] ?? 0,
 		title: artwork.title

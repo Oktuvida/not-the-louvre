@@ -12,6 +12,7 @@ const baseArtwork = {
 	downvotes: 0,
 	forkCount: 0,
 	imageUrl: '/api/artworks/artwork-1/media',
+	isNsfw: false,
 	score: 42,
 	timestamp: Date.now(),
 	upvotes: 0,
@@ -83,5 +84,37 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByText('CHAMPION')).toBeVisible();
 		await expect.element(page.getByText('RUNNER UP')).toBeVisible();
+	});
+
+	it('blurs nsfw artworks until the viewer enables 18+ content', async () => {
+		const fetchSpy = vi.fn(
+			async () => new Response(JSON.stringify({ adultContentEnabled: true }), { status: 200 })
+		);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		render(GalleryExplorationPage, {
+			adultContentEnabled: false,
+			artworks: [{ ...baseArtwork, id: 'artwork-1', isNsfw: true, title: 'Adults only study' }],
+			emptyStateMessage: null,
+			loadArtworkDetail: async () => ({
+				...baseArtwork,
+				id: 'artwork-1',
+				isNsfw: true,
+				title: 'Adults only study'
+			}),
+			room: getGalleryRoom('hot-wall'),
+			roomId: 'hot-wall',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Sensitive artwork', { exact: true })).toBeVisible();
+		await page.getByRole('button', { exact: true, name: 'Reveal 18+ artworks' }).click();
+
+		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
+			body: JSON.stringify({ adultContentEnabled: true }),
+			headers: { 'content-type': 'application/json' },
+			method: 'PATCH'
+		});
+		await expect.element(page.getByRole('button', { name: /Adults only study/ })).toBeVisible();
 	});
 });

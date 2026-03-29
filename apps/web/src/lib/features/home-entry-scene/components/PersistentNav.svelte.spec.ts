@@ -10,6 +10,7 @@ const topArtworks = [
 		artistAvatar: undefined,
 		id: 'artwork-1',
 		imageUrl: '/api/artworks/artwork-1/media',
+		isNsfw: false,
 		rank: 1,
 		rotation: -2,
 		title: 'Sunset Over Mountains'
@@ -46,6 +47,17 @@ describe('PersistentNav', () => {
 
 		await expect.element(page.getByAltText('Sunset Over Mountains')).toBeVisible();
 		await expect.element(page.getByText('#1')).toBeVisible();
+	});
+
+	it('marks top-artwork previews as sensitive until 18+ content is enabled', async () => {
+		render(PersistentNav, {
+			adultContentEnabled: false,
+			previewCards: [{ ...topArtworks[0], isNsfw: true, title: 'Adults only study' }],
+			user: null
+		});
+
+		await expect.element(page.getByText('18+', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Sensitive preview', { exact: true })).toBeVisible();
 	});
 
 	it('does not render fake preview cards when the homepage teaser is empty', async () => {

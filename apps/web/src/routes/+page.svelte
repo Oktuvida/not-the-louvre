@@ -12,6 +12,7 @@
 
 <EntrySceneController
 	auth={data.auth as HomeAuthBootstrap}
+	adultContentEnabled={data.adultContentEnabled}
 	form={form as HomeAuthActionForm}
 	topArtworks={data.topArtworks as HomePreviewCard[]}
 />

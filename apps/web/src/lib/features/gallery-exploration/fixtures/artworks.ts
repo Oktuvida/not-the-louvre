@@ -9,7 +9,7 @@ export interface GalleryRoomConfig {
 	color: string;
 }
 
-export const mockArtworks: Artwork[] = [
+const rawMockArtworks = [
 	{
 		id: '1',
 		title: 'Sunset Over Mountains',
@@ -218,6 +218,11 @@ export const mockArtworks: Artwork[] = [
 		comments: []
 	}
 ];
+
+export const mockArtworks: Artwork[] = rawMockArtworks.map((artwork) => ({
+	...artwork,
+	isNsfw: false
+}));
 
 export const topRanked = mockArtworks.slice(0, 10);
 export const trendingArtworks = mockArtworks.slice(0, 6);
