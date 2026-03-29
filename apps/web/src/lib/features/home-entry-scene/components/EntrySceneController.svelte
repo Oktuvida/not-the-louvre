@@ -16,17 +16,18 @@
 
 	let {
 		auth,
+		adultContentEnabled = false,
 		form,
 		topArtworks = []
 	}: {
 		auth: HomeAuthBootstrap;
+		adultContentEnabled?: boolean;
 		form?: HomeAuthActionForm;
 		topArtworks?: HomePreviewCard[];
 	} = $props();
 
 	const shouldHoldSignupOverlay = (actionData?: HomeAuthActionForm) =>
 		actionData?.action === 'signUp' && 'success' in actionData && actionData.success;
-	const initialHoldSignupOnboarding = shouldHoldSignupOverlay(form);
 	const getInitialEntryState = () =>
 		shouldHoldSignupOverlay(form)
 			? 'auth-signup'
@@ -35,16 +36,16 @@
 				: auth.status === 'authenticated'
 					? 'inside'
 					: 'outside';
+	const getInitialHoldSignupOnboarding = () =>
+		shouldHoldSignupOverlay(form) ||
+		(auth.status === 'authenticated' && auth.onboarding.status === 'needs-avatar');
 
 	const entryState = createEntryState(getInitialEntryState());
 
 	let authOverlayElement = $state<HTMLDivElement | null>(null);
 	let avatarOnboardingDismissed = $state(false);
 	let avatarOnboardingResolved = $state(false);
-	let holdSignupOnboarding = $state(
-		initialHoldSignupOnboarding ||
-			(auth.status === 'authenticated' && auth.onboarding.status === 'needs-avatar')
-	);
+	let holdSignupOnboarding = $state(getInitialHoldSignupOnboarding());
 	let user = $state<HomeAuthUser | null>(null);
 	let integrityFailure = $state<HomeAuthBootstrap['integrityFailure']>(null);
 
@@ -122,7 +123,12 @@
 	});
 </script>
 
-<HomeEntryPage entryState={flowState} previewCards={topArtworks} user={navUser}>
+<HomeEntryPage
+	{adultContentEnabled}
+	entryState={flowState}
+	previewCards={topArtworks}
+	user={navUser}
+>
 	{#if integrityFailure}
 		<div class="absolute inset-0 z-[40] flex items-center justify-center px-6 py-10">
 			<StudioPanel

@@ -14,6 +14,7 @@
 	import { toGalleryArtworkDetail } from '$lib/features/gallery-exploration/gallery-adapter';
 
 	let {
+		adultContentEnabled = false,
 		artworks,
 		emptyStateMessage = null,
 		loadArtworkDetail = async (artworkId: string) => {
@@ -61,6 +62,7 @@
 		realtimeConfig = { anonKey: null, url: null },
 		viewer = null
 	}: {
+		adultContentEnabled?: boolean;
 		artworks: Artwork[];
 		emptyStateMessage?: string | null;
 		loadArtworkDetail?: (artworkId: string) => Promise<Artwork>;
@@ -70,6 +72,8 @@
 		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
 	} = $props();
 
+	let adultContentPreferenceOverride = $state<boolean | null>(null);
+	let isSavingAdultContentPreference = $state(false);
 	let selectedArtwork = $state<Artwork | null>(null);
 	let mysteryIndex = $state(0);
 	let detailErrorMessage = $state<string | null>(null);
@@ -79,6 +83,39 @@
 	const mysteryArtwork = $derived(
 		artworks.length > 0 ? (artworks[mysteryIndex % artworks.length] ?? artworks[0]) : null
 	);
+	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
+	const hasSensitiveArtwork = $derived(
+		artworks.some((artwork) => artwork.isNsfw) || Boolean(selectedArtwork?.isNsfw)
+	);
+
+	const updateAdultContentPreference = async (enabled: boolean) => {
+		if (!viewer || isSavingAdultContentPreference) {
+			detailErrorMessage = 'Sign in to manage 18+ artwork visibility.';
+			return;
+		}
+
+		isSavingAdultContentPreference = true;
+		detailErrorMessage = null;
+
+		try {
+			const response = await fetch('/api/viewer/content-preferences', {
+				body: JSON.stringify({ adultContentEnabled: enabled }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			});
+
+			if (!response.ok) {
+				throw new Error('18+ artwork preference could not be updated.');
+			}
+
+			adultContentPreferenceOverride = enabled;
+		} catch (error) {
+			detailErrorMessage =
+				error instanceof Error ? error.message : '18+ artwork preference could not be updated.';
+		} finally {
+			isSavingAdultContentPreference = false;
+		}
+	};
 
 	const openArtwork = async (artwork: Artwork) => {
 		detailErrorMessage = null;
@@ -349,6 +386,35 @@
 			</p>
 		</div>
 
+		{#if hasSensitiveArtwork}
+			<div
+				class="flex flex-col gap-3 rounded-xl border-4 border-[#2d2420] bg-[#fdfbf7] p-5 shadow-md md:flex-row md:items-center md:justify-between"
+			>
+				<div>
+					<p class="font-display text-sm tracking-[0.18em] text-[#86654b] uppercase">
+						18+ artworks
+					</p>
+					<p class="mt-1 text-sm text-[#5d4e37]">
+						{adultContentAllowed
+							? 'Sensitive artworks are visible for this account.'
+							: 'Sensitive artworks are blurred until you explicitly reveal them.'}
+					</p>
+				</div>
+				{#if viewer}
+					<button
+						type="button"
+						class="rounded-[1rem] border-4 border-[#2d2420] bg-[#d68a49] px-5 py-3 text-sm font-black text-[#2d2420] shadow-md transition duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+						disabled={isSavingAdultContentPreference}
+						onclick={() => updateAdultContentPreference(!adultContentAllowed)}
+					>
+						{adultContentAllowed ? 'Hide 18+ artworks' : 'Reveal 18+ artworks'}
+					</button>
+				{:else}
+					<p class="text-sm font-semibold text-[#8f3720]">Sign in to reveal 18+ artworks.</p>
+				{/if}
+			</div>
+		{/if}
+
 		{#if detailErrorMessage}
 			<div class="rounded-xl border-4 border-[#2d2420] bg-[#f7d8c7] p-5 text-[#7a2e1c]">
 				{detailErrorMessage}
@@ -365,7 +431,12 @@
 				</p>
 			</div>
 		{:else if roomId === 'mystery' && mysteryArtwork}
-			<MysteryRoom artwork={mysteryArtwork} onReveal={spinMystery} onSelect={openArtwork} />
+			<MysteryRoom
+				adultContentEnabled={adultContentAllowed}
+				artwork={mysteryArtwork}
+				onReveal={spinMystery}
+				onSelect={openArtwork}
+			/>
 		{:else if roomId === 'hall-of-fame'}
 			<div class="space-y-12">
 				<div class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end">
@@ -395,11 +466,24 @@
 									<div
 										class="h-full border-[6px] border-[#5d4e37] bg-[#fdfbf7] p-4 shadow-2xl transition duration-200 hover:-translate-y-2 hover:scale-105"
 									>
-										<img
-											src={artwork.imageUrl}
-											alt={artwork.title}
-											class="h-full w-full border-2 border-[#2d2420] object-cover"
-										/>
+										<div class="relative h-full">
+											<img
+												src={artwork.imageUrl}
+												alt={artwork.title}
+												class={`h-full w-full border-2 border-[#2d2420] object-cover transition duration-200 ${artwork.isNsfw && !adultContentAllowed ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
+											/>
+											{#if artwork.isNsfw && !adultContentAllowed}
+												<div
+													class="absolute inset-0 flex flex-col items-center justify-center border-2 border-dashed border-[#2d2420] bg-[rgba(45,36,32,0.72)] text-[#fdfbf7]"
+												>
+													<span
+														class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
+														>18+</span
+													>
+													<p class="mt-3 text-sm font-bold uppercase">Sensitive artwork</p>
+												</div>
+											{/if}
+										</div>
 										{#if artwork.artistAvatar}
 											<div
 												class="absolute -bottom-6 left-1/2 h-20 w-20 -translate-x-1/2 overflow-hidden rounded-full border-4 border-[#2d2420] bg-white shadow-xl"
@@ -440,8 +524,19 @@
 								<img
 									src={artwork.imageUrl}
 									alt={artwork.title}
-									class="aspect-square w-full rounded border-2 border-[#2d2420] object-cover"
+									class={`aspect-square w-full rounded border-2 border-[#2d2420] object-cover transition duration-200 ${artwork.isNsfw && !adultContentAllowed ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
 								/>
+								{#if artwork.isNsfw && !adultContentAllowed}
+									<div
+										class="absolute inset-0 flex flex-col items-center justify-center rounded border-2 border-dashed border-[#2d2420] bg-[rgba(45,36,32,0.72)] text-[#fdfbf7]"
+									>
+										<span
+											class="rounded-full border-2 border-[#fdfbf7] px-2 py-0.5 text-xs font-black"
+											>18+</span
+										>
+										<span class="mt-2 text-[0.7rem] font-bold uppercase">Sensitive artwork</span>
+									</div>
+								{/if}
 								<div
 									class="absolute -top-2 -left-2 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#2d2420] bg-[#d4956c] font-black text-[#2d2420]"
 								>
@@ -470,14 +565,21 @@
 		{:else}
 			<div class="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
 				{#each artworks as artwork, index (artwork.id)}
-					<ArtworkCard {artwork} {index} onclick={() => openArtwork(artwork)} />
+					<ArtworkCard
+						adultContentEnabled={adultContentAllowed}
+						{artwork}
+						{index}
+						onclick={() => openArtwork(artwork)}
+					/>
 				{/each}
 			</div>
 		{/if}
 	</div>
 
 	<ArtworkDetailPanel
+		adultContentEnabled={adultContentAllowed}
 		artwork={selectedArtwork}
+		onAdultContentToggle={updateAdultContentPreference}
 		onArtworkChange={syncArtwork}
 		onClose={() => {
 			selectedArtwork = null;

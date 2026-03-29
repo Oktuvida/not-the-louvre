@@ -2,10 +2,12 @@
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 
 	let {
+		adultContentEnabled = false,
 		artwork,
 		onReveal,
 		onSelect
 	}: {
+		adultContentEnabled?: boolean;
 		artwork: Artwork;
 		onReveal?: () => void;
 		onSelect?: (artwork: Artwork) => void;
@@ -13,6 +15,7 @@
 
 	let isSpinning = $state(false);
 	let revealed = $state(false);
+	const isSensitiveBlurred = $derived(artwork.isNsfw && !adultContentEnabled);
 
 	const handleSpin = () => {
 		if (isSpinning) return;
@@ -54,8 +57,18 @@
 						<img
 							src={artwork.imageUrl}
 							alt={artwork.title}
-							class="h-full w-full rounded-lg border-2 border-[#2d2420] object-cover"
+							class={`h-full w-full rounded-lg border-2 border-[#2d2420] object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
 						/>
+						{#if isSensitiveBlurred}
+							<div
+								class="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-[rgba(45,36,32,0.72)] text-center text-[#fdfbf7]"
+							>
+								<span class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
+									>18+</span
+								>
+								<p class="mt-3 text-sm font-bold uppercase">Sensitive artwork</p>
+							</div>
+						{/if}
 						{#if artwork.artistAvatar}
 							<div
 								class="absolute -bottom-4 -left-4 h-16 w-16 animate-[popIn_0.3s_ease-out_0.3s_both] overflow-hidden rounded-full border-4 border-[#2d2420] bg-white shadow-lg"

@@ -7,12 +7,50 @@
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 
 	let {
+		adultContentEnabled = false,
 		previewCards = [],
 		user = null
 	}: {
+		adultContentEnabled?: boolean;
 		previewCards?: HomePreviewCard[];
 		user?: HomeAuthUser | null;
 	} = $props();
+
+	let adultContentPreferenceOverride = $state<boolean | null>(null);
+	let adultContentError = $state<string | null>(null);
+	let isSavingAdultContentPreference = $state(false);
+
+	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
+	const hasSensitivePreview = $derived(previewCards.some((card) => card.isNsfw));
+
+	const updateAdultContentPreference = async (enabled: boolean) => {
+		if (!user || isSavingAdultContentPreference) {
+			adultContentError = 'Sign in to manage 18+ artwork visibility.';
+			return;
+		}
+
+		isSavingAdultContentPreference = true;
+		adultContentError = null;
+
+		try {
+			const response = await fetch('/api/viewer/content-preferences', {
+				body: JSON.stringify({ adultContentEnabled: enabled }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			});
+
+			if (!response.ok) {
+				throw new Error('18+ artwork preference could not be updated.');
+			}
+
+			adultContentPreferenceOverride = enabled;
+		} catch (error) {
+			adultContentError =
+				error instanceof Error ? error.message : '18+ artwork preference could not be updated.';
+		} finally {
+			isSavingAdultContentPreference = false;
+		}
+	};
 </script>
 
 <div class="pointer-events-none absolute inset-0 z-[30]">
@@ -37,6 +75,36 @@
 	{/if}
 
 	<div class="pointer-events-auto absolute top-8 right-8 space-y-4">
+		{#if hasSensitivePreview}
+			<div
+				class="max-w-[15rem] rotate-1 rounded-[1.1rem] border-4 border-[#2d2420] bg-[rgba(253,251,247,0.96)] px-4 py-3 shadow-xl"
+			>
+				<p class="text-[0.65rem] font-semibold tracking-[0.18em] text-[#8a6c52] uppercase">
+					18+ artworks
+				</p>
+				<p class="mt-1 text-sm text-[#5d4e37]">
+					{adultContentAllowed
+						? 'Sensitive previews are visible on this account.'
+						: 'Sensitive previews stay blurred until you opt in.'}
+				</p>
+				{#if user}
+					<button
+						type="button"
+						class="mt-3 w-full rounded-[0.95rem] border-3 border-[#2d2420] bg-[#d68a49] px-4 py-2 text-sm font-black text-[#2d2420] transition duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+						disabled={isSavingAdultContentPreference}
+						onclick={() => updateAdultContentPreference(!adultContentAllowed)}
+					>
+						{adultContentAllowed ? 'Hide 18+ artworks' : 'Reveal 18+ artworks'}
+					</button>
+				{:else}
+					<p class="mt-3 text-xs font-semibold text-[#8f3720]">Sign in to reveal 18+ artworks.</p>
+				{/if}
+				{#if adultContentError}
+					<p class="mt-2 text-xs text-[#8f3720]">{adultContentError}</p>
+				{/if}
+			</div>
+		{/if}
+
 		{#each previewCards as card (card.id)}
 			<a
 				href={resolve('/gallery')}
@@ -46,7 +114,23 @@
 				<div
 					class="relative border-4 border-[#2d2420] bg-[#fdfbf7] p-2 shadow-xl transition-all duration-200 group-hover:-translate-x-[10px] group-hover:scale-110 group-hover:rotate-0"
 				>
-					<img src={card.imageUrl} alt={card.title} class="h-32 w-32 object-cover" />
+					<img
+						src={card.imageUrl}
+						alt={card.title}
+						class={`h-32 w-32 object-cover transition duration-200 ${card.isNsfw && !adultContentAllowed ? 'scale-[1.08] blur-xl saturate-0' : ''}`}
+					/>
+					{#if card.isNsfw && !adultContentAllowed}
+						<div
+							class="absolute inset-2 flex flex-col items-center justify-center border-2 border-dashed border-[#2d2420] bg-[rgba(45,36,32,0.68)] text-center text-[#fdfbf7]"
+						>
+							<span class="rounded-full border-2 border-[#fdfbf7] px-2 py-0.5 text-xs font-black"
+								>18+</span
+							>
+							<span class="mt-2 max-w-[5rem] text-[0.7rem] font-semibold uppercase"
+								>Sensitive preview</span
+							>
+						</div>
+					{/if}
 					<div
 						class="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#2d2420] bg-[#f4c430] font-bold text-[#2d2420] shadow-lg"
 					>

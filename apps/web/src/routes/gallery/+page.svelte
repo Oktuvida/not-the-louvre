@@ -6,6 +6,7 @@
 </script>
 
 <GalleryExplorationPage
+	adultContentEnabled={data.adultContentEnabled}
 	artworks={data.artworks}
 	emptyStateMessage={data.emptyStateMessage}
 	realtimeConfig={data.realtimeConfig}

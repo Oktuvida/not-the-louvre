@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import { error } from '@sveltejs/kit';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
+import { getViewerContentPreferences } from '$lib/server/moderation/service';
 import { toGalleryArtwork } from '$lib/features/gallery-exploration/gallery-adapter';
 import {
 	getGalleryRoom,
@@ -22,6 +23,7 @@ type GalleryRoomData = {
 	};
 	room: ReturnType<typeof getGalleryRoom>;
 	roomId: GalleryRoomId;
+	adultContentEnabled: boolean;
 	viewer: ProductUser | null;
 };
 
@@ -51,7 +53,10 @@ export const loadGalleryRoomData = async (
 	}
 
 	const room = getGalleryRoom(roomId);
-	const discovery = await listArtworkDiscovery(roomDiscoveryRequest(roomId), { user });
+	const [discovery, viewerContentPreferences] = await Promise.all([
+		listArtworkDiscovery(roomDiscoveryRequest(roomId), { user }),
+		user ? getViewerContentPreferences({ user }) : Promise.resolve({ adultContentEnabled: false })
+	]);
 
 	const visibleItems =
 		roomId === 'your-studio' && user
@@ -71,6 +76,7 @@ export const loadGalleryRoomData = async (
 		},
 		room,
 		roomId,
+		adultContentEnabled: viewerContentPreferences.adultContentEnabled,
 		viewer: user ?? null
 	};
 };

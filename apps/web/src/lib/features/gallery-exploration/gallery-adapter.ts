@@ -23,6 +23,7 @@ const baseArtwork = (
 	forkCount: artwork.forkCount,
 	id: artwork.id,
 	imageUrl: artwork.mediaUrl,
+	isNsfw: artwork.isNsfw,
 	score: artwork.score,
 	timestamp: toTimestamp(artwork.createdAt),
 	title: artwork.title,

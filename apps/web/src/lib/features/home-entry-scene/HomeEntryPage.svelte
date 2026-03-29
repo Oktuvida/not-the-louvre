@@ -10,11 +10,13 @@
 
 	let {
 		children,
+		adultContentEnabled = false,
 		entryState = 'outside',
 		previewCards = [],
 		user = null
 	}: {
 		children?: Snippet;
+		adultContentEnabled?: boolean;
 		entryState?: EntryFlowState;
 		previewCards?: HomePreviewCard[];
 		user?: HomeAuthUser | null;
@@ -33,7 +35,7 @@
 		</div>
 	</div>
 	<HomeHeroOverlay />
-	<PersistentNav {previewCards} {user} />
+	<PersistentNav {adultContentEnabled} {previewCards} {user} />
 	{#if entryState === 'inside' && user}
 		<div class="pointer-events-auto absolute bottom-28 left-1/2 z-[25] -translate-x-1/2">
 			<GameLink
