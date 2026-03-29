@@ -25,7 +25,7 @@ Abres la app, haces un dibujo regulero en menos de un minuto, lo publicas y deja
 - 🍴 **Forkear, o copiar con pedigrí**: Si ves algo aprovechable, le haces `fork`, lo dejas como fondo bloqueado y le añades el bigote reglamentario. La trazabilidad queda ahí para que luego se sepa quién tuvo la idea y quién la remató.
 - 🎩 **Una puesta en escena 2.5D absurdamente elegante**: Esto va con **Threlte**. La interfaz brilla, se mueve y se da una importancia tremenda. Tu dibujo sigue siendo un PNG plano. Precisamente por eso tiene gracia.
 - 🍅 **Crítica popular con verdura incluida**: Puedes aplaudir lo que te parece brillante y castigar lo que clama al cielo. Y sí, si le das caña, cae un tomate en pantalla. Nos parecía de justicia.
-- 🛡️ **Un portero con IA**: NSFWJS revisa en cliente si estás intentando subir algo que obligaría a clausurar el museo antes de la hora del vermú. Intentarlo, puedes. Publicarlo, no.
+- 🛡️ **Moderación guiada por la comunidad**: los creadores marcan el contenido sensible, cada visitante decide si quiere revelar obras +18 y moderación puede intervenir cuando haga falta.
 
 ## 🛠️ La tecnología detrás del numerito
 
@@ -34,7 +34,7 @@ Porque hasta las bromas necesitan infraestructura:
 - **3D / Gráficos:** Threlte + HTML5 Canvas 2D API.
 - **Backend / Base de datos:** Supabase.
 - **Tiempo real:** Supabase Realtime.
-- **Moderación:** NSFWJS en el navegador.
+- **Moderación:** políticas de texto en base de datos, etiquetado NSFW por el creador y compuerta persistida para revelar contenido +18.
 
 ## 📦 Estructura del repositorio
 
