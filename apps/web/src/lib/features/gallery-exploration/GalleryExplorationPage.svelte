@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
+	import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 	import ArtworkCard from '$lib/features/artwork-presentation/components/ArtworkCard.svelte';
 	import ArtworkDetailPanel from '$lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
@@ -56,11 +58,13 @@
 		},
 		room,
 		roomId,
+		realtimeConfig = { anonKey: null, url: null },
 		viewer = null
 	}: {
 		artworks: Artwork[];
 		emptyStateMessage?: string | null;
 		loadArtworkDetail?: (artworkId: string) => Promise<Artwork>;
+		realtimeConfig?: { anonKey: string | null; url: string | null };
 		room: GalleryRoomConfig;
 		roomId: GalleryRoomId;
 		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
@@ -69,6 +73,8 @@
 	let selectedArtwork = $state<Artwork | null>(null);
 	let mysteryIndex = $state(0);
 	let detailErrorMessage = $state<string | null>(null);
+	let cleanupRealtime: (() => void) | null = null;
+	const selectedArtworkId = $derived(selectedArtwork?.id ?? null);
 
 	const mysteryArtwork = $derived(
 		artworks.length > 0 ? (artworks[mysteryIndex % artworks.length] ?? artworks[0]) : null
@@ -93,25 +99,139 @@
 		artworks = artworks.map((candidate, candidateIndex) =>
 			candidateIndex === index
 				? {
-					...candidate,
-					commentCount: nextArtwork.commentCount,
-					comments: nextArtwork.comments,
-					downvotes: nextArtwork.downvotes,
-					forkCount: nextArtwork.forkCount,
-					score: nextArtwork.score,
-					upvotes: nextArtwork.upvotes,
-					viewerVote: nextArtwork.viewerVote
-				}
+						...candidate,
+						commentCount: nextArtwork.commentCount,
+						comments: nextArtwork.comments,
+						downvotes: nextArtwork.downvotes,
+						forkCount: nextArtwork.forkCount,
+						score: nextArtwork.score,
+						upvotes: nextArtwork.upvotes,
+						viewerVote: nextArtwork.viewerVote
+					}
 				: candidate
 		);
 	};
 
 	const spinMystery = () => {
 		mysteryIndex += 1;
-		if (mysteryArtwork) {
-			selectedArtwork = mysteryArtwork;
+	};
+
+	const stopRealtime = () => {
+		cleanupRealtime?.();
+		cleanupRealtime = null;
+	};
+
+	const refreshSelectedArtwork = async (artworkId: string) => {
+		try {
+			const refreshedArtwork = await loadArtworkDetail(artworkId);
+			if (selectedArtwork?.id === artworkId) {
+				detailErrorMessage = null;
+				syncArtwork(refreshedArtwork);
+			}
+		} catch (error) {
+			if (selectedArtwork?.id === artworkId) {
+				detailErrorMessage =
+					error instanceof Error ? error.message : 'Artwork details could not be loaded';
+			}
 		}
 	};
+
+	const startRealtime = async (artworkId: string) => {
+		stopRealtime();
+
+		if (!viewer || !realtimeConfig.url || !realtimeConfig.anonKey) {
+			return;
+		}
+
+		const tokenResponse = await fetch('/api/realtime/token', {
+			headers: { accept: 'application/json' }
+		});
+
+		if (!tokenResponse.ok) {
+			return;
+		}
+
+		const { token } = (await tokenResponse.json()) as { token: string };
+		const supabase = createClient(realtimeConfig.url, realtimeConfig.anonKey, {
+			auth: {
+				autoRefreshToken: false,
+				detectSessionInUrl: false,
+				persistSession: false
+			}
+		});
+		await supabase.realtime.setAuth(token);
+
+		const isArtworkEvent = (payload: unknown) => {
+			if (typeof payload !== 'object' || payload === null) {
+				return false;
+			}
+
+			const candidate = payload as {
+				new?: { artwork_id?: string };
+				old?: { artwork_id?: string };
+			};
+
+			return candidate.new?.artwork_id === artworkId || candidate.old?.artwork_id === artworkId;
+		};
+
+		const refreshArtwork = () => {
+			void refreshSelectedArtwork(artworkId);
+		};
+
+		const channel: RealtimeChannel = supabase
+			.channel(`gallery-artwork:${artworkId}:${viewer.id}`)
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'app',
+					table: 'artwork_vote_realtime'
+				},
+				(payload) => {
+					if (isArtworkEvent(payload)) {
+						refreshArtwork();
+					}
+				}
+			)
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'app',
+					table: 'artwork_comment_realtime'
+				},
+				(payload) => {
+					if (isArtworkEvent(payload)) {
+						refreshArtwork();
+					}
+				}
+			)
+			.subscribe();
+
+		cleanupRealtime = () => {
+			void supabase.removeChannel(channel);
+			void supabase.realtime.disconnect();
+		};
+	};
+
+	$effect(() => {
+		const artworkId = selectedArtworkId;
+
+		if (!browser) {
+			return;
+		}
+
+		if (!artworkId || !viewer) {
+			stopRealtime();
+			return;
+		}
+
+		void startRealtime(artworkId);
+
+		return () => {
+			stopRealtime();
+		};
+	});
 
 	const podiumMeta = {
 		1: {
