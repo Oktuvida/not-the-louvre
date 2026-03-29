@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { gsap } from 'gsap';
 	import { Canvas, T } from '@threlte/core';
-	import { GLTF, OrbitControls } from '@threlte/extras';
+	import { OrbitControls } from '@threlte/extras';
+	import NotTheLouvreStudioModel from '$lib/features/home-entry-scene/scene/NotTheLouvreStudioModel.svelte';
 	import StudioLoadingFallback from '$lib/features/shared-3d-world/components/StudioLoadingFallback.svelte';
 	import type { EntryFlowState } from '$lib/features/home-entry-scene/state/entry-state.svelte';
 
@@ -102,20 +103,18 @@
 		<T.Fog args={['#d7c2a8', 14, 32]} />
 		<T.AmbientLight intensity={0.08} />
 		<T.DirectionalLight position={[5, 16, 6]} intensity={1.4} castShadow />
-		<GLTF
-			url="/models/not-the-louvre-studio.glb"
-			scale={5.7}
-			position={[0, -6, 0]}
-			rotation={[-0.22, modelRotationY, 0]}
-			castShadow
-			receiveShadow
-			onload={() => {
-				loaded = true;
-			}}
-			onerror={() => {
-				loaded = true;
-			}}
-		/>
+		<T.Group scale={5.7} position={[0, -6, 0]} rotation={[-0.22, modelRotationY, 0]}>
+			<NotTheLouvreStudioModel
+				castShadow
+				receiveShadow
+				onload={() => {
+					loaded = true;
+				}}
+				onerror={() => {
+					loaded = true;
+				}}
+			/>
+		</T.Group>
 		<T.Mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.62, 0]} receiveShadow>
 			<T.CircleGeometry args={[18, 48]} />
 			<T.ShadowMaterial transparent opacity={0.2} />
