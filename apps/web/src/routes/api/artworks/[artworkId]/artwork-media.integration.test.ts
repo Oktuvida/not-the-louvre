@@ -45,7 +45,8 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const STORAGE_BASE_URL = process.env.SUPABASE_PUBLIC_URL;
 const STORAGE_SERVICE_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SERVICE_ROLE_KEY;
 
-const describeWithStorage = DATABASE_URL && STORAGE_BASE_URL && STORAGE_SERVICE_KEY ? describe : describe.skip;
+const describeWithStorage =
+	DATABASE_URL && STORAGE_BASE_URL && STORAGE_SERVICE_KEY ? describe : describe.skip;
 
 type DbClient = Sql<Record<string, unknown>>;
 
@@ -203,9 +204,7 @@ describeWithStorage('artwork media backend integration', () => {
 			const actualBytes = new Uint8Array(await response.arrayBuffer());
 
 			expect(response.status).toBe(200);
-			expect(response.headers.get('cache-control')).toBe(
-				'public, max-age=31536000, immutable'
-			);
+			expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
 			expect(response.headers.get('content-type')).toBe('image/avif');
 			expect(actualBytes).toEqual(expectedBytes);
 		} finally {
