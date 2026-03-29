@@ -1,9 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import {
-		checkImageContent as defaultCheckImageContent,
-		type ImageContentChecker
-	} from '$lib/client/content-filter';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 
 	const palette = ['#ff6b6b', '#4ecdc4', '#d4af37', '#7c6fbd', '#2d2a26', '#ffffff'];
@@ -50,7 +46,6 @@
 
 			return new File([blob], 'avatar.png', { type: 'image/png' });
 		},
-		checkImageContent = defaultCheckImageContent,
 		nickname,
 		onContinue,
 		saveAvatar = async () => ({
@@ -58,7 +53,6 @@
 			success: false as const
 		})
 	}: {
-		checkImageContent?: ImageContentChecker;
 		createAvatarFile?: (sourceCanvas: HTMLCanvasElement) => Promise<File | null>;
 		nickname: string;
 		onContinue?: () => void;
@@ -218,12 +212,6 @@
 					new Error('createAvatarFile returned no file')
 				);
 				saveError = 'This browser could not export your avatar. Please try again.';
-				return;
-			}
-
-			const moderationResult = await checkImageContent(avatarFile, 'avatar');
-			if (moderationResult.status !== 'allowed') {
-				saveError = moderationResult.message;
 				return;
 			}
 

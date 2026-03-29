@@ -2,8 +2,8 @@
 	import { deserialize } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import {
-		checkImageContent as defaultCheckImageContent,
-		type ImageContentChecker
+		checkTextContent as defaultCheckTextContent,
+		type TextContentChecker
 	} from '$lib/client/content-filter';
 	import type {
 		DrawForkParent,
@@ -16,14 +16,15 @@
 	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 
 	let {
-		checkImageContent = defaultCheckImageContent,
+		checkTextContent = defaultCheckTextContent,
 		createArtworkFile = exportArtworkFile,
 		forkParent = null,
 		publishDrawing = async (
 			file: File,
-			options: { parentArtworkId?: string | null; title: string }
+			options: { isNsfw: boolean; parentArtworkId?: string | null; title: string }
 		): Promise<DrawPublishActionData> => {
 			const formData = new FormData();
+			formData.set('isNsfw', String(options.isNsfw));
 			formData.set('media', file);
 			formData.set('title', options.title);
 			if (options.parentArtworkId) {
@@ -47,12 +48,12 @@
 		},
 		user
 	}: {
-		checkImageContent?: ImageContentChecker;
+		checkTextContent?: TextContentChecker;
 		createArtworkFile?: (canvas: HTMLCanvasElement) => Promise<File | null>;
 		forkParent?: DrawForkParent | null;
 		publishDrawing?: (
 			file: File,
-			options: { parentArtworkId?: string | null; title: string }
+			options: { isNsfw: boolean; parentArtworkId?: string | null; title: string }
 		) => Promise<DrawPublishActionData>;
 		user?: DrawPageUser;
 	} = $props();
@@ -64,6 +65,7 @@
 	let statusMessage = $state('');
 	let statusTone = $state<'error' | 'success' | 'idle'>('idle');
 	let artworkTitle = $state('');
+	let isArtworkNsfw = $state(false);
 	let titleError = $state('');
 
 	const clearCanvas = () => {
@@ -91,6 +93,14 @@
 		isPublishing = true;
 
 		try {
+			const titleModeration = await checkTextContent(artworkTitle, 'artwork_title');
+			if (titleModeration.status !== 'allowed') {
+				titleError = titleModeration.message;
+				statusMessage = '';
+				statusTone = 'idle';
+				return;
+			}
+
 			const file = await createArtworkFile(canvasRef);
 			if (!file) {
 				statusMessage = 'This browser could not export your drawing. Please try again.';
@@ -98,14 +108,8 @@
 				return;
 			}
 
-			const moderationResult = await checkImageContent(file, 'artwork');
-			if (moderationResult.status !== 'allowed') {
-				statusMessage = moderationResult.message;
-				statusTone = 'error';
-				return;
-			}
-
 			const result = await publishDrawing(file, {
+				isNsfw: isArtworkNsfw,
 				parentArtworkId: forkParent?.id ?? null,
 				title: artworkTitle
 			});
@@ -181,6 +185,12 @@
 				placeholder="Give your piece a title"
 				class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
 			/>
+		</label>
+		<label
+			class="mt-4 flex items-center gap-3 rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-sm text-[#2d2420]"
+		>
+			<input bind:checked={isArtworkNsfw} type="checkbox" />
+			<span>Mark this artwork as NSFW</span>
 		</label>
 		{#if titleError}
 			<p class="mt-2 text-sm text-[#8f3720]">{titleError}</p>

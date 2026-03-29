@@ -5,7 +5,7 @@ import StudioDrawingPage from './StudioDrawingPage.svelte';
 
 describe('StudioDrawingPage', () => {
 	it('publishes the current drawing and shows a minimal success state', async () => {
-		const checkImageContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const createArtworkFile = vi.fn(
 			async () => new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' })
 		);
@@ -20,7 +20,7 @@ describe('StudioDrawingPage', () => {
 		}));
 
 		render(StudioDrawingPage, {
-			checkImageContent,
+			checkTextContent,
 			createArtworkFile,
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
@@ -33,15 +33,16 @@ describe('StudioDrawingPage', () => {
 		await expect.element(page.getByRole('heading', { name: 'Untitled #0001' })).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Open gallery' })).toBeVisible();
 		expect(createArtworkFile).toHaveBeenCalled();
-		expect(checkImageContent).toHaveBeenCalledWith(expect.any(File), 'artwork');
+		expect(checkTextContent).toHaveBeenCalledWith('My First Piece', 'artwork_title');
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(File), {
+			isNsfw: false,
 			parentArtworkId: null,
 			title: 'My First Piece'
 		});
 	});
 
 	it('shows a retryable publish error without leaving the draw route', async () => {
-		const checkImageContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const publishDrawing = vi.fn(async () => ({
 			code: 'INVALID_MEDIA_CONTENT',
 			message: 'Artwork media must decode safely',
@@ -49,7 +50,7 @@ describe('StudioDrawingPage', () => {
 		}));
 
 		render(StudioDrawingPage, {
-			checkImageContent,
+			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
 			publishDrawing,
@@ -64,11 +65,11 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('shows a local export error when the browser cannot create upload media', async () => {
-		const checkImageContent = vi.fn();
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const publishDrawing = vi.fn();
 
 		render(StudioDrawingPage, {
-			checkImageContent,
+			checkTextContent,
 			createArtworkFile: async () => null,
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
@@ -80,16 +81,16 @@ describe('StudioDrawingPage', () => {
 		await expect
 			.element(page.getByText('This browser could not export your drawing. Please try again.'))
 			.toBeVisible();
-		expect(checkImageContent).not.toHaveBeenCalled();
+		expect(checkTextContent).toHaveBeenCalledWith('Export Trouble', 'artwork_title');
 		expect(publishDrawing).not.toHaveBeenCalled();
 	});
 
 	it('requires a title before publishing', async () => {
-		const checkImageContent = vi.fn();
+		const checkTextContent = vi.fn();
 		const publishDrawing = vi.fn();
 
 		render(StudioDrawingPage, {
-			checkImageContent,
+			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
 			publishDrawing,
@@ -99,12 +100,12 @@ describe('StudioDrawingPage', () => {
 		await page.getByRole('button', { name: 'Publish' }).click();
 
 		await expect.element(page.getByText('Title is required before publishing')).toBeVisible();
-		expect(checkImageContent).not.toHaveBeenCalled();
+		expect(checkTextContent).not.toHaveBeenCalled();
 		expect(publishDrawing).not.toHaveBeenCalled();
 	});
 
 	it('shows fork context and publishes with the parent artwork id', async () => {
-		const checkImageContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const publishDrawing = vi.fn(async () => ({
 			action: 'publish' as const,
 			artwork: {
@@ -116,7 +117,7 @@ describe('StudioDrawingPage', () => {
 		}));
 
 		render(StudioDrawingPage, {
-			checkImageContent,
+			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
 			forkParent: {
@@ -134,20 +135,21 @@ describe('StudioDrawingPage', () => {
 		await page.getByRole('button', { name: 'Publish' }).click();
 
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(File), {
+			isNsfw: false,
 			parentArtworkId: 'artwork-parent',
 			title: 'Forked Piece'
 		});
 	});
 
-	it('blocks publishing when the artwork filter rejects the exported image', async () => {
-		const checkImageContent = vi.fn(async () => ({
-			message: 'Artwork contains blocked sexual content.',
+	it('blocks publishing when the artwork title filter rejects the title', async () => {
+		const checkTextContent = vi.fn(async () => ({
+			message: 'Choose a different artwork title.',
 			status: 'blocked' as const
 		}));
 		const publishDrawing = vi.fn();
 
 		render(StudioDrawingPage, {
-			checkImageContent,
+			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
 			publishDrawing,
@@ -157,19 +159,19 @@ describe('StudioDrawingPage', () => {
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
-		await expect.element(page.getByText('Artwork contains blocked sexual content.')).toBeVisible();
+		await expect.element(page.getByText('Choose a different artwork title.')).toBeVisible();
 		expect(publishDrawing).not.toHaveBeenCalled();
 	});
 
-	it('blocks publishing when the artwork filter is unavailable', async () => {
-		const checkImageContent = vi.fn(async () => ({
-			message: 'Artwork safety check is unavailable right now. Please try again.',
+	it('blocks publishing when the artwork title filter is unavailable', async () => {
+		const checkTextContent = vi.fn(async () => ({
+			message: 'Artwork title safety check is unavailable right now. Please try again.',
 			status: 'unavailable' as const
 		}));
 		const publishDrawing = vi.fn();
 
 		render(StudioDrawingPage, {
-			checkImageContent,
+			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
 			publishDrawing,
@@ -180,8 +182,42 @@ describe('StudioDrawingPage', () => {
 		await page.getByRole('button', { name: 'Publish' }).click();
 
 		await expect
-			.element(page.getByText('Artwork safety check is unavailable right now. Please try again.'))
+			.element(
+				page.getByText('Artwork title safety check is unavailable right now. Please try again.')
+			)
 			.toBeVisible();
 		expect(publishDrawing).not.toHaveBeenCalled();
+	});
+
+	it('passes the creator nsfw label when selected', async () => {
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const publishDrawing = vi.fn(async () => ({
+			action: 'publish' as const,
+			artwork: {
+				id: 'artwork-1',
+				isNsfw: true,
+				mediaUrl: '/api/artworks/artwork-1/media',
+				title: 'Figure Study'
+			},
+			success: true as const
+		}));
+
+		render(StudioDrawingPage, {
+			checkTextContent,
+			createArtworkFile: async () =>
+				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
+			publishDrawing,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await page.getByPlaceholder('Give your piece a title').fill('Figure Study');
+		await page.getByRole('checkbox').click();
+		await page.getByRole('button', { name: 'Publish' }).click();
+
+		expect(publishDrawing).toHaveBeenCalledWith(expect.any(File), {
+			isNsfw: true,
+			parentArtworkId: null,
+			title: 'Figure Study'
+		});
 	});
 });
