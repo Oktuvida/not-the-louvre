@@ -6,6 +6,8 @@ import DrawingCanvas from './DrawingCanvas.svelte';
 class MockCanvasImage {
 	onload: (() => void) | null = null;
 	onerror: (() => void) | null = null;
+	naturalHeight = 768;
+	naturalWidth = 768;
 
 	set src(_value: string) {
 		queueMicrotask(() => {
@@ -233,7 +235,9 @@ describe('DrawingCanvas', () => {
 		const ctx = {
 			drawImage: vi.fn(),
 			fillRect: vi.fn(),
-			fillStyle: '#fdfbf7'
+			fillStyle: '#fdfbf7',
+			imageSmoothingEnabled: false,
+			imageSmoothingQuality: 'low'
 		} as unknown as CanvasRenderingContext2D;
 		const getContextSpy = vi
 			.spyOn(HTMLCanvasElement.prototype, 'getContext')
@@ -246,9 +250,19 @@ describe('DrawingCanvas', () => {
 			initialImageUrl: '/api/artworks/artwork-parent/media'
 		});
 
+		const canvas = document.querySelector('canvas');
+		if (!canvas) {
+			throw new Error('Expected drawing canvas to render');
+		}
+
+		expect(canvas.width).toBe(768);
+		expect(canvas.height).toBe(768);
+
 		await vi.waitFor(() => {
-			expect(ctx.drawImage).toHaveBeenCalled();
+			expect(ctx.drawImage).toHaveBeenCalledWith(expect.any(MockCanvasImage), 0, 0, 768, 768);
 		});
+		expect(ctx.imageSmoothingEnabled).toBe(true);
+		expect(ctx.imageSmoothingQuality).toBe('high');
 
 		getContextSpy.mockRestore();
 	});

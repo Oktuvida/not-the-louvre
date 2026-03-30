@@ -24,7 +24,7 @@ const openDrawSketchbook = async (page: import('@playwright/test').Page) => {
 };
 
 const readDrawingCanvasCenterPixel = async (page: import('@playwright/test').Page) =>
-	page.locator('canvas[width="800"][height="600"]').evaluate((node) => {
+	page.locator('canvas[width="768"][height="768"]').evaluate((node) => {
 		const canvas = node as HTMLCanvasElement;
 		const context = canvas.getContext('2d');
 		if (!context) {
@@ -430,6 +430,14 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Forking from')).toBeVisible();
 		await expect(page.getByText('Fork Source')).toBeVisible();
 		await expect(await readDrawingCanvasCenterPixel(page)).not.toEqual([253, 251, 247, 255]);
+		await page.getByPlaceholder('Give your piece a title').fill('Fork Child');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+
+		await page.goto('/gallery/your-studio');
+		await expect(page.getByText('Fork Child')).toBeVisible();
+		await expect(page.getByText('Forked', { exact: true })).toBeVisible();
+		await expect(page.getByText('From Fork Source')).toBeVisible();
 	});
 
 	test('gallery route exposes room navigation', async ({ page }) => {
