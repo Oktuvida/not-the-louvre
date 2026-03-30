@@ -19,6 +19,7 @@
 		EntryFlowEvent,
 		EntryFlowState
 	} from '$lib/features/home-entry-scene/state/entry-state.svelte';
+	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
 
 	type AuthView =
 		| 'login'
@@ -392,6 +393,7 @@
 		});
 
 		if (response.ok) {
+			dispatchAvatarFaviconUpdate(authenticatedUser.id);
 			onAvatarSaved?.();
 			return { success: true as const };
 		}
