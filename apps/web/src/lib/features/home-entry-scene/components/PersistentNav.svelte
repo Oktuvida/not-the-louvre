@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
 	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
@@ -229,7 +228,7 @@
 		</GameLink>
 
 		{#if user}
-			<form method="POST" action="?/signOut" use:enhance class="w-fit">
+			<form method="POST" action="?/signOut" class="w-fit">
 				<GameButton
 					type="submit"
 					variant="danger"
