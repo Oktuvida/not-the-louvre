@@ -41,8 +41,11 @@ const getTopWindowStart = (now: Date, window: ArtworkDiscoveryTopWindow) => {
 	);
 };
 
-const hotRankingSql = (now: Date) =>
-	sql<number>`(${artworks.score}::double precision / power(((extract(epoch from ${now}) - extract(epoch from ${artworks.createdAt})) / 3600.0) + 2, ${HOT_RANKING_GRAVITY}))`;
+const hotRankingSql = (now: Date) => {
+	const nowEpochSeconds = now.getTime() / 1000;
+
+	return sql<number>`(${artworks.score}::double precision / power(((${nowEpochSeconds} - extract(epoch from ${artworks.createdAt})) / 3600.0) + 2, ${HOT_RANKING_GRAVITY}))`;
+};
 
 const rankedCursorWhere = (
 	cursor:

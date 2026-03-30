@@ -809,6 +809,60 @@ describe('artwork read service', () => {
 		]);
 	});
 
+	it('prefers recent momentum over older score in hot discovery', async () => {
+		const { listArtworkDiscovery } = await import('./read.service');
+		const artworks = new Map<string, ArtworkRecord>([
+			[
+				'artwork-older-hit',
+				{
+					authorId: 'user-1',
+					commentCount: 0,
+					createdAt: new Date('2026-03-26T00:00:00.000Z'),
+					forkCount: 0,
+					id: 'artwork-older-hit',
+					isNsfw: false,
+					mediaContentType: 'image/avif',
+					mediaSizeBytes: 128,
+					parentId: null,
+					score: 50,
+					storageKey: 'artworks/user-1/older-hit.avif',
+					title: 'Older hit',
+					updatedAt: new Date('2026-03-26T00:00:00.000Z')
+				}
+			],
+			[
+				'artwork-rising-now',
+				{
+					authorId: 'user-2',
+					commentCount: 0,
+					createdAt: new Date('2026-03-26T11:30:00.000Z'),
+					forkCount: 0,
+					id: 'artwork-rising-now',
+					isNsfw: false,
+					mediaContentType: 'image/avif',
+					mediaSizeBytes: 128,
+					parentId: null,
+					score: 12,
+					storageKey: 'artworks/user-2/rising-now.avif',
+					title: 'Rising now',
+					updatedAt: new Date('2026-03-26T11:30:00.000Z')
+				}
+			]
+		]);
+		const profiles = createProfiles();
+		const readRepository = createReadRepository(artworks, profiles);
+
+		const page = await listArtworkDiscovery(
+			{ limit: 10, sort: 'hot' },
+			asReadDeps(readRepository, () => new Date('2026-03-26T12:00:00.000Z'))
+		);
+
+		expect(page.items.map((artwork) => artwork.id)).toEqual([
+			'artwork-rising-now',
+			'artwork-older-hit'
+		]);
+	});
+
 	it('rejects ranked cursor reuse across sorts and top windows', async () => {
 		const { listArtworkDiscovery } = await import('./read.service');
 		const artworks = new Map<string, ArtworkRecord>();

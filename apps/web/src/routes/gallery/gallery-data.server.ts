@@ -42,7 +42,9 @@ const roomDiscoveryRequest = (roomId: GalleryRoomId) => {
 const emptyStateMessageForRoom = (roomId: GalleryRoomId) =>
 	roomId === 'your-studio'
 		? 'You have not published any artworks yet.'
-		: 'No artworks have reached this gallery room yet.';
+		: roomId === 'hot-wall'
+			? 'Nothing is heating up on the wall right now.'
+			: 'No artworks have reached this gallery room yet.';
 
 export const loadGalleryRoomData = async (
 	roomId: string,

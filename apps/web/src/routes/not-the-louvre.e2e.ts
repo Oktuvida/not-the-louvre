@@ -455,6 +455,23 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('No artworks have reached this gallery room yet.')).toBeVisible();
 	});
 
+	test('hot wall promotes a live artwork and still opens its detail view', async ({ page }) => {
+		await installDrawingExportHarness(page);
+
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+		await openDrawSketchbook(page);
+		await page.getByPlaceholder('Give your piece a title').fill('Hot Wall Piece');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+
+		await page.goto('/gallery/hot-wall');
+		await expect(page.getByText('Hot right now')).toBeVisible();
+		await page.getByRole('button', { name: /Hot Wall Piece/ }).click();
+		await expect(page.getByText('Artwork details')).toBeVisible();
+	});
+
 	test('unknown routes render the custom not-found page', async ({ page }) => {
 		await page.goto('/totally-made-up-room');
 

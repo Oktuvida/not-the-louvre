@@ -18,6 +18,7 @@
 		type GalleryRoomConfig,
 		type GalleryRoomId
 	} from '$lib/features/gallery-exploration/model/rooms';
+	import HotWallRoom from '$lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
 	import MysteryRoom from '$lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
@@ -191,9 +192,7 @@
 				exitFadeOpacity = fade.opacity;
 			},
 			onComplete: () => {
-				const url = `${resolve('/')}?from=gallery`;
-				// eslint-disable-next-line svelte/no-navigation-without-resolve -- URL is already resolved above
-				void goto(url);
+				void goto(resolve('/?from=gallery'));
 			}
 		});
 	};
@@ -383,6 +382,9 @@
 		{ artwork: hallOfFameArtworks[0], position: 1 as const },
 		{ artwork: hallOfFameArtworks[2], position: 3 as const }
 	]);
+	const hotWallLeadArtwork = $derived(artworks[0] ?? null);
+	const hotWallRisers = $derived(artworks.slice(1));
+	const hotWallGridArtworks = $derived(hotWallRisers.slice(3));
 
 	const frameForArtwork = (artworkId: string, podiumPosition?: 1 | 2 | 3) =>
 		resolveArtworkFrame({ artworkId, podiumPosition });
@@ -633,6 +635,14 @@
 								{/each}
 							</div>
 						</div>
+					{:else if roomId === 'hot-wall'}
+						<HotWallRoom
+							adultContentEnabled={adultContentAllowed}
+							gridArtworks={hotWallGridArtworks}
+							leadArtwork={hotWallLeadArtwork}
+							onSelect={openArtwork}
+							risers={hotWallRisers}
+						/>
 					{:else if roomId === 'your-studio'}
 						<div class="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-3">
 							{#each artworks as artwork (artwork.id)}
