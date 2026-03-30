@@ -32,12 +32,13 @@
 
 	let canvasEl: HTMLCanvasElement | undefined = $state();
 	let containerEl: HTMLElement | undefined = $state();
+	let resizeObserver: ResizeObserver | undefined;
 
 	const stickerVariant: StickerVariant = $derived(variant);
 	const stickerStyle = $derived(getStickerControlVars(size, variant));
 	const rotation = $derived(getStickerRotation(`button:${variant}:${size}:${type}`));
 
-	$effect(() => {
+	const redrawSticker = () => {
 		if (!canvasEl || !containerEl) return;
 
 		const w = containerEl.offsetWidth;
@@ -56,6 +57,22 @@
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
 		drawStickerBackground(ctx, w, h, { variant: stickerVariant });
+	};
+
+	$effect(() => {
+		if (!canvasEl || !containerEl) return;
+		redrawSticker();
+
+		resizeObserver?.disconnect();
+		resizeObserver = new ResizeObserver(() => {
+			redrawSticker();
+		});
+		resizeObserver.observe(containerEl);
+
+		return () => {
+			resizeObserver?.disconnect();
+			resizeObserver = undefined;
+		};
 	});
 </script>
 
@@ -86,7 +103,7 @@
 		border: none;
 		background: none;
 		padding: 0;
-		min-width: var(--sticker-min-width);
+		min-width: var(--sticker-min-width, 0px);
 		min-height: var(--sticker-height);
 		padding-inline: var(--sticker-padding-x);
 		font-family: 'Fredoka', sans-serif;
