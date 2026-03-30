@@ -199,7 +199,6 @@
 			duration: 0.5,
 			ease: 'power2.in',
 			onUpdate: () => {
-
 				exitFadeOpacity = fade.opacity;
 			},
 			onComplete: () => {
@@ -255,7 +254,7 @@
 		{/if}
 	</header>
 
-	<!-- <main
+	<main
 		class="relative z-10 mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col px-4 pt-3 pb-4 sm:px-6"
 	>
 		<div
@@ -389,7 +388,7 @@
 				<DrawingToolTray {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
 			</div>
 		</div>
-	</main> -->
+	</main>
 </div>
 
 {#if showExitFade}
