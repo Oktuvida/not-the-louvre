@@ -245,11 +245,9 @@ const createReadRepository = (
 	};
 
 	return {
-		async listRecentArtworks({ cursor, limit, viewer }) {
+		async listRecentArtworks({ cursor, limit }) {
 			return Array.from(artworks.values())
-				.filter(
-					(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
-				)
+				.filter((record) => !record.isHidden)
 				.sort((left, right) => {
 					const createdAtDelta = right.createdAt.getTime() - left.createdAt.getTime();
 					if (createdAtDelta !== 0) return createdAtDelta;
@@ -267,11 +265,9 @@ const createReadRepository = (
 				.slice(0, limit)
 				.map(toReadRecord);
 		},
-		async listHotArtworks({ cursor, limit, now, viewer }) {
+		async listHotArtworks({ cursor, limit, now }) {
 			return Array.from(artworks.values())
-				.filter(
-					(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
-				)
+				.filter((record) => !record.isHidden)
 				.map((record) => {
 					return {
 						...toReadRecord(record),
@@ -298,11 +294,10 @@ const createReadRepository = (
 				)
 				.slice(0, limit);
 		},
-		async findArtworkDetailById(id, viewer) {
+		async findArtworkDetailById(id) {
 			const record = artworks.get(id);
 			if (!record) return null;
-			if (record.isHidden && !viewer?.isModerator && record.authorId !== viewer?.userId)
-				return null;
+			if (record.isHidden) return null;
 
 			const parent = record.parentId
 				? (() => {
@@ -340,11 +335,10 @@ const createReadRepository = (
 				childForks
 			};
 		},
-		async findArtworkMediaById(id, viewer) {
+		async findArtworkMediaById(id) {
 			const record = artworks.get(id);
 			if (!record) return null;
-			if (record.isHidden && !viewer?.isModerator && record.authorId !== viewer?.userId)
-				return null;
+			if (record.isHidden) return null;
 
 			return {
 				id: record.id,
@@ -352,13 +346,11 @@ const createReadRepository = (
 				storageKey: record.storageKey
 			};
 		},
-		async listTopArtworks({ cursor, limit, now, window, viewer }) {
+		async listTopArtworks({ cursor, limit, now, window }) {
 			const windowStart = getTopWindowStart(now, window);
 
 			return Array.from(artworks.values())
-				.filter(
-					(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
-				)
+				.filter((record) => !record.isHidden)
 				.filter((record) => !windowStart || record.createdAt >= windowStart)
 				.map((record) => {
 					return {
@@ -509,6 +501,105 @@ describe('artwork read service', () => {
 		expect(secondPage.items.map((artwork) => artwork.id)).toEqual(['artwork-1']);
 		expect(secondPage.pageInfo.hasMore).toBe(false);
 		expect(secondPage.pageInfo.nextCursor).toBeNull();
+	});
+
+	it('keeps hidden artworks out of public discovery even for authors and admins', async () => {
+		const { listArtworkDiscovery } = await import('./read.service');
+		const artworks = new Map<string, ArtworkRecord>([
+			[
+				'artwork-visible',
+				{
+					authorId: 'user-1',
+					commentCount: 0,
+					createdAt: new Date('2026-03-26T12:00:00.000Z'),
+					forkCount: 0,
+					id: 'artwork-visible',
+					isHidden: false,
+					isNsfw: false,
+					mediaContentType: 'image/avif',
+					mediaSizeBytes: 128,
+					parentId: null,
+					score: 5,
+					storageKey: 'artworks/user-1/visible.avif',
+					title: 'Visible artwork',
+					updatedAt: new Date('2026-03-26T12:00:00.000Z')
+				}
+			],
+			[
+				'artwork-hidden',
+				{
+					authorId: 'user-1',
+					commentCount: 0,
+					createdAt: new Date('2026-03-26T13:00:00.000Z'),
+					forkCount: 0,
+					id: 'artwork-hidden',
+					isHidden: true,
+					isNsfw: false,
+					mediaContentType: 'image/avif',
+					mediaSizeBytes: 128,
+					parentId: null,
+					score: 8,
+					storageKey: 'artworks/user-1/hidden.avif',
+					title: 'Hidden artwork',
+					updatedAt: new Date('2026-03-26T13:00:00.000Z')
+				}
+			]
+		]);
+		const profiles = createProfiles();
+		const readRepository = createReadRepository(artworks, profiles);
+
+		const authorView = await listArtworkDiscovery(
+			{ sort: 'recent' },
+			{ repository: readRepository, user: { id: 'user-1', role: 'user' } }
+		);
+		const adminView = await listArtworkDiscovery(
+			{ sort: 'recent' },
+			{ repository: readRepository, user: { id: 'admin-1', role: 'admin' } }
+		);
+
+		expect(authorView.items.map((artwork) => artwork.id)).toEqual(['artwork-visible']);
+		expect(adminView.items.map((artwork) => artwork.id)).toEqual(['artwork-visible']);
+	});
+
+	it('returns not found for hidden artwork detail and media in public reads', async () => {
+		const { getArtworkDetail, getArtworkMedia } = await import('./read.service');
+		const artworks = new Map<string, ArtworkRecord>([
+			[
+				'artwork-hidden',
+				{
+					authorId: 'user-1',
+					commentCount: 0,
+					createdAt: new Date('2026-03-26T13:00:00.000Z'),
+					forkCount: 0,
+					id: 'artwork-hidden',
+					isHidden: true,
+					isNsfw: false,
+					mediaContentType: 'image/avif',
+					mediaSizeBytes: 128,
+					parentId: null,
+					score: 8,
+					storageKey: 'artworks/user-1/hidden.avif',
+					title: 'Hidden artwork',
+					updatedAt: new Date('2026-03-26T13:00:00.000Z')
+				}
+			]
+		]);
+		const profiles = createProfiles();
+		const readRepository = createReadRepository(artworks, profiles);
+
+		await expect(
+			getArtworkDetail('artwork-hidden', {
+				repository: readRepository,
+				user: { id: 'user-1', role: 'user' }
+			})
+		).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
+
+		await expect(
+			getArtworkMedia('artwork-hidden', {
+				repository: readRepository,
+				user: { id: 'admin-1', role: 'admin' }
+			})
+		).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
 	});
 
 	it('accepts supported discovery sorts and requires a top window only for top feeds', async () => {
