@@ -1,5 +1,5 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import ArtworkCard from './ArtworkCard.svelte';
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
@@ -23,6 +23,10 @@ const artwork = {
 } satisfies Artwork;
 
 describe('ArtworkCard', () => {
+	beforeEach(() => {
+		vi.unstubAllGlobals?.();
+	});
+
 	it('renders a stable standard frame by default', async () => {
 		render(ArtworkCard, { artwork });
 
@@ -59,5 +63,34 @@ describe('ArtworkCard', () => {
 
 		await expect.element(page.getByText('Forked')).toBeVisible();
 		await expect.element(page.getByText('From Original Piece')).toBeVisible();
+	});
+
+	it('renders report and admin moderation controls without triggering card open', async () => {
+		const onclick = vi.fn();
+		const fetchSpy = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({ artwork: { id: 'artwork-1', isHidden: false, isNsfw: true } }),
+					{
+						status: 200
+					}
+				)
+		);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		render(ArtworkCard, {
+			artwork,
+			onclick,
+			viewer: { id: 'admin-1', role: 'admin' }
+		});
+
+		await page.getByRole('button', { name: 'Mark artwork NSFW' }).click();
+
+		expect(onclick).not.toHaveBeenCalled();
+		expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/moderation', {
+			body: JSON.stringify({ action: 'mark_nsfw' }),
+			headers: { 'content-type': 'application/json' },
+			method: 'PATCH'
+		});
 	});
 });

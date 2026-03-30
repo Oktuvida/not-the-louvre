@@ -3,6 +3,7 @@ export class ArtworkFlowError extends Error {
 		readonly status: number,
 		message: string,
 		readonly code:
+			| 'BANNED_USER'
 			| 'FORBIDDEN'
 			| 'DUPLICATE_REPORT'
 			| 'INVALID_COMMENT'
@@ -20,6 +21,7 @@ export class ArtworkFlowError extends Error {
 			| 'INVALID_WINDOW'
 			| 'INVALID_TITLE'
 			| 'INVALID_VOTE'
+			| 'VALIDATION_ERROR'
 			| 'MEDIA_TOO_LARGE'
 			| 'NOT_FOUND'
 			| 'PUBLISH_FAILED'

@@ -128,4 +128,43 @@ describe('ArtworkDetailPanel', () => {
 		expect(fetchSpy).not.toHaveBeenCalled();
 		expect(onArtworkChange).not.toHaveBeenCalled();
 	});
+
+	it('shows report actions for signed-in viewers and admin quick moderation controls', async () => {
+		const onArtworkChange = vi.fn();
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ report: { id: 'report-1', reason: 'spam' } }), {
+					status: 201
+				})
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({ artwork: { id: 'artwork-1', isHidden: true, isNsfw: true } }),
+					{ status: 200 }
+				)
+			);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		render(ArtworkDetailPanel, {
+			artwork,
+			onArtworkChange,
+			viewer: { id: 'admin-1', role: 'admin' }
+		});
+
+		await page.getByRole('button', { name: 'Report artwork' }).click();
+		await page.getByRole('button', { name: 'Spam' }).click();
+		await expect.element(page.getByText('Report submitted.')).toBeVisible();
+
+		await page.getByRole('button', { name: 'Mark artwork NSFW' }).click();
+
+		expect(fetchSpy).toHaveBeenNthCalledWith(2, '/api/artworks/artwork-1/moderation', {
+			body: JSON.stringify({ action: 'mark_nsfw' }),
+			headers: { 'content-type': 'application/json' },
+			method: 'PATCH'
+		});
+		expect(onArtworkChange).toHaveBeenCalledWith(
+			expect.objectContaining({ isHidden: true, isNsfw: true })
+		);
+	});
 });

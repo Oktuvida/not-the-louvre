@@ -152,6 +152,13 @@ const createRepository = () => {
 			artworks.set(id, next);
 			return next;
 		}),
+		updateArtworkModeration: vi.fn(async (id: string, input) => {
+			const current = artworks.get(id);
+			if (!current) return null;
+			const next = { ...current, ...input };
+			artworks.set(id, next);
+			return next;
+		}),
 		setCommentHiddenState: vi.fn(async (id: string, input) => {
 			const current = comments.get(id);
 			if (!current) return null;

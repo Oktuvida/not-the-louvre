@@ -9,11 +9,18 @@
 		gridArtworks = [],
 		leadArtwork = null,
 		onSelect,
+		viewer = null,
+		onArtworkPatch,
 		risers = []
 	}: {
 		adultContentEnabled?: boolean;
 		gridArtworks?: Artwork[];
 		leadArtwork?: Artwork | null;
+		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
+		onArtworkPatch?: (
+			artworkId: string,
+			patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>
+		) => void;
 		onSelect?: (artwork: Artwork) => void;
 		risers?: Artwork[];
 	} = $props();
@@ -133,6 +140,8 @@
 					{artwork}
 					{index}
 					frameTestId={`hot-wall-riser-${artwork.id}`}
+					{viewer}
+					onArtworkPatch={(patch) => onArtworkPatch?.(artwork.id, patch)}
 					onclick={() => onSelect?.(artwork)}
 				/>
 			{/each}

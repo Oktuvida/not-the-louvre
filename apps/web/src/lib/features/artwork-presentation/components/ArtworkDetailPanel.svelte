@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import ArtworkSafetyActions from '$lib/features/artwork-presentation/components/ArtworkSafetyActions.svelte';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
@@ -16,6 +17,7 @@
 		onAdultContentToggle,
 		viewer = null,
 		onArtworkChange,
+		onArtworkPatch,
 		onClose
 	}: {
 		artwork: Artwork | null;
@@ -24,6 +26,10 @@
 		onAdultContentToggle?: (enabled: boolean) => Promise<void> | void;
 		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
 		onArtworkChange?: (artwork: Artwork) => void;
+		onArtworkPatch?: (
+			artworkId: string,
+			patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>
+		) => void;
 		onClose?: () => void;
 	} = $props();
 
@@ -46,6 +52,14 @@
 
 	const syncArtwork = (nextArtwork: Artwork) => {
 		onArtworkChange?.(nextArtwork);
+	};
+
+	const patchArtwork = (patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>) => {
+		if (!artwork) return;
+
+		const nextArtwork = { ...artwork, ...patch };
+		onArtworkPatch?.(artwork.id, patch);
+		syncArtwork(nextArtwork);
 	};
 
 	const updateAdultContentVisibility = async (enabled: boolean) => {
@@ -268,6 +282,9 @@
 							<p class="mt-2 text-sm font-semibold text-[#2d2420]">POWER SCORE</p>
 						</div>
 						<div class="mt-6 grid grid-cols-2 gap-4">
+							<div class="col-span-2">
+								<ArtworkSafetyActions {artwork} {viewer} onArtworkPatch={patchArtwork} />
+							</div>
 							<GameButton
 								variant="secondary"
 								size="sm"
