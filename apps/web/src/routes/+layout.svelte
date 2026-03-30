@@ -1,12 +1,42 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import type { LayoutProps } from './$types';
+	import { faviconUpdateEventName } from '$lib/favicon';
 
-	let { children } = $props();
+	let { children, data }: LayoutProps = $props();
+	let clientFaviconHref = $state<string | null>(null);
+	let clientFaviconBaseHref = $state<string | null>(null);
+
+	const serverFaviconHref = $derived(data.favicon.href);
+	const faviconHref = $derived(
+		clientFaviconHref && clientFaviconBaseHref === serverFaviconHref
+			? clientFaviconHref
+			: serverFaviconHref
+	);
+
+	onMount(() => {
+		const handleFaviconUpdate = (event: Event) => {
+			const customEvent = event as CustomEvent<{ href?: string }>;
+
+			if (typeof customEvent.detail?.href !== 'string') {
+				return;
+			}
+
+			clientFaviconBaseHref = serverFaviconHref;
+			clientFaviconHref = customEvent.detail.href;
+		};
+
+		window.addEventListener(faviconUpdateEventName, handleFaviconUpdate);
+
+		return () => {
+			window.removeEventListener(faviconUpdateEventName, handleFaviconUpdate);
+		};
+	});
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href={faviconHref} sizes="any" />
 	<title>Not the Louvre</title>
 	<meta
 		name="description"
