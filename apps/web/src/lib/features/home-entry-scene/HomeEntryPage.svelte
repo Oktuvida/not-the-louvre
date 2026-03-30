@@ -113,7 +113,7 @@
 				},
 				onComplete: () => {
 					const url = `${resolve('/gallery/[room]', { room: 'your-studio' })}?from=home`;
-					// eslint-disable-next-line svelte/no-navigation-without-resolve -- URL is already resolved above
+					// eslint-disable-next-line svelte/no-navigation-without-resolve -- URL is already resolved and extended with query params
 					void goto(url);
 				}
 			});
