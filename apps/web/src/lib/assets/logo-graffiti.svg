@@ -8,28 +8,28 @@
 
   <!-- NOT -->
   <g filter="url(#tex)">
-    <!-- N -->
-    <rect x="76" y="20" width="24" height="96" rx="7" fill="#d4834a"/>
-    <polygon points="100,20 126,20 126,30 100,116 76,116 76,106" fill="#c97a3a"/>
-    <rect x="100" y="20" width="24" height="96" rx="7" fill="#d4834a"/>
-    <rect x="76" y="20" width="5" height="96" rx="2" fill="#e8a060" opacity="0.45"/>
+    <!-- N (fixed: wider spacing, correct diagonal from top-left to bottom-right) -->
+    <rect x="60" y="20" width="24" height="96" rx="7" fill="#d4834a"/>
+    <polygon points="60,20 84,20 136,104 136,116 112,116 60,32" fill="#c97a3a"/>
+    <rect x="112" y="20" width="24" height="96" rx="7" fill="#d4834a"/>
+    <rect x="60" y="20" width="5" height="96" rx="2" fill="#e8a060" opacity="0.45"/>
 
     <!-- O -->
-    <rect x="144" y="20" width="92" height="96" rx="24" fill="#d4834a"/>
-    <rect x="167" y="42" width="46" height="52" rx="13" fill="#1a1410"/>
-    <rect x="144" y="20" width="5" height="96" rx="2" fill="#e8a060" opacity="0.4"/>
+    <rect x="152" y="20" width="92" height="96" rx="24" fill="#d4834a"/>
+    <rect x="175" y="42" width="46" height="52" rx="13" fill="#1a1410"/>
+    <rect x="152" y="20" width="5" height="96" rx="2" fill="#e8a060" opacity="0.4"/>
 
     <!-- T -->
-    <rect x="256" y="20" width="96" height="24" rx="9" fill="#d4834a"/>
-    <rect x="292" y="20" width="24" height="96" rx="7" fill="#d4834a"/>
-    <rect x="256" y="20" width="5" height="24" rx="2" fill="#e8a060" opacity="0.4"/>
+    <rect x="264" y="20" width="96" height="24" rx="9" fill="#d4834a"/>
+    <rect x="300" y="20" width="24" height="96" rx="7" fill="#d4834a"/>
+    <rect x="264" y="20" width="5" height="24" rx="2" fill="#e8a060" opacity="0.4"/>
   </g>
 
   <!-- drips -->
-  <rect x="192" y="116" width="7" height="20" rx="3.5" fill="#d4834a" opacity="0.28"/>
-  <ellipse cx="195.5" cy="137" rx="5.5" ry="3.5" fill="#d4834a" opacity="0.22"/>
-  <rect x="100" y="116" width="6" height="14" rx="3" fill="#c97a3a" opacity="0.22"/>
-  <rect x="294" y="116" width="5" height="24" rx="2.5" fill="#d4834a" opacity="0.2"/>
+  <rect x="200" y="116" width="7" height="20" rx="3.5" fill="#d4834a" opacity="0.28"/>
+  <ellipse cx="203.5" cy="137" rx="5.5" ry="3.5" fill="#d4834a" opacity="0.22"/>
+  <rect x="112" y="116" width="6" height="14" rx="3" fill="#c97a3a" opacity="0.22"/>
+  <rect x="302" y="116" width="5" height="24" rx="2.5" fill="#d4834a" opacity="0.2"/>
 
   <!-- THE -->
   <g filter="url(#tex)">
@@ -89,5 +89,4 @@
     <rect x="544" y="382" width="74" height="22" rx="8" fill="#b87038"/>
     <rect x="544" y="308" width="5" height="96" rx="2" fill="#cc8c50" opacity="0.4"/>
   </g>
-
 </svg>
