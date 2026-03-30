@@ -20,10 +20,15 @@ vi.mock('$lib/server/user/storage', () => ({
 }));
 
 const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
+	avatarIsHidden: false,
+	avatarIsNsfw: false,
 	avatarUrl: 'avatars/user-1.avif',
 	avatarOnboardingCompletedAt: new Date('2026-01-01T00:00:00.000Z'),
+	banReason: null,
+	bannedAt: null,
 	createdAt: new Date('2026-01-01T00:00:00.000Z'),
 	id: 'user-1',
+	isBanned: false,
 	nickname: 'artist',
 	role: 'user',
 	updatedAt: new Date('2026-01-01T00:00:00.000Z'),

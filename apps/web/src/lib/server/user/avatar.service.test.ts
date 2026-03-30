@@ -12,10 +12,15 @@ import {
 } from '../media/test-helpers';
 
 const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
+	avatarIsHidden: false,
+	avatarIsNsfw: false,
 	avatarUrl: null,
 	avatarOnboardingCompletedAt: null,
+	banReason: null,
+	bannedAt: null,
 	createdAt: new Date('2026-01-01T00:00:00.000Z'),
 	id: 'user-1',
+	isBanned: false,
 	nickname: 'artist',
 	role: 'user',
 	updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -45,6 +50,16 @@ const createRepository = (initial: UserRecord | null = null): UserRepository => 
 	return {
 		findUserById: vi.fn(async (id) => (stored?.id === id ? stored : null)),
 		listUsers: vi.fn(async () => []),
+		updateAvatarModeration: vi.fn(async (id, input) => {
+			if (!stored || stored.id !== id) return null;
+			stored = { ...stored, ...input };
+			return stored;
+		}),
+		updateBanState: vi.fn(async (id, input) => {
+			if (!stored || stored.id !== id) return null;
+			stored = { ...stored, ...input };
+			return stored;
+		}),
 		updateUserAvatarUrl: vi.fn(async (id, avatarUrl, avatarOnboardingCompletedAt, updatedAt) => {
 			if (!stored || stored.id !== id) return null;
 			stored = { ...stored, avatarOnboardingCompletedAt, avatarUrl, updatedAt };
@@ -80,6 +95,19 @@ describe('avatar upload', () => {
 			code: 'UNAUTHENTICATED',
 			status: 401
 		});
+	});
+
+	it('rejects soft-banned users before touching storage', async () => {
+		const service = createAvatarService({ repository, storage });
+
+		await expect(
+			service.uploadAvatar(
+				makeCanonicalUser({ isBanned: true }),
+				await createWebpTestFile({ height: 256, name: 'avatar.webp', width: 256 })
+			)
+		).rejects.toMatchObject({ code: 'BANNED_USER', status: 403 });
+
+		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
 	it('rejects non-WebP media', async () => {
@@ -211,6 +239,14 @@ describe('avatar deletion', () => {
 			code: 'UNAUTHENTICATED',
 			status: 401
 		});
+	});
+
+	it('rejects soft-banned users from deleting avatars', async () => {
+		const service = createAvatarService({ repository, storage });
+
+		await expect(
+			service.deleteAvatar(makeCanonicalUser({ avatarUrl: 'avatars/user-1.avif', isBanned: true }))
+		).rejects.toMatchObject({ code: 'BANNED_USER', status: 403 });
 	});
 
 	it('removes the avatar from storage and clears the profile reference', async () => {

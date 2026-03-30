@@ -27,10 +27,15 @@ vi.mock('$lib/server/user/storage', () => ({
 }));
 
 const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
+	avatarIsHidden: false,
+	avatarIsNsfw: false,
 	avatarUrl: 'avatars/user-1.avif',
 	avatarOnboardingCompletedAt: new Date('2026-01-01T00:00:00.000Z'),
+	banReason: null,
+	bannedAt: null,
 	createdAt: new Date('2026-01-01T00:00:00.000Z'),
 	id: 'user-1',
+	isBanned: false,
 	nickname: 'artist',
 	role: 'user',
 	updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -87,6 +92,21 @@ describe('GET /api/users/[userId]/avatar', () => {
 		} as never);
 
 		expect(response.status).toBe(404);
+	});
+
+	it('returns 404 for a hidden avatar', async () => {
+		mocked.findUserById.mockResolvedValue(
+			makeUserRecord({ avatarIsHidden: true, avatarUrl: 'avatars/user-1.avif' })
+		);
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: {},
+			params: { userId: 'user-1' }
+		} as never);
+
+		expect(response.status).toBe(404);
+		expect(mocked.streamAvatarStorageObject).not.toHaveBeenCalled();
 	});
 
 	it('returns 404 for a nonexistent user', async () => {

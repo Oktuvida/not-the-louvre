@@ -4,10 +4,15 @@ import { users } from '$lib/server/db/schema';
 import type { ListUsersInput, UserRecord, UserRepository } from './types';
 
 const mapRow = (row: typeof users.$inferSelect): UserRecord => ({
+	avatarIsHidden: row.avatarIsHidden,
+	avatarIsNsfw: row.avatarIsNsfw,
 	avatarUrl: row.avatarUrl ?? null,
 	avatarOnboardingCompletedAt: row.avatarOnboardingCompletedAt ?? null,
+	banReason: row.banReason ?? null,
+	bannedAt: row.bannedAt ?? null,
 	createdAt: row.createdAt,
 	id: row.id,
+	isBanned: row.isBanned,
 	nickname: row.nickname,
 	role: row.role,
 	updatedAt: row.updatedAt
@@ -43,6 +48,35 @@ export const userRepository: UserRepository = {
 			.set({ avatarOnboardingCompletedAt, avatarUrl, updatedAt })
 			.where(eq(users.id, id))
 			.returning();
+		return rows[0] ? mapRow(rows[0]) : null;
+	},
+
+	async updateAvatarModeration(id, input) {
+		const rows = await db
+			.update(users)
+			.set({
+				avatarIsHidden: input.avatarIsHidden,
+				avatarIsNsfw: input.avatarIsNsfw,
+				updatedAt: input.updatedAt
+			})
+			.where(eq(users.id, id))
+			.returning();
+
+		return rows[0] ? mapRow(rows[0]) : null;
+	},
+
+	async updateBanState(id, input) {
+		const rows = await db
+			.update(users)
+			.set({
+				banReason: input.banReason,
+				bannedAt: input.bannedAt,
+				isBanned: input.isBanned,
+				updatedAt: input.updatedAt
+			})
+			.where(eq(users.id, id))
+			.returning();
+
 		return rows[0] ? mapRow(rows[0]) : null;
 	},
 

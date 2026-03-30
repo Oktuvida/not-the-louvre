@@ -18,7 +18,7 @@ export const GET: RequestHandler = async (event) => {
 	try {
 		const user = await userRepository.findUserById(event.params.userId);
 
-		if (!user || !user.avatarUrl) {
+		if (!user || !user.avatarUrl || user.avatarIsHidden) {
 			return json({ code: 'NOT_FOUND', message: 'Avatar not found' }, { status: 404 });
 		}
 

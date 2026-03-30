@@ -1,4 +1,5 @@
 import { env } from '$env/dynamic/private';
+import { assertNotBanned } from '$lib/server/auth/guards';
 import { ArtworkFlowError } from './errors';
 import { artworkReadRepository } from './read.repository';
 import type {
@@ -418,6 +419,10 @@ export const listModerationQueue = async (
 	if (!user) {
 		throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
 	}
+	assertNotBanned({
+		...user,
+		isBanned: 'isBanned' in user ? Boolean((user as { isBanned?: boolean }).isBanned) : false
+	});
 
 	if (user.role !== 'moderator' && user.role !== 'admin') {
 		throw new ArtworkFlowError(403, 'Moderator access required', 'FORBIDDEN');

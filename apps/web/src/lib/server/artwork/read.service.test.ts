@@ -182,6 +182,13 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 			artworks.set(id, next);
 			return next;
 		},
+		updateArtworkModeration: async (id: string, input) => {
+			const current = artworks.get(id);
+			if (!current) return null;
+			const next = { ...current, ...input };
+			artworks.set(id, next);
+			return next;
+		},
 		setCommentHiddenState: async () => {
 			throw new Error('not implemented in read tests');
 		},
