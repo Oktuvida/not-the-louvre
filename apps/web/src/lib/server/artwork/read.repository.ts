@@ -142,12 +142,7 @@ type ArtworkReadRow = {
 	rankingValue?: number;
 };
 
-const artworkVisibilityWhere = (viewer: { isModerator: boolean; userId: string | null }) =>
-	viewer.isModerator
-		? undefined
-		: viewer.userId
-			? or(eq(artworks.isHidden, false), eq(artworks.authorId, viewer.userId))
-			: eq(artworks.isHidden, false);
+const artworkVisibilityWhere = () => eq(artworks.isHidden, false);
 
 const commentVisibilityWhere = (
 	artworkId: string,
@@ -249,7 +244,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.select(buildBaseSelect(viewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(and(artworkVisibilityWhere(viewer), recentCursorWhere(input.cursor) ?? undefined))
+			.where(and(artworkVisibilityWhere(), recentCursorWhere(input.cursor) ?? undefined))
 			.orderBy(desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
@@ -264,7 +259,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(
 				and(
-					artworkVisibilityWhere(viewer),
+					artworkVisibilityWhere(),
 					rankedCursorWhere(input.cursor, rankingExpression) ?? undefined
 				)
 			)
@@ -283,7 +278,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(
 				and(
-					artworkVisibilityWhere(viewer),
+					artworkVisibilityWhere(),
 					input.authorId ? eq(artworks.authorId, input.authorId) : undefined,
 					windowStart ? gte(artworks.createdAt, windowStart) : undefined,
 					rankedCursorWhere(input.cursor, rankingExpression) ?? undefined
@@ -300,7 +295,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.select(buildBaseSelect(activeViewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(and(eq(artworks.id, id), artworkVisibilityWhere(activeViewer)))
+			.where(and(eq(artworks.id, id), artworkVisibilityWhere()))
 			.limit(1);
 
 		const record = row[0] ? mapRow(row[0]) : null;
@@ -345,8 +340,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			parentTitle: parent[0]?.title ?? null
 		};
 	},
-	async findArtworkMediaById(id, viewer) {
-		const activeViewer = defaultViewer(viewer);
+	async findArtworkMediaById(id) {
 		const row = await db
 			.select({
 				id: artworks.id,
@@ -354,7 +348,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				storageKey: artworks.storageKey
 			})
 			.from(artworks)
-			.where(and(eq(artworks.id, id), artworkVisibilityWhere(activeViewer)))
+			.where(and(eq(artworks.id, id), artworkVisibilityWhere()))
 			.limit(1);
 
 		return row[0] ?? null;
