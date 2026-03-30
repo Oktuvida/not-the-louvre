@@ -5,33 +5,73 @@
 	let {
 		canvasRef = $bindable<HTMLCanvasElement | null>(null),
 		clearVersion = 0,
+		initialImageUrl = null,
 		interactive = true,
+		onInitialImageSettled,
 		statusMessage = '',
 		statusTone = 'idle'
 	}: {
 		canvasRef?: HTMLCanvasElement | null;
 		clearVersion?: number;
+		initialImageUrl?: string | null;
 		interactive?: boolean;
+		onInitialImageSettled?: () => void;
 		statusMessage?: string;
 		statusTone?: 'error' | 'success' | 'idle';
 	} = $props();
 
+	let baseImage = $state<HTMLImageElement | null>(null);
 	let isDrawing = $state(false);
 
-	const paintBackground = () => {
+	const paintCanvasBase = () => {
 		if (!canvasRef) return;
 		const ctx = canvasRef.getContext('2d');
 		if (!ctx) return;
 		ctx.fillStyle = '#fdfbf7';
 		ctx.fillRect(0, 0, canvasRef.width, canvasRef.height);
+
+		if (baseImage) {
+			ctx.drawImage(baseImage, 0, 0, canvasRef.width, canvasRef.height);
+		}
 	};
 
 	const stopDrawing = () => {
 		isDrawing = false;
 	};
 
+	$effect(() => {
+		const nextInitialImageUrl = initialImageUrl?.trim() ?? '';
+		baseImage = null;
+
+		if (!nextInitialImageUrl) {
+			onInitialImageSettled?.();
+			return;
+		}
+
+		let cancelled = false;
+		const image = new Image();
+
+		image.onload = () => {
+			if (cancelled) return;
+			baseImage = image;
+			onInitialImageSettled?.();
+		};
+
+		image.onerror = () => {
+			if (cancelled) return;
+			baseImage = null;
+			onInitialImageSettled?.();
+		};
+
+		image.src = nextInitialImageUrl;
+
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	onMount(() => {
-		paintBackground();
+		paintCanvasBase();
 
 		window.addEventListener('mouseup', stopDrawing);
 		window.addEventListener('blur', stopDrawing);
@@ -44,7 +84,7 @@
 
 	$effect(() => {
 		if (clearVersion >= 0) {
-			paintBackground();
+			paintCanvasBase();
 		}
 	});
 

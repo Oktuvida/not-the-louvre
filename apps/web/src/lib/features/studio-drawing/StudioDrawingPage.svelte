@@ -64,7 +64,9 @@
 
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
 	let clearVersion = $state(0);
+	let forkPreloadSettled = $state(true);
 	let isPublishing = $state(false);
+	let pendingStudioUnlock = $state(false);
 	let publishedArtwork = $state<DrawPublishedArtwork | null>(null);
 	let sceneState = $state<'closed' | 'opening' | 'open'>('closed');
 	let statusMessage = $state('');
@@ -75,6 +77,16 @@
 
 	let studioUnlocked = $derived(sceneState === 'open');
 	let toolsVisible = $derived(sceneState !== 'closed');
+	let hasForkParent = $derived(Boolean(forkParent?.mediaUrl));
+
+	$effect(() => {
+		forkPreloadSettled = !hasForkParent;
+		pendingStudioUnlock = false;
+
+		if (hasForkParent && sceneState === 'closed') {
+			sceneState = 'opening';
+		}
+	});
 
 	const clearCanvas = () => {
 		if (!studioUnlocked) return;
@@ -89,9 +101,29 @@
 		sceneState = 'opening';
 	};
 
+	const completeStudioUnlock = () => {
+		sceneState = 'open';
+		pendingStudioUnlock = false;
+	};
+
+	const markForkPreloadSettled = () => {
+		if (forkPreloadSettled) return;
+		forkPreloadSettled = true;
+
+		if (pendingStudioUnlock && sceneState === 'opening') {
+			completeStudioUnlock();
+		}
+	};
+
 	const unlockStudio = () => {
 		if (sceneState !== 'opening') return;
-		sceneState = 'open';
+
+		if (!forkPreloadSettled) {
+			pendingStudioUnlock = true;
+			return;
+		}
+
+		completeStudioUnlock();
 	};
 
 	const publishArtwork = async () => {
@@ -274,7 +306,9 @@
 						<DrawingCanvas
 							bind:canvasRef
 							{clearVersion}
+							initialImageUrl={forkParent?.mediaUrl ?? null}
 							interactive={studioUnlocked}
+							onInitialImageSettled={markForkPreloadSettled}
 							{statusMessage}
 							{statusTone}
 						/>
