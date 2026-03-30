@@ -178,18 +178,20 @@
 	};
 </script>
 
-<div class="relative flex h-dvh flex-col overflow-hidden bg-[#f4ecde]">
-	<div class="pointer-events-none absolute inset-0">
-		<div
-			class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,248,235,0.95),_transparent_40%),linear-gradient(180deg,_rgba(255,251,244,0.45),_rgba(214,188,149,0.2)_55%,_rgba(116,87,55,0.08))]"
-		></div>
-		<div
-			class="absolute inset-x-0 top-0 h-48 bg-[linear-gradient(180deg,_rgba(255,255,255,0.4),_transparent)]"
-		></div>
-		<div
-			class="absolute inset-x-0 bottom-0 h-56 bg-[linear-gradient(180deg,_transparent,_rgba(111,79,48,0.12))]"
-		></div>
-	</div>
+<div
+	class="studio-page relative flex h-dvh flex-col overflow-hidden"
+	style="--book-offset-x: 0px; --book-offset-y: 0px; --book-scale: 1;"
+>
+	<picture class="pointer-events-none absolute inset-0 z-0">
+		<source type="image/avif" srcset="/table.avif" />
+		<img
+			src="/table.webp"
+			alt=""
+			class="h-full w-full scale-[1.25] object-cover object-[center_115%]"
+			loading="eager"
+			decoding="async"
+		/>
+	</picture>
 
 	<header
 		class="relative z-30 flex flex-shrink-0 items-start justify-between gap-4 px-4 pt-4 sm:px-6"
@@ -220,7 +222,7 @@
 		{/if}
 	</header>
 
-	<main
+	<!-- <main
 		class="relative z-10 mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col px-4 pt-3 pb-4 sm:px-6"
 	>
 		<div
@@ -352,7 +354,7 @@
 				<DrawingToolTray {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
 			</div>
 		</div>
-	</main>
+	</main> -->
 </div>
 
 {#if showExitFade}
@@ -366,6 +368,7 @@
 	.studio-book-frame {
 		height: clamp(29rem, 78vh, 56rem);
 		flex: 0 0 auto;
+		transform: translate(var(--book-offset-x), var(--book-offset-y)) scale(var(--book-scale));
 	}
 
 	.tools-stage {
