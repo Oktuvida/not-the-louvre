@@ -67,7 +67,7 @@
 	const goToFork = async () => {
 		if (!artwork) return;
 
-		await goto(`${resolve('/draw')}?fork=${artwork.id}`);
+		await goto(resolve(`/draw?fork=${artwork.id}`));
 	};
 
 	const submitVote = async (value: 'down' | 'up') => {
