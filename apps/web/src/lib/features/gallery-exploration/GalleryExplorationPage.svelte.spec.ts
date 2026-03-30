@@ -35,6 +35,24 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByText('Second Work')).toBeVisible();
 	});
 
+	it('renders the hot wall with a featured lead artwork and supporting risers', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [
+				{ ...baseArtwork, id: 'artwork-1', title: 'Lead Heat' },
+				{ ...baseArtwork, id: 'artwork-2', title: 'Second Spark' },
+				{ ...baseArtwork, id: 'artwork-3', title: 'Third Spark' }
+			],
+			emptyStateMessage: null,
+			room: getGalleryRoom('hot-wall'),
+			roomId: 'hot-wall'
+		});
+
+		await expect.element(page.getByText('Hot right now')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /Lead Heat/ })).toBeVisible();
+		await expect.element(page.getByText('Second Spark')).toBeVisible();
+		await expect.element(page.getByText('Third Spark')).toBeVisible();
+	});
+
 	it('shows a product empty state instead of fixture content', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [],
@@ -47,6 +65,19 @@ describe('GalleryExplorationPage', () => {
 			.element(page.getByText('No artworks have reached this gallery room yet.'))
 			.toBeVisible();
 		await expect.element(page.getByText('Sunset Over Mountains')).not.toBeInTheDocument();
+	});
+
+	it('shows a hot wall-specific empty state message', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [],
+			emptyStateMessage: 'Nothing is heating up on the wall right now.',
+			room: getGalleryRoom('hot-wall'),
+			roomId: 'hot-wall'
+		});
+
+		await expect
+			.element(page.getByText('Nothing is heating up on the wall right now.'))
+			.toBeVisible();
 	});
 
 	it('loads and opens real artwork detail when a user selects a card', async () => {
