@@ -8,6 +8,7 @@
 	import { resolve } from '$app/paths';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import StudioPanel from '$lib/features/shared-ui/components/StudioPanel.svelte';
+	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
 
 	let {
 		artwork,
@@ -65,7 +66,7 @@
 	};
 
 	const goToFork = async () => {
-		if (!artwork) return;
+		if (!artwork || !requireViewer()) return;
 
 		await goto(resolve(`/draw?fork=${artwork.id}`));
 	};
@@ -253,11 +254,12 @@
 						</h2>
 						<div class="mt-3 flex items-center gap-3">
 							{#if artwork.artistAvatar}
-								<div
-									class="h-12 w-12 overflow-hidden rounded-full border-[3px] border-[#2d2420] shadow-md"
-								>
-									<img src={artwork.artistAvatar} alt={artwork.artist} class="h-full w-full" />
-								</div>
+								<WaxSealAvatar
+									alt={artwork.artist}
+									seed={artwork.id}
+									size="md"
+									src={artwork.artistAvatar}
+								/>
 							{/if}
 							<p class="text-xl text-[var(--color-muted)] italic">by {artwork.artist}</p>
 						</div>
@@ -267,44 +269,54 @@
 							<div class="font-display text-5xl font-black text-[#2d2420]">⭐ {artwork.score}</div>
 							<p class="mt-2 text-sm font-semibold text-[#2d2420]">POWER SCORE</p>
 						</div>
-						<div class="mt-6 grid grid-cols-2 gap-4">
-							<GameButton
-								variant="secondary"
-								size="sm"
-								className="w-full justify-center"
-								onclick={() => submitVote('up')}>👍 {artwork.upvotes}</GameButton
+						{#if viewer}
+							<div class="mt-6 grid grid-cols-2 gap-4">
+								<GameButton
+									variant="secondary"
+									size="sm"
+									className="w-full justify-center"
+									onclick={() => submitVote('up')}>👍 {artwork.upvotes}</GameButton
+								>
+								<GameButton
+									variant="danger"
+									size="sm"
+									className="w-full justify-center"
+									onclick={() => submitVote('down')}>👎 {artwork.downvotes}</GameButton
+								>
+								<GameButton
+									variant="primary"
+									size="sm"
+									className="w-full justify-center"
+									onclick={submitComment}>💬 Comment</GameButton
+								>
+								<GameButton
+									variant="accent"
+									size="sm"
+									className="w-full justify-center"
+									onclick={goToFork}>📄 Fork</GameButton
+								>
+							</div>
+						{:else}
+							<div
+								class="mt-6 rounded-xl border-3 border-dashed border-[#8a6a42] bg-[#f5f0e1] px-4 py-3 text-sm text-[#5d4e37]"
 							>
-							<GameButton
-								variant="danger"
-								size="sm"
-								className="w-full justify-center"
-								onclick={() => submitVote('down')}>👎 {artwork.downvotes}</GameButton
-							>
-							<GameButton
-								variant="primary"
-								size="sm"
-								className="w-full justify-center"
-								onclick={submitComment}>💬 Comment</GameButton
-							>
-							<GameButton
-								variant="accent"
-								size="sm"
-								className="w-full justify-center"
-								onclick={goToFork}>📄 Fork</GameButton
-							>
-						</div>
+								Sign in to vote, comment, or fork this piece.
+							</div>
+						{/if}
 						<p class="mt-3 text-sm text-[#6b625a]">Forks: {artwork.forkCount ?? 0}</p>
-						<label class="mt-4 block space-y-2">
-							<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-								>Add a comment</span
-							>
-							<textarea
-								bind:value={commentBody}
-								rows="3"
-								placeholder="Say something about this piece"
-								class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-							></textarea>
-						</label>
+						{#if viewer}
+							<label class="mt-4 block space-y-2">
+								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
+									>Add a comment</span
+								>
+								<textarea
+									bind:value={commentBody}
+									rows="3"
+									placeholder="Say something about this piece"
+									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
+								></textarea>
+							</label>
+						{/if}
 						{#if actionError}
 							<p class="mt-2 text-sm text-[#8f3720]">{actionError}</p>
 						{/if}
