@@ -32,6 +32,7 @@
 
 	let canvasEl: HTMLCanvasElement | undefined = $state();
 	let containerEl: HTMLElement | undefined = $state();
+	let resizeObserver: ResizeObserver | undefined;
 
 	const stickerVariant: StickerVariant = $derived(variant);
 	const rotation = $derived(getStickerRotation(`link:${href}:${variant}:${size}`));
@@ -44,7 +45,7 @@
 		return resolve('/gallery/[room]', { room: href.replace('/gallery/', '') });
 	});
 
-	$effect(() => {
+	const redrawSticker = () => {
 		if (!canvasEl || !containerEl) return;
 
 		const w = containerEl.offsetWidth;
@@ -63,6 +64,22 @@
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
 		drawStickerBackground(ctx, w, h, { variant: stickerVariant });
+	};
+
+	$effect(() => {
+		if (!canvasEl || !containerEl) return;
+		redrawSticker();
+
+		resizeObserver?.disconnect();
+		resizeObserver = new ResizeObserver(() => {
+			redrawSticker();
+		});
+		resizeObserver.observe(containerEl);
+
+		return () => {
+			resizeObserver?.disconnect();
+			resizeObserver = undefined;
+		};
 	});
 </script>
 

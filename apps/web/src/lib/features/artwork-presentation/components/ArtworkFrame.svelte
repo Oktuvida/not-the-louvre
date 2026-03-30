@@ -73,10 +73,6 @@
 	data-frame-tier={frame.tier}
 	data-premium-marker={frame.isPremium ? 'true' : 'false'}
 >
-	{#if frame.isPremium}
-		<div class="premium-ribbon">{frame.preset.markerLabel ?? 'PREMIUM'}</div>
-	{/if}
-
 	<canvas bind:this={canvas} class="absolute inset-0 h-full w-full"></canvas>
 
 	<div class={`artwork-opening ${openingClass}`} style={openingStyle}>
@@ -93,27 +89,5 @@
 	.artwork-opening {
 		position: absolute;
 		overflow: hidden;
-	}
-
-	.premium-ribbon {
-		position: absolute;
-		top: 0.1rem;
-		right: 0.1rem;
-		z-index: 2;
-		padding: 0.22rem 0.55rem;
-		border: 2px solid #2d2420;
-		border-radius: 999px;
-		background: linear-gradient(135deg, #fff3c4, #f4c430);
-		color: #2d2420;
-		font-size: 0.68rem;
-		font-weight: 900;
-		letter-spacing: 0.14em;
-		box-shadow: 0 0.45rem 0.8rem rgba(45, 36, 32, 0.2);
-	}
-
-	@media (max-width: 640px) {
-		.premium-ribbon {
-			font-size: 0.6rem;
-		}
 	}
 </style>

@@ -13,5 +13,15 @@ describe('GalleryRoomNav', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'Mystery Room' }))
 			.toHaveAttribute('data-sticker-size', 'md');
+		await expect.element(page.getByRole('link', { name: 'Your Studio' })).not.toBeInTheDocument();
+	});
+
+	it('includes the personal room for authenticated viewers', async () => {
+		render(GalleryRoomNav, {
+			roomId: 'hall-of-fame',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
 	});
 });

@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { getViewerContentPreferences } from '$lib/server/moderation/service';
 import { toGalleryArtwork } from '$lib/features/gallery-exploration/gallery-adapter';
@@ -52,6 +52,10 @@ export const loadGalleryRoomData = async (
 ): Promise<GalleryRoomData> => {
 	if (!isGalleryRoomId(roomId)) {
 		throw error(404, 'Room not found');
+	}
+
+	if (roomId === 'your-studio' && !user) {
+		throw redirect(302, '/gallery');
 	}
 
 	const room = getGalleryRoom(roomId);

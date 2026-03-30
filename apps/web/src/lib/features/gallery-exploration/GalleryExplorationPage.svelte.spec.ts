@@ -67,16 +67,35 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByText('Sunset Over Mountains')).not.toBeInTheDocument();
 	});
 
-	it('shows a hot wall-specific empty state message', async () => {
+	it('hides authenticated-only gallery chrome from signed-out visitors', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [],
-			emptyStateMessage: 'Nothing is heating up on the wall right now.',
-			room: getGalleryRoom('hot-wall'),
-			roomId: 'hot-wall'
+			emptyStateMessage: 'No artworks have reached this gallery room yet.',
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame',
+			viewer: null
 		});
 
+		await expect.element(page.getByRole('link', { name: 'Your Studio' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'Create Art' })).not.toBeInTheDocument();
 		await expect
-			.element(page.getByText('Nothing is heating up on the wall right now.'))
+			.element(page.getByText('New pieces will appear here as artists publish them.'))
+			.toBeVisible();
+	});
+
+	it('shows authenticated gallery chrome and personal empty-state guidance for users', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [],
+			emptyStateMessage: 'You have not published any artworks yet.',
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Create Art' })).toBeVisible();
+		await expect
+			.element(page.getByText('Publish a new piece from the studio and it will show up here.'))
 			.toBeVisible();
 	});
 
