@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { gsap } from 'gsap';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
@@ -72,6 +75,9 @@
 	let artworkTitle = $state('');
 	let isArtworkNsfw = $state(false);
 	let titleError = $state('');
+	let isExitingToHome = $state(false);
+	let showExitFade = $state(false);
+	let exitFadeOpacity = $state(0);
 
 	let studioUnlocked = $derived(sceneState === 'open');
 	let toolsVisible = $derived(sceneState !== 'closed');
@@ -148,6 +154,28 @@
 			isPublishing = false;
 		}
 	};
+	const handleBackToHome = (event: MouseEvent) => {
+		event.preventDefault();
+		event.stopPropagation();
+		if (isExitingToHome) return;
+		isExitingToHome = true;
+		showExitFade = true;
+
+		const fade = { opacity: 0 };
+		gsap.to(fade, {
+			opacity: 1,
+			duration: 0.5,
+			ease: 'power2.in',
+			onUpdate: () => {
+				exitFadeOpacity = fade.opacity;
+			},
+			onComplete: () => {
+				const url = `${resolve('/')}?from=studio`;
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- URL is already resolved above
+				void goto(url);
+			}
+		});
+	};
 </script>
 
 <div class="relative flex h-dvh flex-col overflow-hidden bg-[#f4ecde]">
@@ -166,20 +194,22 @@
 	<header
 		class="relative z-30 flex flex-shrink-0 items-start justify-between gap-4 px-4 pt-4 sm:px-6"
 	>
-		<GameLink href="/" variant="secondary" size="md" className="-rotate-1 shadow-lg">
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="20"
-				height="20"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg
-			>
-			<span>Exit Studio</span>
-		</GameLink>
+		<div onclickcapture={handleBackToHome}>
+			<GameLink href="/" variant="secondary" size="md" className="-rotate-1 shadow-lg">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg
+				>
+				<span>Exit Studio</span>
+			</GameLink>
+		</div>
 
 		{#if user}
 			<div
@@ -324,6 +354,13 @@
 		</div>
 	</main>
 </div>
+
+{#if showExitFade}
+	<div
+		class="pointer-events-none fixed inset-0 z-[9999]"
+		style={`background-color: #6e6e6e; opacity: ${exitFadeOpacity};`}
+	></div>
+{/if}
 
 <style>
 	.studio-book-frame {
