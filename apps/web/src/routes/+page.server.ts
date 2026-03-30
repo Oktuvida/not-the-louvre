@@ -24,10 +24,9 @@ import {
 	signupSchema
 } from '$lib/server/auth/validation';
 import { getIp } from 'better-auth/api';
+import { resolveUserAvatarUrl } from '$lib/user/avatar-url';
 
 const INTEGRITY_FAILURE_MESSAGE = 'Authenticated session is missing its product user profile';
-const resolveHomeAvatarUrl = (userId: string, storageKey: string | null | undefined) =>
-	storageKey ? `/api/users/${userId}/avatar` : null;
 
 type HomeActionName = 'checkNickname' | 'recover' | 'saveAvatar' | 'signIn' | 'signOut' | 'signUp';
 
@@ -117,7 +116,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 			status: 'authenticated',
 			user: {
 				...locals.user,
-				avatarUrl: resolveHomeAvatarUrl(locals.user.id, locals.user.avatarUrl)
+				avatarUrl: resolveUserAvatarUrl(
+					locals.user.id,
+					locals.user.avatarUrl,
+					locals.user.avatarUrl ? locals.user.updatedAt.getTime() : null
+				)
 			}
 		},
 		adultContentEnabled,
@@ -200,7 +203,12 @@ export const actions: Actions = {
 
 			return {
 				action: 'saveAvatar',
-				avatarUrl: updatedUser.avatarUrl ?? '',
+				avatarUrl:
+					resolveUserAvatarUrl(
+						updatedUser.id,
+						updatedUser.avatarUrl,
+						updatedUser.updatedAt.getTime()
+					) ?? '',
 				onboarding: 'complete',
 				success: true
 			};

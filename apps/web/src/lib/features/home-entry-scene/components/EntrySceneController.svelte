@@ -47,7 +47,14 @@
 
 	const entryState = createEntryState(getInitialEntryState());
 
+	type AvatarOverride = {
+		avatarOnboardingCompletedAt: Date;
+		avatarUrl: string;
+		userId: string;
+	};
+
 	let authOverlayElement = $state<HTMLDivElement | null>(null);
+	let avatarOverride = $state<AvatarOverride | null>(null);
 	let avatarOnboardingDismissed = $state(false);
 	let avatarOnboardingResolved = $state(false);
 	let holdSignupOnboarding = $state(getInitialHoldSignupOnboarding());
@@ -69,6 +76,7 @@
 
 	$effect(() => {
 		if (auth.status !== 'authenticated') {
+			avatarOverride = null;
 			avatarOnboardingDismissed = false;
 			avatarOnboardingResolved = false;
 		}
@@ -96,7 +104,16 @@
 		}
 
 		if (auth.status === 'authenticated') {
-			user = auth.user;
+			const nextUser =
+				avatarOverride?.userId === auth.user.id
+					? {
+						...auth.user,
+						avatarOnboardingCompletedAt: avatarOverride.avatarOnboardingCompletedAt,
+						avatarUrl: avatarOverride.avatarUrl
+					}
+					: auth.user;
+
+			user = nextUser;
 
 			if (needsAvatarOnboarding) {
 				holdSignupOnboarding = true;
@@ -163,7 +180,21 @@
 			onAvatarDismiss={() => {
 				avatarOnboardingDismissed = true;
 			}}
-			onAvatarSaved={() => {
+			onAvatarSaved={(payload) => {
+				if (user) {
+					avatarOverride = {
+						avatarOnboardingCompletedAt: payload.avatarOnboardingCompletedAt,
+						avatarUrl: payload.avatarUrl,
+						userId: user.id
+					};
+
+					user = {
+						...user,
+						avatarOnboardingCompletedAt: payload.avatarOnboardingCompletedAt,
+						avatarUrl: payload.avatarUrl
+					};
+				}
+
 				avatarOnboardingResolved = true;
 				avatarOnboardingDismissed = false;
 			}}

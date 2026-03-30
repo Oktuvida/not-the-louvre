@@ -62,7 +62,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expect(page.getByText('Signed in as')).toBeVisible();
-		await expect(page.getByRole('link', { name: 'Studio' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
 		await page.getByRole('button', { name: 'Logout' }).click();
 
 		await openHomeAuthOverlay(page);
@@ -98,7 +98,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 
 		await expect(page.getByText('Signed in as')).toBeVisible();
-		await expect(page.getByRole('link', { name: 'Studio' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
 		await expect(
 			page.getByText(new RegExp(`Signed in as\\s*${deterministicAuthUser.nickname}`))
 		).toBeVisible();
@@ -149,7 +149,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await setAvatarExportMode(page, 'good');
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expect(page.getByText('Signed in as')).toBeVisible();
-		await expect(page.getByRole('link', { name: 'Studio' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
 	});
 
 	test('home recovery flow rotates the recovery key and lets the user sign in with the new password', async ({

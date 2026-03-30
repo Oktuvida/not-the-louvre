@@ -169,7 +169,7 @@ describeWithStorage('avatar backend integration', () => {
 
 			expect(uploadResponse.status).toBe(200);
 			const uploadPayload = (await uploadResponse.json()) as { avatarUrl: string };
-			expect(uploadPayload.avatarUrl).toBe(`avatars/${userId}.avif`);
+			expect(uploadPayload.avatarUrl).toMatch(new RegExp(`^/api/users/${userId}/avatar\\?v=\\d+$`));
 
 			const [storedUser] = await sql<Array<{ avatar_url: string | null }>>`
 				select avatar_url

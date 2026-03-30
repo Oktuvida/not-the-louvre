@@ -207,4 +207,60 @@ describe('AuthOverlay', () => {
 		expect(onAvatarDismiss).toHaveBeenCalled();
 		expect(dispatch).toHaveBeenCalledWith('AUTH_SUCCESS');
 	});
+
+	it('returns the live avatar URL to the controller after a successful avatar save', async () => {
+		const dispatch = vi.fn();
+		const onAvatarSaved = vi.fn();
+		const fetchSpy = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({ avatarUrl: '/api/users/product-user-1/avatar?v=1711713600000' }),
+					{
+						headers: { 'content-type': 'application/json' },
+						status: 200
+					}
+				)
+		);
+		const toBlobSpy = vi
+			.spyOn(HTMLCanvasElement.prototype, 'toBlob')
+			.mockImplementation((callback) => {
+				callback(new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' }));
+			});
+
+		vi.stubGlobal('fetch', fetchSpy);
+
+		render(AuthOverlay, {
+			authenticatedUser: {
+				authUserId: 'auth-user-1',
+				avatarOnboardingCompletedAt: null,
+				email: 'artist_1@not-the-louvre.local',
+				id: 'product-user-1',
+				nickname: 'artist_1',
+				role: 'user'
+			},
+			dispatch,
+			entryState: 'auth-signup',
+			form: undefined,
+			onAvatarSaved,
+			resumeAvatarOnboarding: true
+		});
+
+		await expect.element(page.getByText('Finish your avatar')).toBeVisible();
+		await page.getByRole('button', { name: 'Enter the gallery' }).click();
+
+		await vi.waitFor(() => {
+			expect(onAvatarSaved).toHaveBeenCalledWith({
+				avatarOnboardingCompletedAt: expect.any(Date),
+				avatarUrl: '/api/users/product-user-1/avatar?v=1711713600000'
+			});
+			expect(dispatch).toHaveBeenCalledWith('AUTH_SUCCESS');
+		});
+
+		expect(fetchSpy).toHaveBeenCalledWith('/api/users/product-user-1/avatar', {
+			body: expect.any(FormData),
+			method: 'PUT'
+		});
+
+		toBlobSpy.mockRestore();
+	});
 });
