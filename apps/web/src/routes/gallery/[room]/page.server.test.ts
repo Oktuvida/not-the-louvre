@@ -98,6 +98,17 @@ describe('gallery room route', () => {
 		expect(result.viewer).toMatchObject({ id: 'user-1' });
 	});
 
+	it('redirects signed-out visitors away from the personal studio room', async () => {
+		const { load } = await import('./+page.server');
+
+		await expect(
+			load({ locals: {}, params: { room: 'your-studio' } } as never)
+		).rejects.toMatchObject({
+			location: '/gallery',
+			status: 302
+		});
+	});
+
 	it('returns 404 for unknown room ids', async () => {
 		const { load } = await import('./+page.server');
 
