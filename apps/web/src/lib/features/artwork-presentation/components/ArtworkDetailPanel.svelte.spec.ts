@@ -39,6 +39,24 @@ describe('ArtworkDetailPanel', () => {
 		await expect.element(page.getByText('Forks: 2')).toBeVisible();
 	});
 
+	it('renders artwork detail as read-only for signed-out visitors', async () => {
+		goto.mockReset();
+
+		render(ArtworkDetailPanel, {
+			artwork,
+			viewer: null
+		});
+
+		await expect.element(page.getByRole('button', { name: /Comment/ })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Fork' })).not.toBeInTheDocument();
+		await expect
+			.element(page.getByPlaceholder('Say something about this piece'))
+			.not.toBeInTheDocument();
+		await expect
+			.element(page.getByText('Sign in to vote, comment, or fork this piece.'))
+			.toBeVisible();
+	});
+
 	it('posts comments and syncs the artwork detail state', async () => {
 		const onArtworkChange = vi.fn();
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
