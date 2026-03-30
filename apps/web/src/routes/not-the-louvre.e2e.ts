@@ -45,7 +45,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByRole('heading', { name: 'NOT THE LOUVRE' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'GALLERY' })).toBeVisible();
-		await expect(page.getByRole('link', { name: 'MYSTERY' })).toBeVisible();
+		await expect(page.getByRole('link', { name: 'MYSTERY' })).not.toBeVisible();
 		await expect(
 			page.getByText('A social art studio where your doodles compete for glory')
 		).toBeVisible();
@@ -445,7 +445,29 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await expect(page.getByRole('link', { name: 'Hall of Fame' })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Mystery Room' })).toBeVisible();
+		await expect(page.getByRole('link', { name: 'Your Studio' })).not.toBeVisible();
+		await expect(page.getByRole('link', { name: 'Create Art' })).not.toBeVisible();
 		await expect(page.getByText('No artworks have reached this gallery room yet.')).toBeVisible();
+	});
+
+	test('signed-out visitors are redirected away from the personal studio route', async ({
+		page
+	}) => {
+		await page.goto('/gallery/your-studio');
+
+		await expect(page).toHaveURL(/\/gallery$/);
+		await expect(page.getByRole('link', { name: 'Your Studio' })).not.toBeVisible();
+	});
+
+	test('signed-out gallery back button returns home without authenticated transition handling', async ({
+		page
+	}) => {
+		await page.goto('/gallery');
+
+		await page.getByRole('link', { name: 'Back' }).click();
+
+		await expect(page).toHaveURL(/\/$/);
+		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
 	});
 
 	test('room-specific gallery route keeps room context', async ({ page }) => {
