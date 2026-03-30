@@ -41,7 +41,6 @@
 	let frameVisualElement = $state<HTMLDivElement | null>(null);
 	let frameElement = $state<HTMLDivElement | null>(null);
 	let openingElement = $state<HTMLDivElement | null>(null);
-	let prefersReducedMotion = $state(false);
 	let targetScale = $state(1);
 	let finalScale = $state(1);
 	let translateX = $state(0);
@@ -51,7 +50,6 @@
 
 	let forwardTimeline: gsap.core.Timeline | null = null;
 	let reverseTimeline: gsap.core.Timeline | null = null;
-	let mediaQuery: MediaQueryList | null = null;
 	let enterFallbackHandle: ReturnType<typeof setTimeout> | null = null;
 	let resetFallbackHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -138,42 +136,6 @@
 			return null;
 		}
 
-		if (prefersReducedMotion) {
-			return gsap
-				.timeline({
-					paused: true,
-					onStart: () => {
-						updateWillChange(true);
-						gsap.set(overlayElement, { opacity: 1 });
-						gsap.set(wallTextureElement, { opacity: 1 });
-						gsap.set(frameVisualElement, { opacity: 1, filter: 'blur(0px)' });
-						gsap.set(authOverlayElement, { opacity: 0, scale: 0.95 });
-					},
-					onComplete: () => {
-						updateWillChange(false);
-						dispatch('TRANSITION_DONE');
-					}
-				})
-				.to(
-					frameVisualElement,
-					{
-						opacity: 0,
-						duration: 0.32,
-						ease: 'power1.out'
-					},
-					0
-				)
-				.to(
-					wallTextureElement,
-					{
-						opacity: 0,
-						duration: 0.24,
-						ease: 'power1.out'
-					},
-					0
-				);
-		}
-
 		return gsap
 			.timeline({
 				paused: true,
@@ -237,58 +199,6 @@
 			!authOverlayElement
 		) {
 			return null;
-		}
-
-		if (prefersReducedMotion) {
-			return gsap
-				.timeline({
-					paused: true,
-					onStart: () => {
-						updateWillChange(true);
-						gsap.set(overlayElement, { opacity: 0 });
-						gsap.set(wallTextureElement, { opacity: 0 });
-						gsap.set(frameVisualElement, { opacity: 0, filter: 'blur(8px)' });
-						gsap.set(authOverlayElement, { opacity: 1, scale: 1 });
-					},
-					onComplete: () => {
-						resetWallStyles();
-						dispatch('TRANSITION_RESET_DONE');
-					}
-				})
-				.to(
-					overlayElement,
-					{
-						opacity: 1,
-						duration: 0.3,
-						ease: 'power1.out'
-					},
-					0
-				)
-				.to(
-					authOverlayElement,
-					{
-						opacity: 0,
-						scale: 0.95,
-						duration: 0.3,
-						ease: 'power1.in'
-					},
-					0
-				)
-				.to(
-					frameVisualElement,
-					{
-						opacity: 1,
-						filter: 'blur(0px) brightness(1)',
-						duration: 0.28,
-						ease: 'power1.out'
-					},
-					0
-				)
-				.to(wallTextureElement, {
-					opacity: 1,
-					duration: 0.32,
-					ease: 'power1.in'
-				});
 		}
 
 		return gsap
@@ -373,16 +283,6 @@
 	};
 
 	onMount(() => {
-		if (window.matchMedia) {
-			mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-			prefersReducedMotion = mediaQuery.matches;
-		}
-
-		const handleMotionChange = (event: MediaQueryListEvent) => {
-			prefersReducedMotion = event.matches;
-			rebuildTimelines();
-		};
-
 		const handleResize = () => {
 			rebuildTimelines();
 		};
@@ -391,11 +291,9 @@
 		rebuildTimelines();
 
 		window.addEventListener('resize', handleResize);
-		mediaQuery?.addEventListener('change', handleMotionChange);
 
 		return () => {
 			window.removeEventListener('resize', handleResize);
-			mediaQuery?.removeEventListener('change', handleMotionChange);
 			forwardTimeline?.kill();
 			reverseTimeline?.kill();
 			clearFallbacks();
