@@ -210,89 +210,11 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 const createReadRepository = (
 	artworks: Map<string, ArtworkRecord>,
 	profiles: Map<string, ProfileRecord>
-): ArtworkReadRepository => ({
-	async listRecentArtworks({ cursor, limit, viewer }) {
-		return Array.from(artworks.values())
-			.filter(
-				(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
-			)
-			.sort((left, right) => {
-				const createdAtDelta = right.createdAt.getTime() - left.createdAt.getTime();
-				if (createdAtDelta !== 0) return createdAtDelta;
-
-				return right.id.localeCompare(left.id);
-			})
-			.filter((record) => {
-				if (!cursor) return true;
-
-				if (record.createdAt.getTime() < cursor.createdAt.getTime()) return true;
-				if (record.createdAt.getTime() > cursor.createdAt.getTime()) return false;
-
-				return record.id.localeCompare(cursor.id) < 0;
-			})
-			.slice(0, limit)
-			.map((record) => {
-				const profile = profiles.get(record.authorId);
-				if (!profile) throw new Error(`Missing profile ${record.authorId}`);
-
-				const readRecord: ArtworkReadRecord = {
-					...record,
-					authorAvatarUrl: profile.avatarUrl,
-					authorNickname: profile.nickname,
-					commentCount: record.commentCount ?? 0,
-					score: record.score ?? 0
-				};
-
-				return readRecord;
-			});
-	},
-	async listHotArtworks({ cursor, limit, now, viewer }) {
-		return Array.from(artworks.values())
-			.filter(
-				(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
-			)
-			.map((record) => {
-				const profile = profiles.get(record.authorId);
-				if (!profile) throw new Error(`Missing profile ${record.authorId}`);
-
-				const readRecord: ArtworkReadRecord = {
-					...record,
-					authorAvatarUrl: profile.avatarUrl,
-					authorNickname: profile.nickname,
-					commentCount: record.commentCount ?? 0,
-					rankingValue: getHotRankingValue(record, now),
-					score: record.score ?? 0
-				};
-
-				return readRecord;
-			})
-			.sort((left, right) => {
-				const rankingDelta = (right.rankingValue ?? 0) - (left.rankingValue ?? 0);
-				if (rankingDelta !== 0) return rankingDelta;
-
-				return compareRecent(left, right);
-			})
-			.filter((record) =>
-				isAfterRankedCursor(
-					record,
-					cursor
-						? {
-								createdAt: cursor.createdAt,
-								id: cursor.id,
-								rankingValue: cursor.rankingValue
-							}
-						: null
-				)
-			)
-			.slice(0, limit);
-	},
-	async findArtworkDetailById(id, viewer) {
-		const record = artworks.get(id);
-		if (!record) return null;
-		if (record.isHidden && !viewer?.isModerator && record.authorId !== viewer?.userId) return null;
-
+): ArtworkReadRepository => {
+	const toReadRecord = (record: ArtworkRecord): ArtworkReadRecord => {
 		const profile = profiles.get(record.authorId);
 		if (!profile) throw new Error(`Missing profile ${record.authorId}`);
+
 		const parent = record.parentId
 			? (() => {
 					const candidate = artworks.get(record.parentId) ?? null;
@@ -301,23 +223,6 @@ const createReadRepository = (
 				})()
 			: null;
 		const parentProfile = parent ? (profiles.get(parent.authorId) ?? null) : null;
-		const childForks = Array.from(artworks.values())
-			.filter((candidate) => candidate.parentId === record.id && !candidate.isHidden)
-			.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-			.map((child) => {
-				const childProfile = profiles.get(child.authorId);
-				if (!childProfile) throw new Error(`Missing profile ${child.authorId}`);
-
-				return {
-					authorAvatarUrl: childProfile.avatarUrl,
-					authorId: child.authorId,
-					authorNickname: childProfile.nickname,
-					createdAt: child.createdAt,
-					id: child.id,
-					isNsfw: child.isNsfw,
-					title: child.title
-				};
-			});
 
 		return {
 			...record,
@@ -327,73 +232,161 @@ const createReadRepository = (
 			parentAuthorAvatarUrl: parentProfile?.avatarUrl ?? null,
 			parentAuthorId: parent?.authorId ?? null,
 			parentAuthorNickname: parentProfile?.nickname ?? null,
-			parentId: record.parentId ?? null,
 			parentTitle: parent?.title ?? null,
-			score: record.score ?? 0,
-			childForks
+			score: record.score ?? 0
 		};
-	},
-	async findArtworkMediaById(id, viewer) {
-		const record = artworks.get(id);
-		if (!record) return null;
-		if (record.isHidden && !viewer?.isModerator && record.authorId !== viewer?.userId) return null;
+	};
 
-		return {
-			id: record.id,
-			mediaContentType: record.mediaContentType,
-			storageKey: record.storageKey
-		};
-	},
-	async listTopArtworks({ cursor, limit, now, window, viewer }) {
-		const windowStart = getTopWindowStart(now, window);
-
-		return Array.from(artworks.values())
-			.filter(
-				(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
-			)
-			.filter((record) => !windowStart || record.createdAt >= windowStart)
-			.map((record) => {
-				const profile = profiles.get(record.authorId);
-				if (!profile) throw new Error(`Missing profile ${record.authorId}`);
-
-				const readRecord: ArtworkReadRecord = {
-					...record,
-					authorAvatarUrl: profile.avatarUrl,
-					authorNickname: profile.nickname,
-					commentCount: record.commentCount ?? 0,
-					rankingValue: record.score ?? 0,
-					score: record.score ?? 0
-				};
-
-				return readRecord;
-			})
-			.sort((left, right) => {
-				const rankingDelta = (right.rankingValue ?? 0) - (left.rankingValue ?? 0);
-				if (rankingDelta !== 0) return rankingDelta;
-
-				return compareRecent(left, right);
-			})
-			.filter((record) =>
-				isAfterRankedCursor(
-					record,
-					cursor
-						? {
-								createdAt: cursor.createdAt,
-								id: cursor.id,
-								rankingValue: cursor.rankingValue
-							}
-						: null
+	return {
+		async listRecentArtworks({ cursor, limit, viewer }) {
+			return Array.from(artworks.values())
+				.filter(
+					(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
 				)
-			)
-			.slice(0, limit);
-	},
-	async listArtworkCommentsByArtworkId() {
-		return [];
-	},
-	async listModerationQueue() {
-		return [];
-	}
-});
+				.sort((left, right) => {
+					const createdAtDelta = right.createdAt.getTime() - left.createdAt.getTime();
+					if (createdAtDelta !== 0) return createdAtDelta;
+
+					return right.id.localeCompare(left.id);
+				})
+				.filter((record) => {
+					if (!cursor) return true;
+
+					if (record.createdAt.getTime() < cursor.createdAt.getTime()) return true;
+					if (record.createdAt.getTime() > cursor.createdAt.getTime()) return false;
+
+					return record.id.localeCompare(cursor.id) < 0;
+				})
+				.slice(0, limit)
+				.map(toReadRecord);
+		},
+		async listHotArtworks({ cursor, limit, now, viewer }) {
+			return Array.from(artworks.values())
+				.filter(
+					(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
+				)
+				.map((record) => {
+					return {
+						...toReadRecord(record),
+						rankingValue: getHotRankingValue(record, now)
+					};
+				})
+				.sort((left, right) => {
+					const rankingDelta = (right.rankingValue ?? 0) - (left.rankingValue ?? 0);
+					if (rankingDelta !== 0) return rankingDelta;
+
+					return compareRecent(left, right);
+				})
+				.filter((record) =>
+					isAfterRankedCursor(
+						record,
+						cursor
+							? {
+									createdAt: cursor.createdAt,
+									id: cursor.id,
+									rankingValue: cursor.rankingValue
+								}
+							: null
+					)
+				)
+				.slice(0, limit);
+		},
+		async findArtworkDetailById(id, viewer) {
+			const record = artworks.get(id);
+			if (!record) return null;
+			if (record.isHidden && !viewer?.isModerator && record.authorId !== viewer?.userId)
+				return null;
+
+			const parent = record.parentId
+				? (() => {
+						const candidate = artworks.get(record.parentId) ?? null;
+						if (!candidate || candidate.isHidden) return null;
+						return candidate;
+					})()
+				: null;
+			const parentProfile = parent ? (profiles.get(parent.authorId) ?? null) : null;
+			const childForks = Array.from(artworks.values())
+				.filter((candidate) => candidate.parentId === record.id && !candidate.isHidden)
+				.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+				.map((child) => {
+					const childProfile = profiles.get(child.authorId);
+					if (!childProfile) throw new Error(`Missing profile ${child.authorId}`);
+
+					return {
+						authorAvatarUrl: childProfile.avatarUrl,
+						authorId: child.authorId,
+						authorNickname: childProfile.nickname,
+						createdAt: child.createdAt,
+						id: child.id,
+						isNsfw: child.isNsfw,
+						title: child.title
+					};
+				});
+
+			return {
+				...toReadRecord(record),
+				parentAuthorAvatarUrl: parentProfile?.avatarUrl ?? null,
+				parentAuthorId: parent?.authorId ?? null,
+				parentAuthorNickname: parentProfile?.nickname ?? null,
+				parentId: record.parentId ?? null,
+				parentTitle: parent?.title ?? null,
+				childForks
+			};
+		},
+		async findArtworkMediaById(id, viewer) {
+			const record = artworks.get(id);
+			if (!record) return null;
+			if (record.isHidden && !viewer?.isModerator && record.authorId !== viewer?.userId)
+				return null;
+
+			return {
+				id: record.id,
+				mediaContentType: record.mediaContentType,
+				storageKey: record.storageKey
+			};
+		},
+		async listTopArtworks({ cursor, limit, now, window, viewer }) {
+			const windowStart = getTopWindowStart(now, window);
+
+			return Array.from(artworks.values())
+				.filter(
+					(record) => !record.isHidden || viewer?.isModerator || record.authorId === viewer?.userId
+				)
+				.filter((record) => !windowStart || record.createdAt >= windowStart)
+				.map((record) => {
+					return {
+						...toReadRecord(record),
+						rankingValue: record.score ?? 0
+					};
+				})
+				.sort((left, right) => {
+					const rankingDelta = (right.rankingValue ?? 0) - (left.rankingValue ?? 0);
+					if (rankingDelta !== 0) return rankingDelta;
+
+					return compareRecent(left, right);
+				})
+				.filter((record) =>
+					isAfterRankedCursor(
+						record,
+						cursor
+							? {
+									createdAt: cursor.createdAt,
+									id: cursor.id,
+									rankingValue: cursor.rankingValue
+								}
+							: null
+					)
+				)
+				.slice(0, limit);
+		},
+		async listArtworkCommentsByArtworkId() {
+			return [];
+		},
+		async listModerationQueue() {
+			return [];
+		}
+	};
+};
 
 const asReadDeps = (repository: ArtworkReadRepository, now?: () => Date) => ({
 	repository,
@@ -1051,6 +1044,58 @@ describe('artwork read service', () => {
 			isFork: true,
 			parent: null,
 			parentStatus: 'deleted'
+		});
+	});
+
+	it('includes live parent attribution in discovery projections for forked artworks', async () => {
+		const { listArtworkDiscovery } = await import('./read.service');
+		const artworks = new Map<string, ArtworkRecord>();
+		const profiles = createProfiles();
+		const { repository } = createWriteRepository(artworks);
+		const readRepository = createReadRepository(artworks, profiles);
+		const { storage } = createStorage();
+
+		await publishArtwork(
+			{ media: createAvifFile(), title: 'Parent artwork' },
+			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
+			asWriteDeps(repository, storage, {
+				generateId: () => 'artwork-parent',
+				now: () => new Date('2026-03-26T12:00:00.000Z')
+			})
+		);
+
+		await publishArtwork(
+			{
+				media: createAvifFile(),
+				parentArtworkId: 'artwork-parent',
+				title: 'Child fork artwork'
+			},
+			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-2')!) },
+			asWriteDeps(repository, storage, {
+				generateId: () => 'artwork-child',
+				now: () => new Date('2026-03-26T13:00:00.000Z')
+			})
+		);
+
+		const discovery = await listArtworkDiscovery(
+			{ limit: 10, sort: 'recent' },
+			asReadDeps(readRepository)
+		);
+
+		expect(discovery.items[0]).toMatchObject({
+			id: 'artwork-child',
+			lineage: {
+				isFork: true,
+				parentStatus: 'available',
+				parent: {
+					id: 'artwork-parent',
+					title: 'Parent artwork',
+					author: {
+						id: 'user-1',
+						nickname: 'artist_1'
+					}
+				}
+			}
 		});
 	});
 

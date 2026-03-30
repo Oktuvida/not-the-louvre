@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, gte, isNotNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { artworkComments, artworks, contentReports, users } from '$lib/server/db/schema';
 import type {
@@ -129,6 +129,10 @@ type ArtworkReadRow = {
 	storageKey: string;
 	title: string;
 	updatedAt: Date;
+	parentAuthorAvatarUrl?: string | null;
+	parentAuthorId?: string | null;
+	parentAuthorNickname?: string | null;
+	parentTitle?: string | null;
 	downvotes?: number;
 	upvotes?: number;
 	viewerVote?: 'down' | 'up' | null;
@@ -173,7 +177,11 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	isNsfw: row.isNsfw,
 	mediaContentType: row.mediaContentType,
 	mediaSizeBytes: row.mediaSizeBytes,
+	parentAuthorAvatarUrl: row.parentAuthorAvatarUrl ?? null,
+	parentAuthorId: row.parentAuthorId ?? null,
+	parentAuthorNickname: row.parentAuthorNickname ?? null,
 	parentId: row.parentId,
+	parentTitle: row.parentTitle ?? null,
 	score: row.score,
 	storageKey: row.storageKey,
 	title: row.title,
@@ -192,6 +200,45 @@ const buildRankedBaseSelect = (
 	rankingValue: rankingExpression.as('rankingValue')
 });
 
+const hydrateDiscoveryParents = async (records: ArtworkReadRecord[]) => {
+	const parentIds = Array.from(
+		new Set(records.flatMap((record) => (record.parentId ? [record.parentId] : [])))
+	);
+
+	if (parentIds.length === 0) {
+		return records;
+	}
+
+	const parentRows = await db
+		.select({
+			authorAvatarUrl: users.avatarUrl,
+			authorId: artworks.authorId,
+			authorNickname: users.nickname,
+			id: artworks.id,
+			title: artworks.title
+		})
+		.from(artworks)
+		.innerJoin(users, eq(users.id, artworks.authorId))
+		.where(and(inArray(artworks.id, parentIds), eq(artworks.isHidden, false)));
+
+	const parentsById = new Map(parentRows.map((row) => [row.id, row]));
+
+	return records.map((record) => {
+		if (!record.parentId) return record;
+
+		const parent = parentsById.get(record.parentId);
+		if (!parent) return record;
+
+		return {
+			...record,
+			parentAuthorAvatarUrl: parent.authorAvatarUrl,
+			parentAuthorId: parent.authorId,
+			parentAuthorNickname: parent.authorNickname,
+			parentTitle: parent.title
+		};
+	});
+};
+
 export const artworkReadRepository: ArtworkReadRepository = {
 	async listRecentArtworks(input: ListRecentArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
@@ -203,7 +250,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.orderBy(desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
-		return rows.map(mapRow);
+		return hydrateDiscoveryParents(rows.map(mapRow));
 	},
 	async listHotArtworks(input: ListHotArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
@@ -221,7 +268,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.orderBy(desc(rankingExpression), desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
-		return rows.map(mapRow);
+		return hydrateDiscoveryParents(rows.map(mapRow));
 	},
 	async listTopArtworks(input: ListTopArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
@@ -242,7 +289,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.orderBy(desc(artworks.score), desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
-		return rows.map(mapRow);
+		return hydrateDiscoveryParents(rows.map(mapRow));
 	},
 	async findArtworkDetailById(id, viewer) {
 		const activeViewer = defaultViewer(viewer);
