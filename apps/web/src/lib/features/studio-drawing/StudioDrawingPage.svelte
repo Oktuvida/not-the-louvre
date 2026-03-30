@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { gsap } from 'gsap';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
@@ -74,6 +77,9 @@
 	let artworkTitle = $state('');
 	let isArtworkNsfw = $state(false);
 	let titleError = $state('');
+	let isExitingToHome = $state(false);
+	let showExitFade = $state(false);
+	let exitFadeOpacity = $state(0);
 
 	let studioUnlocked = $derived(sceneState === 'open');
 	let toolsVisible = $derived(sceneState !== 'closed');
@@ -180,38 +186,64 @@
 			isPublishing = false;
 		}
 	};
+	const handleBackToHome = (event: MouseEvent) => {
+		event.preventDefault();
+		event.stopPropagation();
+		if (isExitingToHome) return;
+		isExitingToHome = true;
+		showExitFade = true;
+
+		const fade = { opacity: 0 };
+		gsap.to(fade, {
+			opacity: 1,
+			duration: 0.5,
+			ease: 'power2.in',
+			onUpdate: () => {
+				exitFadeOpacity = fade.opacity;
+			},
+			onComplete: () => {
+				const url = `${resolve('/')}?from=studio`;
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- URL is already resolved above
+				void goto(url);
+			}
+		});
+	};
 </script>
 
-<div class="relative flex h-dvh flex-col overflow-hidden bg-[#f4ecde]">
-	<div class="pointer-events-none absolute inset-0">
-		<div
-			class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,248,235,0.95),_transparent_40%),linear-gradient(180deg,_rgba(255,251,244,0.45),_rgba(214,188,149,0.2)_55%,_rgba(116,87,55,0.08))]"
-		></div>
-		<div
-			class="absolute inset-x-0 top-0 h-48 bg-[linear-gradient(180deg,_rgba(255,255,255,0.4),_transparent)]"
-		></div>
-		<div
-			class="absolute inset-x-0 bottom-0 h-56 bg-[linear-gradient(180deg,_transparent,_rgba(111,79,48,0.12))]"
-		></div>
-	</div>
+<div
+	class="studio-page relative flex h-dvh flex-col overflow-hidden"
+	style="--book-offset-x: 0px; --book-offset-y: 0px; --book-scale: 1;"
+>
+	<picture class="pointer-events-none absolute inset-0 z-0">
+		<source type="image/avif" srcset="/table.avif" />
+		<img
+			src="/table.webp"
+			alt=""
+			class="h-full w-full scale-[1.25] object-cover object-[center_115%]"
+			loading="eager"
+			decoding="async"
+		/>
+	</picture>
 
 	<header
 		class="relative z-30 flex flex-shrink-0 items-start justify-between gap-4 px-4 pt-4 sm:px-6"
 	>
-		<GameLink href="/" variant="secondary" size="md" className="-rotate-1 shadow-lg">
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="20"
-				height="20"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg
-			>
-			<span>Exit Studio</span>
-		</GameLink>
+		<div onclickcapture={handleBackToHome}>
+			<GameLink href="/" variant="secondary" size="md" className="-rotate-1 shadow-lg">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg
+				>
+				<span>Exit Studio</span>
+			</GameLink>
+		</div>
 
 		{#if user}
 			<div
@@ -222,7 +254,7 @@
 		{/if}
 	</header>
 
-	<main
+	<!-- <main
 		class="relative z-10 mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col px-4 pt-3 pb-4 sm:px-6"
 	>
 		<div
@@ -356,13 +388,21 @@
 				<DrawingToolTray {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
 			</div>
 		</div>
-	</main>
+	</main> -->
 </div>
+
+{#if showExitFade}
+	<div
+		class="pointer-events-none fixed inset-0 z-[9999]"
+		style={`background-color: #6e6e6e; opacity: ${exitFadeOpacity};`}
+	></div>
+{/if}
 
 <style>
 	.studio-book-frame {
 		height: clamp(29rem, 78vh, 56rem);
 		flex: 0 0 auto;
+		transform: translate(var(--book-offset-x), var(--book-offset-y)) scale(var(--book-scale));
 	}
 
 	.tools-stage {
