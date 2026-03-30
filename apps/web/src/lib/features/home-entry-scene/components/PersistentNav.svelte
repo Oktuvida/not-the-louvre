@@ -1,20 +1,24 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
-	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
 	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
+	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
+	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import VisitorBadge from '$lib/features/shared-ui/components/VisitorBadge.svelte';
 
 	let {
 		adultContentEnabled = false,
+		isExiting = false,
+		onGalleryNavigate,
 		previewCards = [],
 		user = null
 	}: {
 		adultContentEnabled?: boolean;
+		isExiting?: boolean;
+		onGalleryNavigate?: () => void;
 		previewCards?: HomePreviewCard[];
 		user?: HomeAuthUser | null;
 	} = $props();
@@ -54,11 +58,21 @@
 			isSavingAdultContentPreference = false;
 		}
 	};
+
+	const handleGalleryClick = (event: MouseEvent) => {
+		event.preventDefault();
+		event.stopPropagation();
+		onGalleryNavigate?.();
+	};
 </script>
 
 <div class="pointer-events-none absolute inset-0 z-[30]">
 	{#if user}
-		<div class="pointer-events-auto absolute top-8 left-8 max-w-[22rem]">
+		<div
+			class="pointer-events-auto absolute top-8 left-8 max-w-[22rem] transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)]"
+			class:-translate-x-[calc(100%+3rem)]={isExiting}
+			class:opacity-0={isExiting}
+		>
 			<VisitorBadge
 				avatarUrl={user.avatarUrl ?? user.image ?? null}
 				nickname={user.nickname}
@@ -72,7 +86,11 @@
 		</div>
 	{/if}
 
-	<div class="pointer-events-auto absolute top-8 right-8 space-y-4">
+	<div
+		class="pointer-events-auto absolute top-8 right-8 space-y-4 transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)]"
+		class:translate-x-[calc(100%+3rem)]={isExiting}
+		class:opacity-0={isExiting}
+	>
 		{#if hasSensitivePreview}
 			<div
 				class="max-w-[15rem] rotate-1 rounded-[1.1rem] border-4 border-[#2d2420] bg-[rgba(253,251,247,0.96)] px-4 py-3 shadow-xl"
@@ -152,32 +170,38 @@
 		{/each}
 	</div>
 
-	<div class="pointer-events-auto absolute bottom-20 left-6 flex flex-col gap-4 md:left-16">
-		<GameLink
-			href="/gallery"
-			variant="secondary"
-			size="lg"
-			className="group -rotate-1 hover:translate-x-[10px] hover:rotate-2"
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="24"
-				height="24"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-				><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path
-					d="M4 22h16"
-				/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path
-					d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"
-				/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></svg
+	<div
+		class="pointer-events-auto absolute bottom-20 left-6 flex flex-col gap-4 transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:left-16"
+		class:translate-y-[calc(100%+6rem)]={isExiting}
+		class:opacity-0={isExiting}
+	>
+		<div onclickcapture={handleGalleryClick}>
+			<GameLink
+				href="/gallery/your-studio"
+				variant="secondary"
+				size="lg"
+				className="group -rotate-1 hover:translate-x-[10px] hover:rotate-2"
 			>
-			<span>GALLERY</span>
-		</GameLink>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="24"
+					height="24"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
+					><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path
+						d="M4 22h16"
+					/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path
+						d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"
+					/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></svg
+				>
+				<span>GALLERY</span>
+			</GameLink>
+		</div>
 
 		<GameLink
 			href="/gallery/mystery"
