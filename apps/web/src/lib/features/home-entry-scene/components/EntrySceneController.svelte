@@ -107,10 +107,10 @@
 			const nextUser =
 				avatarOverride?.userId === auth.user.id
 					? {
-						...auth.user,
-						avatarOnboardingCompletedAt: avatarOverride.avatarOnboardingCompletedAt,
-						avatarUrl: avatarOverride.avatarUrl
-					}
+							...auth.user,
+							avatarOnboardingCompletedAt: avatarOverride.avatarOnboardingCompletedAt,
+							avatarUrl: avatarOverride.avatarUrl
+						}
 					: auth.user;
 
 			user = nextUser;
