@@ -1,9 +1,24 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import DrawingCanvas from './DrawingCanvas.svelte';
 
+class MockCanvasImage {
+	onload: (() => void) | null = null;
+	onerror: (() => void) | null = null;
+
+	set src(_value: string) {
+		queueMicrotask(() => {
+			this.onload?.();
+		});
+	}
+}
+
 describe('DrawingCanvas', () => {
+	beforeEach(() => {
+		vi.unstubAllGlobals();
+	});
+
 	it('renders product-facing status messaging below the canvas', async () => {
 		render(DrawingCanvas, {
 			statusMessage: 'Artwork published as Untitled #0001',
@@ -211,6 +226,30 @@ describe('DrawingCanvas', () => {
 		);
 
 		expect(ctx.lineTo).toHaveBeenCalledTimes(1);
+		getContextSpy.mockRestore();
+	});
+
+	it('hydrates the canvas with a flat initial image when provided', async () => {
+		const ctx = {
+			drawImage: vi.fn(),
+			fillRect: vi.fn(),
+			fillStyle: '#fdfbf7'
+		} as unknown as CanvasRenderingContext2D;
+		const getContextSpy = vi
+			.spyOn(HTMLCanvasElement.prototype, 'getContext')
+			.mockImplementation(((contextId: string) =>
+				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
+
+		vi.stubGlobal('Image', MockCanvasImage);
+
+		render(DrawingCanvas, {
+			initialImageUrl: '/api/artworks/artwork-parent/media'
+		});
+
+		await vi.waitFor(() => {
+			expect(ctx.drawImage).toHaveBeenCalled();
+		});
+
 		getContextSpy.mockRestore();
 	});
 });

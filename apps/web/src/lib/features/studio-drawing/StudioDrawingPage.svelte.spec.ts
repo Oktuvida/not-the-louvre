@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import StudioDrawingPage from './StudioDrawingPage.svelte';
 
+const forkParentPreviewDataUrl =
+	'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="2" height="2" viewBox="0 0 2 2"%3E%3Crect width="1" height="2" fill="%23d66b4d"/%3E%3Crect x="1" width="1" height="2" fill="%23406c8f"/%3E%3C/svg%3E';
+
 const reducedMotionMediaQuery = {
 	addEventListener: vi.fn(),
 	addListener: vi.fn(),
@@ -204,16 +207,16 @@ describe('StudioDrawingPage', () => {
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
 			forkParent: {
 				id: 'artwork-parent',
-				mediaUrl: '/api/artworks/artwork-parent/media',
+				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
 			},
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
 
-		await openSketchbook();
 		await expect.element(page.getByText('Forking from')).toBeVisible();
 		await expect.element(page.getByText('Parent Artwork')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 		await page.getByPlaceholder('Give your piece a title').fill('Forked Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
 
@@ -222,6 +225,23 @@ describe('StudioDrawingPage', () => {
 			parentArtworkId: 'artwork-parent',
 			title: 'Forked Piece'
 		});
+	});
+
+	it('auto-opens the sketchbook for a fork once the parent artwork preload is ready', async () => {
+		render(StudioDrawingPage, {
+			forkParent: {
+				id: 'artwork-parent',
+				mediaUrl: forkParentPreviewDataUrl,
+				title: 'Parent Artwork'
+			},
+			openingDurationMs: 1,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await expect.element(page.getByText('Forking from')).toBeVisible();
+		await expect.element(page.getByText('Parent Artwork')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+		await expect.element(page.getByPlaceholder('Give your piece a title')).toBeEnabled();
 	});
 
 	it('blocks publishing when the artwork title filter rejects the title', async () => {
