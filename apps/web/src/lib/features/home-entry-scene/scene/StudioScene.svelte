@@ -38,13 +38,13 @@
 	};
 	const TOP_CLOSE_CAMERA = {
 		cameraX: 1.8,
-		cameraDepth: 2.8,
-		cameraHeight: 50,
+		cameraDepth: 0.6,
+		cameraHeight: 0,
 		rotationX: 0,
 		rotationY: 0,
 		targetX: 1.8,
-		targetY: -15.8,
-		targetZ: 0,
+		targetY: -1.8,
+		targetZ: 0.6,
 		zoom: 450
 	};
 	const DEFAULT_CAMERA = {
@@ -79,6 +79,7 @@
 	let studioNodes = $state<Record<string, Object3D>>({});
 	let studioSceneRoot = $state<Group | null>(null);
 	let previousScenePose: 'default' | 'left-wall' | 'top-close' | undefined = initialPoseValue;
+	let holdingInitialPose = initialPoseValue !== 'default';
 	let activeSceneTimeline: gsap.core.Animation | null = null;
 	const ENTER_DURATION = 2.08;
 	const RESET_DURATION = 1.13;
@@ -86,8 +87,8 @@
 	const LEFT_WALL_ZOOM_DURATION = 2.2;
 	const LEFT_WALL_EXIT_ZOOM_DURATION = 1.1;
 	const LEFT_WALL_EXIT_ROTATE_DURATION = 1.75;
-	const TOP_CLOSE_ENTER_DURATION = 1.35;
-	const TOP_CLOSE_EXIT_DURATION = 1.05;
+	const TOP_CLOSE_ENTER_DURATION = 2;
+	const TOP_CLOSE_EXIT_DURATION = 1.4;
 
 	const studioMotion = {
 		cameraX: initialCamera.cameraX,
@@ -137,6 +138,15 @@
 			entryState === 'auth-signup' ||
 			entryState === 'auth-recovery' ||
 			entryState === 'inside';
+
+		// Hold the initial return pose — only on the first mount, not on subsequent visits
+		if (holdingInitialPose && scenePose === initialPoseValue) {
+			previousScenePose = scenePose;
+			return;
+		}
+		if (holdingInitialPose && scenePose !== initialPoseValue) {
+			holdingInitialPose = false;
+		}
 
 		activeSceneTimeline?.kill();
 		activeSceneTimeline = null;
@@ -218,20 +228,27 @@
 
 		if (isLeavingTopClose && isInside) {
 			previousScenePose = scenePose;
-			activeSceneTimeline = gsap.to(studioMotion, {
-				cameraX: 0,
-				zoom: 60,
-				cameraDepth: 16,
-				cameraHeight: 7.8,
-				targetX: 0,
-				targetY: 0.8,
-				targetZ: 0,
-				rotationX: -0.22,
-				rotationY: -Math.PI / 4,
-				duration: TOP_CLOSE_EXIT_DURATION,
-				ease: 'power3.inOut',
-				onUpdate: syncStudioMotion
-			});
+			activeSceneTimeline = gsap
+				.timeline()
+				.to(studioMotion, {
+					cameraX: 0,
+					zoom: 60,
+					cameraDepth: 16,
+					cameraHeight: 7.8,
+					targetX: 0,
+					targetY: 0.8,
+					targetZ: 0,
+					rotationX: -0.22,
+					duration: TOP_CLOSE_EXIT_DURATION,
+					ease: 'power3.inOut',
+					onUpdate: syncStudioMotion
+				})
+				.to(studioMotion, {
+					rotationY: -Math.PI / 4,
+					duration: 0.8,
+					ease: 'power3.inOut',
+					onUpdate: syncStudioMotion
+				});
 
 			return;
 		}

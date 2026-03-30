@@ -59,7 +59,7 @@
 	}
 
 	$effect(() => {
-		if (entryState !== 'inside' && scenePose !== 'default') {
+		if (entryState !== 'inside' && scenePose !== 'default' && !isReturningActive) {
 			scenePose = 'default';
 		}
 	});
@@ -72,6 +72,10 @@
 	$effect(() => {
 		if (!isReturningActive || entryState !== 'inside') return;
 
+		// Start the reverse camera animation immediately (behind the overlay)
+		scenePose = 'default';
+
+		// Then fade out the overlay so the scene is already animating when revealed
 		const fade = { opacity: 1 };
 		gsap.to(fade, {
 			opacity: 0,
@@ -84,7 +88,6 @@
 			onComplete: () => {
 				fadeOverlayVisible = false;
 				isReturningActive = false;
-				scenePose = 'default';
 			}
 		});
 	});
@@ -123,14 +126,19 @@
 		isExiting = true;
 		scenePose = 'top-close';
 
-		// The top-close animation is 1.35s. Start the fade overlay partway
-		// through so navigation overlaps with the end of the camera move.
-		gsap.delayedCall(0.8, () => {
+		// Start the fade overlay near the end of the camera animation so
+		// navigation overlaps with the final stretch. The fade itself is 0.4s,
+		// so we begin it (duration − 0.55)s into the animation.
+		const TOP_CLOSE_DURATION = 2;
+		const FADE_DURATION = 0.4;
+		const fadeDelay = Math.max(0, TOP_CLOSE_DURATION - FADE_DURATION - 0.15);
+
+		gsap.delayedCall(fadeDelay, () => {
 			fadeOverlayVisible = true;
 			const fade = { opacity: 0 };
 			gsap.to(fade, {
 				opacity: 1,
-				duration: 0.4,
+				duration: FADE_DURATION,
 				ease: 'power2.in',
 				onUpdate: () => {
 					fadeOverlayOpacity = fade.opacity;

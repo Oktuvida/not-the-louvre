@@ -199,6 +199,7 @@
 			duration: 0.5,
 			ease: 'power2.in',
 			onUpdate: () => {
+
 				exitFadeOpacity = fade.opacity;
 			},
 			onComplete: () => {
