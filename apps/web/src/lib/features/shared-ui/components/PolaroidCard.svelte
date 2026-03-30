@@ -21,6 +21,10 @@
 	const pinClass = $derived(
 		['pin-blue', 'pin-red', 'pin-green', 'pin-yellow'][seed % 4] ?? 'pin-blue'
 	);
+	const isFork = $derived(Boolean(artwork.lineage?.isFork));
+	const forkParentTitle = $derived(
+		artwork.lineage?.parentStatus === 'available' ? (artwork.lineage.parent?.title ?? null) : null
+	);
 	// Paint stain position/color — deterministic per card
 	const stainVariant = $derived(seed % 5);
 	const stainColor = $derived(
@@ -69,6 +73,13 @@
 
 		<!-- Image area -->
 		<div class="relative aspect-square overflow-hidden border border-[#d6cfc5]">
+			{#if isFork}
+				<div
+					class="absolute top-3 left-3 z-10 rounded-full border-2 border-[#2d2420] bg-[#f7d58a] px-3 py-1 text-[0.65rem] font-black tracking-[0.18em] text-[#2d2420] uppercase shadow-md"
+				>
+					Forked
+				</div>
+			{/if}
 			<img src={artwork.imageUrl} alt={artwork.title} class="h-full w-full object-cover" />
 		</div>
 
@@ -94,6 +105,13 @@
 				<p class="truncate text-[0.82rem] text-[#8a6c52]" style="font-family: 'Caveat', cursive;">
 					{artwork.artist}
 				</p>
+				{#if isFork}
+					<p
+						class="truncate font-['Fredoka'] text-[0.7rem] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
+					>
+						{forkParentTitle ? `From ${forkParentTitle}` : 'Forked artwork'}
+					</p>
+				{/if}
 				<div class="mt-px font-['Fredoka'] text-[0.7rem] tracking-[0.04em] text-[#8a6c52]">
 					&#11088; {artwork.score} &middot; &#128172; {artwork.commentCount ??
 						artwork.comments.length}
