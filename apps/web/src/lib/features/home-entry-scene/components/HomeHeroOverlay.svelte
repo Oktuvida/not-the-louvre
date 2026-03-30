@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { homeFloatingPaint } from '$lib/features/home-entry-scene/state/home-entry.svelte';
+
+	let { isExiting = false }: { isExiting?: boolean } = $props();
 </script>
 
 <!-- Animated Background Particles -->
@@ -36,7 +38,11 @@
 </div>
 
 <!-- Game Title -->
-<div class="absolute top-16 left-1/2 z-20 -translate-x-1/2">
+<div
+	class="absolute top-16 left-1/2 z-20 -translate-x-1/2 transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)]"
+	class:-translate-y-[calc(100%+6rem)]={isExiting}
+	class:opacity-0={isExiting}
+>
 	<h1
 		class="font-display text-center text-7xl font-black tracking-tight text-[#2d2420]"
 		style="text-shadow: 4px 4px 0px #e8b896, 8px 8px 0px rgba(45, 36, 32, 0.2);"
@@ -52,7 +58,9 @@
 </div>
 <!-- Footer tagline -->
 <div
-	class="pointer-events-none absolute bottom-6 left-1/2 z-20 -translate-x-1/2 text-sm text-[#6b625a] italic"
+	class="pointer-events-none absolute bottom-6 left-1/2 z-20 -translate-x-1/2 text-sm text-[#6b625a] italic transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)]"
+	class:translate-y-[calc(100%+3rem)]={isExiting}
+	class:opacity-0={isExiting}
 	style="font-family: 'Baloo 2', sans-serif;"
 >
 	A social art studio where your doodles compete for glory
