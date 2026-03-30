@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { useThrelte } from '@threlte/core';
 	import { DoubleSide, Mesh, MeshBasicMaterial, SRGBColorSpace, TextureLoader } from 'three';
 	import type { Object3D, Texture } from 'three';
 	import type {
@@ -38,6 +39,7 @@
 	};
 
 	let textureByTarget = $state<Partial<Record<SceneTextureTargetName, Texture>>>({});
+	const { invalidate } = useThrelte();
 	const textureLoader = new TextureLoader();
 	const textureTargets = $derived.by(
 		() =>
@@ -65,11 +67,13 @@
 					textureByTarget = Object.fromEntries(entries) as Partial<
 						Record<SceneTextureTargetName, Texture>
 					>;
+					invalidate();
 				}
 			})
 			.catch(() => {
 				if (!cancelled) {
 					textureByTarget = {};
+					invalidate();
 				}
 			});
 
@@ -99,6 +103,10 @@
 
 			artifact.material = material;
 			applied.push({ artifact, material, originalMaterial });
+		}
+
+		if (applied.length > 0) {
+			invalidate();
 		}
 
 		return () => {
