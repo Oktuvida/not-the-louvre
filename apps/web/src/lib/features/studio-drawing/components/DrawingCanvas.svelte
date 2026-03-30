@@ -23,6 +23,31 @@
 	let baseImage = $state<HTMLImageElement | null>(null);
 	let isDrawing = $state(false);
 
+	const getBaseImagePlacement = (canvas: HTMLCanvasElement, image: HTMLImageElement) => {
+		const sourceWidth = image.naturalWidth || canvas.width;
+		const sourceHeight = image.naturalHeight || canvas.height;
+
+		if (!sourceWidth || !sourceHeight) {
+			return {
+				height: canvas.height,
+				width: canvas.width,
+				x: 0,
+				y: 0
+			};
+		}
+
+		const scale = Math.min(1, canvas.width / sourceWidth, canvas.height / sourceHeight);
+		const width = Math.max(1, Math.round(sourceWidth * scale));
+		const height = Math.max(1, Math.round(sourceHeight * scale));
+
+		return {
+			height,
+			width,
+			x: Math.round((canvas.width - width) / 2),
+			y: Math.round((canvas.height - height) / 2)
+		};
+	};
+
 	const paintCanvasBase = () => {
 		if (!canvasRef) return;
 		const ctx = canvasRef.getContext('2d');
@@ -31,7 +56,10 @@
 		ctx.fillRect(0, 0, canvasRef.width, canvasRef.height);
 
 		if (baseImage) {
-			ctx.drawImage(baseImage, 0, 0, canvasRef.width, canvasRef.height);
+			const placement = getBaseImagePlacement(canvasRef, baseImage);
+			ctx.imageSmoothingEnabled = true;
+			ctx.imageSmoothingQuality = 'high';
+			ctx.drawImage(baseImage, placement.x, placement.y, placement.width, placement.height);
 		}
 	};
 
@@ -133,9 +161,9 @@
 <div class="relative flex h-full w-full items-stretch">
 	<canvas
 		bind:this={canvasRef}
-		width={800}
-		height={600}
-		class={`h-full w-full rounded-lg ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
+		width={768}
+		height={768}
+		class={`aspect-square h-full max-h-full w-auto max-w-full self-center rounded-lg ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
 		style="background: #fdfbf7;"
 		aria-disabled={!interactive}
 		onmousedown={startDrawing}
