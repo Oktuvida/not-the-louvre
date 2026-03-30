@@ -84,11 +84,11 @@
 	const isAvatarView = $derived(view === 'signup-avatar');
 	const panelClassName = $derived(
 		isAvatarView
-			? 'w-full max-w-[68rem] border-[#2d2a26] bg-[linear-gradient(180deg,rgba(255,252,246,0.98),rgba(247,239,228,0.98))] text-[#2d2a26]'
-			: 'w-full max-w-[44rem] border-[#2d2a26] bg-[linear-gradient(180deg,rgba(255,252,246,0.97),rgba(248,241,230,0.97))] text-[#2d2a26]'
+			? 'w-full max-w-[50rem] border-[var(--color-ink)] bg-[linear-gradient(180deg,rgba(255,252,246,0.98),rgba(247,239,228,0.98))] text-[var(--color-ink)]'
+			: 'w-full max-w-[44rem] border-[var(--color-ink)] bg-[linear-gradient(180deg,rgba(255,252,246,0.97),rgba(248,241,230,0.97))] text-[var(--color-ink)]'
 	);
 	const contentClassName = $derived(
-		isAvatarView ? 'space-y-6 p-6 md:p-8 lg:p-10' : 'space-y-5 p-6 md:p-8'
+		isAvatarView ? 'space-y-4 p-4 md:p-5 lg:p-6' : 'min-h-[26rem] space-y-5 p-6 md:p-8'
 	);
 
 	const normalizeNickname = (value: string) => value.trim().toLowerCase();
@@ -496,10 +496,14 @@
 		<div class={contentClassName}>
 			<div class="flex items-start justify-between gap-4">
 				<div class="space-y-2">
-					<p class="text-xs font-semibold tracking-[0.28em] text-[#8d6c52] uppercase">
+					<p
+						class="font-display text-xs font-semibold tracking-[0.28em] text-[var(--color-muted)] uppercase"
+					>
 						Studio Access
 					</p>
-					<h2 class="font-display text-3xl tracking-[0.06em] text-[#2d2a26] uppercase md:text-4xl">
+					<h2
+						class="font-display text-3xl tracking-[0.06em] text-[var(--color-ink)] uppercase md:text-4xl"
+					>
 						{view === 'signup-account'
 							? 'Draw yourself'
 							: view === 'signup-success'
@@ -512,7 +516,7 @@
 											? 'Replacement key'
 											: 'Welcome back'}
 					</h2>
-					<p class="max-w-2xl text-sm text-[#5a554d] md:text-base">
+					<p class="max-w-2xl text-sm text-[var(--color-muted)] md:text-base">
 						{view === 'login'
 							? 'The room missed you. Probably.'
 							: view === 'signup-account'
@@ -562,227 +566,290 @@
 			{/if}
 
 			<div
-				class="rounded-[1.25rem] border border-[rgba(141,108,82,0.22)] bg-[rgba(255,255,255,0.38)] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]"
+				class="rounded-[1.25rem] border border-[rgb(141_108_82_/_0.2)] bg-[linear-gradient(180deg,rgb(255_248_238_/_0.92),rgb(245_235_220_/_0.92))] p-4 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.45)] md:p-5"
 			>
-				<div
-					class="rounded-[1rem] border border-[rgba(141,108,82,0.18)] bg-[linear-gradient(180deg,rgba(255,248,238,0.92),rgba(245,235,220,0.92))] p-4 md:p-5"
-				>
-					{#if rateLimitError}
-						<div
-							class="rounded-[1rem] border-2 border-[#9c432b] bg-[#f4d0bf] px-4 py-3 text-sm text-[#6f2413]"
-						>
-							{rateLimitError}
+				{#if rateLimitError || formError}
+					<div class="mb-4 space-y-2">
+						{#if rateLimitError}
+							<div
+								class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
+							>
+								{rateLimitError}
+							</div>
+						{/if}
+						{#if formError}
+							<div
+								class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
+							>
+								{formError}
+							</div>
+						{/if}
+					</div>
+				{/if}
+
+				{#if view === 'login'}
+					<form
+						bind:this={loginFormElement}
+						method="POST"
+						action="?/signIn"
+						use:enhance={createEnhancer}
+						onsubmit={handleLoginSubmit}
+						class="space-y-4"
+					>
+						<label class="block space-y-2">
+							<span
+								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+								>Nickname</span
+							>
+							<input
+								bind:value={nickname}
+								name="nickname"
+								type="text"
+								placeholder="artist_123"
+								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+							/>
+						</label>
+						{#if nicknameError}<p class="text-sm text-[var(--color-danger)]">
+								{nicknameError}
+							</p>{/if}
+
+						<label class="block space-y-2">
+							<span
+								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+								>Password</span
+							>
+							<input
+								bind:value={password}
+								name="password"
+								type="password"
+								placeholder="Enter your password"
+								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+							/>
+						</label>
+						{#if passwordError}<p class="text-sm text-[var(--color-danger)]">
+								{passwordError}
+							</p>{/if}
+
+						<div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+							<GameButton
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="w-full min-w-0 sm:w-auto sm:[--sticker-min-width:0px]"
+								onclick={goToRecovery}
+							>
+								<span>Use recovery key</span>
+							</GameButton>
+
+							<GameButton
+								type="button"
+								onclick={submitLogin}
+								disabled={isSubmitting}
+								size="md"
+								className="w-full min-w-0 sm:w-auto sm:[--sticker-min-width:0px]"
+							>
+								<span>{isSubmitting ? 'Working...' : 'Sign In'}</span>
+							</GameButton>
 						</div>
-					{/if}
-					{#if formError}
-						<div
-							class="rounded-[1rem] border-2 border-[#9c432b] bg-[#f7e1d7] px-4 py-3 text-sm text-[#6f2413]"
-						>
-							{formError}
-						</div>
-					{/if}
-
-					{#if view === 'login'}
-						<form
-							bind:this={loginFormElement}
-							method="POST"
-							action="?/signIn"
-							use:enhance={createEnhancer}
-							onsubmit={handleLoginSubmit}
-							class="space-y-4"
-						>
-							<label class="block space-y-2">
-								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-									>Nickname</span
-								>
-								<input
-									bind:value={nickname}
-									name="nickname"
-									type="text"
-									placeholder="artist_123"
-									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-								/>
-							</label>
-							{#if nicknameError}<p class="text-sm text-[#8f3720]">{nicknameError}</p>{/if}
-
-							<label class="block space-y-2">
-								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-									>Password</span
-								>
-								<input
-									bind:value={password}
-									name="password"
-									type="password"
-									placeholder="Enter your password"
-									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-								/>
-							</label>
-							{#if passwordError}<p class="text-sm text-[#8f3720]">{passwordError}</p>{/if}
-
-							<div class="flex items-center justify-between gap-3 pt-2">
-								<GameButton type="button" variant="ghost" size="sm" onclick={goToRecovery}>
-									<span>Use recovery key</span>
-								</GameButton>
-
-								<GameButton type="button" onclick={submitLogin} disabled={isSubmitting} size="md">
-									<span>{isSubmitting ? 'Working...' : 'Sign In'}</span>
-								</GameButton>
-							</div>
-						</form>
-					{:else if view === 'signup-account'}
-						<form
-							bind:this={signupFormElement}
-							method="POST"
-							action="?/signUp"
-							use:enhance={createEnhancer}
-							onsubmit={handleSignupSubmit}
-							class="space-y-4"
-						>
-							<label class="block space-y-2">
-								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-									>Nickname</span
-								>
-								<input
-									bind:value={nickname}
-									name="nickname"
-									type="text"
-									placeholder="artist_123"
-									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-								/>
-							</label>
-							{#if nicknameError}
-								<p class="text-sm text-[#8f3720]">{nicknameError}</p>
-							{:else if availabilityMessage}
-								<p
-									class={`text-sm ${availabilityState === 'taken' ? 'text-[#8f3720]' : availabilityState === 'available' ? 'text-[#35613f]' : 'text-[#6f5846]'}`}
-								>
-									{availabilityMessage}
-								</p>
-							{/if}
-
-							<label class="block space-y-2">
-								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-									>Password</span
-								>
-								<input
-									bind:value={password}
-									name="password"
-									type="password"
-									placeholder="Enter your password"
-									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-								/>
-							</label>
-							{#if passwordError}<p class="text-sm text-[#8f3720]">{passwordError}</p>{/if}
-
-							<div class="flex items-center justify-between gap-3 pt-2">
-								<p class="text-xs tracking-[0.18em] text-[#8d6c52] uppercase">
-									Step 1: claim your wall
-								</p>
-
-								<GameButton type="button" onclick={submitSignup} disabled={isSubmitting} size="md">
-									<span>{isSubmitting ? 'Working...' : 'Start account'}</span>
-								</GameButton>
-							</div>
-						</form>
-					{:else if view === 'recover'}
-						<form
-							bind:this={recoveryFormElement}
-							method="POST"
-							action="?/recover"
-							use:enhance={createEnhancer}
-							onsubmit={handleRecoverySubmit}
-							class="space-y-4"
-						>
-							<label class="block space-y-2">
-								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-									>Nickname</span
-								>
-								<input
-									bind:value={nickname}
-									name="nickname"
-									type="text"
-									placeholder="artist_123"
-									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-								/>
-							</label>
-							{#if nicknameError}<p class="text-sm text-[#8f3720]">{nicknameError}</p>{/if}
-
-							<label class="block space-y-2">
-								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-									>Recovery Key</span
-								>
-								<input
-									bind:value={recoveryKey}
-									name="recoveryKey"
-									type="text"
-									placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-								/>
-							</label>
-							{#if recoveryKeyError}<p class="text-sm text-[#8f3720]">{recoveryKeyError}</p>{/if}
-
-							<label class="block space-y-2">
-								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-									>New Password</span
-								>
-								<input
-									bind:value={newPassword}
-									name="newPassword"
-									type="password"
-									placeholder="Choose a new password"
-									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-								/>
-							</label>
-							{#if newPasswordError}<p class="text-sm text-[#8f3720]">{newPasswordError}</p>{/if}
-
-							<div class="flex items-center justify-between gap-3 pt-2">
-								<GameButton type="button" variant="ghost" size="sm" onclick={goToLogin}>
-									<span>Log in</span>
-								</GameButton>
-								<GameButton
-									type="button"
-									onclick={submitRecovery}
-									disabled={isSubmitting}
-									size="md"
-								>
-									<span>{isSubmitting ? 'Working...' : 'Recover Access'}</span>
-								</GameButton>
-							</div>
-						</form>
-					{:else if view === 'signup-success' || view === 'recover-success'}
-						<div class="space-y-4 rounded-[1.4rem] border-2 border-[#d7c2ab] bg-[#fff8ef] p-5">
-							<p class="text-sm tracking-[0.18em] text-[#8d6c52] uppercase">One-time key</p>
+					</form>
+				{:else if view === 'signup-account'}
+					<form
+						bind:this={signupFormElement}
+						method="POST"
+						action="?/signUp"
+						use:enhance={createEnhancer}
+						onsubmit={handleSignupSubmit}
+						class="space-y-4"
+					>
+						<label class="block space-y-2">
+							<span
+								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+								>Nickname</span
+							>
+							<input
+								bind:value={nickname}
+								name="nickname"
+								type="text"
+								placeholder="artist_123"
+								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+							/>
+						</label>
+						{#if nicknameError}
+							<p class="text-sm text-[var(--color-danger)]">{nicknameError}</p>
+						{:else if availabilityMessage}
 							<p
-								class="rounded-[1rem] border-2 border-[#2d2a26] bg-[#2d2a26] px-4 py-4 font-mono text-sm text-[#f5f0e1]"
+								class={`text-sm ${availabilityState === 'taken' ? 'text-[var(--color-danger)]' : availabilityState === 'available' ? 'text-[var(--color-secondary)]' : 'text-[var(--color-muted)]'}`}
+							>
+								{availabilityMessage}
+							</p>
+						{/if}
+
+						<label class="block space-y-2">
+							<span
+								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+								>Password</span
+							>
+							<input
+								bind:value={password}
+								name="password"
+								type="password"
+								placeholder="Enter your password"
+								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+							/>
+						</label>
+						{#if passwordError}<p class="text-sm text-[var(--color-danger)]">
+								{passwordError}
+							</p>{/if}
+
+						<div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+							<p class="font-display text-xs tracking-[0.18em] text-[var(--color-muted)] uppercase">
+								Step 1: claim your wall
+							</p>
+
+							<GameButton
+								type="button"
+								onclick={submitSignup}
+								disabled={isSubmitting}
+								size="md"
+								className="w-full min-w-0 sm:w-auto sm:[--sticker-min-width:0px]"
+							>
+								<span>{isSubmitting ? 'Working...' : 'Start account'}</span>
+							</GameButton>
+						</div>
+					</form>
+				{:else if view === 'recover'}
+					<form
+						bind:this={recoveryFormElement}
+						method="POST"
+						action="?/recover"
+						use:enhance={createEnhancer}
+						onsubmit={handleRecoverySubmit}
+						class="space-y-4"
+					>
+						<label class="block space-y-2">
+							<span
+								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+								>Nickname</span
+							>
+							<input
+								bind:value={nickname}
+								name="nickname"
+								type="text"
+								placeholder="artist_123"
+								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+							/>
+						</label>
+						{#if nicknameError}<p class="text-sm text-[var(--color-danger)]">
+								{nicknameError}
+							</p>{/if}
+
+						<label class="block space-y-2">
+							<span
+								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+								>Recovery Key</span
+							>
+							<input
+								bind:value={recoveryKey}
+								name="recoveryKey"
+								type="text"
+								placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+							/>
+						</label>
+						{#if recoveryKeyError}<p class="text-sm text-[var(--color-danger)]">
+								{recoveryKeyError}
+							</p>{/if}
+
+						<label class="block space-y-2">
+							<span
+								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+								>New Password</span
+							>
+							<input
+								bind:value={newPassword}
+								name="newPassword"
+								type="password"
+								placeholder="Choose a new password"
+								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+							/>
+						</label>
+						{#if newPasswordError}<p class="text-sm text-[var(--color-danger)]">
+								{newPasswordError}
+							</p>{/if}
+
+						<div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+							<GameButton
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="w-full min-w-0 sm:w-auto sm:[--sticker-min-width:0px]"
+								onclick={goToLogin}
+							>
+								<span>Log in</span>
+							</GameButton>
+							<GameButton
+								type="button"
+								onclick={submitRecovery}
+								disabled={isSubmitting}
+								size="md"
+								className="w-full min-w-0 sm:w-auto sm:[--sticker-min-width:0px]"
+							>
+								<span>{isSubmitting ? 'Working...' : 'Recover Access'}</span>
+							</GameButton>
+						</div>
+					</form>
+				{:else if view === 'signup-success' || view === 'recover-success'}
+					<div
+						class="space-y-4 rounded-[1.4rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper)] p-5"
+					>
+						<p class="font-display text-sm tracking-[0.18em] text-[var(--color-muted)] uppercase">
+							One-time key
+						</p>
+						<div class="relative">
+							<p
+								class="rounded-[1rem] border-2 border-[var(--color-ink)] bg-[var(--color-ink)] px-4 py-4 pr-16 font-mono text-sm break-all text-[var(--color-paper-deep)] select-all"
 							>
 								{oneTimeKey}
 							</p>
-							<p class="text-sm text-[#5d4737]">
-								{view === 'signup-success'
-									? 'Store this recovery key now. It will not be shown again after you continue.'
-									: 'Your password was reset and your old recovery key is now invalid. Store this replacement key now.'}
-							</p>
-						</div>
-
-						<div class="flex items-center justify-end pt-2">
-							<GameButton
-								onclick={() => {
-									if (view === 'signup-success') {
-										view = 'signup-avatar';
-										return;
+							<button
+								type="button"
+								class="absolute top-1/2 right-3 -translate-y-1/2 rounded-lg border border-[rgb(255_255_255_/_0.2)] bg-[rgb(255_255_255_/_0.1)] px-2 py-1.5 text-xs text-[var(--color-paper-deep)] transition hover:bg-[rgb(255_255_255_/_0.2)] active:scale-95"
+								onclick={async () => {
+									try {
+										await navigator.clipboard.writeText(oneTimeKey);
+									} catch {
+										// Fallback: the text is already select-all
 									}
-
-									goToLogin();
 								}}
-								size="md"
 							>
-								<span>{view === 'signup-success' ? 'I Stored It' : 'Back To Sign In'}</span>
-							</GameButton>
+								Copy
+							</button>
 						</div>
-					{:else}
-						<AvatarSketchpad {nickname} {saveAvatar} onContinue={enterStudio} />
-					{/if}
-				</div>
+						<p class="text-sm text-[var(--color-muted)]">
+							{view === 'signup-success'
+								? 'Store this recovery key now. It will not be shown again after you continue.'
+								: 'Your password was reset and your old recovery key is now invalid. Store this replacement key now.'}
+						</p>
+					</div>
+
+					<div class="flex items-center justify-end pt-2">
+						<GameButton
+							onclick={() => {
+								if (view === 'signup-success') {
+									view = 'signup-avatar';
+									return;
+								}
+
+								goToLogin();
+							}}
+							size="md"
+						>
+							<span>{view === 'signup-success' ? 'I Stored It' : 'Back To Sign In'}</span>
+						</GameButton>
+					</div>
+				{:else}
+					<AvatarSketchpad {nickname} {saveAvatar} onContinue={enterStudio} />
+				{/if}
 			</div>
 		</div>
 	</StudioPanel>

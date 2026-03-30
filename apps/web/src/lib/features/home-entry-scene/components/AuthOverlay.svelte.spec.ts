@@ -180,7 +180,10 @@ describe('AuthOverlay', () => {
 		});
 
 		await expect.element(page.getByText('Finish your avatar')).toBeVisible();
-		await expect.element(page.getByRole('textbox')).toHaveValue('artist_1');
+		await expect
+			.element(page.getByText('Sketch a quick self-portrait for artist_1.'))
+			.toBeVisible();
+		await expect.element(page.getByRole('textbox')).not.toBeInTheDocument();
 	});
 
 	it('notifies the controller when the avatar step is dismissed', async () => {
