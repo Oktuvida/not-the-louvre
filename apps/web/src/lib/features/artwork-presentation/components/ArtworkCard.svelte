@@ -25,6 +25,10 @@
 	const rotation = $derived(index % 3 === 0 ? -2 : index % 3 === 1 ? 2 : 0);
 	const isSensitiveBlurred = $derived(artwork.isNsfw && !adultContentEnabled);
 	const frame = $derived(resolveArtworkFrame({ artworkId: artwork.id, podiumPosition }));
+	const isFork = $derived(Boolean(artwork.lineage?.isFork));
+	const forkParentTitle = $derived(
+		artwork.lineage?.parentStatus === 'available' ? (artwork.lineage.parent?.title ?? null) : null
+	);
 	const medal = $derived(
 		artwork.rank && artwork.rank <= 3
 			? { 1: '\u{1F947}', 2: '\u{1F948}', 3: '\u{1F949}' }[artwork.rank as 1 | 2 | 3]
@@ -47,6 +51,13 @@
 	>
 		<ArtworkFrame {frame} className="aspect-square w-full" testId={frameTestId}>
 			<div class="relative h-full w-full">
+				{#if isFork}
+					<div
+						class="absolute top-3 left-3 z-10 rounded-full border-2 border-[#2d2420] bg-[#f7d58a] px-3 py-1 text-[0.65rem] font-black tracking-[0.18em] text-[#2d2420] uppercase shadow-md"
+					>
+						Forked
+					</div>
+				{/if}
 				<img
 					src={artwork.imageUrl}
 					alt={artwork.title}
@@ -84,6 +95,11 @@
 
 		<div class="mt-4 space-y-2 border-t-2 border-[#e5dfd5] pt-3 text-[#2d2420]">
 			<h3 class="truncate text-lg font-bold">{artwork.title}</h3>
+			{#if isFork}
+				<p class="truncate text-xs font-semibold tracking-[0.12em] text-[#8a6a42] uppercase">
+					{forkParentTitle ? `From ${forkParentTitle}` : 'Forked artwork'}
+				</p>
+			{/if}
 			<p class="truncate text-sm text-[#6b625a]">by {artwork.artist}</p>
 			<div class="flex items-center gap-3 text-xs font-semibold text-[#5a5249]">
 				<span>⭐ {artwork.score}</span>
@@ -97,6 +113,11 @@
 				class="absolute right-0 -bottom-20 left-0 z-20 animate-[slideUp_0.15s_ease-out] rounded-lg border-[3px] border-[#2d2420] bg-[#8b7355] p-4 [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif] text-[#fdfbf7] shadow-xl"
 			>
 				<h3 class="mb-1 truncate text-lg font-bold">{artwork.title}</h3>
+				{#if isFork}
+					<p class="truncate text-xs font-semibold tracking-[0.12em] text-[#f7d58a] uppercase">
+						{forkParentTitle ? `From ${forkParentTitle}` : 'Forked artwork'}
+					</p>
+				{/if}
 				<p class="truncate text-sm opacity-90">by {artwork.artist}</p>
 				<div class="mt-2 flex items-center gap-3 text-sm">
 					<span class="flex items-center gap-1 font-bold text-[#f4c430]">
