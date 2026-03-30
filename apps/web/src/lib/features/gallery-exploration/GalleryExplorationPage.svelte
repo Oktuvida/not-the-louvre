@@ -23,6 +23,7 @@
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
+	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import WaxSealMedal from '$lib/features/shared-ui/components/WaxSealMedal.svelte';
 
 	let {
@@ -177,6 +178,10 @@
 	};
 
 	const handleBackToHome = (event: MouseEvent) => {
+		if (!viewer) {
+			return;
+		}
+
 		event.preventDefault();
 		event.stopPropagation();
 		if (isExitingToHome) return;
@@ -192,7 +197,9 @@
 				exitFadeOpacity = fade.opacity;
 			},
 			onComplete: () => {
-				void goto(resolve('/?from=gallery'));
+				const url = `${resolve('/')}?from=gallery`;
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- URL is already resolved and extended with query params
+				void goto(url);
 			}
 		});
 	};
@@ -395,6 +402,17 @@
 		mystery: '',
 		'your-studio': ''
 	};
+	const emptyStateSupportMessage = $derived.by(() => {
+		if (viewer && roomId === 'your-studio') {
+			return 'Publish a new piece from the studio and it will show up here.';
+		}
+
+		if (viewer) {
+			return 'Publish a new piece from the studio to start climbing the gallery walls.';
+		}
+
+		return 'New pieces will appear here as artists publish them.';
+	});
 </script>
 
 {#if roomId !== 'your-studio'}
@@ -441,28 +459,30 @@
 		</div>
 
 		<div class="pointer-events-auto absolute top-4 right-4 md:top-6 md:right-8">
-			<GameLink href="/draw" variant="primary" size="sm" className="w-fit rotate-1 shadow-xl">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					class="mr-1 h-5 w-5"
-					><path
-						d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"
-					/><path d="M20 3v4" /><path d="M22 5h-4" /><path d="M4 17v2" /><path d="M5 18H3" /></svg
-				>
-				<span class="font-semibold">Create Art</span>
-			</GameLink>
+			{#if viewer}
+				<GameLink href="/draw" variant="primary" size="sm" className="w-fit rotate-1 shadow-xl">
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						class="mr-1 h-5 w-5"
+						><path
+							d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"
+						/><path d="M20 3v4" /><path d="M22 5h-4" /><path d="M4 17v2" /><path d="M5 18H3" /></svg
+					>
+					<span class="font-semibold">Create Art</span>
+				</GameLink>
+			{/if}
 		</div>
 
 		<div class="pointer-events-auto mx-auto w-fit pt-1">
-			<GalleryRoomNav {roomId} />
+			<GalleryRoomNav {roomId} {viewer} />
 		</div>
 	</div>
 
@@ -526,7 +546,7 @@
 						>
 							<p class="font-display text-2xl text-[#2d2420]">{emptyStateMessage}</p>
 							<p class="mt-3 text-[#6b625a]">
-								Publish a new piece from the studio and it will show up here.
+								{emptyStateSupportMessage}
 							</p>
 						</div>
 					{:else if roomId === 'mystery' && mysteryArtwork}
@@ -593,13 +613,12 @@
 														</div>
 													</ArtworkFrame>
 													{#if artwork.artistAvatar}
-														<div
-															class="absolute -bottom-6 left-1/2 h-20 w-20 -translate-x-1/2 overflow-hidden rounded-full border-4 border-[#2d2420] bg-white shadow-xl"
-														>
-															<img
-																src={artwork.artistAvatar}
+														<div class="absolute -bottom-6 left-1/2 -translate-x-1/2">
+															<WaxSealAvatar
 																alt={artwork.artist}
-																class="h-full w-full"
+																seed={artwork.id}
+																size="xl"
+																src={artwork.artistAvatar}
 															/>
 														</div>
 													{/if}
