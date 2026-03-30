@@ -1,4 +1,5 @@
 import { generateId } from 'better-auth';
+import { assertNotBanned } from '$lib/server/auth/guards';
 import {
 	ARTWORK_COMMENT_MAX_LENGTH,
 	ARTWORK_COMMENT_RATE_LIMIT,
@@ -70,7 +71,7 @@ type SubmitContentReportInput = {
 };
 
 type ModerateArtworkInput = {
-	action: 'delete' | 'dismiss' | 'hide' | 'unhide';
+	action: 'clear_nsfw' | 'delete' | 'dismiss' | 'hide' | 'mark_nsfw' | 'unhide';
 	artworkId: string;
 };
 
@@ -102,6 +103,7 @@ const requireActor = (context: Partial<ArtworkActorContext>): ArtworkActorContex
 	if (!context.user) {
 		throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
 	}
+	assertNotBanned(context.user as ArtworkActorContext['user'] & { isBanned: boolean });
 
 	return {
 		ipAddress: context.ipAddress ?? null,
@@ -371,7 +373,7 @@ const isPendingReportUniqueViolation = (error: unknown) => {
 const getResolutionStatus = (
 	action: ModerateArtworkInput['action'] | ModerateCommentInput['action']
 ): Exclude<ContentReportStatus, 'pending'> =>
-	action === 'hide' || action === 'delete' ? 'actioned' : 'reviewed';
+	action === 'hide' || action === 'delete' || action === 'mark_nsfw' ? 'actioned' : 'reviewed';
 
 export const publishArtwork = async (
 	input: PublishArtworkInput,
@@ -715,6 +717,40 @@ export const moderateArtwork = async (
 	if (input.action === 'dismiss') {
 		await repository.resolveArtworkReports(resolution);
 		return artwork;
+	}
+
+	if (input.action === 'mark_nsfw') {
+		const updated = await repository.updateArtworkModeration(artwork.id, {
+			hiddenAt: now,
+			isHidden: true,
+			isNsfw: true,
+			nsfwLabeledAt: now,
+			nsfwSource: 'moderator',
+			updatedAt: now
+		});
+		await repository.resolveArtworkReports(resolution);
+
+		if (!updated) {
+			throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+		}
+
+		return updated;
+	}
+
+	if (input.action === 'clear_nsfw') {
+		const updated = await repository.updateArtworkModeration(artwork.id, {
+			isNsfw: false,
+			nsfwLabeledAt: null,
+			nsfwSource: null,
+			updatedAt: now
+		});
+		await repository.resolveArtworkReports(resolution);
+
+		if (!updated) {
+			throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+		}
+
+		return updated;
 	}
 
 	const updated = await repository.setArtworkHiddenState(artwork.id, {

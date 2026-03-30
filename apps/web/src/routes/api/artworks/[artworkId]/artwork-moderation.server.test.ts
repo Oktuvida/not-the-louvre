@@ -64,6 +64,32 @@ describe('artwork moderation endpoint', () => {
 		);
 	});
 
+	it('allows moderators to mark artwork as NSFW through the moderation boundary', async () => {
+		mocked.moderateArtwork.mockResolvedValue({
+			id: 'artwork-1',
+			isHidden: true,
+			isNsfw: true,
+			nsfwSource: 'moderator'
+		});
+
+		const { PATCH } = await import('./moderation/+server');
+		const response = await PATCH({
+			locals: { user: { id: 'moderator-1', role: 'moderator' } },
+			params: { artworkId: 'artwork-1' },
+			request: new Request('http://localhost/api/artworks/artwork-1/moderation', {
+				body: JSON.stringify({ action: 'mark_nsfw' }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			})
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(mocked.moderateArtwork).toHaveBeenCalledWith(
+			{ action: 'mark_nsfw', artworkId: 'artwork-1' },
+			{ user: { id: 'moderator-1', role: 'moderator' } }
+		);
+	});
+
 	it('allows moderators to delete artwork through the moderation boundary', async () => {
 		mocked.moderateArtwork.mockResolvedValue({ id: 'artwork-1' });
 

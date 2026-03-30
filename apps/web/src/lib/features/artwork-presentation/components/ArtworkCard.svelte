@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
+	import ArtworkSafetyActions from '$lib/features/artwork-presentation/components/ArtworkSafetyActions.svelte';
 	import {
 		resolveArtworkFrame,
 		type ArtworkPodiumPosition
@@ -12,6 +13,8 @@
 		index = 0,
 		frameTestId = 'artwork-card-frame',
 		podiumPosition,
+		viewer = null,
+		onArtworkPatch,
 		onclick
 	}: {
 		artwork: Artwork;
@@ -19,6 +22,8 @@
 		frameTestId?: string;
 		index?: number;
 		podiumPosition?: ArtworkPodiumPosition;
+		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
+		onArtworkPatch?: (patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>) => void;
 		onclick?: () => void;
 	} = $props();
 
@@ -49,6 +54,14 @@
 	<div
 		class="relative transition duration-300 group-hover:-translate-y-2 group-hover:scale-110 group-hover:rotate-0"
 	>
+		{#if viewer}
+			<div
+				class="absolute top-2 right-2 z-20 opacity-0 transition duration-150 group-focus-within:opacity-100 group-hover:opacity-100"
+			>
+				<ArtworkSafetyActions {artwork} compact {viewer} {onArtworkPatch} />
+			</div>
+		{/if}
+
 		<ArtworkFrame {frame} className="aspect-square w-full" testId={frameTestId}>
 			<div class="relative h-full w-full">
 				{#if isFork}

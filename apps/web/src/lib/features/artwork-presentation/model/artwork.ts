@@ -27,6 +27,7 @@ export interface Artwork {
 	artist: string;
 	artistAvatar?: string;
 	imageUrl: string;
+	isHidden?: boolean;
 	score: number;
 	upvotes: number;
 	downvotes: number;

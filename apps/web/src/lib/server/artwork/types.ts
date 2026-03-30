@@ -359,6 +359,14 @@ export type ArtworkRepository = {
 	resolveArtworkReports(input: ResolveContentReportsInput): Promise<number>;
 	resolveCommentReports(input: ResolveContentReportsInput): Promise<number>;
 	setArtworkHiddenState(id: string, input: HiddenStateUpdate): Promise<ArtworkRecord | null>;
+	updateArtworkModeration(
+		id: string,
+		input: Partial<
+			Pick<ArtworkRecord, 'hiddenAt' | 'isHidden' | 'isNsfw' | 'nsfwLabeledAt' | 'nsfwSource'>
+		> & {
+			updatedAt: Date;
+		}
+	): Promise<ArtworkRecord | null>;
 	setCommentHiddenState(id: string, input: HiddenStateUpdate): Promise<ArtworkCommentRecord | null>;
 	upsertVote(input: CreateArtworkVoteInput): Promise<ArtworkVoteMutationResult | null>;
 	updateArtworkTitle(id: string, title: string, updatedAt: Date): Promise<ArtworkRecord | null>;

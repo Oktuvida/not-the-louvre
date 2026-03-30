@@ -172,6 +172,19 @@
 		);
 	};
 
+	const patchArtwork = (
+		artworkId: string,
+		patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>
+	) => {
+		if (selectedArtwork?.id === artworkId) {
+			selectedArtwork = { ...selectedArtwork, ...patch };
+		}
+
+		artworks = artworks.map((candidate) =>
+			candidate.id === artworkId ? { ...candidate, ...patch } : candidate
+		);
+	};
+
 	const spinMystery = () => {
 		mysteryIndex += 1;
 	};
@@ -630,6 +643,8 @@
 										{artwork}
 										{index}
 										frameTestId={`ranked-frame-${artwork.id}`}
+										{viewer}
+										onArtworkPatch={(patch) => patchArtwork(artwork.id, patch)}
 										onclick={() => openArtwork(artwork)}
 									/>
 								{/each}
@@ -640,6 +655,8 @@
 							adultContentEnabled={adultContentAllowed}
 							gridArtworks={hotWallGridArtworks}
 							leadArtwork={hotWallLeadArtwork}
+							{viewer}
+							onArtworkPatch={patchArtwork}
 							onSelect={openArtwork}
 							risers={hotWallRisers}
 						/>
@@ -661,6 +678,8 @@
 									{artwork}
 									{index}
 									frameTestId={`gallery-frame-${artwork.id}`}
+									{viewer}
+									onArtworkPatch={(patch) => patchArtwork(artwork.id, patch)}
 									onclick={() => openArtwork(artwork)}
 								/>
 							{/each}
@@ -676,6 +695,7 @@
 		artwork={selectedArtwork}
 		onAdultContentToggle={updateAdultContentPreference}
 		onArtworkChange={syncArtwork}
+		onArtworkPatch={patchArtwork}
 		onClose={() => {
 			selectedArtwork = null;
 		}}
