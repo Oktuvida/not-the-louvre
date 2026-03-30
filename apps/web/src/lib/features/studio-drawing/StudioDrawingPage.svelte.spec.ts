@@ -1,7 +1,18 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import StudioDrawingPage from './StudioDrawingPage.svelte';
+
+const reducedMotionMediaQuery = {
+	addEventListener: vi.fn(),
+	addListener: vi.fn(),
+	dispatchEvent: vi.fn(),
+	matches: true,
+	media: '(prefers-reduced-motion: reduce)',
+	onchange: null,
+	removeEventListener: vi.fn(),
+	removeListener: vi.fn()
+} satisfies MediaQueryList;
 
 async function openSketchbook() {
 	await page.getByRole('button', { name: 'Open sketchbook' }).click();
@@ -9,6 +20,10 @@ async function openSketchbook() {
 }
 
 describe('StudioDrawingPage', () => {
+	beforeEach(() => {
+		vi.unstubAllGlobals();
+	});
+
 	it('starts with a closed sketchbook and hides active studio controls', async () => {
 		render(StudioDrawingPage, {
 			openingDurationMs: 1,
@@ -31,6 +46,28 @@ describe('StudioDrawingPage', () => {
 		await expect.element(page.getByRole('button', { name: 'Clear' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 		await expect.element(page.getByLabelText('Title')).toBeVisible();
+	});
+
+	it('keeps the sketchbook opening animation duration even when reduced motion is requested', async () => {
+		vi.stubGlobal(
+			'matchMedia',
+			vi.fn(() => reducedMotionMediaQuery)
+		);
+
+		render(StudioDrawingPage, {
+			openingDurationMs: 300,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await page.getByRole('button', { name: 'Open sketchbook' }).click();
+		await new Promise((resolve) => setTimeout(resolve, 120));
+
+		await expect.element(page.getByPlaceholder('Give your piece a title')).toBeDisabled();
+		await expect.element(page.getByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+
+		await new Promise((resolve) => setTimeout(resolve, 240));
+
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 	});
 
 	it('publishes the current drawing and shows a minimal success state', async () => {

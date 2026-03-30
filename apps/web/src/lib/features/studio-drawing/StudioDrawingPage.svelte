@@ -413,14 +413,4 @@
 			}
 		}
 	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.tools-stage-open {
-			animation-duration: 80ms;
-		}
-
-		.tools-stage-hidden {
-			transform: none;
-		}
-	}
 </style>
