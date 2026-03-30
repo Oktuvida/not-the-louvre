@@ -423,7 +423,7 @@ test.describe('Not the Louvre frontend port', () => {
 	test('gallery route exposes room navigation', async ({ page }) => {
 		await page.goto('/gallery');
 
-		await expect(page.getByText('The Gallery', { exact: true })).toBeVisible();
+		await expect(page.getByRole('link', { name: 'Hall of Fame' })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Mystery Room' })).toBeVisible();
 		await expect(page.getByText('No artworks have reached this gallery room yet.')).toBeVisible();
 	});
