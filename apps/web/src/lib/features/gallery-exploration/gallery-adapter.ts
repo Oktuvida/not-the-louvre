@@ -24,6 +24,7 @@ const baseArtwork = (
 	id: artwork.id,
 	imageUrl: artwork.mediaUrl,
 	isNsfw: artwork.isNsfw,
+	lineage: artwork.lineage,
 	score: artwork.score,
 	timestamp: toTimestamp(artwork.createdAt),
 	title: artwork.title,
