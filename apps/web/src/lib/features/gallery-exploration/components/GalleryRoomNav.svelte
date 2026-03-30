@@ -2,7 +2,13 @@
 	import { galleryRooms, type GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 
-	let { roomId }: { roomId: GalleryRoomId } = $props();
+	let {
+		roomId,
+		viewer = null
+	}: {
+		roomId: GalleryRoomId;
+		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
+	} = $props();
 
 	/** Lucide icon SVG paths keyed by room id */
 	const iconPaths: Record<GalleryRoomId, string> = {
@@ -20,10 +26,14 @@
 		mystery: 'secondary',
 		'your-studio': 'primary'
 	};
+
+	const visibleRooms = $derived(
+		viewer ? galleryRooms : galleryRooms.filter((room) => room.id !== 'your-studio')
+	);
 </script>
 
 <nav class="flex gap-4 overflow-x-auto pb-4">
-	{#each galleryRooms as room (room.id)}
+	{#each visibleRooms as room (room.id)}
 		{@const isActive = room.id === roomId}
 		{@const href = room.id === 'hall-of-fame' ? '/gallery' : (`/gallery/${room.id}` as const)}
 		<GameLink

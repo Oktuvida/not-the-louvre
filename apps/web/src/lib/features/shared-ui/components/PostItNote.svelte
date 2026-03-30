@@ -1,7 +1,9 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import { hashString } from '$lib/features/artwork-presentation/model/frame';
 
 	let {
+		children,
 		attachment = 'tape',
 		className = '',
 		color,
@@ -9,6 +11,7 @@
 		seedKey,
 		text
 	}: {
+		children?: Snippet;
 		attachment?: 'pin' | 'tape';
 		className?: string;
 		color: string;
@@ -76,5 +79,10 @@
 		<p class="relative z-[2] text-[1.1rem] leading-[1.35]" style="font-family: 'Caveat', cursive;">
 			{text}
 		</p>
+		{#if children}
+			<div class="relative z-[2] mt-3">
+				{@render children()}
+			</div>
+		{/if}
 	</div>
 </div>

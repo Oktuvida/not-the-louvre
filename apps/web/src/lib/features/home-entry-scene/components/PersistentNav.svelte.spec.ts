@@ -40,6 +40,7 @@ describe('PersistentNav', () => {
 
 		await expect.element(page.getByText('HELLO')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Logout' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'GALLERY' })).toBeVisible();
 	});
 
 	it('renders real homepage top-artwork preview cards from route data', async () => {
@@ -49,6 +50,7 @@ describe('PersistentNav', () => {
 		await expect
 			.element(page.getByTestId('home-preview-frame-1'))
 			.toHaveAttribute('data-frame-tier', 'premium');
+		await expect.element(page.getByText('#1')).not.toBeInTheDocument();
 	});
 
 	it('marks top-artwork previews as sensitive until 18+ content is enabled', async () => {
@@ -60,6 +62,8 @@ describe('PersistentNav', () => {
 
 		await expect.element(page.getByText('18+', { exact: true })).toBeVisible();
 		await expect.element(page.getByText('Sensitive preview', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('18+ artworks', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Sign in to reveal 18+ artworks.')).toBeVisible();
 	});
 
 	it('does not render fake preview cards when the homepage teaser is empty', async () => {
@@ -68,7 +72,7 @@ describe('PersistentNav', () => {
 		await expect.element(page.getByAltText('Sunset Over Mountains')).not.toBeInTheDocument();
 	});
 
-	it('uses shared sticker links for the primary homepage CTAs', async () => {
+	it('uses shared sticker links for the primary homepage CTA', async () => {
 		render(PersistentNav, { previewCards: [], user: null });
 
 		await expect
@@ -77,8 +81,22 @@ describe('PersistentNav', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'GALLERY' }))
 			.toHaveAttribute('data-sticker-variant', 'secondary');
-		await expect
-			.element(page.getByRole('link', { name: 'MYSTERY' }))
-			.toHaveAttribute('data-sticker-variant', 'accent');
+		await expect.element(page.getByRole('link', { name: 'MYSTERY' })).not.toBeInTheDocument();
+	});
+
+	it('shows the studio-bound gallery destination only for authenticated users', async () => {
+		render(PersistentNav, {
+			previewCards: [],
+			user: {
+				authUserId: 'auth-user-1',
+				email: 'artist_1@not-the-louvre.local',
+				id: 'product-user-1',
+				nickname: 'artist_1',
+				role: 'user'
+			}
+		});
+
+		await expect.element(page.getByRole('button', { name: 'GALLERY' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'GALLERY' })).not.toBeInTheDocument();
 	});
 });

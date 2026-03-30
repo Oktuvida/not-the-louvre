@@ -451,7 +451,7 @@
 					</div>
 
 					<!-- Entry button shown only when the visitor is outside. -->
-					<div class="pointer-events-none absolute top-full left-1/2 z-[25] mt-8 -translate-x-1/2">
+					<div class="pointer-events-none absolute top-full left-1/2 z-[25] -translate-x-1/2">
 						<GameButton
 							onclick={() => dispatch('COME_IN')}
 							size="hero"
