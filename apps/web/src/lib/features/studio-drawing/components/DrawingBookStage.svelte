@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, type Snippet } from 'svelte';
+	import type { Snippet } from 'svelte';
 
 	export type BookStageState = 'closed' | 'opening' | 'open';
 
@@ -19,11 +19,7 @@
 		stageState: BookStageState;
 	} = $props();
 
-	let prefersReducedMotion = $state(false);
-
-	let effectiveOpeningDurationMs = $derived(
-		prefersReducedMotion ? Math.min(openingDurationMs, 80) : openingDurationMs
-	);
+	let effectiveOpeningDurationMs = $derived(openingDurationMs);
 	let stageStatus = $derived(
 		stageState === 'closed'
 			? 'Closed sketchbook. Activate to begin drawing.'
@@ -31,31 +27,6 @@
 				? 'Sketchbook opening.'
 				: 'Sketchbook open. Drawing surface ready.'
 	);
-
-	onMount(() => {
-		const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-		const legacyMediaQuery = mediaQuery as MediaQueryList & {
-			addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
-			removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
-		};
-		const updatePreference = () => {
-			prefersReducedMotion = mediaQuery.matches;
-		};
-
-		updatePreference();
-
-		if ('addEventListener' in mediaQuery) {
-			mediaQuery.addEventListener('change', updatePreference);
-			return () => {
-				mediaQuery.removeEventListener('change', updatePreference);
-			};
-		}
-
-		legacyMediaQuery.addListener?.(updatePreference);
-		return () => {
-			legacyMediaQuery.removeListener?.(updatePreference);
-		};
-	});
 
 	$effect(() => {
 		if (stageState !== 'opening') {
@@ -356,12 +327,6 @@
 
 		.book-cover {
 			border-radius: 1.1rem;
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.book-cover {
-			transition-duration: 80ms;
 		}
 	}
 </style>
