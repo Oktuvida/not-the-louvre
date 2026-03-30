@@ -4,6 +4,7 @@ import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { avatarService } from '$lib/server/user/avatar.service';
 import { userRepository } from '$lib/server/user/repository';
 import { streamAvatarStorageObject } from '$lib/server/user/storage';
+import { resolveUserAvatarUrl } from '$lib/user/avatar-url';
 
 const toErrorResponse = (error: unknown, fallback: { code: string; message: string }) => {
 	if (error instanceof ArtworkFlowError) {
@@ -49,7 +50,9 @@ export const PUT: RequestHandler = async (event) => {
 
 		const updated = await avatarService.uploadAvatar(event.locals.user ?? null, file);
 
-		return json({ avatarUrl: updated.avatarUrl });
+		return json({
+			avatarUrl: resolveUserAvatarUrl(updated.id, updated.avatarUrl, updated.updatedAt.getTime())
+		});
 	} catch (error) {
 		return toErrorResponse(error, {
 			code: 'PUBLISH_FAILED',

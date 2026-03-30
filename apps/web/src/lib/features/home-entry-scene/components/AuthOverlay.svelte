@@ -47,7 +47,7 @@
 		checkTextContent?: TextContentChecker;
 		form?: HomeAuthActionForm;
 		onAvatarDismiss?: () => void;
-		onAvatarSaved?: () => void;
+		onAvatarSaved?: (payload: { avatarOnboardingCompletedAt: Date; avatarUrl: string }) => void;
 		resumeAvatarOnboarding?: boolean;
 		overlayElement?: HTMLDivElement | null;
 	} = $props();
@@ -393,8 +393,20 @@
 		});
 
 		if (response.ok) {
+			const data = (await response.json()) as { avatarUrl?: string };
+
+			if (!data.avatarUrl) {
+				return {
+					message: 'Avatar save succeeded but no avatar URL was returned.',
+					success: false as const
+				};
+			}
+
 			dispatchAvatarFaviconUpdate(authenticatedUser.id);
-			onAvatarSaved?.();
+			onAvatarSaved?.({
+				avatarOnboardingCompletedAt: new Date(),
+				avatarUrl: data.avatarUrl
+			});
 			return { success: true as const };
 		}
 

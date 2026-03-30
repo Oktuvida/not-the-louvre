@@ -143,7 +143,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 
 		expect(response.status).toBe(200);
 		const json = await response.json();
-		expect(json.avatarUrl).toBe('avatars/user-1.avif');
+		expect(json.avatarUrl).toBe(`/api/users/${updated.id}/avatar?v=${updated.updatedAt.getTime()}`);
 	});
 
 	it('returns 400 JSON when the file field is missing', async () => {

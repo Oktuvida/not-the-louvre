@@ -355,7 +355,7 @@ describe('home route auth contract', () => {
 		});
 		expect(result).toEqual({
 			action: 'saveAvatar',
-			avatarUrl: 'avatars/product-user-1.avif',
+			avatarUrl: '/api/users/product-user-1/avatar?v=1774699200000',
 			onboarding: 'complete',
 			success: true
 		});
