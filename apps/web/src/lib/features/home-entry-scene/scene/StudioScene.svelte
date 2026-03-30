@@ -336,12 +336,14 @@
 		<T.Fog args={['#d7c2a8', 14, 32]} />
 		<T.AmbientLight intensity={0.08} />
 		<T.DirectionalLight position={[5, 16, 6]} intensity={1.4} castShadow />
-		<SceneTextureBindings
-			{avatarUrl}
-			{artworkSlots}
-			nodes={studioNodes}
-			sceneRoot={studioSceneRoot}
-		/>
+		{#key avatarUrl}
+			<SceneTextureBindings
+				{avatarUrl}
+				{artworkSlots}
+				nodes={studioNodes}
+				sceneRoot={studioSceneRoot}
+			/>
+		{/key}
 		<GLTF
 			bind:nodes={studioNodes}
 			bind:scene={studioSceneRoot}
