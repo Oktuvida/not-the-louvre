@@ -38,7 +38,7 @@ describe('ArtworkCard', () => {
 		const frame = page.getByTestId('artwork-card-frame');
 
 		await expect.element(frame).toHaveAttribute('data-frame-tier', 'premium');
-		await expect.element(page.getByText('PREMIUM')).toBeVisible();
+		await expect.element(frame).toHaveAttribute('data-premium-marker', 'true');
 	});
 
 	it('shows fork lineage on forked artworks', async () => {
