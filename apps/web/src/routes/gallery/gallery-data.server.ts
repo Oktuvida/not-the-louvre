@@ -60,7 +60,7 @@ export const loadGalleryRoomData = async (
 
 	const visibleItems =
 		roomId === 'your-studio' && user
-			? discovery.items.filter((item) => item.author.id === user.id).slice(0, 12)
+			? discovery.items.filter((item) => item.author.id === user.id)
 			: roomId === 'your-studio'
 				? []
 				: discovery.items.slice(0, 12);
