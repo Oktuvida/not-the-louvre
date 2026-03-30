@@ -1,4 +1,5 @@
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { assertNotBanned } from '$lib/server/auth/guards';
 import type { CanonicalUser } from '$lib/server/auth/types';
 import {
 	buildBaselineProfanityMatcher,
@@ -48,6 +49,10 @@ const requireAdmin = (context: ModerationContext) => {
 	if (!context.user) {
 		throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
 	}
+	assertNotBanned({
+		...context.user,
+		isBanned: Boolean(context.user.isBanned)
+	});
 
 	if (context.user.role !== 'admin') {
 		throw new ArtworkFlowError(403, 'Admin access required', 'FORBIDDEN');
@@ -60,6 +65,10 @@ const requireUser = (context: ModerationContext) => {
 	if (!context.user) {
 		throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
 	}
+	assertNotBanned({
+		...context.user,
+		isBanned: Boolean(context.user.isBanned)
+	});
 
 	return context.user;
 };
