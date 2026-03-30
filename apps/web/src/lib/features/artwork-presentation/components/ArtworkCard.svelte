@@ -5,6 +5,7 @@
 		type ArtworkPodiumPosition
 	} from '$lib/features/artwork-presentation/model/frame';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
 
 	let {
 		artwork,
@@ -78,10 +79,14 @@
 		</ArtworkFrame>
 
 		{#if artwork.artistAvatar}
-			<div
-				class="absolute -top-4 -right-4 h-16 w-16 overflow-hidden rounded-full border-4 border-[#2d2420] bg-white shadow-xl transition duration-200 hover:scale-110 hover:rotate-[5deg]"
-			>
-				<img src={artwork.artistAvatar} alt={artwork.artist} class="h-full w-full" />
+			<div class="absolute -top-5 -right-5">
+				<WaxSealAvatar
+					alt={artwork.artist}
+					className="transition duration-200 hover:scale-110 hover:rotate-[5deg]"
+					seed={artwork.id}
+					size="lg"
+					src={artwork.artistAvatar}
+				/>
 			</div>
 		{/if}
 
