@@ -75,6 +75,9 @@ describe('PersistentNav', () => {
 			.element(page.getByRole('link', { name: 'GALLERY' }))
 			.toHaveAttribute('data-sticker-size', 'lg');
 		await expect
+			.element(page.getByRole('link', { name: 'GALLERY' }))
+			.toHaveAttribute('data-sticker-variant', 'secondary');
+		await expect
 			.element(page.getByRole('link', { name: 'MYSTERY' }))
 			.toHaveAttribute('data-sticker-variant', 'accent');
 	});
