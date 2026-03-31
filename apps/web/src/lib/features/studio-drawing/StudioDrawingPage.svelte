@@ -250,95 +250,76 @@
 		class="relative z-10 mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col px-4 pt-3 pb-4 sm:px-6"
 	>
 		<div
-			class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(13rem,15rem)]"
+			class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)]"
 		>
 			<div class="order-1 flex min-h-0 flex-col">
 				<div class="studio-book-frame">
-					<DrawingBookStage
-						stageState={sceneState}
-						onOpenRequest={startOpeningBook}
-						onOpened={unlockStudio}
-						{openingDurationMs}
-					>
-						{#snippet pageFields()}
-							<div class="page-fields-content">
-								{#if forkParent}
-									<p class="fork-context">
-										Forking from <span class="fork-title">{forkParent.title}</span>
-									</p>
-								{/if}
-
-								<label class="field-group">
-									<span class="field-label">Title</span>
-									<input
-										bind:value={artworkTitle}
-										type="text"
-										maxlength="80"
-										placeholder="Give your piece a title"
-										disabled={!studioUnlocked}
-										class="field-input"
-									/>
-								</label>
-
-								<button
-									type="button"
-									role="checkbox"
-									aria-checked={isArtworkNsfw}
-									disabled={!studioUnlocked}
-									onclick={() => {
-										if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
-									}}
-									class="nsfw-toggle"
-								>
-									<span
-										class="nsfw-track"
-										style={`background: ${isArtworkNsfw ? '#c84f4f' : 'rgb(47 36 28 / 0.12)'};`}
-									>
-										<span
-											class="nsfw-dot"
-											style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
-										></span>
-									</span>
-									<span class={isArtworkNsfw ? 'font-semibold text-[#e8805a]' : ''}>NSFW</span>
-								</button>
-
-								{#if titleError}
-									<p class="field-error">{titleError}</p>
-								{/if}
-							</div>
-						{/snippet}
-						<DrawingCanvas
-							bind:canvasRef
-							{clearVersion}
-							initialImageUrl={forkParent?.mediaUrl ?? null}
-							interactive={studioUnlocked}
-							onInitialImageSettled={markForkPreloadSettled}
-							{statusMessage}
-							{statusTone}
-						/>
-					</DrawingBookStage>
-				</div>
-
-				{#if publishedArtwork}
-					<div
-						class="mt-2 rounded-2xl border-3 border-[#2d2420]/30 bg-[#fdfbf7]/90 px-4 py-2.5 shadow-lg backdrop-blur-sm"
-						style="animation: studioPanelReveal 280ms ease-out both;"
-					>
-						<p class="text-xs font-semibold tracking-[0.18em] text-[#8b9d91] uppercase">
-							Artwork published
-						</p>
-						<h2 class="mt-0.5 text-base font-black text-[#2d2420]">{publishedArtwork.title}</h2>
-						<p class="text-xs text-[#6b625a]">Artwork id: {publishedArtwork.id}</p>
-						<div class="mt-1.5 flex flex-wrap gap-2">
-							<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
-								<span>Draw again</span>
-							</GameButton>
-							<GameLink href="/gallery" variant="secondary" size="sm">
-								<span>Open gallery</span>
-							</GameLink>
+				<DrawingBookStage
+					stageState={sceneState}
+					onOpenRequest={startOpeningBook}
+					onOpened={unlockStudio}
+					{openingDurationMs}
+				>
+					{#snippet coverFields()}
+						<div class="cover-postit cover-postit-title">
+							<div class="postit-tape" aria-hidden="true"></div>
+							<p class="postit-label">Title your masterpiece</p>
+							{#if forkParent}
+								<p class="postit-fork-note">
+									Forking <span class="postit-fork-name">{forkParent.title}</span>
+								</p>
+							{/if}
+							<input
+								bind:value={artworkTitle}
+								type="text"
+								maxlength="80"
+								placeholder="Untitled genius"
+								disabled={!studioUnlocked}
+								class="postit-input"
+							/>
+							{#if titleError}
+								<p class="postit-error">{titleError}</p>
+							{/if}
 						</div>
-					</div>
-				{/if}
+
+						<div class="cover-postit cover-postit-nsfw">
+							<div class="postit-tape" aria-hidden="true"></div>
+							<button
+								type="button"
+								role="checkbox"
+								aria-checked={isArtworkNsfw}
+								disabled={!studioUnlocked}
+								onclick={() => {
+									if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
+								}}
+								class="postit-nsfw-btn"
+							>
+								<span
+									class="nsfw-track"
+									style={`background: ${isArtworkNsfw ? '#c84f4f' : 'rgb(60 50 40 / 0.15)'};`}
+								>
+								<span
+									class="nsfw-dot"
+									style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
+								></span>
+								</span>
+								<span class={isArtworkNsfw ? 'font-semibold text-[#c84f4f]' : ''}
+									>Not safe for the Louvre</span
+								>
+							</button>
+						</div>
+					{/snippet}
+					<DrawingCanvas
+						bind:canvasRef
+						{clearVersion}
+						initialImageUrl={forkParent?.mediaUrl ?? null}
+						interactive={studioUnlocked}
+						onInitialImageSettled={markForkPreloadSettled}
+						{statusMessage}
+						{statusTone}
+					/>
+				</DrawingBookStage>
+				</div>
 			</div>
 
 			<div
@@ -347,6 +328,24 @@
 				inert={!studioUnlocked}
 			>
 				<DrawingToolTray {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
+
+				{#if publishedArtwork}
+					<div class="publish-postit" style="animation: studioPanelReveal 280ms ease-out both;">
+						<div class="postit-tape" aria-hidden="true"></div>
+						<p class="postit-label">Hung on the wall!</p>
+						<h2 class="publish-postit-title">{publishedArtwork.title}</h2>
+						<!-- <p class="publish-postit-id">id: {publishedArtwork.id}</p> -->
+						<div class="publish-postit-actions">
+							<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
+								<span>Draw again</span>
+							</GameButton>
+							<GameLink href="/gallery" variant="secondary" size="sm">
+								<span>Open gallery</span>
+							</GameLink>
+						</div>
+						<div class="postit-curl" aria-hidden="true"></div>
+					</div>
+				{/if}
 			</div>
 		</div>
 	</main>
@@ -384,7 +383,7 @@
 	}
 
 	.tools-stage {
-		width: min(100%, 15rem);
+		width: min(100%, 18rem);
 		transform-origin: left center;
 		will-change: opacity, transform;
 	}
@@ -400,79 +399,105 @@
 		animation: toolTrayCrashIn 210ms cubic-bezier(0.2, 0.9, 0.24, 1.12) both;
 	}
 
-	/* --- Page fields styling (inside the book page) --- */
+	/* --- Post-it notes (inside cover fields) --- */
 
-	.page-fields-content {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
+	.cover-postit {
+		position: relative;
+		padding: 16px 16px 6px;
+		box-shadow: 2px 3px 8px rgb(0 0 0 / 0.18);
+		max-width: 240px;
 	}
 
-	.fork-context {
-		font-family: var(--font-body, 'Baloo 2', sans-serif);
-		font-size: 0.7rem;
-		color: var(--color-muted, #6f6257);
+	.cover-postit-title {
+		background: linear-gradient(160deg, #fef49c 0%, #f7e67a 100%);
+		transform: rotate(-1.5deg);
 	}
 
-	.fork-title {
-		font-weight: 600;
-		color: var(--color-ink, #2f241c);
+	.cover-postit-nsfw {
+		background: linear-gradient(160deg, #ffcdd2 0%, #f7929e 100%);
+		transform: rotate(2deg);
 	}
 
-	.field-group {
-		display: block;
+	.postit-tape {
+		position: absolute;
+		top: -7px;
+		left: 50%;
+		transform: translateX(-50%) rotate(-2deg);
+		width: 42px;
+		height: 14px;
+		background: rgb(255 255 240 / 0.55);
+		border: 1px solid rgb(200 190 170 / 0.3);
+		pointer-events: none;
+		z-index: 3;
 	}
 
-	.field-label {
-		display: block;
+	.postit-label {
 		font-family: var(--font-display, 'Fredoka', sans-serif);
-		font-size: 9px;
+		font-size: 0.75rem;
 		font-weight: 600;
-		letter-spacing: 2px;
+		letter-spacing: 0.1em;
 		text-transform: uppercase;
-		color: var(--color-muted, #6f6257);
+		color: rgb(61 53 48 / 0.5);
 		margin-bottom: 3px;
 	}
 
-	.field-input {
+	.postit-fork-note {
+		font-family: 'Caveat', cursive;
+		font-size: 0.75rem;
+		color: #3d3530;
+		margin-bottom: 2px;
+	}
+
+	.postit-fork-name {
+		font-weight: 700;
+	}
+
+	.postit-input {
 		width: 100%;
-		background: rgb(255 255 255 / 0.7);
-		border: 1.5px solid rgb(47 36 28 / 0.12);
-		border-radius: 8px;
-		padding: 7px 10px;
-		font-family: var(--font-body, 'Baloo 2', sans-serif);
-		font-size: 12px;
-		color: var(--color-ink, #2f241c);
+		background: rgb(255 255 255 / 0.5);
+		border: none;
+		border-bottom: 1.5px solid rgb(61 53 48 / 0.2);
+		padding: 3px 2px;
+		font-family: 'Caveat', cursive;
+		font-size: 1rem;
+		color: #3d3530;
 		outline: none;
-		transition: border-color 0.2s;
 	}
 
-	.field-input::placeholder {
-		color: #a09888;
+	.postit-input::placeholder {
+		color: rgb(61 53 48 / 0.3);
+		font-style: italic;
 	}
 
-	.field-input:focus {
-		border-color: var(--color-primary, #d4834a);
+	.postit-input:focus {
+		border-bottom-color: var(--color-primary, #d4834a);
 	}
 
-	.field-input:disabled {
+	.postit-input:disabled {
 		opacity: 0.5;
 	}
 
-	.nsfw-toggle {
+	.postit-error {
+		font-family: 'Caveat', cursive;
+		font-size: 0.75rem;
+		color: #c84f4f;
+		margin-top: 2px;
+	}
+
+	.postit-nsfw-btn {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 5px;
 		background: none;
 		border: none;
 		padding: 0;
 		cursor: pointer;
-		font-family: var(--font-body, 'Baloo 2', sans-serif);
-		font-size: 11px;
-		color: var(--color-muted, #6f6257);
+		font-family: 'Caveat', cursive;
+		font-size: 1rem;
+		color: #3d3530;
 	}
 
-	.nsfw-toggle:disabled {
+	.postit-nsfw-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
@@ -480,16 +505,16 @@
 	.nsfw-track {
 		position: relative;
 		display: inline-flex;
-		width: 30px;
-		height: 17px;
-		border-radius: 9px;
+		width: 28px;
+		height: 16px;
+		border-radius: 8px;
 		transition: background 0.2s;
 		flex-shrink: 0;
 	}
 
 	.nsfw-dot {
-		width: 13px;
-		height: 13px;
+		width: 12px;
+		height: 12px;
 		border-radius: 50%;
 		background: #fbf7f0;
 		border: 1.5px solid rgb(47 36 28 / 0.25);
@@ -497,9 +522,57 @@
 		transition: transform 0.2s;
 	}
 
-	.field-error {
-		font-size: 0.7rem;
-		color: #e8805a;
+	/* --- Publish notification post-it --- */
+
+	.publish-postit {
+		position: relative;
+		margin-top: 4rem;
+		padding: 14px 12px 12px;
+		background: linear-gradient(160deg, #c8e6c9 0%, #a5d6a7 100%);
+		box-shadow: 2px 3px 8px rgb(0 0 0 / 0.18);
+		transform: rotate(-2deg);
+	}
+
+	.publish-postit-title {
+		font-family: 'Caveat', cursive;
+		font-size: 1.15rem;
+		font-weight: 700;
+		color: #3d3530;
+		margin-top: 2px;
+		line-height: 2;
+	}
+
+	.publish-postit-id {
+		font-family: 'Caveat', cursive;
+		font-size: 0.85rem;
+		color: rgb(61 53 48 / 0.45);
+		margin-top: 1px;
+	}
+
+	.publish-postit-actions {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		margin-top: 8px;
+	}
+
+	.postit-curl {
+		position: absolute;
+		right: 0;
+		bottom: 0;
+		width: 22px;
+		height: 22px;
+		background: linear-gradient(225deg, #b8956e 0%, #b8956e 45%, transparent 46%);
+	}
+
+	.postit-curl::after {
+		content: '';
+		position: absolute;
+		right: -2px;
+		bottom: -2px;
+		width: 24px;
+		height: 24px;
+		background: linear-gradient(225deg, transparent 42%, rgb(0 0 0 / 0.08) 44%, #8cc98f 45%);
 	}
 
 	/* --- Animations --- */

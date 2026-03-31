@@ -6,7 +6,7 @@
 	let {
 		children,
 		coverBack,
-		pageFields,
+		coverFields,
 		onOpened,
 		onOpenRequest,
 		openingDurationMs = 950,
@@ -14,7 +14,7 @@
 	}: {
 		children?: Snippet;
 		coverBack?: Snippet;
-		pageFields?: Snippet;
+		coverFields?: Snippet;
 		onOpened?: () => void;
 		onOpenRequest?: () => void;
 		openingDurationMs?: number;
@@ -75,13 +75,13 @@
 				<!-- Main page -->
 				<div class="page canvas-page">
 					<div class="canvas-window">
-						{@render children?.()}
-					</div>
-					{#if pageFields}
-						<div class="page-fields">
-							{@render pageFields()}
+						<div class="canvas-square">
+							{@render children?.()}
 						</div>
-					{/if}
+					</div>
+					<div class="page-tagline" aria-hidden="true">
+						<span>U might get a very expensive frame, so try not to do a very questionable drawing.</span>
+					</div>
 				</div>
 			</div>
 
@@ -107,7 +107,13 @@
 					</div>
 					<span class="cover-invite">Tap the cover to begin</span>
 				</button>
-				<div class="cover-back-face" aria-hidden="true"></div>
+				<div class="cover-back-face">
+					{#if coverFields}
+						<div class="cover-fields-area">
+							{@render coverFields()}
+						</div>
+					{/if}
+				</div>
 			</div>
 		</div>
 	</div>
@@ -158,7 +164,7 @@
 		width: fit-content;
 		height: 100%;
 		border: 3px solid #8a8078;
-		border-radius: 0.375rem 1rem 1rem 0.375rem;
+		border-radius: 2px;
 		background: #fbf7f0;
 		box-shadow:
 			inset 0 0 0 1px rgb(255 255 255 / 0.25),
@@ -310,7 +316,7 @@
 
 	.page {
 		position: relative;
-		border-radius: 0 0.5rem 0.5rem 0;
+		border-radius: 0;
 		background: #fbf7f0;
 		border-left: 1px solid rgb(138 128 120 / 0.3);
 	}
@@ -359,19 +365,53 @@
 		display: flex;
 		flex: 1;
 		min-height: 0;
+		width: 100%;
+		align-self: center;
 		align-items: center;
 		justify-content: center;
+		max-height: 100%;
 	}
 
-	/* --- Fields below canvas --- */
+	.canvas-square {
+		display: flex;
+		width: 100%;
+		height: auto;
+		max-width: 100%;
+		max-height: 100%;
+		aspect-ratio: 1 / 1;
+		align-items: stretch;
+		justify-content: center;
+		margin-block: auto;
+	}
 
-	.page-fields {
+	/* --- Cover fields area (cover back post-its) --- */
+
+	.cover-fields-area {
 		position: relative;
 		z-index: 2;
-		margin-top: clamp(0.5rem, 1vw, 0.875rem);
+		flex: 1;
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
+		justify-content: flex-start;
+		align-items: flex-end;
+		padding: 2rem;
+		padding-top: 10rem;
+		/* padding: clamp(16px, 1.5vw, 18px); */
+		gap: 2rem;
+	}
+
+	/* --- Tagline below canvas --- */
+
+	.page-tagline {
+		position: relative;
+		z-index: 2;
+		margin-top: 0;
+		text-align: center;
+		font-family: 'Caveat', cursive;
+		font-size: 7;
+		color: rgba(80, 71, 63, 0.806);
+		font-style: italic;
+		line-height: 7;
 	}
 
 	/* --- Book cover (3D flip) — sandstone surface --- */
@@ -379,7 +419,7 @@
 	.book-cover {
 		position: absolute;
 		inset: clamp(0.5rem, 1vw, 1rem);
-		border-radius: 0.375rem 1rem 1rem 0.375rem;
+		border-radius: 2px;
 		background: linear-gradient(145deg, #c6b69a 0%, #b8a88e 30%, #a89878 60%, #9e8e72 100%);
 		box-shadow:
 			inset 0 0 0 2px rgb(255 248 230 / 0.14),
@@ -460,7 +500,7 @@
 		position: absolute;
 		inset: 10px;
 		border: 1px solid rgb(111 98 87 / 0.2);
-		border-radius: 0.375rem;
+		border-radius: 2px;
 		pointer-events: none;
 	}
 
@@ -471,7 +511,7 @@
 		bottom: 0;
 		width: 12px;
 		background: linear-gradient(90deg, #8a8078, #9e968d, #8a8078);
-		border-radius: 0.375rem 0 0 0.375rem;
+		border-radius: 0;
 		box-shadow: 2px 0 6px rgb(0 0 0 / 0.1);
 		pointer-events: none;
 	}
@@ -567,6 +607,33 @@
 		background: linear-gradient(135deg, #c6b69a 0%, #b8a88e 40%, #a89878 100%);
 		backface-visibility: hidden;
 		transform: rotateY(180deg);
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	/* Cross-hatch texture on cover back */
+	.cover-back-face::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background:
+			repeating-linear-gradient(
+				0deg,
+				transparent,
+				transparent 18px,
+				rgb(140 124 96 / 0.12) 18px,
+				rgb(140 124 96 / 0.12) 19px
+			),
+			repeating-linear-gradient(
+				90deg,
+				transparent,
+				transparent 14px,
+				rgb(140 124 96 / 0.06) 14px,
+				rgb(140 124 96 / 0.06) 15px
+			);
+		pointer-events: none;
+		z-index: 0;
 	}
 
 	.book-shell[data-state='opening'] .book-cover,
@@ -577,7 +644,7 @@
 			0 1rem 2rem rgb(47 36 28 / 0.16);
 	}
 
-	.book-shell[data-state='open'] .book-cover {
+	.book-shell[data-state='open'] .cover-front {
 		pointer-events: none;
 	}
 
@@ -586,10 +653,6 @@
 	@media (max-width: 700px) {
 		.book-block {
 			padding: 0.4rem;
-		}
-
-		.book-spread {
-			border-radius: 0.25rem 0.75rem 0.75rem 0.25rem;
 		}
 
 		.book-spine {
@@ -610,10 +673,6 @@
 
 		.book-cover strong {
 			font-size: clamp(1.2rem, 9vw, 1.4rem);
-		}
-
-		.book-cover {
-			border-radius: 0.25rem 0.75rem 0.75rem 0.25rem;
 		}
 	}
 </style>
