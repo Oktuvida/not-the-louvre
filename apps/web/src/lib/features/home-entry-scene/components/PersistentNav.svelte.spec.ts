@@ -1,6 +1,11 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import {
+	createEmptyDrawingDocument,
+	serializeDrawingDocument
+} from '$lib/features/stroke-json/document';
+import { buildDrawingDraftKey } from '$lib/features/stroke-json/drafts';
 import PersistentNav from './PersistentNav.svelte';
 
 const topArtworks = [
@@ -98,5 +103,75 @@ describe('PersistentNav', () => {
 
 		await expect.element(page.getByRole('button', { name: 'GALLERY' })).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'GALLERY' })).not.toBeInTheDocument();
+	});
+
+	it('discards the authenticated avatar draft when the editor is closed without saving', async () => {
+		const savedDocument = {
+			...createEmptyDrawingDocument('avatar'),
+			strokes: [
+				{
+					color: '#2F4B9A',
+					points: [[16, 18] as [number, number], [140, 180] as [number, number]],
+					size: 10
+				}
+			]
+		};
+		const draftDocument = {
+			...createEmptyDrawingDocument('avatar'),
+			strokes: [
+				{
+					color: '#B9322E',
+					points: [[28, 32] as [number, number], [220, 240] as [number, number]],
+					size: 12
+				}
+			]
+		};
+		const user = {
+			authUserId: 'auth-user-1',
+			email: 'artist_1@not-the-louvre.local',
+			id: 'product-user-1',
+			nickname: 'artist_1',
+			role: 'user',
+			avatarDrawingDocument: savedDocument
+		};
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: draftDocument.version,
+			scope: 'profile',
+			surface: 'avatar',
+			userKey: user.id
+		});
+		window.localStorage.setItem(draftKey, serializeDrawingDocument(draftDocument));
+
+		const fetchSpy = vi.fn(async () => ({
+			json: async () => ({ avatarUrl: '/avatars/product-user-1.png' }),
+			ok: true
+		}));
+		vi.stubGlobal('fetch', fetchSpy);
+
+		render(PersistentNav, { previewCards: topArtworks, user });
+
+		await page.getByRole('button', { name: 'Edit avatar for artist_1' }).click();
+		await page.getByRole('button', { name: 'Close' }).click();
+
+		expect(window.localStorage.getItem(draftKey)).toBeNull();
+
+		await page.getByRole('button', { name: 'Edit avatar for artist_1' }).click();
+		await page.getByRole('button', { name: 'Done' }).click();
+
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		const fetchCalls = fetchSpy.mock.calls as unknown as Array<[string, RequestInit]>;
+		const call = fetchCalls[0];
+		expect(call).toBeDefined();
+		const url = call?.[0];
+		const request = call?.[1];
+		expect(url).toBe('/api/users/product-user-1/avatar');
+		expect(request?.method).toBe('PUT');
+		expect(request?.body).toBeInstanceOf(FormData);
+		expect((request?.body as FormData).get('drawingDocument')).toBe(
+			serializeDrawingDocument(savedDocument)
+		);
+
+		window.localStorage.clear();
+		vi.unstubAllGlobals();
 	});
 });
