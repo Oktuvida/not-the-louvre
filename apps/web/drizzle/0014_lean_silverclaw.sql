@@ -1,0 +1,1 @@
+ALTER TABLE "app"."viewer_content_preferences" ADD COLUMN "ambient_audio_enabled" boolean;

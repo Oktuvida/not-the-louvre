@@ -331,6 +331,7 @@ export const viewerContentPreferences = appSchema.table('viewer_content_preferen
 		.primaryKey()
 		.references(() => users.id, { onDelete: 'cascade' }),
 	adultContentEnabled: boolean('adult_content_enabled').notNull().default(false),
+	ambientAudioEnabled: boolean('ambient_audio_enabled'),
 	adultContentConsentedAt: timestamp('adult_content_consented_at'),
 	adultContentRevokedAt: timestamp('adult_content_revoked_at'),
 	createdAt: timestamp('created_at').defaultNow().notNull(),

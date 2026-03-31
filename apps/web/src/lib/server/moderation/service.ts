@@ -31,6 +31,15 @@ type SetViewerAdultContentEnabledInput = {
 	enabled: boolean;
 };
 
+type SetViewerAmbientAudioEnabledInput = {
+	enabled: boolean;
+};
+
+type UpdateViewerContentPreferencesInput = {
+	adultContentEnabled?: boolean;
+	ambientAudioEnabled?: boolean;
+};
+
 const POLICY_CONTEXTS: TextModerationContext[] = ['nickname', 'comment', 'artwork_title'];
 const baselineMatcher = buildBaselineProfanityMatcher();
 
@@ -182,24 +191,55 @@ export const getViewerContentPreferences = async (
 	return {
 		adultContentConsentedAt: preference?.adultContentConsentedAt ?? null,
 		adultContentEnabled: preference?.adultContentEnabled ?? false,
-		adultContentRevokedAt: preference?.adultContentRevokedAt ?? null
+		adultContentRevokedAt: preference?.adultContentRevokedAt ?? null,
+		ambientAudioEnabled: preference?.ambientAudioEnabled ?? null
 	};
 };
 
-export const setViewerAdultContentEnabled = async (
-	input: SetViewerAdultContentEnabledInput,
+export const updateViewerContentPreferences = async (
+	input: UpdateViewerContentPreferencesInput,
 	context: ModerationContext,
 	dependencies: ServiceDependencies = {}
 ) => {
 	const user = requireUser(context);
 	const { now, repository } = getDependencies(dependencies);
 	const currentTime = now();
+	const currentPreference = await repository.findViewerContentPreference(user.id);
+	const adultContentEnabled =
+		input.adultContentEnabled ?? currentPreference?.adultContentEnabled ?? false;
+	const adultContentConsentedAt =
+		input.adultContentEnabled === undefined
+			? (currentPreference?.adultContentConsentedAt ?? null)
+			: input.adultContentEnabled
+				? currentTime
+				: null;
+	const adultContentRevokedAt =
+		input.adultContentEnabled === undefined
+			? (currentPreference?.adultContentRevokedAt ?? null)
+			: input.adultContentEnabled
+				? null
+				: currentTime;
+	const ambientAudioEnabled =
+		input.ambientAudioEnabled ?? currentPreference?.ambientAudioEnabled ?? null;
 
 	return repository.upsertViewerContentPreference({
-		adultContentConsentedAt: input.enabled ? currentTime : null,
-		adultContentEnabled: input.enabled,
-		adultContentRevokedAt: input.enabled ? null : currentTime,
+		adultContentConsentedAt,
+		adultContentEnabled,
+		adultContentRevokedAt,
+		ambientAudioEnabled,
 		updatedAt: currentTime,
 		userId: user.id
 	});
 };
+
+export const setViewerAdultContentEnabled = async (
+	input: SetViewerAdultContentEnabledInput,
+	context: ModerationContext,
+	dependencies: ServiceDependencies = {}
+) => updateViewerContentPreferences({ adultContentEnabled: input.enabled }, context, dependencies);
+
+export const setViewerAmbientAudioEnabled = async (
+	input: SetViewerAmbientAudioEnabledInput,
+	context: ModerationContext,
+	dependencies: ServiceDependencies = {}
+) => updateViewerContentPreferences({ ambientAudioEnabled: input.enabled }, context, dependencies);

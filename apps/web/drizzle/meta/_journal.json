@@ -99,6 +99,13 @@
       "when": 1774930994840,
       "tag": "0013_luxuriant_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1774939924324,
+      "tag": "0014_lean_silverclaw",
+      "breakpoints": true
     }
   ]
 }

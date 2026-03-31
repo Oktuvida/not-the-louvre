@@ -14,6 +14,7 @@ export type ViewerContentPreferenceRecord = {
 	adultContentConsentedAt: Date | null;
 	adultContentEnabled: boolean;
 	adultContentRevokedAt: Date | null;
+	ambientAudioEnabled: boolean | null;
 	createdAt: Date;
 	updatedAt: Date;
 	userId: string;
@@ -32,6 +33,7 @@ export type UpsertViewerContentPreferenceInput = {
 	adultContentConsentedAt: Date | null;
 	adultContentEnabled: boolean;
 	adultContentRevokedAt: Date | null;
+	ambientAudioEnabled: boolean | null;
 	updatedAt: Date;
 	userId: string;
 };
