@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import { goto } from '$app/navigation';
+	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { gsap } from 'gsap';
@@ -100,6 +101,9 @@
 
 			return { message: 'Artwork publish failed' };
 		},
+		replaceStudioUrl = () => {
+			replaceState(resolve('/draw'), window.history.state);
+		},
 		user
 	}: {
 		checkTextContent?: TextContentChecker;
@@ -110,17 +114,20 @@
 			drawingDocument: string,
 			options: { isNsfw: boolean; parentArtworkId?: string | null; title: string }
 		) => Promise<DrawPublishActionData>;
+		replaceStudioUrl?: () => void;
 		user?: DrawPageUser;
 	} = $props();
 
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
 	let clearVersion = $state(0);
+	let currentForkParent = $state<DrawForkParent | null>(null);
 	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('artwork'));
 	let forkPreloadSettled = $state(true);
 	let isPublishing = $state(false);
 	let pendingStudioUnlock = $state(false);
 	let publishedArtwork = $state<DrawPublishedArtwork | null>(null);
 	let sceneState = $state<'closed' | 'opening' | 'open'>('closed');
+	let seededForkParent = $state(false);
 	let statusMessage = $state('');
 	let statusTone = $state<'error' | 'success' | 'idle'>('idle');
 	let artworkTitle = $state('');
@@ -130,15 +137,15 @@
 	let showExitFade = $state(false);
 	let exitFadeOpacity = $state(0);
 	const initialDrawingDocument = $derived(
-		forkParent?.drawingDocument
-			? cloneDrawingDocument(forkParent.drawingDocument)
+		currentForkParent?.drawingDocument
+			? cloneDrawingDocument(currentForkParent.drawingDocument)
 			: createEmptyDrawingDocument('artwork')
 	);
 	const draftKey = $derived(
 		user
 			? buildDrawingDraftKey({
 					schemaVersion: drawingDocument.version,
-					scope: forkParent?.id ?? 'new',
+					scope: currentForkParent?.id ?? 'new',
 					surface: 'artwork',
 					userKey: user.id ?? user.nickname
 				})
@@ -147,7 +154,13 @@
 
 	let studioUnlocked = $derived(sceneState === 'open');
 	let toolsVisible = $derived(sceneState !== 'closed');
-	let hasForkParent = $derived(Boolean(forkParent));
+	let hasForkParent = $derived(Boolean(currentForkParent));
+
+	$effect(() => {
+		if (seededForkParent) return;
+		currentForkParent = forkParent;
+		seededForkParent = true;
+	});
 
 	$effect(() => {
 		forkPreloadSettled = !hasForkParent;
@@ -181,6 +194,27 @@
 		publishedArtwork = null;
 		statusMessage = '';
 		statusTone = 'idle';
+	};
+
+	const cancelFork = () => {
+		if (!studioUnlocked || !currentForkParent) return;
+
+		const forkDraftKey = draftKey;
+		if (forkDraftKey) {
+			clearDrawingDraft(forkDraftKey);
+		}
+
+		currentForkParent = null;
+		drawingDocument = createEmptyDrawingDocument('artwork');
+		clearVersion += 1;
+		artworkTitle = '';
+		isArtworkNsfw = false;
+		titleError = '';
+		publishedArtwork = null;
+		statusMessage = '';
+		statusTone = 'idle';
+
+		replaceStudioUrl();
 	};
 
 	const startOpeningBook = () => {
@@ -248,7 +282,7 @@
 
 			const result = await publishDrawing(payload, {
 				isNsfw: isArtworkNsfw,
-				parentArtworkId: forkParent?.id ?? null,
+				parentArtworkId: currentForkParent?.id ?? null,
 				title: artworkTitle
 			});
 			if ('success' in result && result.success) {
@@ -359,14 +393,25 @@
 										class="text-[0.6rem] font-bold tracking-[0.25em] uppercase"
 										style="color: rgb(212 196 174 / 0.6);"
 									>
-										{forkParent ? 'Fork Details' : 'Artwork Details'}
+										{currentForkParent ? 'Fork Details' : 'Artwork Details'}
 									</p>
-									{#if forkParent}
+									{#if currentForkParent}
 										<p class="mt-1.5 text-xs" style="color: rgb(212 196 174 / 0.7);">
 											Forking from <span class="font-semibold text-[#e8d5be]"
-												>{forkParent.title}</span
+												>{currentForkParent.title}</span
 											>
 										</p>
+										<div class="mt-2 flex justify-start">
+											<GameButton
+												type="button"
+												variant="ghost"
+												size="sm"
+												disabled={!studioUnlocked}
+												onclick={cancelFork}
+											>
+												<span>Cancel fork</span>
+											</GameButton>
+										</div>
 									{/if}
 								</div>
 
@@ -423,7 +468,7 @@
 							bind:canvasRef
 							bind:drawingDocument
 							{clearVersion}
-							initialDrawingDocument={forkParent?.drawingDocument ?? null}
+							initialDrawingDocument={currentForkParent?.drawingDocument ?? null}
 							interactive={studioUnlocked}
 							onInitialImageSettled={markForkPreloadSettled}
 							{statusMessage}
