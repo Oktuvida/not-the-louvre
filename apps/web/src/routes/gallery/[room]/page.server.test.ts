@@ -87,14 +87,31 @@ describe('gallery room route', () => {
 		const result = (await load({
 			locals: { user: { id: 'user-1', role: 'user' } },
 			params: { room: 'your-studio' }
-		} as never)) as { artworks: Array<Record<string, unknown>>; viewer: { id: string } };
+		} as never)) as {
+			artworks: Array<Record<string, unknown>>;
+			discovery: {
+				pageInfo: { hasMore: boolean; nextCursor: string | null };
+				request: { authorId: string; limit: number; scalable: boolean; sort: string; window: null };
+			};
+			viewer: { id: string };
+		};
 
 		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
-			{ cursor: null, limit: 50, sort: 'recent', window: null },
+			{ authorId: 'user-1', cursor: null, limit: 24, sort: 'recent', window: null },
 			{ user: { id: 'user-1', role: 'user' } }
 		);
 		expect(result.artworks).toHaveLength(1);
 		expect(result.artworks[0]).toMatchObject({ id: 'artwork-1' });
+		expect(result.discovery).toMatchObject({
+			pageInfo: { hasMore: false, nextCursor: null },
+			request: {
+				authorId: 'user-1',
+				limit: 24,
+				scalable: true,
+				sort: 'recent',
+				window: null
+			}
+		});
 		expect(result.viewer).toMatchObject({ id: 'user-1' });
 	});
 

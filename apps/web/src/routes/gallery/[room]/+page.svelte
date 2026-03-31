@@ -8,6 +8,7 @@
 <GalleryExplorationPage
 	adultContentEnabled={data.adultContentEnabled}
 	artworks={data.artworks}
+	discovery={data.discovery}
 	emptyStateMessage={data.emptyStateMessage}
 	realtimeConfig={data.realtimeConfig}
 	viewer={data.viewer}
