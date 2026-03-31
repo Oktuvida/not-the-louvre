@@ -1,22 +1,22 @@
 export const drawingPalette = [
-	'#F4EBDD',
-	'#DCC9A3',
-	'#B78C5A',
-	'#6B4A2E',
-	'#2B2622',
-	'#C79A2B',
-	'#A5562A',
-	'#C96A4A',
-	'#B9322E',
-	'#B97A74',
-	'#2F4B9A',
-	'#2E6F7E',
-	'#667A3E',
-	'#8FA27A',
-	'#2D7A63',
-	'#8C7AAE',
-	'#5E3A57',
-	'#A9862A'
+	'#1a1a1a', // Negro
+	'#808080', // Gris
+	'#d4d4d4', // Blanco
+	'#e63946', // Rojo
+	'#2176d9', // Azul
+	'#ffd500', // Amarillo
+	'#2dba4e', // Verde
+	'#f4841a', // Naranja
+	'#9b30c8', // Morado
+	'#4fc3f7', // Azul claro
+	'#1a3a6b', // Marino
+	'#26c6a0', // Turquesa
+	'#f5cba7', // Piel
+	'#c87941', // Café
+	'#6b3a1f', // Marrón
+	'#f06292', // Rosa
+	'#a8e063', // Verde lima
+	'#fff9c4' // Crema
 ];
 
 export const brushSizeSteps = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 38, 45, 54, 64];
