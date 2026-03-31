@@ -96,6 +96,38 @@ describe('StudioDrawingPage', () => {
 		expect(goto).toHaveBeenCalledWith(expect.stringContaining('?from=studio'));
 	});
 
+	it('does not reopen or drop fork context while exiting a forked artwork', async () => {
+		goto.mockReset();
+
+		render(StudioDrawingPage, {
+			forkParent: {
+				drawingDocument: createEmptyDrawingDocument('artwork'),
+				id: 'artwork-parent',
+				mediaUrl: forkParentPreviewDataUrl,
+				title: 'Parent Artwork'
+			},
+			openingDurationMs: 120,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await expect.element(page.getByText('Forking Parent Artwork')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+
+		await page.getByRole('link', { name: 'Exit Studio' }).click();
+
+		await expect.element(page.getByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+		expect(goto).not.toHaveBeenCalled();
+
+		await new Promise((resolve) => setTimeout(resolve, 260));
+
+		await expect.element(page.getByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+		await expect.element(page.getByText('Forking Parent Artwork')).toBeInTheDocument();
+		expect(goto).not.toHaveBeenCalled();
+
+		await new Promise((resolve) => setTimeout(resolve, 420));
+		expect(goto).toHaveBeenCalledWith(expect.stringContaining('?from=studio'));
+	});
+
 	it('publishes the current drawing and shows a minimal success state', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const createArtworkPayload = vi.fn(async () =>
