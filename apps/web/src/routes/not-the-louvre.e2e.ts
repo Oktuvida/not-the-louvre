@@ -261,7 +261,9 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/gallery/your-studio');
 		await expect(page.getByText(publishedTitle!)).toBeVisible();
 		await page.getByRole('button', { name: new RegExp(publishedTitle!) }).click();
-		await expect(page.getByText('Artwork details')).toBeVisible();
+		await expect(
+			page.getByRole('dialog', { name: new RegExp(`Artwork details for ${publishedTitle!}`) })
+		).toBeVisible();
 	});
 
 	test('gallery detail persists vote counts and receives realtime vote and comment updates', async ({
@@ -280,7 +282,9 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/gallery/your-studio');
 		await page.getByRole('button', { name: /Realtime Product Piece/ }).click();
-		await expect(page.getByText('Artwork details')).toBeVisible();
+		await expect(
+			page.getByRole('dialog', { name: /Artwork details for Realtime Product Piece/ })
+		).toBeVisible();
 		await expect(page.getByRole('button', { name: /👍\s*0/ })).toBeVisible();
 		await expect(page.getByRole('button', { name: /👎\s*0/ })).toBeVisible();
 
@@ -293,7 +297,9 @@ test.describe('Not the Louvre frontend port', () => {
 			await signUpThroughNicknameDemo(actorPage, deterministicActorUser);
 			await actorPage.goto('/gallery');
 			await actorPage.getByRole('button', { name: /Realtime Product Piece/ }).click();
-			await expect(actorPage.getByText('Artwork details')).toBeVisible();
+			await expect(
+				actorPage.getByRole('dialog', { name: /Artwork details for Realtime Product Piece/ })
+			).toBeVisible();
 
 			const voteResponse = actorPage.waitForResponse(
 				(response) =>
@@ -319,8 +325,8 @@ test.describe('Not the Louvre frontend port', () => {
 					response.request().method() === 'POST' &&
 					response.status() === 201
 			);
-			await actorPage.getByPlaceholder('Say something about this piece').fill('Realtime hello');
-			await actorPage.getByRole('button', { name: '💬 Comment' }).click();
+			await actorPage.getByPlaceholder('Write a comment').fill('Realtime hello');
+			await actorPage.getByRole('button', { name: 'Send comment' }).click();
 			await commentResponse;
 
 			await expect
@@ -332,7 +338,9 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.reload();
 		await page.getByRole('button', { name: /Realtime Product Piece/ }).click();
-		await expect(page.getByText('Artwork details')).toBeVisible();
+		await expect(
+			page.getByRole('dialog', { name: /Artwork details for Realtime Product Piece/ })
+		).toBeVisible();
 		await expect(page.getByRole('button', { name: /👍\s*1/ })).toBeVisible();
 		await expect(page.getByRole('button', { name: /👎\s*0/ })).toBeVisible();
 		await expect(page.getByText('Realtime hello')).toBeVisible();
@@ -353,15 +361,17 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/gallery/your-studio');
 		await page.getByRole('button', { name: /Mystery Comment Piece/ }).click();
-		await expect(page.getByText('Artwork details')).toBeVisible();
+		await expect(
+			page.getByRole('dialog', { name: /Artwork details for Mystery Comment Piece/ })
+		).toBeVisible();
 		const commentResponse = page.waitForResponse(
 			(response) =>
 				response.url().includes('/comments') &&
 				response.request().method() === 'POST' &&
 				response.status() === 201
 		);
-		await page.getByPlaceholder('Say something about this piece').fill('Mystery room comment');
-		await page.getByRole('button', { name: '💬 Comment' }).click();
+		await page.getByPlaceholder('Write a comment').fill('Mystery room comment');
+		await page.getByRole('button', { name: 'Send comment' }).click();
 		await commentResponse;
 		await expect(page.getByText('Mystery room comment')).toBeVisible();
 		await page.getByRole('dialog').press('Escape');
@@ -369,7 +379,11 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/gallery/mystery');
 		await page.getByRole('button', { name: 'Spin!' }).click();
 
-		await expect(page.getByText('Artwork details')).toBeVisible({ timeout: 8000 });
+		await expect(
+			page.getByRole('dialog', { name: /Artwork details for Mystery Comment Piece/ })
+		).toBeVisible({
+			timeout: 8000
+		});
 		await expect(page.getByText('Mystery room comment')).toBeVisible();
 	});
 
@@ -489,7 +503,9 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/gallery/hot-wall');
 		await expect(page.getByText('Hot right now')).toBeVisible();
 		await page.getByRole('button', { name: /Hot Wall Piece/ }).click();
-		await expect(page.getByText('Artwork details')).toBeVisible();
+		await expect(
+			page.getByRole('dialog', { name: /Artwork details for Hot Wall Piece/ })
+		).toBeVisible();
 	});
 
 	test('unknown routes render the custom not-found page', async ({ page }) => {
