@@ -1,186 +1,54 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import FilmReel from './FilmReel.svelte';
 
 	let {
 		adultContentEnabled = false,
-		artwork,
-		onReveal,
+		artworks,
 		onSelect
 	}: {
 		adultContentEnabled?: boolean;
-		artwork: Artwork;
-		onReveal?: () => void;
+		artworks: Artwork[];
 		onSelect?: (artwork: Artwork) => void;
 	} = $props();
 
+	let filmReel: ReturnType<typeof FilmReel> | undefined = $state();
 	let isSpinning = $state(false);
-	let revealed = $state(false);
-	const isSensitiveBlurred = $derived(artwork.isNsfw && !adultContentEnabled);
 
 	const handleSpin = () => {
 		if (isSpinning) return;
 		isSpinning = true;
-		revealed = false;
+		filmReel?.spin();
+	};
 
+	const handleLand = (artwork: Artwork) => {
+		isSpinning = false;
+		onSelect?.(artwork);
 		setTimeout(() => {
-			onReveal?.();
-			isSpinning = false;
-			revealed = true;
-		}, 2000);
+			filmReel?.resetToIdle();
+		}, 500);
 	};
 </script>
 
-<div class="flex min-h-[500px] flex-col items-center justify-center py-12">
-	<div class="flex flex-col items-center gap-8">
-		<!-- Mystery Card -->
-		<div
-			class="relative"
-			class:animate-[spinY_2s_ease-in-out]={isSpinning}
-			style="perspective: 1000px;"
-		>
-			<div class="h-96 w-80 rounded-2xl border-[6px] border-[#5d4e37] bg-[#fdfbf7] p-6 shadow-2xl">
-				{#if !revealed || isSpinning}
-					<!-- Placeholder ? card -->
-					<div
-						class="flex h-full w-full items-center justify-center rounded-lg border-4 border-dashed border-[#8b7355] bg-gradient-to-br from-[#e5dfd5] to-[#d4c5b5]"
-					>
-						<div
-							class="font-display text-8xl text-[#8b7355]"
-							class:animate-[pulseScale_0.5s_ease-in-out_infinite]={isSpinning}
-						>
-							?
-						</div>
-					</div>
-				{:else}
-					<!-- Revealed artwork -->
-					<div class="relative h-full animate-[fadeScale_0.4s_ease-out]">
-						<img
-							src={artwork.imageUrl}
-							alt={artwork.title}
-							class={`h-full w-full rounded-lg border-2 border-[#2d2420] object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
-						/>
-						{#if isSensitiveBlurred}
-							<div
-								class="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-[rgba(45,36,32,0.72)] text-center text-[#fdfbf7]"
-							>
-								<span class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
-									>18+</span
-								>
-								<p class="mt-3 text-sm font-bold uppercase">Sensitive artwork</p>
-							</div>
-						{/if}
-						{#if artwork.artistAvatar}
-							<div
-								class="absolute -bottom-4 -left-4 h-16 w-16 animate-[popIn_0.3s_ease-out_0.3s_both] overflow-hidden rounded-full border-4 border-[#2d2420] bg-white shadow-lg"
-							>
-								<img src={artwork.artistAvatar} alt={artwork.artist} class="h-full w-full" />
-							</div>
-						{/if}
-					</div>
-				{/if}
-			</div>
-		</div>
+<div class="flex min-h-[400px] flex-col items-center justify-center gap-16 py-8 pt-55">
+	<FilmReel bind:this={filmReel} {adultContentEnabled} {artworks} onLand={handleLand} />
 
-		<!-- Spin Button -->
-		<GameButton
-			type="button"
-			variant="danger"
-			size="hero"
-			className="shadow-2xl"
-			disabled={isSpinning}
-			onclick={handleSpin}
-		>
-			<span>{isSpinning ? 'SPINNING...' : 'Spin!'}</span>
-		</GameButton>
+	<GameButton
+		type="button"
+		variant="danger"
+		size="hero"
+		className="shadow-2xl"
+		disabled={isSpinning}
+		onclick={handleSpin}
+	>
+		<span>{isSpinning ? 'SPINNING...' : 'Spin!'}</span>
+	</GameButton>
 
-		<p
-			class="text-center [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif] text-[#6b625a] italic"
-		>
-			Discover a random masterpiece from the gallery
-		</p>
-
-		<!-- Revealed Artwork Details -->
-		{#if revealed && !isSpinning}
-			<div
-				class="max-w-md rotate-1 animate-[slideUp_0.4s_ease-out] rounded-xl border-4 border-[#2d2420] bg-[#e8b896] p-6 text-center shadow-lg"
-			>
-				<h3 class="font-display mb-2 text-2xl font-black text-[#2d2420]">
-					{artwork.title}
-				</h3>
-				<p class="mb-3 [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif] text-lg text-[#6b625a]">
-					by {artwork.artist}
-				</p>
-				<div class="flex items-center justify-center gap-4 text-[#2d2420]">
-					<span class="flex items-center gap-1 font-bold">⭐ {artwork.score}</span>
-					<span class="flex items-center gap-1">👍 {artwork.upvotes}</span>
-				</div>
-				<button
-					type="button"
-					class="mt-4 rounded-lg bg-[#2d2420] px-6 py-2 font-bold text-white transition duration-200 hover:scale-105"
-					onclick={() => onSelect?.(artwork)}
-				>
-					View Details
-				</button>
-			</div>
-		{/if}
+	<div
+		class="pointer-events-none absolute -bottom-7 left-1/2 z-20 -translate-x-1/2 text-sm text-[#f7eadf] italic transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)]"
+		style="font-family: 'Baloo 2', sans-serif; letter-spacing: 0.01em; text-shadow: 0 1px 1px rgba(45,36,32,.7), 0 2px 8px rgba(45,36,32,.35);"
+	>
+		Discover a random masterpiece... hopefully
 	</div>
 </div>
-
-<style>
-	@keyframes spinY {
-		0% {
-			transform: rotateY(0deg);
-		}
-		25% {
-			transform: rotateY(360deg);
-		}
-		50% {
-			transform: rotateY(720deg);
-		}
-		100% {
-			transform: rotateY(1080deg);
-		}
-	}
-
-	@keyframes pulseScale {
-		0%,
-		100% {
-			transform: scale(1);
-		}
-		50% {
-			transform: scale(1.2);
-		}
-	}
-
-	@keyframes fadeScale {
-		0% {
-			opacity: 0;
-			transform: scale(0.8);
-		}
-		100% {
-			opacity: 1;
-			transform: scale(1);
-		}
-	}
-
-	@keyframes popIn {
-		0% {
-			transform: scale(0);
-		}
-		100% {
-			transform: scale(1);
-		}
-	}
-
-	@keyframes slideUp {
-		0% {
-			opacity: 0;
-			transform: translateY(20px);
-		}
-		100% {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-</style>
