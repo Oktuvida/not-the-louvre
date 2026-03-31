@@ -42,6 +42,7 @@ const transitionTable: Partial<
 		AUTH_SUCCESS: 'inside'
 	},
 	'auth-recovery': {
+		AUTH_SUCCESS: 'inside',
 		SHOW_LOGIN: 'auth-login',
 		SHOW_SIGN_UP: 'auth-signup',
 		AUTH_CANCEL: 'transitioning-out'
