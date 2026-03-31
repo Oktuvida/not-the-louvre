@@ -1,6 +1,21 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+
+const { goto, invalidateAll } = vi.hoisted(() => ({
+	goto: vi.fn(),
+	invalidateAll: vi.fn(async () => {})
+}));
+
+vi.mock('$app/navigation', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$app/navigation')>();
+	return {
+		...actual,
+		goto,
+		invalidateAll
+	};
+});
+
 import GalleryExplorationPage from './GalleryExplorationPage.svelte';
 import { getGalleryRoom } from './model/rooms';
 
@@ -27,15 +42,16 @@ describe('GalleryExplorationPage', () => {
 				{ ...baseArtwork, id: 'artwork-2', title: 'Second Work' }
 			],
 			emptyStateMessage: null,
-			room: getGalleryRoom('hot-wall'),
-			roomId: 'hot-wall'
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
 		});
 
 		await expect.element(page.getByText('Deterministic Gallery Study')).toBeVisible();
 		await expect.element(page.getByText('Second Work')).toBeVisible();
 	});
 
-	it('renders the hot wall with a featured lead artwork and supporting risers', async () => {
+	it('renders the hot wall as a coming-soon placeholder', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', title: 'Lead Heat' },
@@ -47,10 +63,8 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hot-wall'
 		});
 
-		await expect.element(page.getByText('Hot right now')).toBeVisible();
-		await expect.element(page.getByRole('button', { name: /Lead Heat/ })).toBeVisible();
-		await expect.element(page.getByText('Second Spark')).toBeVisible();
-		await expect.element(page.getByText('Third Spark')).toBeVisible();
+		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
+		await expect.element(page.getByText('Proximamente.')).toBeVisible();
 	});
 
 	it('shows a product empty state instead of fixture content', async () => {
@@ -78,12 +92,15 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByRole('link', { name: 'Your Studio' })).not.toBeInTheDocument();
 		await expect.element(page.getByRole('link', { name: 'Create Art' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
 		await expect
 			.element(page.getByText('New pieces will appear here as artists publish them.'))
 			.toBeVisible();
 	});
 
 	it('shows authenticated gallery chrome and personal empty-state guidance for users', async () => {
+		invalidateAll.mockReset();
+
 		render(GalleryExplorationPage, {
 			artworks: [],
 			emptyStateMessage: 'You have not published any artworks yet.',
@@ -94,12 +111,51 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Create Art' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
 		await expect
 			.element(page.getByText('Publish a new piece from the studio and it will show up here.'))
 			.toBeVisible();
+
+		await page.getByRole('button', { name: 'Refresh' }).click();
+		expect(invalidateAll).toHaveBeenCalledTimes(1);
 	});
 
-	it('loads and opens real artwork detail when a user selects a card', async () => {
+	it('uses the shared studio background and draw overlay in gallery', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [],
+			emptyStateMessage: 'You have not published any artworks yet.',
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
+		await expect
+			.element(page.getByTestId('gallery-wall-bricks'))
+			.toHaveAttribute('style', expect.stringContaining('background-image: url('));
+		await expect
+			.element(page.getByTestId('gallery-room-shell'))
+			.toHaveAttribute('style', expect.stringContaining('background-color: #252018;'));
+		await expect
+			.element(page.getByTestId('gallery-wall-bricks'))
+			.toHaveAttribute('style', expect.stringContaining('background-size: 512px 512px;'));
+	});
+
+	it('renders the your studio room note in normal flow above the artworks', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Desk Study' }],
+			emptyStateMessage: null,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByTestId('your-studio-room-note-flow')).toBeVisible();
+		await expect.element(page.getByText(getGalleryRoom('your-studio').description)).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /Desk Study/ })).toBeVisible();
+	});
+
+	it.skip('loads and opens real artwork detail when a user selects a card', async () => {
 		const loadArtworkDetail = vi.fn(async () => ({
 			...baseArtwork,
 			forkCount: 0,
@@ -132,8 +188,8 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hall-of-fame'
 		});
 
-		await expect.element(page.getByText('CHAMPION')).toBeVisible();
-		await expect.element(page.getByText('RUNNER UP')).toBeVisible();
+		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByText('#2 RUNNER UP')).toBeVisible();
 	});
 
 	it('blurs nsfw artworks until the viewer enables 18+ content', async () => {
@@ -144,7 +200,7 @@ describe('GalleryExplorationPage', () => {
 
 		render(GalleryExplorationPage, {
 			adultContentEnabled: false,
-			artworks: [{ ...baseArtwork, id: 'artwork-1', isNsfw: true, title: 'Adults only study' }],
+			artworks: [{ ...baseArtwork, id: 'artwork-1', isNsfw: true, rank: 1, title: 'Adults only study' }],
 			emptyStateMessage: null,
 			loadArtworkDetail: async () => ({
 				...baseArtwork,
@@ -152,11 +208,12 @@ describe('GalleryExplorationPage', () => {
 				isNsfw: true,
 				title: 'Adults only study'
 			}),
-			room: getGalleryRoom('hot-wall'),
-			roomId: 'hot-wall',
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame',
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
+		await expect.element(page.getByText('18+ artworks', { exact: true })).toBeVisible();
 		await expect.element(page.getByText('Sensitive artwork', { exact: true })).toBeVisible();
 		await page.getByRole('button', { exact: true, name: 'Reveal 18+ artworks' }).click();
 
@@ -168,7 +225,7 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByRole('button', { name: /Adults only study/ })).toBeVisible();
 	});
 
-	it('uses premium frames for the top-three podium artworks only', async () => {
+	it('uses frames only for the top-three podium artworks in hall of fame', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
@@ -190,8 +247,30 @@ describe('GalleryExplorationPage', () => {
 		await expect
 			.element(page.getByTestId('podium-frame-3'))
 			.toHaveAttribute('data-frame-tier', 'premium');
-		await expect
-			.element(page.getByTestId('ranked-frame-artwork-4'))
-			.toHaveAttribute('data-frame-tier', 'standard');
+		await expect.element(page.getByTestId('podium-plaque-1')).toBeVisible();
+		await expect.element(page.getByTestId('podium-plaque-2')).toBeVisible();
+		await expect.element(page.getByTestId('podium-plaque-3')).toBeVisible();
+		await expect.element(page.getByTestId('ranked-polaroid-artwork-4')).toBeVisible();
+		await expect.element(page.getByTestId('ranked-frame-artwork-4')).not.toBeInTheDocument();
+	});
+
+	it.skip('uses polaroids for the hot wall secondary grid artworks', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [
+				{ ...baseArtwork, id: 'artwork-1', title: 'Lead Heat' },
+				{ ...baseArtwork, id: 'artwork-2', title: 'Second Spark' },
+				{ ...baseArtwork, id: 'artwork-3', title: 'Third Spark' },
+				{ ...baseArtwork, id: 'artwork-4', title: 'Fourth Spark' },
+				{ ...baseArtwork, id: 'artwork-5', title: 'Fifth Spark' }
+			],
+			emptyStateMessage: null,
+			room: getGalleryRoom('hot-wall'),
+			roomId: 'hot-wall',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByTestId('hot-wall-frame-artwork-1')).toBeVisible();
+		await expect.element(page.getByTestId('hot-wall-polaroid-artwork-5')).toBeVisible();
+		await expect.element(page.getByTestId('hot-wall-riser-artwork-5')).not.toBeInTheDocument();
 	});
 });

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { ArrowLeft, Paintbrush } from 'lucide-svelte';
+	import { ArrowLeft, Paintbrush, RefreshCw } from 'lucide-svelte';
 	import { browser } from '$app/environment';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
 	import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
@@ -14,6 +14,7 @@
 	import { hashString, resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
 	import { toGalleryArtworkDetail } from '$lib/features/gallery-exploration/gallery-adapter';
 	import GalleryRoomNav from '$lib/features/gallery-exploration/components/GalleryRoomNav.svelte';
+	import { createMuseumWallPatternUrl } from '$lib/features/home-entry-scene/canvas/museum-canvas';
 	import {
 		galleryRoomIds,
 		type GalleryRoomConfig,
@@ -21,6 +22,8 @@
 	} from '$lib/features/gallery-exploration/model/rooms';
 	import HotWallRoom from '$lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
 	import MysteryRoom from '$lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
+	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
+	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
@@ -89,7 +92,6 @@
 	let adultContentPreferenceOverride = $state<boolean | null>(null);
 	let isSavingAdultContentPreference = $state(false);
 	let selectedArtwork = $state<Artwork | null>(null);
-	let mysteryIndex = $state(0);
 	let detailErrorMessage = $state<string | null>(null);
 	let cleanupRealtime: (() => void) | null = null;
 	let entryFadeOpacity = $state(0);
@@ -97,12 +99,11 @@
 	let exitFadeOpacity = $state(0);
 	let showExitFade = $state(false);
 	let isExitingToHome = $state(false);
+	let isRefreshingGallery = $state(false);
 	let previousRoomIndex = $state(-1);
+	let museumWallPatternUrl = $state('');
 
 	const selectedArtworkId = $derived(selectedArtwork?.id ?? null);
-	const mysteryArtwork = $derived(
-		artworks.length > 0 ? (artworks[mysteryIndex % artworks.length] ?? artworks[0]) : null
-	);
 	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
 	const hasSensitiveArtwork = $derived(
 		artworks.some((artwork) => artwork.isNsfw) || Boolean(selectedArtwork?.isNsfw)
@@ -187,10 +188,6 @@
 		);
 	};
 
-	const spinMystery = () => {
-		mysteryIndex += 1;
-	};
-
 	const handleBackToHome = (event: MouseEvent) => {
 		if (!viewer) {
 			return;
@@ -216,6 +213,24 @@
 				void goto(url);
 			}
 		});
+	};
+
+	const refreshGallery = async () => {
+		if (isRefreshingGallery) {
+			return;
+		}
+
+		isRefreshingGallery = true;
+		detailErrorMessage = null;
+
+		try {
+			await invalidateAll();
+		} catch (error) {
+			detailErrorMessage =
+				error instanceof Error ? error.message : 'Gallery could not be refreshed.';
+		} finally {
+			isRefreshingGallery = false;
+		}
 	};
 
 	const stopRealtime = () => {
@@ -317,6 +332,11 @@
 	};
 
 	$effect(() => {
+		if (!browser || museumWallPatternUrl) return;
+		museumWallPatternUrl = createMuseumWallPatternUrl();
+	});
+
+	$effect(() => {
 		const artworkId = selectedArtworkId;
 
 		if (!browser) {
@@ -372,28 +392,22 @@
 
 	const podiumMeta = {
 		1: {
-			base: 'h-32',
 			color: '#f4c430',
-			height: 'h-72 md:h-80',
+			height: 'h-80 md:h-[22rem]',
 			label: 'CHAMPION',
-			medal: '🥇',
-			width: 'w-72 md:w-80'
+			width: 'w-76 md:w-[22rem]'
 		},
 		2: {
-			base: 'h-24',
 			color: '#c0c0c0',
-			height: 'h-64 md:h-72',
+			height: 'h-68 md:h-[19rem]',
 			label: 'RUNNER UP',
-			medal: '🥈',
-			width: 'w-64 md:w-72'
+			width: 'w-68 md:w-[19rem]'
 		},
 		3: {
-			base: 'h-20',
 			color: '#cd7f32',
-			height: 'h-64 md:h-72',
+			height: 'h-60 md:h-[16rem]',
 			label: 'BRONZE STAR',
-			medal: '🥉',
-			width: 'w-64 md:w-72'
+			width: 'w-60 md:w-[16rem]'
 		}
 	} as const;
 
@@ -429,28 +443,31 @@
 	});
 </script>
 
-{#if roomId !== 'your-studio'}
-	<div class="pointer-events-none absolute inset-0 overflow-hidden">
-		{#each Array.from( { length: 20 } ).map((_, index) => index) as index (`gallery-particle-${index}`)}
-			<div
-				class="absolute h-2 w-2 animate-[drift_4s_ease-in-out_infinite] rounded-full opacity-20"
-				style={`
-					background: ${['#f4c430', '#d4956c', '#8b9d91', '#c84f4f'][index % 4]};
-					left: ${(index * 19) % 100}%;
-					top: ${(index * 23) % 100}%;
-					animation-delay: ${index * 0.12}s;
-				`}
-			></div>
-		{/each}
-	</div>
-{/if}
-
 <div
 	class="relative min-h-screen bg-cover bg-fixed bg-center bg-no-repeat"
-	style={roomId === 'your-studio'
-		? 'background-color: #6e6e6e;'
-		: "background-color: #e7dece; background-image: url('/gallery-bg.webp');"}
+	data-testid="gallery-room-shell"
+	style="background-color: #252018;"
 >
+	<div
+		class="absolute inset-0 z-0 bg-[#252018]"
+		data-testid="gallery-wall-bricks"
+		style={`background-image: url('${museumWallPatternUrl}'); background-size: 512px 512px; background-repeat: repeat;`}
+	></div>
+	<div
+		class="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_86%_12%,rgba(255,247,214,0.34)_0%,rgba(255,243,201,0.18)_18%,rgba(255,241,196,0.06)_36%,transparent_58%)]"
+	></div>
+	<div
+		class="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,transparent_0%,transparent_58%,rgba(46,28,11,0.14)_78%,rgba(20,12,6,0.28)_100%)]"
+	></div>
+	<div
+		class="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_12%_92%,rgba(18,10,4,0.34)_0%,rgba(18,10,4,0.22)_26%,rgba(18,10,4,0.08)_46%,transparent_66%)]"
+	></div>
+	<div
+		class="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_center,transparent_0%,transparent_42%,rgba(12,9,7,0.08)_66%,rgba(12,9,7,0.2)_100%)]"
+	></div>
+
+	<AmbientParticleOverlay className="z-[5] opacity-90" />
+
 	<div class="pointer-events-none sticky top-0 z-40 px-4 pt-4 md:px-8 md:pt-6">
 		<div class="pointer-events-auto absolute top-4 left-4 md:top-6 md:left-8">
 			<div onclickcapture={handleBackToHome}>
@@ -461,12 +478,24 @@
 			</div>
 		</div>
 
-		<div class="pointer-events-auto absolute top-4 right-4 md:top-6 md:right-8">
+		<div
+			class="pointer-events-auto absolute top-4 right-4 flex flex-col items-end gap-3 md:top-6 md:right-8"
+		>
 			{#if viewer}
 				<GameLink href="/draw" variant="primary" size="sm" className="w-fit rotate-1 shadow-xl">
 					<Paintbrush class="mr-1 h-5 w-5" />
 					<span class="font-semibold">Create Art</span>
 				</GameLink>
+				<GameButton
+					variant="secondary"
+					size="sm"
+					className="w-fit rotate-1 shadow-xl"
+					disabled={isRefreshingGallery}
+					onclick={refreshGallery}
+				>
+					<RefreshCw class={`mr-1 h-5 w-5 ${isRefreshingGallery ? 'animate-spin' : ''}`} />
+					<span class="font-semibold">{isRefreshingGallery ? 'Refreshing' : 'Refresh'}</span>
+				</GameButton>
 			{/if}
 		</div>
 
@@ -475,52 +504,68 @@
 		</div>
 	</div>
 
-	<div class="mx-auto flex max-w-7xl flex-col gap-8 px-8 py-8">
-		{#if hasSensitiveArtwork}
-			<div
-				class="flex flex-col gap-3 rounded-xl border-4 border-[#2d2420] bg-[#fdfbf7] p-5 shadow-md md:flex-row md:items-center md:justify-between"
-			>
-				<div>
-					<p class="font-display text-sm tracking-[0.18em] text-[#86654b] uppercase">
-						18+ artworks
-					</p>
-					<p class="mt-1 text-sm text-[#5d4e37]">
-						{adultContentAllowed
-							? 'Sensitive artworks are visible for this account.'
-							: 'Sensitive artworks are blurred until you explicitly reveal them.'}
-					</p>
-				</div>
-				{#if viewer}
-					<button
-						type="button"
-						class="rounded-[1rem] border-4 border-[#2d2420] bg-[#d68a49] px-5 py-3 text-sm font-black text-[#2d2420] shadow-md transition duration-200 hover:-translate-y-0.5 disabled:opacity-60"
-						disabled={isSavingAdultContentPreference}
-						onclick={() => updateAdultContentPreference(!adultContentAllowed)}
-					>
-						{adultContentAllowed ? 'Hide 18+ artworks' : 'Reveal 18+ artworks'}
-					</button>
-				{:else}
-					<p class="text-sm font-semibold text-[#8f3720]">Sign in to reveal 18+ artworks.</p>
-				{/if}
-			</div>
-		{/if}
-
+	<div class="relative z-10 mx-auto flex max-w-7xl flex-col gap-8 px-8 py-8">
 		{#key roomId}
 			<div
-				class="relative overflow-hidden"
+				class="relative overflow-visible"
 				in:fly={{ x: slideDirection * 300, duration: slideDirection === 0 ? 0 : 300 }}
 				out:fly={{ x: slideDirection * -300, duration: slideDirection === 0 ? 0 : 300 }}
 			>
-				<div class="pointer-events-none absolute top-2 left-2 z-[25] md:left-4">
-					<PostItNote
-						attachment={room.postItAttachment}
-						className={roomNoteClassNames[roomId]}
-						color={room.postItColor}
-						label={room.name}
-						seedKey={room.id}
-						text={room.description}
-					/>
-				</div>
+				{#if roomId === 'your-studio'}
+					<div class="mb-6 flex justify-start" data-testid="your-studio-room-note-flow">
+						<PostItNote
+							attachment={room.postItAttachment}
+							className={roomNoteClassNames[roomId]}
+							color={room.postItColor}
+							label={room.name}
+							seedKey={room.id}
+							text={room.description}
+						/>
+					</div>
+				{:else}
+					<div
+						class="pointer-events-none absolute top-5 -left-16 z-[25] rotate-[-20deg] md:-left-16"
+					>
+						<PostItNote
+							attachment={room.postItAttachment}
+							className={roomNoteClassNames[roomId]}
+							color={room.postItColor}
+							label={room.name}
+							seedKey={room.id}
+							text={room.description}
+						/>
+					</div>
+				{/if}
+
+				{#if hasSensitiveArtwork}
+					<div
+						class="pointer-events-none mb-6 flex rotate-14 justify-end lg:absolute lg:top-20 lg:right-[-2.5rem] lg:z-[26] lg:mb-0 xl:right-[-17.5rem]"
+					>
+						<PostItNote
+							attachment="tape"
+							className="pointer-events-auto"
+							color="linear-gradient(160deg, #fef49c 0%, #f1df77 100%)"
+							label="18+ artworks"
+							seedKey={`gallery-sensitive-${roomId}`}
+							text={adultContentAllowed
+								? 'Sensitive artworks are visible on this account.'
+								: 'Sensitive artworks stay blurred until you opt in.'}
+						>
+							{#if viewer}
+								<button
+									type="button"
+									class="w-full rounded-[0.95rem] border-3 border-[#2d2420] bg-[#fff7d4] px-4 py-2 text-sm font-black text-[#2d2420] shadow-[2px_3px_0_rgba(45,36,32,0.18)] transition duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+									disabled={isSavingAdultContentPreference}
+									onclick={() => updateAdultContentPreference(!adultContentAllowed)}
+								>
+									{adultContentAllowed ? 'Hide 18+ artworks' : 'Reveal 18+ artworks'}
+								</button>
+							{:else}
+								<p class="text-xs font-semibold text-[#8f3720]">Sign in to reveal 18+ artworks.</p>
+							{/if}
+						</PostItNote>
+					</div>
+				{/if}
 
 				<div class="space-y-6">
 					{#if detailErrorMessage}
@@ -538,17 +583,16 @@
 								{emptyStateSupportMessage}
 							</p>
 						</div>
-					{:else if roomId === 'mystery' && mysteryArtwork}
+					{:else if roomId === 'mystery' && artworks.length > 0}
 						<MysteryRoom
 							adultContentEnabled={adultContentAllowed}
-							artwork={mysteryArtwork}
-							onReveal={spinMystery}
+							{artworks}
 							onSelect={openArtwork}
 						/>
 					{:else if roomId === 'hall-of-fame'}
 						<div class="space-y-12">
 							<div
-								class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end"
+								class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end lg:gap-10"
 							>
 								{#each hallOfFamePodium as entry (`podium-${entry.position}-${entry.artwork?.id ?? 'empty'}`)}
 									{@const artwork = entry.artwork}
@@ -556,11 +600,14 @@
 										{@const position = entry.position}
 										{@const meta = podiumMeta[position]}
 										{@const frame = frameForArtwork(artwork.id, position)}
-										<div class="relative flex flex-col items-center">
+										<div class="relative flex flex-col items-center gap-5">
 											<div class="relative mb-5 flex flex-col items-center gap-3">
-												<WaxSealMedal {position} size={position === 1 ? 'large' : 'medium'} />
+												<WaxSealMedal
+													{position}
+													size={position === 1 ? 'large' : position === 2 ? 'medium' : 'small'}
+												/>
 												<div
-													class="font-display rounded-full border-[3px] border-[#2d2420] px-6 py-2 font-black text-[#2d2420] shadow-lg"
+													class="font-display rounded-full border-[3px] border-[#2d2420] bg-[#f8f2e8]/92 px-5 py-1.5 text-xs font-black tracking-[0.16em] text-[#2d2420] shadow-lg"
 													style={`background:${meta.color}`}
 												>
 													{meta.label}
@@ -602,11 +649,11 @@
 														</div>
 													</ArtworkFrame>
 													{#if artwork.artistAvatar}
-														<div class="absolute -bottom-6 left-1/2 -translate-x-1/2">
+														<div class="absolute -right-4 -bottom-4">
 															<WaxSealAvatar
 																alt={artwork.artist}
 																seed={artwork.id}
-																size="xl"
+																size="lg"
 																src={artwork.artistAvatar}
 															/>
 														</div>
@@ -615,15 +662,18 @@
 											</button>
 
 											<div
-												class={`mt-8 w-full rounded-t-lg border-4 border-[#2d2420] ${meta.base}`}
-												style={`background:${meta.color}`}
+												class="rounded-[1.1rem] border-[3px] border-[#4d351c] bg-[linear-gradient(180deg,rgba(255,249,238,0.96),rgba(239,228,208,0.96))] px-4 py-3 text-center text-[#2d2420] shadow-[0_10px_18px_rgba(0,0,0,0.14),inset_0_1px_0_rgba(255,255,255,0.45)]"
+												data-testid={`podium-plaque-${position}`}
 											>
-												<div class="flex h-full flex-col items-center justify-center">
-													<div class="font-display text-5xl font-black text-[#2d2420]">
-														{position}
-													</div>
-													<div class="mt-1 text-sm font-bold text-[#2d2420]">{artwork.artist}</div>
-													<div class="text-xs font-bold text-[#2d2420]">{artwork.score} pts</div>
+												<div
+													class="text-[0.68rem] font-black tracking-[0.18em] text-[#8a6a42] uppercase"
+												>
+													#{position}
+													{meta.label}
+												</div>
+												<div class="mt-1 text-sm font-bold text-[#2d2420]">{artwork.artist}</div>
+												<div class="mt-1 text-xs font-semibold text-[#5f554b]">
+													⭐ {artwork.score}
 												</div>
 											</div>
 										</div>
@@ -633,15 +683,13 @@
 
 							<div class="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-4">
 								{#each hallOfFameArtworks.slice(3) as artwork, index (artwork.id)}
-									<ArtworkCard
-										adultContentEnabled={adultContentAllowed}
-										{artwork}
-										{index}
-										frameTestId={`ranked-frame-${artwork.id}`}
-										{viewer}
-										onArtworkPatch={(patch) => patchArtwork(artwork.id, patch)}
-										onclick={() => openArtwork(artwork)}
-									/>
+									<div style={`transform: translateY(${index % 2 === 0 ? '-6px' : '8px'});`}>
+										<PolaroidCard
+											{artwork}
+											testId={`ranked-polaroid-${artwork.id}`}
+											onclick={() => openArtwork(artwork)}
+										/>
+									</div>
 								{/each}
 							</div>
 						</div>
@@ -656,7 +704,7 @@
 							risers={hotWallRisers}
 						/>
 					{:else if roomId === 'your-studio'}
-						<div class="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-3">
+						<div class="grid grid-cols-1 gap-15 md:grid-cols-2 lg:grid-cols-3">
 							{#each artworks as artwork (artwork.id)}
 								{@const seed = hashString(artwork.id)}
 								{@const offsetY = ((seed >> 4) % 21) - 10}
