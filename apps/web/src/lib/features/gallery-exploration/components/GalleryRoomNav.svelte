@@ -30,7 +30,7 @@
 	);
 </script>
 
-<nav class="flex gap-4 overflow-x-auto pb-4">
+<nav class="flex gap-4 overflow-x-auto p-2">
 	{#each visibleRooms as room (room.id)}
 		{@const isActive = room.id === roomId}
 		{@const href = room.id === 'hall-of-fame' ? '/gallery' : (`/gallery/${room.id}` as const)}
