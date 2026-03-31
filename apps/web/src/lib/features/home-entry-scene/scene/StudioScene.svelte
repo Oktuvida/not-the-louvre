@@ -328,7 +328,7 @@
 </script>
 
 <div
-	class="relative h-full w-full overflow-hidden rounded-[2rem] border-[var(--border-frame)] bg-[radial-gradient(circle_at_50%_18%,_rgba(255,255,255,0.44),_transparent_30%),linear-gradient(180deg,_#ccb194_0%,_#8b6f57_100%)] shadow-[var(--shadow-strong)]"
+	class="relative h-full w-full overflow-hidden border-[var(--border-frame)] bg-[radial-gradient(circle_at_50%_18%,_rgba(255,255,255,0.44),_transparent_30%),linear-gradient(180deg,_#ccb194_0%,_#8b6f57_100%)] shadow-[var(--shadow-strong)]"
 >
 	{#if !loaded}
 		<StudioLoadingFallback />
@@ -383,7 +383,4 @@
 			<T.ShadowMaterial transparent opacity={0.2} />
 		</T.Mesh>
 	</Canvas>
-	<div
-		class="pointer-events-none absolute inset-x-[7%] top-[8%] bottom-[6%] rounded-[1.6rem] border-2 border-white/18"
-	></div>
 </div>
