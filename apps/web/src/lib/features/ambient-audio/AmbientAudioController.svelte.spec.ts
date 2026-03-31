@@ -4,6 +4,12 @@ import { render } from 'vitest-browser-svelte';
 
 import AmbientAudioController from './AmbientAudioController.svelte';
 
+type FakeAudioElement = HTMLAudioElement & {
+	__currentTimeWrites: () => number[];
+	__endedHandler: () => (() => void) | null;
+	__errorHandler: () => (() => void) | null;
+};
+
 const createFakeAudio = () => {
 	let endedHandler: (() => void) | null = null;
 	let errorHandler: (() => void) | null = null;
@@ -33,7 +39,7 @@ const createFakeAudio = () => {
 		__currentTimeWrites: () => currentTimeWrites,
 		__endedHandler: () => endedHandler,
 		__errorHandler: () => errorHandler
-	} as unknown as HTMLAudioElement;
+	} as unknown as FakeAudioElement;
 };
 
 describe('AmbientAudioController', () => {
