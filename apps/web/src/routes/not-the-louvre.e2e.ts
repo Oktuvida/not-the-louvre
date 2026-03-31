@@ -20,7 +20,7 @@ const openDrawSketchbook = async (page: import('@playwright/test').Page) => {
 	await enableReducedMotion(page);
 	await expect(page.getByRole('button', { name: 'Open sketchbook' })).toBeVisible();
 	await page.getByRole('button', { name: 'Open sketchbook' }).click();
-	await expect(page.getByPlaceholder('Give your piece a title')).toBeVisible();
+	await expect(page.getByPlaceholder('Untitled genius')).toBeVisible();
 };
 
 const expectSignedInHomeChrome = async (
@@ -28,8 +28,10 @@ const expectSignedInHomeChrome = async (
 	nickname: string
 ) => {
 	await expect(page.getByText('HELLO')).toBeVisible();
-	await expect(page.getByText(nickname, { exact: true })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
+	await expect(
+		page.getByRole('button', { name: new RegExp(`Edit avatar for ${nickname}`) })
+	).toBeVisible();
+	await expect(page.getByRole('button', { name: /logout/i })).toBeVisible();
 };
 
 const readDrawingCanvasCenterPixel = async (page: import('@playwright/test').Page) =>
@@ -72,13 +74,12 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
-		await page.getByRole('button', { name: 'Logout' }).click();
+		await page.getByRole('button', { name: /logout/i }).click();
 
 		await openHomeAuthOverlay(page);
 		await page.getByPlaceholder('artist_123').fill(deterministicAuthUser.nickname);
 		await page.getByPlaceholder('Enter your password').fill(deterministicAuthUser.password);
 		await page.getByRole('button', { name: 'Sign In' }).last().click();
-
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 	});
 
@@ -102,7 +103,6 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByText('I Stored It').click();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
 		await page.reload();
@@ -166,7 +166,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
-		await page.getByRole('button', { name: 'Logout' }).click();
+		await page.getByRole('button', { name: /logout/i }).click();
 
 		await openHomeAuthOverlay(page);
 		await page.getByRole('button', { name: 'Use recovery key' }).click();
@@ -215,7 +215,7 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/');
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
-		await page.getByRole('button', { name: 'Logout' }).click();
+		await page.getByRole('button', { name: /logout/i }).click();
 
 		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
 		await expect(page.getByText('HELLO')).not.toBeVisible();
@@ -231,13 +231,12 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await expect(page.getByRole('link', { name: 'Exit Studio' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
-		await page.getByPlaceholder('Give your piece a title').fill('Fresh Paint');
+		await page.getByPlaceholder('Untitled genius').fill('Fresh Paint');
 		await page.getByRole('button', { name: 'Publish' }).click();
 
-		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Fresh Paint' })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Open gallery' })).toBeVisible();
-		await expect(page.getByText(/Artwork id:/)).toBeVisible();
 	});
 
 	test('gallery shows a newly published artwork from the real product flow', async ({ page }) => {
@@ -247,9 +246,9 @@ test.describe('Not the Louvre frontend port', () => {
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
 		await openDrawSketchbook(page);
-		await page.getByPlaceholder('Give your piece a title').fill('Gallery Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Gallery Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 		const publishedTitle = (
 			await page
 				.getByRole('heading')
@@ -275,9 +274,9 @@ test.describe('Not the Louvre frontend port', () => {
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
 		await openDrawSketchbook(page);
-		await page.getByPlaceholder('Give your piece a title').fill('Realtime Product Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Realtime Product Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 
 		await page.goto('/gallery/your-studio');
 		await page.getByRole('button', { name: /Realtime Product Piece/ }).click();
@@ -348,9 +347,9 @@ test.describe('Not the Louvre frontend port', () => {
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
 		await openDrawSketchbook(page);
-		await page.getByPlaceholder('Give your piece a title').fill('Mystery Comment Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Mystery Comment Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 
 		await page.goto('/gallery/your-studio');
 		await page.getByRole('button', { name: /Mystery Comment Piece/ }).click();
@@ -394,7 +393,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await openDrawSketchbook(page);
 
 		await setDrawingExportMode(page, 'unsupported');
-		await page.getByPlaceholder('Give your piece a title').fill('Retry Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Retry Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(
 			page.getByText('This browser could not prepare your drawing. Please try again.')
@@ -403,7 +402,7 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await setDrawingExportMode(page, 'webp');
 		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 	});
 
 	test('gallery detail can fork into the draw studio with the parent artwork preloaded', async ({
@@ -416,9 +415,9 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/draw');
 		await openDrawSketchbook(page);
 		await setDrawingExportMode(page, 'webp');
-		await page.getByPlaceholder('Give your piece a title').fill('Fork Source');
+		await page.getByPlaceholder('Untitled genius').fill('Fork Source');
 		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 
 		await page.goto('/gallery/your-studio');
 		await page.getByRole('button', { name: /Fork Source/ }).click();
@@ -426,12 +425,12 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await expect(page).toHaveURL(/\/draw\?fork=/);
 		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
-		await expect(page.getByText('Forking from')).toBeVisible();
+		await expect(page.getByText('Forking Fork Source')).toBeVisible();
 		await expect(page.getByText('Fork Source')).toBeVisible();
 		await expect.poll(() => readDrawingCanvasCenterPixel(page)).not.toEqual([253, 251, 247, 255]);
-		await page.getByPlaceholder('Give your piece a title').fill('Fork Child');
+		await page.getByPlaceholder('Untitled genius').fill('Fork Child');
 		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 
 		await page.goto('/gallery/your-studio');
 		await expect(page.getByText('Fork Child')).toBeVisible();
@@ -483,9 +482,9 @@ test.describe('Not the Louvre frontend port', () => {
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
 		await openDrawSketchbook(page);
-		await page.getByPlaceholder('Give your piece a title').fill('Hot Wall Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Hot Wall Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 
 		await page.goto('/gallery/hot-wall');
 		await expect(page.getByText('Hot right now')).toBeVisible();

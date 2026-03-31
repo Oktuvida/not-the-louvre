@@ -1,19 +1,31 @@
 export const drawingPalette = [
-	'#2d2420',
-	'#d4956c',
-	'#8b9d91',
-	'#e8b896',
-	'#c84f4f',
-	'#6b8e7f',
-	'#f4c430',
-	'#fdfbf7'
+	'#F4EBDD',
+	'#DCC9A3',
+	'#B78C5A',
+	'#6B4A2E',
+	'#2B2622',
+	'#C79A2B',
+	'#A5562A',
+	'#C96A4A',
+	'#B9322E',
+	'#B97A74',
+	'#2F4B9A',
+	'#2E6F7E',
+	'#667A3E',
+	'#8FA27A',
+	'#2D7A63',
+	'#8C7AAE',
+	'#5E3A57',
+	'#A9862A'
 ];
+
+export const brushSizeSteps = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 38, 45, 54, 64];
 
 export const drawingTools = createDrawingTools();
 
 function createDrawingTools() {
-	let activeColor = $state(drawingPalette[0]);
-	let brushSize = $state(5);
+	let activeColor = $state(drawingPalette[4]);
+	let brushSizeIndex = $state(3);
 
 	return {
 		get activeColor() {
@@ -23,10 +35,13 @@ function createDrawingTools() {
 			activeColor = value;
 		},
 		get brushSize() {
-			return brushSize;
+			return brushSizeSteps[brushSizeIndex];
 		},
-		set brushSize(value: number) {
-			brushSize = value;
+		get brushSizeIndex() {
+			return brushSizeIndex;
+		},
+		set brushSizeIndex(value: number) {
+			brushSizeIndex = Math.max(0, Math.min(brushSizeSteps.length - 1, value));
 		}
 	};
 }

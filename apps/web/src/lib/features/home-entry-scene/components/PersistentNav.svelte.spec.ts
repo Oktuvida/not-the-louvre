@@ -37,14 +37,14 @@ describe('PersistentNav', () => {
 
 		await expect.element(page.getByText('HELLO')).toBeVisible();
 		await expect.element(page.getByText('artist_1', { exact: true })).toBeVisible();
-		await expect.element(page.getByRole('button', { name: 'Logout' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /logout/i })).toBeVisible();
 	});
 
 	it('hides signed-in chrome when no canonical backend user exists', async () => {
 		render(PersistentNav, { previewCards: [], user: null });
 
 		await expect.element(page.getByText('HELLO')).not.toBeInTheDocument();
-		await expect.element(page.getByRole('button', { name: 'Logout' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: /logout/i })).not.toBeInTheDocument();
 		await expect.element(page.getByRole('link', { name: 'GALLERY' })).toBeVisible();
 	});
 
