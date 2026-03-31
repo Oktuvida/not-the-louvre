@@ -9,7 +9,6 @@
 	} from '$lib/client/content-filter';
 	import type {
 		DrawForkParent,
-		DrawPageUser,
 		DrawPublishActionData,
 		DrawPublishedArtwork
 	} from '$lib/features/studio-drawing/publish-contract';
@@ -17,6 +16,7 @@
 	import DrawingBookStage from '$lib/features/studio-drawing/components/DrawingBookStage.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
+	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 	import DrawingCanvas from '$lib/features/studio-drawing/components/DrawingCanvas.svelte';
 	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 
@@ -51,8 +51,7 @@
 			}
 
 			return { message: 'Artwork publish failed' };
-		},
-		user
+		}
 	}: {
 		checkTextContent?: TextContentChecker;
 		createArtworkFile?: (canvas: HTMLCanvasElement) => Promise<File | null>;
@@ -62,7 +61,6 @@
 			file: File,
 			options: { isNsfw: boolean; parentArtworkId?: string | null; title: string }
 		) => Promise<DrawPublishActionData>;
-		user?: DrawPageUser;
 	} = $props();
 
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
@@ -212,18 +210,20 @@
 
 <div
 	class="studio-page relative flex h-dvh flex-col overflow-hidden"
-	style="--book-offset-x: 0px; --book-offset-y: 0px; --book-scale: 1;"
+	data-book-state={sceneState}
 >
 	<picture class="pointer-events-none absolute inset-0 z-0">
 		<source type="image/avif" srcset="/table.avif" />
 		<img
 			src="/table.webp"
 			alt=""
-			class="h-full w-full scale-[1.25] object-cover object-[center_115%]"
+			class="h-full w-full scale-[1.4] object-cover object-[center_115%]"
 			loading="eager"
 			decoding="async"
 		/>
 	</picture>
+
+	<AmbientParticleOverlay className="z-[5] opacity-90" />
 
 	<header
 		class="relative z-30 flex flex-shrink-0 items-start justify-between gap-4 px-4 pt-4 sm:px-6"
@@ -244,14 +244,6 @@
 				<span>Exit Studio</span>
 			</GameLink>
 		</div>
-
-		{#if user}
-			<div
-				class="rounded-xl border-3 border-[#2d2420] bg-[#fdfbf7]/90 px-3 py-2 text-sm text-[#2d2420] shadow-lg backdrop-blur-sm"
-			>
-				Signed in as <span class="font-bold">{user.nickname}</span>
-			</div>
-		{/if}
 	</header>
 
 	<main
@@ -268,71 +260,51 @@
 						onOpened={unlockStudio}
 						{openingDurationMs}
 					>
-						{#snippet coverBack()}
-							<div class="flex h-full flex-col justify-between gap-3 text-[#d4c4ae]">
-								<div>
-									<p
-										class="text-[0.6rem] font-bold tracking-[0.25em] uppercase"
-										style="color: rgb(212 196 174 / 0.6);"
-									>
-										{forkParent ? 'Fork Details' : 'Artwork Details'}
+						{#snippet pageFields()}
+							<div class="page-fields-content">
+								{#if forkParent}
+									<p class="fork-context">
+										Forking from <span class="fork-title">{forkParent.title}</span>
 									</p>
-									{#if forkParent}
-										<p class="mt-1.5 text-xs" style="color: rgb(212 196 174 / 0.7);">
-											Forking from <span class="font-semibold text-[#e8d5be]"
-												>{forkParent.title}</span
-											>
-										</p>
-									{/if}
-								</div>
+								{/if}
 
-								<div class="space-y-2.5">
-									<label class="block space-y-1">
-										<span
-											class="text-[0.55rem] font-bold tracking-[0.2em] uppercase"
-											style="color: rgb(212 196 174 / 0.5);">Title</span
-										>
-										<input
-											bind:value={artworkTitle}
-											type="text"
-											maxlength="80"
-											placeholder="Give your piece a title"
-											disabled={!studioUnlocked}
-											class="w-full rounded-lg border border-[#6b4f38] bg-[#4a3020]/60 px-2.5 py-1.5 text-sm text-[#f0e4d4] placeholder-[#8a7460] transition outline-none focus:border-[#c49a6c] disabled:opacity-50"
-										/>
-									</label>
-									<button
-										type="button"
-										role="checkbox"
-										aria-checked={isArtworkNsfw}
+								<label class="field-group">
+									<span class="field-label">Title</span>
+									<input
+										bind:value={artworkTitle}
+										type="text"
+										maxlength="80"
+										placeholder="Give your piece a title"
 										disabled={!studioUnlocked}
-										onclick={() => {
-											if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
-										}}
-										class="nsfw-toggle group flex w-full items-center gap-2.5 rounded-lg border border-[#6b4f38] bg-[#4a3020]/60 px-2.5 py-1.5 text-left text-xs text-[#d4c4ae] transition disabled:opacity-50"
+										class="field-input"
+									/>
+								</label>
+
+								<button
+									type="button"
+									role="checkbox"
+									aria-checked={isArtworkNsfw}
+									disabled={!studioUnlocked}
+									onclick={() => {
+										if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
+									}}
+									class="nsfw-toggle"
+								>
+									<span
+										class="nsfw-track"
+										style={`background: ${isArtworkNsfw ? '#c84f4f' : 'rgb(47 36 28 / 0.12)'};`}
 									>
 										<span
-											class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors duration-200"
-											style={`background: ${isArtworkNsfw ? '#c84f4f' : '#6b4f38'};`}
-										>
-											<span
-												class="inline-block h-4 w-4 translate-y-0.5 rounded-full bg-[#f0e4d4] shadow-sm transition-transform duration-200"
-												style={`transform: translateX(${isArtworkNsfw ? '1.1rem' : '0.2rem'}) translateY(0.1rem);`}
-											></span>
-										</span>
-										<span class={isArtworkNsfw ? 'font-semibold text-[#e8805a]' : ''}>NSFW</span>
-									</button>
-									{#if titleError}
-										<p class="text-xs text-[#e8805a]">{titleError}</p>
-									{/if}
-								</div>
+											class="nsfw-dot"
+											style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
+										></span>
+									</span>
+									<span class={isArtworkNsfw ? 'font-semibold text-[#e8805a]' : ''}>NSFW</span>
+								</button>
 
-								<div
-									class="mt-auto border-t border-[#6b4f38]/40 pt-1.5 text-[0.55rem]"
-									style="color: rgb(212 196 174 / 0.35);"
-								>
-									Inside cover · Not the Louvre
-								</div>
+								{#if titleError}
+									<p class="field-error">{titleError}</p>
+								{/if}
 							</div>
 						{/snippet}
 						<DrawingCanvas
@@ -367,17 +339,6 @@
 						</div>
 					</div>
 				{/if}
-
-				{#if !studioUnlocked}
-					<div
-						class="mx-auto mt-2 max-w-xl rounded-full border border-[#8c6a50]/30 bg-[#fff9f0]/80 px-4 py-2 text-center text-xs text-[#6f5645] shadow-lg backdrop-blur-sm"
-						style="font-family: 'Baloo 2', sans-serif;"
-					>
-						{sceneState === 'closed'
-							? 'Open the sketchbook cover to start drawing.'
-							: 'The page is opening...'}
-					</div>
-				{/if}
 			</div>
 
 			<div
@@ -402,7 +363,24 @@
 	.studio-book-frame {
 		height: clamp(29rem, 78vh, 56rem);
 		flex: 0 0 auto;
-		transform: translate(var(--book-offset-x), var(--book-offset-y)) scale(var(--book-scale));
+		justify-self: center;
+		--book-offset-x: 22rem;
+		--book-offset-y: 3rem;
+		--book-scale: 0.82;
+		--book-rotation: -6deg;
+		transform: translate(var(--book-offset-x), var(--book-offset-y)) scale(var(--book-scale)) rotate(var(--book-rotation));
+		transform-origin: center center;
+		transition:
+			transform 800ms cubic-bezier(0.23, 1, 0.32, 1);
+	}
+
+	/* Book approaches viewer when opening/open */
+	.studio-page[data-book-state='opening'] .studio-book-frame,
+	.studio-page[data-book-state='open'] .studio-book-frame {
+		--book-offset-x: 36rem;
+		--book-offset-y: 2rem;
+		--book-scale: 1.3;
+		--book-rotation: 0deg;
 	}
 
 	.tools-stage {
@@ -421,6 +399,110 @@
 		opacity: 1;
 		animation: toolTrayCrashIn 210ms cubic-bezier(0.2, 0.9, 0.24, 1.12) both;
 	}
+
+	/* --- Page fields styling (inside the book page) --- */
+
+	.page-fields-content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.fork-context {
+		font-family: var(--font-body, 'Baloo 2', sans-serif);
+		font-size: 0.7rem;
+		color: var(--color-muted, #6f6257);
+	}
+
+	.fork-title {
+		font-weight: 600;
+		color: var(--color-ink, #2f241c);
+	}
+
+	.field-group {
+		display: block;
+	}
+
+	.field-label {
+		display: block;
+		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-size: 9px;
+		font-weight: 600;
+		letter-spacing: 2px;
+		text-transform: uppercase;
+		color: var(--color-muted, #6f6257);
+		margin-bottom: 3px;
+	}
+
+	.field-input {
+		width: 100%;
+		background: rgb(255 255 255 / 0.7);
+		border: 1.5px solid rgb(47 36 28 / 0.12);
+		border-radius: 8px;
+		padding: 7px 10px;
+		font-family: var(--font-body, 'Baloo 2', sans-serif);
+		font-size: 12px;
+		color: var(--color-ink, #2f241c);
+		outline: none;
+		transition: border-color 0.2s;
+	}
+
+	.field-input::placeholder {
+		color: #a09888;
+	}
+
+	.field-input:focus {
+		border-color: var(--color-primary, #d4834a);
+	}
+
+	.field-input:disabled {
+		opacity: 0.5;
+	}
+
+	.nsfw-toggle {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		font-family: var(--font-body, 'Baloo 2', sans-serif);
+		font-size: 11px;
+		color: var(--color-muted, #6f6257);
+	}
+
+	.nsfw-toggle:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.nsfw-track {
+		position: relative;
+		display: inline-flex;
+		width: 30px;
+		height: 17px;
+		border-radius: 9px;
+		transition: background 0.2s;
+		flex-shrink: 0;
+	}
+
+	.nsfw-dot {
+		width: 13px;
+		height: 13px;
+		border-radius: 50%;
+		background: #fbf7f0;
+		border: 1.5px solid rgb(47 36 28 / 0.25);
+		box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+		transition: transform 0.2s;
+	}
+
+	.field-error {
+		font-size: 0.7rem;
+		color: #e8805a;
+	}
+
+	/* --- Animations --- */
 
 	@keyframes studioPanelReveal {
 		from {
@@ -454,6 +536,7 @@
 	@media (max-width: 1279px) {
 		.studio-book-frame {
 			height: clamp(27rem, 74vh, 52rem);
+			--book-offset-x: 1.5rem;
 		}
 
 		.tools-stage {
@@ -464,6 +547,7 @@
 	@media (max-width: 700px) {
 		.studio-book-frame {
 			height: clamp(24rem, 68vh, 48rem);
+			--book-offset-x: 0.5rem;
 		}
 
 		.tools-stage-hidden {

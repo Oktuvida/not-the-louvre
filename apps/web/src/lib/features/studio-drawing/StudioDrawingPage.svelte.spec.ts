@@ -28,21 +28,17 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('starts with a closed sketchbook and hides active studio controls', async () => {
-		render(StudioDrawingPage, {
-			openingDurationMs: 1,
-			user: { nickname: 'journey_artist' }
-		});
+		render(StudioDrawingPage, { openingDurationMs: 1 });
 
+		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
+		await expect.element(page.getByText('Signed in as')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Open sketchbook' })).toBeVisible();
 		await expect.element(page.getByPlaceholder('Give your piece a title')).toBeDisabled();
 		await expect.element(page.getByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
 	});
 
 	it('reveals the drawing controls after the sketchbook opens', async () => {
-		render(StudioDrawingPage, {
-			openingDurationMs: 1,
-			user: { nickname: 'journey_artist' }
-		});
+		render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await openSketchbook();
 
@@ -58,8 +54,7 @@ describe('StudioDrawingPage', () => {
 		);
 
 		render(StudioDrawingPage, {
-			openingDurationMs: 300,
-			user: { nickname: 'journey_artist' }
+			openingDurationMs: 300
 		});
 
 		await page.getByRole('button', { name: 'Open sketchbook' }).click();
@@ -92,8 +87,7 @@ describe('StudioDrawingPage', () => {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkFile,
-			publishDrawing,
-			user: { nickname: 'journey_artist' }
+			publishDrawing
 		});
 		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('My First Piece');
@@ -131,8 +125,7 @@ describe('StudioDrawingPage', () => {
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
-			publishDrawing,
-			user: { nickname: 'journey_artist' }
+			publishDrawing
 		});
 		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('Problem Piece');
@@ -151,8 +144,7 @@ describe('StudioDrawingPage', () => {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkFile: async () => null,
-			publishDrawing,
-			user: { nickname: 'journey_artist' }
+			publishDrawing
 		});
 		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('Export Trouble');
@@ -175,8 +167,7 @@ describe('StudioDrawingPage', () => {
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
-			publishDrawing,
-			user: { nickname: 'journey_artist' }
+			publishDrawing
 		});
 
 		await openSketchbook();
@@ -210,8 +201,7 @@ describe('StudioDrawingPage', () => {
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
 			},
-			publishDrawing,
-			user: { nickname: 'journey_artist' }
+			publishDrawing
 		});
 
 		await expect.element(page.getByText('Forking from')).toBeVisible();
@@ -234,8 +224,7 @@ describe('StudioDrawingPage', () => {
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
 			},
-			openingDurationMs: 1,
-			user: { nickname: 'journey_artist' }
+			openingDurationMs: 1
 		});
 
 		await expect.element(page.getByText('Forking from')).toBeVisible();
@@ -256,8 +245,7 @@ describe('StudioDrawingPage', () => {
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
-			publishDrawing,
-			user: { nickname: 'journey_artist' }
+			publishDrawing
 		});
 		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('Blocked Piece');
@@ -280,8 +268,7 @@ describe('StudioDrawingPage', () => {
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
-			publishDrawing,
-			user: { nickname: 'journey_artist' }
+			publishDrawing
 		});
 		await openSketchbook();
 		await page.getByPlaceholder('Give your piece a title').fill('Retry Later Piece');
@@ -314,8 +301,7 @@ describe('StudioDrawingPage', () => {
 			checkTextContent,
 			createArtworkFile: async () =>
 				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
-			publishDrawing,
-			user: { nickname: 'journey_artist' }
+			publishDrawing
 		});
 
 		await openSketchbook();
