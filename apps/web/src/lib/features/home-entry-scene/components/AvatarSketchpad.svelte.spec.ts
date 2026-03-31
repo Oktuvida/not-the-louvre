@@ -164,6 +164,34 @@ describe('AvatarSketchpad', () => {
 		expect(saveAvatar).toHaveBeenCalledWith(serializeDrawingDocument(storedDocument));
 	});
 
+	it('clears to a blank avatar when configured for the authenticated editor flow', async () => {
+		const storedDocument = {
+			...createEmptyDrawingDocument('avatar'),
+			strokes: [
+				{
+					color: '#2F4B9A',
+					points: [[20, 24] as [number, number], [120, 180] as [number, number]],
+					size: 10
+				}
+			]
+		};
+		const saveAvatar = vi.fn(async () => ({ success: true as const }));
+
+		render(AvatarSketchpad, {
+			clearMode: 'blank',
+			initialDrawingDocument: storedDocument,
+			nickname: 'artist_1',
+			saveAvatar
+		});
+
+		await page.getByRole('button', { name: 'Clear' }).click();
+		await enterGalleryButton().click();
+
+		expect(saveAvatar).toHaveBeenCalledWith(
+			serializeDrawingDocument(createEmptyDrawingDocument('avatar'))
+		);
+	});
+
 	it('shows a retryable save error and stays in the avatar step when persistence fails', async () => {
 		const onContinue = vi.fn();
 		const createAvatarPayload = vi.fn(async () =>

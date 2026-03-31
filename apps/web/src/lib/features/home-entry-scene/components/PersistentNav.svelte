@@ -5,7 +5,11 @@
 	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
 	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
-	import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+	import { buildDrawingDraftKey, clearDrawingDraft } from '$lib/features/stroke-json/drafts';
+	import {
+		createEmptyDrawingDocument,
+		parseDrawingDocument
+	} from '$lib/features/stroke-json/document';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
@@ -44,6 +48,17 @@
 	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
 	const hasSensitivePreview = $derived(previewCards.some((card) => card.isNsfw));
 	const galleryHref = $derived(user ? ('/gallery/your-studio' as const) : ('/gallery' as const));
+	const avatarDraftKey = $derived(
+		user
+			? buildDrawingDraftKey({
+					schemaVersion:
+						user.avatarDrawingDocument?.version ?? createEmptyDrawingDocument('avatar').version,
+					scope: 'profile',
+					surface: 'avatar',
+					userKey: user.id
+				})
+			: null
+	);
 
 	const updateAdultContentPreference = async (enabled: boolean) => {
 		if (!user || isSavingAdultContentPreference) {
@@ -83,6 +98,10 @@
 	};
 
 	const closeAvatarEditor = () => {
+		if (avatarDraftKey) {
+			clearDrawingDraft(avatarDraftKey);
+		}
+
 		isAvatarEditorOpen = false;
 	};
 
@@ -380,6 +399,7 @@
 							Redraw your avatar
 						</h2>
 						<GameButton type="button" variant="ghost" size="sm" onclick={closeAvatarEditor}>
+							<span class="sr-only">Close</span>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								width="20"
@@ -397,6 +417,7 @@
 						</GameButton>
 					</div>
 					<AvatarSketchpad
+						clearMode="blank"
 						draftUserKey={user.id}
 						initialDrawingDocument={user.avatarDrawingDocument ?? null}
 						nickname={user.nickname}

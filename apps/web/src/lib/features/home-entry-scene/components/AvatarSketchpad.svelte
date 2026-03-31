@@ -52,6 +52,7 @@
 		  };
 
 	let {
+		clearMode = 'initial',
 		createAvatarPayload = async (documentState: DrawingDocumentV1) => {
 			const mode =
 				typeof window === 'undefined'
@@ -82,6 +83,7 @@
 		}),
 		submitLabel = 'Enter the gallery'
 	}: {
+		clearMode?: 'blank' | 'initial';
 		createAvatarPayload?: (documentState: DrawingDocumentV1) => Promise<string | null>;
 		draftUserKey?: string | null;
 		initialDrawingDocument?: DrawingDocumentV1 | null;
@@ -102,6 +104,9 @@
 
 	const brushSize = $derived(BRUSH_SIZES[brushStep] ?? BRUSH_SIZES[BRUSH_SIZES.length - 1]);
 	const brushPreviewDiameter = $derived(Math.max(4, brushSize + 2));
+	const clearDocument = $derived(
+		clearMode === 'blank' ? createEmptyDrawingDocument('avatar') : baselineDocument
+	);
 	const draftKey = $derived(
 		draftUserKey
 			? buildDrawingDraftKey({
@@ -472,7 +477,7 @@
 						className="w-full sm:w-auto"
 						onclick={() => {
 							saveError = '';
-							drawingDocument = cloneDrawingDocument(baselineDocument);
+							drawingDocument = cloneDrawingDocument(clearDocument);
 						}}
 						disabled={isSaving}
 					>
