@@ -39,6 +39,7 @@
 	let isUpdatingAdultContentPreference = $state(false);
 	let isSubmittingComment = $state(false);
 	let isSubmittingVote = $state(false);
+	let commentInput: HTMLInputElement | undefined = $state();
 
 	const isSensitiveBlurred = $derived(Boolean(artwork?.isNsfw) && !adultContentEnabled);
 
@@ -181,6 +182,7 @@
 				]
 			});
 			commentBody = '';
+			commentInput?.focus();
 		} catch (error) {
 			actionError = error instanceof Error ? error.message : 'Comment failed';
 		} finally {
@@ -214,142 +216,175 @@
 			}}
 		>
 			<StudioPanel tone="paper" className="relative px-6 py-6 md:px-8 md:py-8">
-				<div class="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
-					<div class="relative">
-						<div class="border-4 border-[#2d2420] bg-white p-4 shadow-lg">
-							<div class="relative">
-								<img
-									class={`aspect-square w-full object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
-									src={artwork.imageUrl}
-									alt={artwork.title}
-								/>
-								{#if isSensitiveBlurred}
-									<div
-										class="absolute inset-0 flex flex-col items-center justify-center bg-[rgba(45,36,32,0.72)] px-6 text-center text-[#fdfbf7]"
-									>
-										<span
-											class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
-											>18+</span
+				<div
+					class="grid max-h-[min(86vh,52rem)] gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(19rem,24rem)]"
+				>
+					<div class="flex min-h-0 flex-col gap-4">
+						<div class="relative">
+							{#if viewer}
+								<div class="absolute top-3 right-3 z-20">
+									<ArtworkSafetyActions {artwork} compact {viewer} onArtworkPatch={patchArtwork} />
+								</div>
+							{/if}
+							<div class="border-4 border-[#2d2420] bg-white p-4 shadow-lg">
+								<div class="relative">
+									<img
+										class={`aspect-square w-full object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
+										src={artwork.imageUrl}
+										alt={artwork.title}
+									/>
+									{#if isSensitiveBlurred}
+										<div
+											class="absolute inset-0 flex flex-col items-center justify-center bg-[rgba(45,36,32,0.72)] px-6 text-center text-[#fdfbf7]"
 										>
-										<p class="mt-3 text-lg font-bold uppercase">Sensitive artwork</p>
-										<p class="mt-2 text-sm">Reveal 18+ artworks to view this piece in full.</p>
-										{#if viewer}
-											<button
-												type="button"
-												class="mt-4 rounded-[0.95rem] border-3 border-[#fdfbf7] bg-[#d68a49] px-4 py-2 text-sm font-black text-[#2d2420]"
-												disabled={isUpdatingAdultContentPreference}
-												onclick={() => updateAdultContentVisibility(true)}
+											<span
+												class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
+												>18+</span
 											>
-												Reveal 18+ artworks
-											</button>
-										{:else}
-											<p class="mt-4 text-xs font-semibold">Sign in to reveal 18+ artworks.</p>
-										{/if}
+											<p class="mt-3 text-lg font-bold uppercase">Sensitive artwork</p>
+											<p class="mt-2 text-sm">Reveal 18+ artworks to view this piece in full.</p>
+											{#if viewer}
+												<button
+													type="button"
+													class="mt-4 rounded-[0.95rem] border-3 border-[#fdfbf7] bg-[#d68a49] px-4 py-2 text-sm font-black text-[#2d2420]"
+													disabled={isUpdatingAdultContentPreference}
+													onclick={() => updateAdultContentVisibility(true)}
+												>
+													Reveal 18+ artworks
+												</button>
+											{:else}
+												<p class="mt-4 text-xs font-semibold">Sign in to reveal 18+ artworks.</p>
+											{/if}
+										</div>
+									{/if}
+								</div>
+							</div>
+							{#if artwork.rank && artwork.rank <= 3}
+								<div
+									class="absolute -top-4 -right-4 animate-[bob_1.8s_ease-in-out_infinite] text-6xl"
+								>
+									{{ 1: '🥇', 2: '🥈', 3: '🥉' }[artwork.rank as 1 | 2 | 3]}
+								</div>
+							{/if}
+						</div>
+						<div
+							class="rounded-[1.4rem] border-3 border-[#2d2420] bg-[#f8f2e8]/95 p-3 shadow-[0_10px_24px_rgba(45,36,32,0.16)]"
+						>
+							<div class="grid gap-2">
+								{#if viewer}
+									<div class="grid grid-cols-2 gap-2">
+										<GameButton
+											variant="secondary"
+											size="sm"
+											className="w-full justify-center"
+											onclick={() => submitVote('up')}>👍 {artwork.upvotes}</GameButton
+										>
+										<GameButton
+											variant="danger"
+											size="sm"
+											className="w-full justify-center"
+											onclick={() => submitVote('down')}>👎 {artwork.downvotes}</GameButton
+										>
 									</div>
+									<div class="grid grid-cols-2 gap-2">
+										<GameButton
+											variant="accent"
+											size="sm"
+											className="w-full justify-center"
+											onclick={goToFork}>📄 Fork</GameButton
+										>
+										<GameButton
+											variant="ghost"
+											size="sm"
+											className="w-full justify-center"
+											onclick={onClose}>Close</GameButton
+										>
+									</div>
+								{:else}
+									<p class="text-sm text-[#5d4e37]">Sign in to vote, fork, or leave a comment.</p>
 								{/if}
 							</div>
+							{#if actionError}
+								<p class="mt-3 text-sm text-[#8f3720]">{actionError}</p>
+							{/if}
 						</div>
-						{#if artwork.rank && artwork.rank <= 3}
-							<div
-								class="absolute -top-4 -right-4 animate-[bob_1.8s_ease-in-out_infinite] text-6xl"
-							>
-								{{ 1: '🥇', 2: '🥈', 3: '🥉' }[artwork.rank as 1 | 2 | 3]}
-							</div>
-						{/if}
 					</div>
-					<div>
-						<p class="font-display text-xs tracking-[0.35em] text-[var(--color-muted)] uppercase">
-							Artwork details
-						</p>
+					<div
+						class="flex min-h-0 flex-col rounded-[1.75rem] border-3 border-[#2d2420] bg-[#fff9ef]/96 p-5 shadow-[0_16px_34px_rgba(45,36,32,0.18)]"
+					>
 						<h2
-							class="font-display mt-3 text-4xl tracking-[0.08em] text-[var(--color-ink)] uppercase [text-shadow:2px_2px_0px_#e8b896]"
+							class="font-display text-3xl tracking-[0.08em] text-[var(--color-ink)] uppercase [text-shadow:2px_2px_0px_#e8b896] md:text-4xl"
 						>
 							{artwork.title}
 						</h2>
-						<div class="mt-3 flex items-center gap-3">
-							{#if artwork.artistAvatar}
-								<WaxSealAvatar
-									alt={artwork.artist}
-									seed={artwork.id}
-									size="md"
-									src={artwork.artistAvatar}
-								/>
-							{/if}
-							<p class="text-xl text-[var(--color-muted)] italic">by {artwork.artist}</p>
+						<div class="mt-3 flex items-center justify-between gap-3">
+							<div class="flex items-center gap-3">
+								{#if artwork.artistAvatar}
+									<WaxSealAvatar
+										alt={artwork.artist}
+										seed={artwork.id}
+										size="md"
+										src={artwork.artistAvatar}
+									/>
+								{/if}
+								<p class="text-xl text-[var(--color-muted)] italic">by {artwork.artist}</p>
+							</div>
+							<p class="shrink-0 text-sm font-semibold tracking-[0.08em] text-[#6b625a]">
+								{artwork.forkCount ?? 0} forks
+							</p>
 						</div>
 						<div
-							class="mt-6 -rotate-1 rounded-xl border-4 border-[#2d2420] bg-[#f4c430] p-6 text-center shadow-lg"
+							class="mt-6 flex max-h-[24rem] min-h-0 flex-1 flex-col overflow-hidden rounded-[1.3rem] border-2 border-[#c9b69c] bg-[#f4ecdf]"
 						>
-							<div class="font-display text-5xl font-black text-[#2d2420]">⭐ {artwork.score}</div>
-							<p class="mt-2 text-sm font-semibold text-[#2d2420]">POWER SCORE</p>
-						</div>
-						{#if viewer}
-							<div class="mt-6 grid grid-cols-2 gap-4">
-								<div class="col-span-2">
-									<ArtworkSafetyActions {artwork} {viewer} onArtworkPatch={patchArtwork} />
-								</div>
-								<GameButton
-									variant="secondary"
-									size="sm"
-									className="w-full justify-center"
-									onclick={() => submitVote('up')}>👍 {artwork.upvotes}</GameButton
-								>
-								<GameButton
-									variant="danger"
-									size="sm"
-									className="w-full justify-center"
-									onclick={() => submitVote('down')}>👎 {artwork.downvotes}</GameButton
-								>
-								<GameButton
-									variant="primary"
-									size="sm"
-									className="w-full justify-center"
-									onclick={submitComment}>💬 Comment</GameButton
-								>
-								<GameButton
-									variant="accent"
-									size="sm"
-									className="w-full justify-center"
-									onclick={goToFork}>📄 Fork</GameButton
-								>
-							</div>
-						{:else}
-							<div
-								class="mt-6 rounded-xl border-3 border-dashed border-[#8a6a42] bg-[#f5f0e1] px-4 py-3 text-sm text-[#5d4e37]"
-							>
-								Sign in to vote, comment, or fork this piece.
-							</div>
-						{/if}
-						<p class="mt-3 text-sm text-[#6b625a]">Forks: {artwork.forkCount ?? 0}</p>
-						{#if viewer}
-							<label class="mt-4 block space-y-2">
-								<span class="text-xs font-semibold tracking-[0.18em] text-[#86654b] uppercase"
-									>Add a comment</span
-								>
-								<textarea
-									bind:value={commentBody}
-									rows="3"
-									placeholder="Say something about this piece"
-									class="w-full rounded-[1rem] border-2 border-[#c8af95] bg-[#f5f0e1] px-4 py-3 text-base transition outline-none focus:border-[#4ecdc4]"
-								></textarea>
-							</label>
-						{/if}
-						{#if actionError}
-							<p class="mt-2 text-sm text-[#8f3720]">{actionError}</p>
-						{/if}
-						{#if artwork.comments.length > 0}
-							<div class="mt-6 space-y-3">
-								<h3 class="font-display text-xl text-[#2d2420]">Comments</h3>
-								{#each artwork.comments as comment (comment.id)}
-									<div class="rotate-1 rounded-lg border-2 border-[#2d2420] bg-[#e5dfd5] p-4">
-										<p class="text-sm font-semibold text-[#2d2420]">{comment.author}</p>
-										<p class="mt-1 text-[#6b625a]">{comment.text}</p>
+							{#if artwork.comments.length > 0}
+								<div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+									<div class="space-y-3">
+										{#each artwork.comments as comment (comment.id)}
+											<div
+												class="rounded-2xl border border-[#d2c3ab] bg-[#fffaf2] px-3 py-2 shadow-[0_6px_14px_rgba(45,36,32,0.06)]"
+											>
+												<p class="text-xs font-black tracking-[0.08em] text-[#5d4e37]">
+													{comment.author}
+												</p>
+												<p class="mt-1 text-sm leading-snug text-[#4d4339]">{comment.text}</p>
+											</div>
+										{/each}
 									</div>
-								{/each}
-							</div>
-						{/if}
-						<div class="mt-6 flex justify-end">
-							<GameButton variant="ghost" size="sm" onclick={onClose}>Close</GameButton>
+								</div>
+							{:else}
+								<div
+									class="flex min-h-0 flex-1 items-center justify-center px-4 text-center text-sm text-[#7b6d5f]"
+								>
+									No comments yet.
+								</div>
+							{/if}
+							{#if viewer}
+								<form
+									class="border-t border-[#d7c8b1] bg-[#fbf5ea] p-3"
+									onsubmit={(event) => {
+										event.preventDefault();
+										submitComment();
+									}}
+								>
+									<div class="flex items-center gap-2">
+										<input
+											bind:this={commentInput}
+											bind:value={commentBody}
+											type="text"
+											placeholder="Write a comment"
+											class="min-w-0 flex-1 rounded-full border-2 border-[#c8af95] bg-white px-4 py-2.5 text-sm transition outline-none focus:border-[#4ecdc4]"
+										/>
+										<button
+											type="submit"
+											class="shrink-0 rounded-full border-2 border-[#2d2420] bg-[#f4c430] px-4 py-2 text-xs font-black tracking-[0.16em] text-[#2d2420] uppercase transition hover:-translate-y-0.5 disabled:opacity-60"
+											disabled={isSubmittingComment}
+											aria-label="Send comment"
+										>
+											Send
+										</button>
+									</div>
+								</form>
+							{/if}
 						</div>
 					</div>
 				</div>
