@@ -84,7 +84,7 @@
 		</div>
 
 		<!-- Caption area -->
-		<div class="flex items-start gap-2 px-[6px] pt-2 pb-[10px]">
+		<div class="flex items-start gap-3 px-[6px] pt-2 pb-[10px]">
 			<div
 				class="flex h-8 w-8 min-w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-[2.5px] border-[#2d2420] bg-[#e8ddd0] shadow-[1px_2px_4px_rgba(0,0,0,0.15)]"
 			>
@@ -112,9 +112,16 @@
 						{forkParentTitle ? `From ${forkParentTitle}` : 'Forked artwork'}
 					</p>
 				{/if}
-				<div class="mt-px font-['Fredoka'] text-[0.7rem] tracking-[0.04em] text-[#8a6c52]">
-					&#11088; {artwork.score} &middot; &#128172; {artwork.commentCount ??
-						artwork.comments.length}
+			</div>
+
+			<div
+				class="shrink-0 pt-0.5 text-right font-['Fredoka'] text-[0.7rem] leading-[1.2] tracking-[0.04em] text-[#8a6c52]"
+			>
+				<div data-testid={testId ? `${testId}-score` : undefined}>
+					&#11088; {artwork.score}
+				</div>
+				<div data-testid={testId ? `${testId}-comments` : undefined}>
+					&#128172; {artwork.commentCount ?? artwork.comments.length}
 				</div>
 			</div>
 		</div>

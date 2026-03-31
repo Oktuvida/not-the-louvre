@@ -23,6 +23,22 @@ const artwork = {
 } satisfies Artwork;
 
 describe('PolaroidCard', () => {
+	it('renders avatar, title-author column, and right-aligned metrics', async () => {
+		render(PolaroidCard, {
+			artwork: {
+				...artwork,
+				commentCount: 5,
+				score: 12
+			},
+			testId: 'polaroid-card'
+		});
+
+		await expect.element(page.getByText('Pinned Study')).toBeVisible();
+		await expect.element(page.getByText('journey_artist')).toBeVisible();
+		await expect.element(page.getByTestId('polaroid-card-score')).toHaveTextContent('⭐ 12');
+		await expect.element(page.getByTestId('polaroid-card-comments')).toHaveTextContent('💬 5');
+	});
+
 	it('shows fork lineage on forked artworks', async () => {
 		render(PolaroidCard, {
 			artwork: {
