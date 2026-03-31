@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
-	import gsap from 'gsap';
+	import { gsap } from '$lib/client/gsap';
 	import type { Snippet } from 'svelte';
 	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
 	import type {

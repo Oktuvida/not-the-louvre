@@ -45,7 +45,7 @@ const { gsapSet, gsapTimeline, timelineInstances } = vi.hoisted(() => {
 	return { gsapSet, gsapTimeline, timelineInstances };
 });
 
-vi.mock('gsap', () => {
+vi.mock('$lib/client/gsap', () => {
 	const gsap = {
 		set: gsapSet,
 		timeline: gsapTimeline

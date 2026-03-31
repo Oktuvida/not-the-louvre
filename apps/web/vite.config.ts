@@ -17,6 +17,9 @@ globalWithVitestRunner.__vitest_browser_runner__ ??= {
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+	ssr: {
+		noExternal: ['gsap']
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [
