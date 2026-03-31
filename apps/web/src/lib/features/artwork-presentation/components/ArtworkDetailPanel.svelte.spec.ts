@@ -18,6 +18,7 @@ const artwork = {
 	id: 'artwork-1',
 	imageUrl: '/api/artworks/artwork-1/media',
 	isNsfw: false,
+	lineage: { isFork: false, parent: null, parentStatus: 'none' as const },
 	score: 4,
 	timestamp: Date.now(),
 	title: 'Detail artwork',
@@ -40,6 +41,27 @@ describe('ArtworkDetailPanel', () => {
 		await expect.element(page.getByText('Artwork details')).not.toBeInTheDocument();
 		await expect.element(page.getByText('POWER SCORE')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Close' })).toBeVisible();
+	});
+
+	it('shows fork attribution when the artwork comes from a parent artwork', async () => {
+		render(ArtworkDetailPanel, {
+			artwork: {
+				...artwork,
+				lineage: {
+					isFork: true,
+					parent: {
+						author: { avatarUrl: null, id: 'user-parent', nickname: 'parent_artist' },
+						id: 'artwork-parent',
+						title: 'Parent artwork'
+					},
+					parentStatus: 'available'
+				}
+			}
+		});
+
+		await expect
+			.element(page.getByText('Forked from Parent artwork by parent_artist'))
+			.toBeVisible();
 	});
 
 	it('renders artwork detail as read-only for signed-out visitors', async () => {
