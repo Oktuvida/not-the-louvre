@@ -94,7 +94,9 @@ describe('StudioDrawingPage', () => {
 		expect(goto).not.toHaveBeenCalled();
 
 		await new Promise((resolve) => setTimeout(resolve, 620));
-		expect(goto).toHaveBeenCalledWith(expect.stringContaining('?from=studio'));
+		await vi.waitFor(() => {
+			expect(goto).toHaveBeenCalledWith(expect.stringContaining('?from=studio'));
+		});
 	});
 
 	it('does not reopen or drop fork context while exiting a forked artwork', async () => {
@@ -126,7 +128,9 @@ describe('StudioDrawingPage', () => {
 		expect(goto).not.toHaveBeenCalled();
 
 		await new Promise((resolve) => setTimeout(resolve, 420));
-		expect(goto).toHaveBeenCalledWith(expect.stringContaining('?from=studio'));
+		await vi.waitFor(() => {
+			expect(goto).toHaveBeenCalledWith(expect.stringContaining('?from=studio'));
+		});
 
 		unmount();
 
