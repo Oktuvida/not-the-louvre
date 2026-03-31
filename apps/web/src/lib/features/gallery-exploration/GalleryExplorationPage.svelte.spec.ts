@@ -200,7 +200,9 @@ describe('GalleryExplorationPage', () => {
 
 		render(GalleryExplorationPage, {
 			adultContentEnabled: false,
-			artworks: [{ ...baseArtwork, id: 'artwork-1', isNsfw: true, rank: 1, title: 'Adults only study' }],
+			artworks: [
+				{ ...baseArtwork, id: 'artwork-1', isNsfw: true, rank: 1, title: 'Adults only study' }
+			],
 			emptyStateMessage: null,
 			loadArtworkDetail: async () => ({
 				...baseArtwork,
