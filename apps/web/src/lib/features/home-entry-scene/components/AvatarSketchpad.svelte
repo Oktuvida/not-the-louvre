@@ -14,34 +14,17 @@
 		type DrawingDocumentV1
 	} from '$lib/features/stroke-json/document';
 	import { renderDrawingStroke } from '$lib/features/stroke-json/canvas';
+	import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 
-	const palette = [
-		'#F4EBDD',
-		'#DCC9A3',
-		'#B78C5A',
-		'#6B4A2E',
-		'#2B2622',
-		'#C79A2B',
-		'#A5562A',
-		'#C96A4A',
-		'#B9322E',
-		'#B97A74',
-		'#2F4B9A',
-		'#2E6F7E',
-		'#667A3E',
-		'#8FA27A',
-		'#2D7A63',
-		'#8C7AAE',
-		'#5E3A57',
-		'#A9862A'
-	];
+	const palette = drawingPalette;
 	const BRUSH_SIZES = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
 	const BRUSH_PREVIEW_SIZE = Math.max(...BRUSH_SIZES) + 6;
-	const DEFAULT_AVATAR_COLOR = '#2B2622';
+	const DEFAULT_AVATAR_COLOR = drawingPalette[4] ?? drawingPalette[0] ?? '#1a1a1a';
 
-	const CANVAS_WIDTH = 340;
-	const CANVAS_HEIGHT = 340;
+	const CANVAS_WIDTH = 520;
+	const CANVAS_HEIGHT = 320;
+	const EXPORT_SIZE = 256;
 
 	type AvatarSaveResult =
 		| { success: true }
