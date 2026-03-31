@@ -25,7 +25,7 @@ export type ProductionEnvValidation = {
 export const createChildProcessEnv = (
 	baseEnv: Record<string, string | undefined>,
 	productionEnv: Record<string, string>
-	): NodeJS.ProcessEnv => ({
+): NodeJS.ProcessEnv => ({
 	...baseEnv,
 	...productionEnv,
 	NODE_ENV: baseEnv.NODE_ENV ?? 'production'
