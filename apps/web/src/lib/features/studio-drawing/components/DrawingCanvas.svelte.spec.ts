@@ -1,20 +1,24 @@
 import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { createEmptyDrawingDocument } from '$lib/features/stroke-json/document';
 import DrawingCanvas from './DrawingCanvas.svelte';
 
-class MockCanvasImage {
-	onload: (() => void) | null = null;
-	onerror: (() => void) | null = null;
-	naturalHeight = 768;
-	naturalWidth = 768;
-
-	set src(_value: string) {
-		queueMicrotask(() => {
-			this.onload?.();
-		});
-	}
-}
+const createMockContext = () =>
+	({
+		arc: vi.fn(),
+		beginPath: vi.fn(),
+		fill: vi.fn(),
+		fillRect: vi.fn(),
+		fillStyle: '#fdfbf7',
+		lineCap: 'round',
+		lineJoin: 'round',
+		lineTo: vi.fn(),
+		lineWidth: 1,
+		moveTo: vi.fn(),
+		stroke: vi.fn(),
+		strokeStyle: '#000000'
+	}) as unknown as CanvasRenderingContext2D;
 
 describe('DrawingCanvas', () => {
 	beforeEach(() => {
@@ -31,17 +35,7 @@ describe('DrawingCanvas', () => {
 	});
 
 	it('ignores drawing input while interaction is disabled', async () => {
-		const ctx = {
-			beginPath: vi.fn(),
-			fillRect: vi.fn(),
-			lineCap: 'round',
-			lineJoin: 'round',
-			lineTo: vi.fn(),
-			moveTo: vi.fn(),
-			stroke: vi.fn(),
-			strokeStyle: '#000000',
-			lineWidth: 1
-		} as unknown as CanvasRenderingContext2D;
+		const ctx = createMockContext();
 		const getContextSpy = vi
 			.spyOn(HTMLCanvasElement.prototype, 'getContext')
 			.mockImplementation(((contextId: string) =>
@@ -76,17 +70,7 @@ describe('DrawingCanvas', () => {
 	});
 
 	it('accepts drawing input once interaction is enabled', async () => {
-		const ctx = {
-			beginPath: vi.fn(),
-			fillRect: vi.fn(),
-			lineCap: 'round',
-			lineJoin: 'round',
-			lineTo: vi.fn(),
-			moveTo: vi.fn(),
-			stroke: vi.fn(),
-			strokeStyle: '#000000',
-			lineWidth: 1
-		} as unknown as CanvasRenderingContext2D;
+		const ctx = createMockContext();
 		const getContextSpy = vi
 			.spyOn(HTMLCanvasElement.prototype, 'getContext')
 			.mockImplementation(((contextId: string) =>
@@ -128,17 +112,7 @@ describe('DrawingCanvas', () => {
 	});
 
 	it('keeps drawing when the pointer leaves and re-enters with the mouse still pressed', async () => {
-		const ctx = {
-			beginPath: vi.fn(),
-			fillRect: vi.fn(),
-			lineCap: 'round',
-			lineJoin: 'round',
-			lineTo: vi.fn(),
-			moveTo: vi.fn(),
-			stroke: vi.fn(),
-			strokeStyle: '#000000',
-			lineWidth: 1
-		} as unknown as CanvasRenderingContext2D;
+		const ctx = createMockContext();
 		const getContextSpy = vi
 			.spyOn(HTMLCanvasElement.prototype, 'getContext')
 			.mockImplementation(((contextId: string) =>
@@ -180,17 +154,7 @@ describe('DrawingCanvas', () => {
 	});
 
 	it('stops drawing after the mouse is released outside the canvas', async () => {
-		const ctx = {
-			beginPath: vi.fn(),
-			fillRect: vi.fn(),
-			lineCap: 'round',
-			lineJoin: 'round',
-			lineTo: vi.fn(),
-			moveTo: vi.fn(),
-			stroke: vi.fn(),
-			strokeStyle: '#000000',
-			lineWidth: 1
-		} as unknown as CanvasRenderingContext2D;
+		const ctx = createMockContext();
 		const getContextSpy = vi
 			.spyOn(HTMLCanvasElement.prototype, 'getContext')
 			.mockImplementation(((contextId: string) =>
@@ -231,11 +195,9 @@ describe('DrawingCanvas', () => {
 		getContextSpy.mockRestore();
 	});
 
-	it('hydrates the canvas with a flat initial image when provided', async () => {
+	it('hydrates the canvas with an initial drawing document when provided', async () => {
 		const ctx = {
-			drawImage: vi.fn(),
-			fillRect: vi.fn(),
-			fillStyle: '#fdfbf7',
+			...createMockContext(),
 			imageSmoothingEnabled: false,
 			imageSmoothingQuality: 'low'
 		} as unknown as CanvasRenderingContext2D;
@@ -244,10 +206,17 @@ describe('DrawingCanvas', () => {
 			.mockImplementation(((contextId: string) =>
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 
-		vi.stubGlobal('Image', MockCanvasImage);
-
 		render(DrawingCanvas, {
-			initialImageUrl: '/api/artworks/artwork-parent/media'
+			initialDrawingDocument: {
+				...createEmptyDrawingDocument('artwork'),
+				strokes: [
+					{
+						color: '#2d2420',
+						points: [[24, 24] as [number, number], [200, 200] as [number, number]],
+						size: 8
+					}
+				]
+			}
 		});
 
 		const canvas = document.querySelector('canvas');
@@ -259,10 +228,10 @@ describe('DrawingCanvas', () => {
 		expect(canvas.height).toBe(768);
 
 		await vi.waitFor(() => {
-			expect(ctx.drawImage).toHaveBeenCalledWith(expect.any(MockCanvasImage), 0, 0, 768, 768);
+			expect(ctx.moveTo).toHaveBeenCalled();
+			expect(ctx.lineTo).toHaveBeenCalled();
+			expect(ctx.stroke).toHaveBeenCalled();
 		});
-		expect(ctx.imageSmoothingEnabled).toBe(true);
-		expect(ctx.imageSmoothingQuality).toBe('high');
 
 		getContextSpy.mockRestore();
 	});

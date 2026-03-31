@@ -1,3 +1,5 @@
+import type { DrawingDocumentV1 } from '$lib/features/stroke-json/document';
+
 export type DrawPublishedArtwork = {
 	id: string;
 	isNsfw?: boolean;
@@ -6,6 +8,7 @@ export type DrawPublishedArtwork = {
 };
 
 export type DrawForkParent = {
+	drawingDocument?: DrawingDocumentV1 | null;
 	id: string;
 	isNsfw?: boolean;
 	mediaUrl: string;
@@ -26,5 +29,6 @@ export type DrawPublishActionData =
 	  };
 
 export type DrawPageUser = {
+	id?: string;
 	nickname: string;
 };

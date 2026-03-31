@@ -2,18 +2,30 @@
 	import { deserialize } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
 	import { gsap } from 'gsap';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
 	} from '$lib/client/content-filter';
+	import {
+		buildDrawingDraftKey,
+		clearDrawingDraft,
+		loadDrawingDraft,
+		saveDrawingDraft
+	} from '$lib/features/stroke-json/drafts';
+	import {
+		cloneDrawingDocument,
+		createEmptyDrawingDocument,
+		serializeDrawingDocument,
+		type DrawingDocumentV1
+	} from '$lib/features/stroke-json/document';
 	import type {
 		DrawForkParent,
 		DrawPageUser,
 		DrawPublishActionData,
 		DrawPublishedArtwork
 	} from '$lib/features/studio-drawing/publish-contract';
-	import { exportArtworkFile } from '$lib/features/studio-drawing/canvas-export';
 	import DrawingBookStage from '$lib/features/studio-drawing/components/DrawingBookStage.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
@@ -22,16 +34,52 @@
 
 	let {
 		checkTextContent = defaultCheckTextContent,
-		createArtworkFile = exportArtworkFile,
+		createArtworkPayload = async (documentState: DrawingDocumentV1) => {
+			const mode =
+				typeof window === 'undefined'
+					? 'good'
+					: ((
+							window as Window & {
+								__drawingExportMode?: 'bad' | 'unsupported' | 'webp';
+							}
+						).__drawingExportMode ?? 'good');
+
+			if (mode === 'unsupported') {
+				return null;
+			}
+
+			if (mode === 'bad') {
+				return serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
+			}
+
+			if (mode === 'webp' && documentState.strokes.length === 0) {
+				return serializeDrawingDocument({
+					...createEmptyDrawingDocument('artwork'),
+					strokes: [
+						{
+							color: '#2d2420',
+							points: [
+								[128, 128] as [number, number],
+								[384, 384] as [number, number],
+								[640, 640] as [number, number]
+							],
+							size: 48
+						}
+					]
+				});
+			}
+
+			return serializeDrawingDocument(documentState);
+		},
 		forkParent = null,
 		openingDurationMs = 950,
 		publishDrawing = async (
-			file: File,
+			drawingDocument: string,
 			options: { isNsfw: boolean; parentArtworkId?: string | null; title: string }
 		): Promise<DrawPublishActionData> => {
 			const formData = new FormData();
+			formData.set('drawingDocument', drawingDocument);
 			formData.set('isNsfw', String(options.isNsfw));
-			formData.set('media', file);
 			formData.set('title', options.title);
 			if (options.parentArtworkId) {
 				formData.set('parentArtworkId', options.parentArtworkId);
@@ -55,11 +103,11 @@
 		user
 	}: {
 		checkTextContent?: TextContentChecker;
-		createArtworkFile?: (canvas: HTMLCanvasElement) => Promise<File | null>;
+		createArtworkPayload?: (documentState: DrawingDocumentV1) => Promise<string | null>;
 		forkParent?: DrawForkParent | null;
 		openingDurationMs?: number;
 		publishDrawing?: (
-			file: File,
+			drawingDocument: string,
 			options: { isNsfw: boolean; parentArtworkId?: string | null; title: string }
 		) => Promise<DrawPublishActionData>;
 		user?: DrawPageUser;
@@ -67,6 +115,7 @@
 
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
 	let clearVersion = $state(0);
+	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('artwork'));
 	let forkPreloadSettled = $state(true);
 	let isPublishing = $state(false);
 	let pendingStudioUnlock = $state(false);
@@ -80,10 +129,25 @@
 	let isExitingToHome = $state(false);
 	let showExitFade = $state(false);
 	let exitFadeOpacity = $state(0);
+	const initialDrawingDocument = $derived(
+		forkParent?.drawingDocument
+			? cloneDrawingDocument(forkParent.drawingDocument)
+			: createEmptyDrawingDocument('artwork')
+	);
+	const draftKey = $derived(
+		user
+			? buildDrawingDraftKey({
+					schemaVersion: drawingDocument.version,
+					scope: forkParent?.id ?? 'new',
+					surface: 'artwork',
+					userKey: user.id ?? user.nickname
+				})
+			: null
+	);
 
 	let studioUnlocked = $derived(sceneState === 'open');
 	let toolsVisible = $derived(sceneState !== 'closed');
-	let hasForkParent = $derived(Boolean(forkParent?.mediaUrl));
+	let hasForkParent = $derived(Boolean(forkParent));
 
 	$effect(() => {
 		forkPreloadSettled = !hasForkParent;
@@ -94,8 +158,25 @@
 		}
 	});
 
+	onMount(() => {
+		if (!draftKey) {
+			drawingDocument = cloneDrawingDocument(initialDrawingDocument);
+			return;
+		}
+
+		const draft = loadDrawingDraft(draftKey);
+		drawingDocument =
+			draft?.kind === 'artwork' ? draft : cloneDrawingDocument(initialDrawingDocument);
+	});
+
+	$effect(() => {
+		if (!draftKey) return;
+		saveDrawingDraft(draftKey, drawingDocument);
+	});
+
 	const clearCanvas = () => {
 		if (!studioUnlocked) return;
+		drawingDocument = cloneDrawingDocument(initialDrawingDocument);
 		clearVersion += 1;
 		publishedArtwork = null;
 		statusMessage = '';
@@ -158,19 +239,22 @@
 				return;
 			}
 
-			const file = await createArtworkFile(canvasRef);
-			if (!file) {
-				statusMessage = 'This browser could not export your drawing. Please try again.';
+			const payload = await createArtworkPayload(drawingDocument);
+			if (!payload) {
+				statusMessage = 'This browser could not prepare your drawing. Please try again.';
 				statusTone = 'error';
 				return;
 			}
 
-			const result = await publishDrawing(file, {
+			const result = await publishDrawing(payload, {
 				isNsfw: isArtworkNsfw,
 				parentArtworkId: forkParent?.id ?? null,
 				title: artworkTitle
 			});
 			if ('success' in result && result.success) {
+				if (draftKey) {
+					clearDrawingDraft(draftKey);
+				}
 				publishedArtwork = result.artwork;
 				statusMessage = `Artwork published as ${result.artwork.title}`;
 				statusTone = 'success';
@@ -337,8 +421,9 @@
 						{/snippet}
 						<DrawingCanvas
 							bind:canvasRef
+							bind:drawingDocument
 							{clearVersion}
-							initialImageUrl={forkParent?.mediaUrl ?? null}
+							initialDrawingDocument={forkParent?.drawingDocument ?? null}
 							interactive={studioUnlocked}
 							onInitialImageSettled={markForkPreloadSettled}
 							{statusMessage}

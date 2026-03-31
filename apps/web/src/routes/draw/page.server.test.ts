@@ -158,10 +158,40 @@ describe('draw route page', () => {
 			data: {
 				action: 'publish',
 				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Artwork media is required'
+				message: 'Artwork media or drawing document is required'
 			}
 		});
 		expect(mocked.publishArtwork).not.toHaveBeenCalled();
+	});
+
+	it('publishes a drawing document without requiring source media', async () => {
+		const { actions } = await import('./+page.server');
+		const result = await actions.publish(
+			createActionEvent({
+				drawingDocument:
+					'{"version":1,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","strokes":[]}',
+				title: 'Document publish'
+			})
+		);
+
+		expect(mocked.publishArtwork).toHaveBeenCalledWith(
+			expect.objectContaining({
+				drawingDocument:
+					'{"version":1,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","strokes":[]}',
+				media: null,
+				title: 'Document publish'
+			}),
+			expect.anything()
+		);
+		expect(result).toEqual({
+			action: 'publish',
+			artwork: {
+				id: 'artwork-1',
+				mediaUrl: '/api/artworks/artwork-1/media',
+				title: 'Untitled #0001'
+			},
+			success: true
+		});
 	});
 
 	it('returns a product-facing success payload after publishing the current drawing', async () => {
