@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Detail: Post-it Notes — Not the Louvre</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@400;500;600;700;800&family=Caveat:wght@400;500;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Baloo 2', 'Trebuchet MS', sans-serif;
+    color: #2d2420;
+    background-color: #b8956e;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 56px, rgba(0,0,0,0.06) 56px, rgba(0,0,0,0.06) 59px),
+      repeating-linear-gradient(90deg, transparent, transparent 124px, rgba(0,0,0,0.04) 124px, rgba(0,0,0,0.04) 127px),
+      radial-gradient(circle at 85% 15%, rgba(255,248,225,0.2) 0%, transparent 45%);
+    padding: 2rem;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-family: 'Fredoka', sans-serif;
+    color: #fdfbf7;
+    text-align: center;
+    font-size: 1.6rem;
+    margin-bottom: 0.3rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+  .subtitle {
+    text-align: center;
+    color: rgba(253,251,247,0.7);
+    font-size: 0.85rem;
+    margin-bottom: 2rem;
+  }
+
+  .section-label {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(253,251,247,0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-align: center;
+    margin: 2.5rem 0 1rem;
+  }
+
+  .detail-callout {
+    max-width: 700px;
+    margin: 2rem auto;
+    background: rgba(253,251,247,0.08);
+    border: 1px solid rgba(253,251,247,0.15);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    color: rgba(253,251,247,0.75);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .detail-callout strong {
+    color: #fdfbf7;
+    font-weight: 600;
+  }
+  .detail-callout ul {
+    margin: 0.5rem 0 0 1.2rem;
+  }
+  .detail-callout li {
+    margin-bottom: 0.3rem;
+  }
+
+  .note {
+    text-align: center;
+    font-family: 'Caveat', cursive;
+    font-size: 1rem;
+    color: rgba(253,251,247,0.6);
+    margin-top: 0.5rem;
+    font-style: italic;
+  }
+
+  /* ============================================= */
+  /*   POST-IT BASE                                */
+  /* ============================================= */
+
+  .postit-row {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 1rem 0;
+  }
+
+  .postit {
+    position: relative;
+    width: 280px;
+    padding: 1.2rem 1rem 1rem;
+    box-shadow: 2px 3px 8px rgba(0,0,0,0.18);
+  }
+
+  .postit-text {
+    font-family: 'Caveat', cursive;
+    font-size: 1.1rem;
+    color: #3d3530;
+    line-height: 1.35;
+    position: relative;
+    z-index: 2;
+  }
+
+  .postit-title {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(45,36,32,0.5);
+    margin-bottom: 0.4rem;
+  }
+
+  /* Colors */
+  .postit-yellow {
+    background: linear-gradient(160deg, #fef49c 0%, #f7e67a 100%);
+  }
+  .postit-pink {
+    background: linear-gradient(160deg, #ffcdd2 0%, #f7929e 100%);
+  }
+  .postit-blue {
+    background: linear-gradient(160deg, #bbdefb 0%, #8bb8d0 100%);
+  }
+  .postit-green {
+    background: linear-gradient(160deg, #c8e6c9 0%, #a5d6a7 100%);
+  }
+
+  /* ============================================= */
+  /*   ATTACHMENT METHODS                          */
+  /* ============================================= */
+
+  /* Tape — translucent strip */
+  .postit-tape {
+    position: absolute;
+    width: 52px;
+    height: 18px;
+    background: rgba(255,255,240,0.55);
+    border: 1px solid rgba(200,190,170,0.3);
+    z-index: 3;
+  }
+  .postit-tape-center {
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%) rotate(-2deg);
+  }
+  .postit-tape-left {
+    top: -6px;
+    left: 10px;
+    transform: rotate(10deg);
+  }
+  .postit-tape-right {
+    top: -6px;
+    right: 10px;
+    transform: rotate(-6deg);
+  }
+
+  /* Pin */
+  .postit-pin {
+    position: absolute;
+    top: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.3);
+    z-index: 4;
+  }
+  .postit-pin::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 4px;
+    width: 4px; height: 4px;
+    background: rgba(255,255,255,0.35);
+    border-radius: 50%;
+  }
+  .pin-red { background: radial-gradient(circle at 4px 4px, #e74c3c, #c0392b); }
+  .pin-blue { background: radial-gradient(circle at 4px 4px, #4a90d9, #2d6bb5); }
+  .pin-green { background: radial-gradient(circle at 4px 4px, #5dba5d, #3a8f3a); }
+  .pin-yellow { background: radial-gradient(circle at 4px 4px, #f4c430, #d4a017); }
+
+  /* Corner curl — subtle, clean fold, not ragged */
+  .postit-curl-br::after {
+    content: '';
+    position: absolute;
+    bottom: 0; right: 0;
+    width: 22px; height: 22px;
+    background: linear-gradient(225deg, #b8956e 0%, #b8956e 45%, transparent 46%);
+    z-index: 3;
+  }
+  .postit-curl-br::before {
+    content: '';
+    position: absolute;
+    bottom: -2px; right: -2px;
+    width: 24px; height: 24px;
+    background: linear-gradient(225deg, transparent 42%, rgba(0,0,0,0.08) 44%, currentColor 45%);
+    z-index: 4;
+  }
+  /* Override currentColor per post-it color */
+  .postit-yellow.postit-curl-br::before { color: #e8d86c; }
+  .postit-pink.postit-curl-br::before { color: #e8828e; }
+  .postit-blue.postit-curl-br::before { color: #7aa8c0; }
+  .postit-green.postit-curl-br::before { color: #8fc490; }
+
+  .postit-curl-bl::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0;
+    width: 22px; height: 22px;
+    background: linear-gradient(315deg, #b8956e 0%, #b8956e 45%, transparent 46%);
+    z-index: 3;
+  }
+  .postit-curl-bl::before {
+    content: '';
+    position: absolute;
+    bottom: -2px; left: -2px;
+    width: 24px; height: 24px;
+    background: linear-gradient(315deg, transparent 42%, rgba(0,0,0,0.08) 44%, currentColor 45%);
+    z-index: 4;
+  }
+  .postit-yellow.postit-curl-bl::before { color: #e8d86c; }
+  .postit-pink.postit-curl-bl::before { color: #e8828e; }
+  .postit-blue.postit-curl-bl::before { color: #7aa8c0; }
+  .postit-green.postit-curl-bl::before { color: #8fc490; }
+
+  /* ============================================= */
+  /*   TAB VARIANT (for room nav)                  */
+  /* ============================================= */
+
+  .tab-row {
+    display: flex;
+    gap: 0.8rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 0 auto;
+    padding: 1rem 0;
+  }
+
+  .postit-tab {
+    position: relative;
+    padding: 0.45rem 1.1rem 0.35rem;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #2d2420;
+    cursor: pointer;
+    box-shadow: 2px 3px 6px rgba(0,0,0,0.15);
+    transition: transform 0.15s;
+  }
+  .postit-tab:hover { transform: scale(1.08) rotate(0deg) !important; }
+
+  .postit-tab.active {
+    box-shadow: 2px 3px 8px rgba(0,0,0,0.25);
+    font-weight: 700;
+    z-index: 2;
+  }
+  .postit-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 15%;
+    right: 15%;
+    height: 3px;
+    background: #2d2420;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Post-it Notes — Detailed Spec</h1>
+<p class="subtitle">Room description cards and navigation tabs</p>
+
+<div class="detail-callout">
+  <strong>Key design points:</strong>
+  <ul>
+    <li><strong>Clean edges</strong> — no ragged tears, no weird ripped effects. Just clean rectangles with optional subtle corner curls</li>
+    <li><strong>Color per room:</strong> Yellow = Hall of Fame, Pink = Hot Wall, Blue = Mystery, Green = Your Studio</li>
+    <li><strong>Handwriting font</strong> — Caveat for the body text (room descriptions), Fredoka for the room name label</li>
+    <li><strong>Different attachment per room</strong> — tape center, tape corner, pin — each room uses a different one</li>
+    <li><strong>Subtle corner curl</strong> — optional, clean triangular fold showing the wall behind, not torn paper</li>
+  </ul>
+</div>
+
+<!-- ============================================= -->
+<!--   ROOM DESCRIPTION POST-ITS                   -->
+<!-- ============================================= -->
+<p class="section-label">Room description cards — one per room</p>
+
+<div class="postit-row">
+
+  <!-- Hall of Fame (yellow, tape center, curl bottom-right) -->
+  <div class="postit postit-yellow postit-curl-br" style="transform: rotate(-0.8deg);">
+    <div class="postit-tape postit-tape-center"></div>
+    <div class="postit-title">Hall of Fame</div>
+    <div class="postit-text">Where legends are enshrined forever in gilded glory. Only the highest-voted artworks earn their spot on these hallowed walls.</div>
+  </div>
+
+  <!-- Hot Wall (pink, tape left corner, curl bottom-left) -->
+  <div class="postit postit-pink postit-curl-bl" style="transform: rotate(1.2deg);">
+    <div class="postit-tape postit-tape-left"></div>
+    <div class="postit-title">Hot Wall</div>
+    <div class="postit-text">The freshest, most buzzed-about pieces right now. Trending artworks fighting for the spotlight — today's heat, tomorrow's legends.</div>
+  </div>
+
+</div>
+
+<div class="postit-row">
+
+  <!-- Mystery (blue, pin, curl bottom-right) -->
+  <div class="postit postit-blue postit-curl-br" style="transform: rotate(-1.5deg);">
+    <div class="postit-pin pin-blue"></div>
+    <div class="postit-title">Mystery Room</div>
+    <div class="postit-text">Peek behind the curtain at anonymous creations. Vote on raw talent — no names, no bias, just pure art appreciation.</div>
+  </div>
+
+  <!-- Your Studio (green, tape right corner, no curl) -->
+  <div class="postit postit-green" style="transform: rotate(0.6deg);">
+    <div class="postit-tape postit-tape-right"></div>
+    <div class="postit-title">Your Studio</div>
+    <div class="postit-text">Your personal corner of the museum. All your masterpieces (and happy little accidents) gathered in one place.</div>
+  </div>
+
+</div>
+
+<p class="note">Each room has its own color, attachment method, rotation, and optional corner curl</p>
+
+<!-- ============================================= -->
+<!--   NAVIGATION TABS                             -->
+<!-- ============================================= -->
+<p class="section-label">Navigation tabs — compact post-it strips</p>
+
+<div class="tab-row">
+  <div class="postit-tab postit-yellow active" style="transform: rotate(-1.5deg) scale(1.05);">Hall of Fame</div>
+  <div class="postit-tab postit-pink" style="transform: rotate(1deg);">Hot Wall</div>
+  <div class="postit-tab postit-blue" style="transform: rotate(-0.5deg);">Mystery</div>
+  <div class="postit-tab postit-green" style="transform: rotate(1.5deg);">Your Studio</div>
+</div>
+
+<p class="note">Active tab is slightly bigger with an underline bar</p>
+
+<!-- ============================================= -->
+<!--   ATTACHMENT CLOSE-UPS                        -->
+<!-- ============================================= -->
+<p class="section-label">Attachment method close-ups</p>
+
+<div class="postit-row">
+
+  <!-- Tape center close-up -->
+  <div class="postit postit-yellow" style="transform: rotate(0deg); width: 200px; padding: 2rem 1rem;">
+    <div class="postit-tape postit-tape-center" style="width: 60px; height: 20px;"></div>
+    <div class="postit-text" style="text-align: center; font-size: 0.9rem; color: rgba(45,36,32,0.5);">tape — center</div>
+  </div>
+
+  <!-- Tape left close-up -->
+  <div class="postit postit-pink" style="transform: rotate(0deg); width: 200px; padding: 2rem 1rem;">
+    <div class="postit-tape postit-tape-left" style="width: 55px; height: 20px;"></div>
+    <div class="postit-text" style="text-align: center; font-size: 0.9rem; color: rgba(45,36,32,0.5);">tape — left angle</div>
+  </div>
+
+  <!-- Pin close-up -->
+  <div class="postit postit-blue" style="transform: rotate(0deg); width: 200px; padding: 2rem 1rem;">
+    <div class="postit-pin pin-blue" style="width: 18px; height: 18px;"></div>
+    <div class="postit-text" style="text-align: center; font-size: 0.9rem; color: rgba(45,36,32,0.5);">pin</div>
+  </div>
+
+  <!-- Tape right close-up -->
+  <div class="postit postit-green" style="transform: rotate(0deg); width: 200px; padding: 2rem 1rem;">
+    <div class="postit-tape postit-tape-right" style="width: 55px; height: 20px;"></div>
+    <div class="postit-text" style="text-align: center; font-size: 0.9rem; color: rgba(45,36,32,0.5);">tape — right angle</div>
+  </div>
+
+</div>
+
+<!-- ============================================= -->
+<!--   IMPLEMENTATION NOTES                        -->
+<!-- ============================================= -->
+<div class="detail-callout" style="margin-top: 3rem;">
+  <strong>Implementation notes:</strong>
+  <ul>
+    <li><strong>CSS-only</strong> — no canvas rendering needed; pure CSS backgrounds, pseudo-elements, and shadows</li>
+    <li><strong>Room model drives styling:</strong> each room in <code>rooms.ts</code> gets a <code>postItColor</code> and <code>attachment</code> property</li>
+    <li><strong>Corner curls are optional</strong> — some rooms have them, some don't, for variety</li>
+    <li><strong>The curl reveals the wall</strong> — the triangular cutout matches the page background color (<code>#b8956e</code> or the <code>gallery-bg.webp</code> texture)</li>
+    <li><strong>Tabs reuse the same color system</strong> — just smaller padding, no curl, used as navigation</li>
+  </ul>
+</div>
+
+</body>
+</html>

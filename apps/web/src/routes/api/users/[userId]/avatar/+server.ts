@@ -1,15 +1,25 @@
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { avatarService } from '$lib/server/user/avatar.service';
 import { userRepository } from '$lib/server/user/repository';
 import { streamAvatarStorageObject } from '$lib/server/user/storage';
+import { resolveUserAvatarUrl } from '$lib/user/avatar-url';
+
+const toErrorResponse = (error: unknown, fallback: { code: string; message: string }) => {
+	if (error instanceof ArtworkFlowError) {
+		return json({ code: error.code, message: error.message }, { status: error.status });
+	}
+
+	return json(fallback, { status: 500 });
+};
 
 export const GET: RequestHandler = async (event) => {
 	try {
 		const user = await userRepository.findUserById(event.params.userId);
 
-		if (!user || !user.avatarUrl) {
-			return new Response('Avatar not found', { status: 404 });
+		if (!user || !user.avatarUrl || user.avatarIsHidden) {
+			return json({ code: 'NOT_FOUND', message: 'Avatar not found' }, { status: 404 });
 		}
 
 		const upstream = await streamAvatarStorageObject(user.avatarUrl);
@@ -19,32 +29,35 @@ export const GET: RequestHandler = async (event) => {
 
 		return new Response(upstream.body, { headers, status: 200 });
 	} catch (error) {
-		if (error instanceof ArtworkFlowError) {
-			return new Response(error.message, { status: error.status });
-		}
-
-		return new Response('Avatar media read failed', { status: 500 });
+		return toErrorResponse(error, {
+			code: 'AVATAR_READ_FAILED',
+			message: 'Avatar media read failed'
+		});
 	}
 };
 
 export const PUT: RequestHandler = async (event) => {
 	try {
 		const formData = await event.request.formData();
-		const file = formData.get('file');
+		const drawingDocument = formData.get('drawingDocument')?.toString() ?? '';
 
-		if (!(file instanceof File)) {
-			return new Response('Missing file field in form data', { status: 400 });
+		if (!drawingDocument.trim()) {
+			return json(
+				{ code: 'INVALID_MEDIA_FORMAT', message: 'Avatar drawing document must be provided' },
+				{ status: 400 }
+			);
 		}
 
-		const updated = await avatarService.uploadAvatar(event.locals.user ?? null, file);
+		const updated = await avatarService.uploadAvatar(event.locals.user ?? null, drawingDocument);
 
-		return Response.json({ avatarUrl: updated.avatarUrl });
+		return json({
+			avatarUrl: resolveUserAvatarUrl(updated.id, updated.avatarUrl, updated.updatedAt.getTime())
+		});
 	} catch (error) {
-		if (error instanceof ArtworkFlowError) {
-			return new Response(error.message, { status: error.status });
-		}
-
-		return new Response('Avatar upload failed', { status: 500 });
+		return toErrorResponse(error, {
+			code: 'PUBLISH_FAILED',
+			message: 'Avatar upload failed'
+		});
 	}
 };
 
@@ -52,12 +65,11 @@ export const DELETE: RequestHandler = async (event) => {
 	try {
 		const updated = await avatarService.deleteAvatar(event.locals.user ?? null);
 
-		return Response.json({ avatarUrl: updated.avatarUrl });
+		return json({ avatarUrl: updated.avatarUrl });
 	} catch (error) {
-		if (error instanceof ArtworkFlowError) {
-			return new Response(error.message, { status: error.status });
-		}
-
-		return new Response('Avatar deletion failed', { status: 500 });
+		return toErrorResponse(error, {
+			code: 'PUBLISH_FAILED',
+			message: 'Avatar deletion failed'
+		});
 	}
 };

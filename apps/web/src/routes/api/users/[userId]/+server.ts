@@ -12,7 +12,7 @@ export const GET: RequestHandler = async (event) => {
 	}
 
 	return Response.json({
-		avatarUrl: resolveAvatarUrl(user.id, user.avatarUrl),
+		avatarUrl: user.avatarIsHidden ? null : resolveAvatarUrl(user.id, user.avatarUrl),
 		createdAt: user.createdAt,
 		id: user.id,
 		nickname: user.nickname,

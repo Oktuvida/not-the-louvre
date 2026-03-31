@@ -1,4 +1,5 @@
 import { env } from '$env/dynamic/private';
+import { assertNotBanned } from '$lib/server/auth/guards';
 import { ArtworkFlowError } from './errors';
 import { artworkReadRepository } from './read.repository';
 import type {
@@ -19,6 +20,7 @@ import type {
 } from './types';
 
 type ListArtworkDiscoveryInput = {
+	authorId?: string | null;
 	cursor?: string | null;
 	limit?: number;
 	sort: ArtworkDiscoverySort;
@@ -111,6 +113,7 @@ const toChildForkSummary = (
 	},
 	createdAt: record.createdAt,
 	id: record.id,
+	isNsfw: record.isNsfw,
 	mediaUrl: getArtworkMediaUrl(record.id),
 	title: record.title
 });
@@ -119,17 +122,23 @@ const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 	author: toAuthorSummary(record),
 	commentCount: record.commentCount,
 	createdAt: record.createdAt,
+	downvotes: record.downvotes ?? 0,
 	forkCount: record.forkCount,
 	id: record.id,
+	isNsfw: record.isNsfw,
 	lineage: toLineage(record),
 	mediaUrl: getArtworkMediaUrl(record.id),
 	score: record.score,
-	title: record.title
+	title: record.title,
+	upvotes: record.upvotes ?? 0,
+	viewerVote: record.viewerVote ?? null
 });
 
 const toDetail = (record: ArtworkReadRecord): ArtworkDetail => ({
 	...toFeedCard(record),
 	childForks: (record.childForks ?? []).map(toChildForkSummary),
+	drawingDocument: record.drawingDocument ?? null,
+	drawingVersion: record.drawingVersion ?? null,
 	mediaContentType: record.mediaContentType,
 	mediaSizeBytes: record.mediaSizeBytes,
 	updatedAt: record.updatedAt
@@ -282,6 +291,7 @@ export const listArtworkDiscovery = async (
 	const records =
 		sort === 'recent'
 			? await repository.listRecentArtworks({
+					authorId: input.authorId,
 					cursor: cursor?.sort === 'recent' ? cursor : null,
 					limit: limit + 1,
 					viewer
@@ -294,6 +304,7 @@ export const listArtworkDiscovery = async (
 						viewer
 					})
 				: await repository.listTopArtworks({
+						authorId: input.authorId,
 						cursor: cursor?.sort === 'top' ? cursor : null,
 						limit: limit + 1,
 						now: snapshotAt,
@@ -411,6 +422,10 @@ export const listModerationQueue = async (
 	if (!user) {
 		throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
 	}
+	assertNotBanned({
+		...user,
+		isBanned: 'isBanned' in user ? Boolean((user as { isBanned?: boolean }).isBanned) : false
+	});
 
 	if (user.role !== 'moderator' && user.role !== 'admin') {
 		throw new ArtworkFlowError(403, 'Moderator access required', 'FORBIDDEN');

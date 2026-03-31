@@ -248,6 +248,11 @@ export const artworkRepository: ArtworkRepository = {
 
 		return (record as ArtworkRecord | undefined) ?? null;
 	},
+	async updateArtworkModeration(id: string, input) {
+		const [record] = await db.update(artworks).set(input).where(eq(artworks.id, id)).returning();
+
+		return (record as ArtworkRecord | undefined) ?? null;
+	},
 	async setCommentHiddenState(id: string, input: HiddenStateUpdate) {
 		const [record] = await db
 			.update(artworkComments)

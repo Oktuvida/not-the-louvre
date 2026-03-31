@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Museum Gilded Frame — Preview (Pristine + Aged)</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: rgb(172,156,126);
+  min-height: 100vh;
+  padding: 48px 32px;
+  font-family: monospace;
+  color: #fdfbf7;
+}
+h2 { text-align: center; margin: 0 0 32px; font-size: 18px; letter-spacing: 2px;
+  text-transform: uppercase; opacity: 0.6; }
+.row { display: flex; align-items: center; justify-content: center;
+  gap: 48px; flex-wrap: wrap; margin-bottom: 56px; }
+canvas { display: block; }
+.frame-container { position: relative; display: inline-block; }
+.frame-container img { position: absolute; object-fit: cover; pointer-events: none; }
+label { display: block; text-align: center; margin-top: 12px;
+  font: 13px/1.4 monospace; color: #fdfbf7; opacity: 0.6; }
+.divider { border: none; border-top: 1px solid rgba(253,251,247,0.15);
+  margin: 24px auto 40px; width: 60%; }
+</style>
+</head>
+<body>
+<script>
+/* ── Colour palette (matches museum-canvas.ts) ───────── */
+const C = {
+  gA:[212,168,64], gB:[192,146,42], gC:[142,104,32], gD:[98,72,22],
+  mat:[253,251,247], matShadow:[218,210,196],
+};
+const rgb = (a, al=1) => `rgba(${a[0]},${a[1]},${a[2]},${al})`;
+function poly(ctx, pts, fill){
+  ctx.fillStyle = fill; ctx.beginPath();
+  ctx.moveTo(pts[0], pts[1]);
+  for(let i=2; i<pts.length; i+=2) ctx.lineTo(pts[i], pts[i+1]);
+  ctx.closePath(); ctx.fill();
+}
+/* ─────────────────────────────────────────────────────── *
+ *  drawArtworkFrame — standalone copy for preview.        *
+ *  Mirrors museum-canvas.ts exactly.                      *
+ * ─────────────────────────────────────────────────────── */
+function drawArtworkFrame(ctx, width, height, opts = {}){
+  const {
+    mouldingRatio = 0.08,
+    innerMouldingRatio = 0.4,
+    matRatio = 0.35,
+    castShadow = true,
+    cornerOrnaments = true,
+    aged = false,
+  } = opts;
+  const agingIntensity = aged === true ? 0.5 : aged === false ? 0 : Math.max(0, Math.min(1, aged));
+  const shorter = Math.min(width, height);
+  const outerT = Math.round(shorter * mouldingRatio);
+  const innerT = Math.round(outerT * innerMouldingRatio);
+  const matT   = Math.round(outerT * matRatio);
+  const totalT = outerT + innerT + matT;
+  const opening = { x: totalT, y: totalT, w: width - totalT*2, h: height - totalT*2 };
+  ctx.clearRect(0, 0, width, height);
+  /* ── cast shadow ── */
+  if(castShadow){
+    const so = Math.round(shorter * 0.02);
+    const sb = Math.round(shorter * 0.04);
+    ctx.save();
+    ctx.shadowColor = 'rgba(30,20,10,0.35)';
+    ctx.shadowOffsetX = so; ctx.shadowOffsetY = so; ctx.shadowBlur = sb;
+    ctx.fillStyle = 'rgba(0,0,0,0)';
+    ctx.beginPath(); ctx.rect(0,0,width,height);
+    ctx.rect(opening.x, opening.y+opening.h, opening.w, -opening.h);
+    ctx.fill('evenodd'); ctx.restore();
+  }
+  /* ── outer moulding ── */
+  const ox=0, oy=0, ow=width, oh=height;
+  const ix=outerT, iy=outerT, iw=width-outerT*2, ih=height-outerT*2;
+  ctx.fillStyle = rgb(C.gB);
+  ctx.beginPath(); ctx.rect(ox,oy,ow,oh);
+  ctx.rect(ix, iy+ih, iw, -ih); ctx.fill('evenodd');
+  poly(ctx, [ox,oy, ox+ow,oy, ix+iw,iy, ix,iy], 'rgba(255,248,225,0.32)');
+  poly(ctx, [ox,oy, ix,iy, ix,iy+ih, ox,oy+oh], 'rgba(255,245,210,0.18)');
+  poly(ctx, [ox+ow,oy, ox+ow,oy+oh, ix+iw,iy+ih, ix+iw,iy], 'rgba(0,0,0,0.18)');
+  poly(ctx, [ox,oy+oh, ox+ow,oy+oh, ix+iw,iy+ih, ix,iy+ih], 'rgba(0,0,0,0.24)');
+  const gs = Math.max(3, Math.round(outerT * 0.22));
+  ctx.strokeStyle = rgb(C.gA, 0.18); ctx.lineWidth = 0.5;
+  for(let g=gs; g<outerT; g+=gs){
+    ctx.beginPath(); ctx.moveTo(g,g); ctx.lineTo(ow-g,g); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(g,oh-g); ctx.lineTo(ow-g,oh-g); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(g,g); ctx.lineTo(g,oh-g); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ow-g,g); ctx.lineTo(ow-g,oh-g); ctx.stroke();
+  }
+  ctx.strokeStyle = rgb(C.gD, 0.6); ctx.lineWidth = 1.5;
+  ctx.strokeRect(0.5, 0.5, ow-1, oh-1);
+  /* ── inner moulding ── */
+  const imx=ix, imy=iy, imw=iw, imh=ih;
+  const imix=ix+innerT, imiy=iy+innerT, imiw=iw-innerT*2, imih=ih-innerT*2;
+  ctx.fillStyle = rgb(C.gC);
+  ctx.beginPath(); ctx.rect(imx,imy,imw,imh);
+  ctx.rect(imix, imiy+imih, imiw, -imih); ctx.fill('evenodd');
+  poly(ctx, [imx,imy, imx+imw,imy, imix+imiw,imiy, imix,imiy], 'rgba(255,248,225,0.22)');
+  poly(ctx, [imx,imy+imh, imx+imw,imy+imh, imix+imiw,imiy+imih, imix,imiy+imih], 'rgba(0,0,0,0.20)');
+  poly(ctx, [imx+imw,imy, imx+imw,imy+imh, imix+imiw,imiy+imih, imix+imiw,imiy], 'rgba(0,0,0,0.14)');
+  poly(ctx, [imx,imy, imix,imiy, imix,imiy+imih, imx,imy+imh], 'rgba(255,245,210,0.12)');
+  ctx.strokeStyle = rgb(C.gD, 0.45); ctx.lineWidth = 1;
+  ctx.strokeRect(ix+0.5, iy+0.5, iw-1, ih-1);
+  /* ── linen mat ── */
+  const mx=imix, my=imiy, mw=imiw, mh=imih;
+  ctx.fillStyle = rgb(C.mat);
+  ctx.beginPath(); ctx.rect(mx,my,mw,mh);
+  ctx.rect(opening.x, opening.y+opening.h, opening.w, -opening.h);
+  ctx.fill('evenodd');
+  const msd = Math.max(2, Math.round(matT*0.4));
+  const matSG = ctx.createLinearGradient(opening.x, opening.y, opening.x, opening.y+msd);
+  matSG.addColorStop(0, rgb(C.matShadow, 0.6)); matSG.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = matSG; ctx.fillRect(opening.x, opening.y, opening.w, msd);
+  const matSGL = ctx.createLinearGradient(opening.x, opening.y, opening.x+msd, opening.y);
+  matSGL.addColorStop(0, rgb(C.matShadow, 0.4)); matSGL.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = matSGL; ctx.fillRect(opening.x, opening.y, msd, opening.h);
+  ctx.strokeStyle = rgb(C.matShadow, 0.5); ctx.lineWidth = 0.5;
+  ctx.strokeRect(mx+0.5, my+0.5, mw-1, mh-1);
+  ctx.strokeStyle = rgb(C.matShadow, 0.35); ctx.lineWidth = 1;
+  ctx.strokeRect(opening.x-0.5, opening.y-0.5, opening.w+1, opening.h+1);
+  /* ── corner ornaments ── */
+  if(cornerOrnaments && outerT >= 12){
+    const ornSize = Math.round(outerT * 0.6);
+    const ornInset = Math.round(outerT * 0.5);
+    const corners = [[ornInset,ornInset],[ow-ornInset,ornInset],[ow-ornInset,oh-ornInset],[ornInset,oh-ornInset]];
+    for(const [cx,cy] of corners){
+      const s = ornSize * 0.5;
+      poly(ctx, [cx,cy-s, cx+s,cy, cx,cy+s, cx-s,cy], rgb(C.gA, 0.35));
+      const si = s * 0.5;
+      poly(ctx, [cx,cy-si, cx+si,cy, cx,cy+si, cx-si,cy], rgb(C.gD, 0.30));
+      ctx.fillStyle = rgb(C.gA, 0.5);
+      ctx.beginPath(); ctx.arc(cx, cy, Math.max(1.5, s*0.18), 0, Math.PI*2); ctx.fill();
+    }
+  }
+  /* ── surface noise ── */
+  const fd = ctx.getImageData(0,0,width,height);
+  const d = fd.data;
+  let seed = 77341;
+  const rng = () => { seed=(seed*16807)%2147483647; return(seed&0x7fffffff)/2147483647; };
+  for(let i=0; i<d.length; i+=4){
+    if(d[i+3]>0){
+      const n = (rng()-0.5)*8;
+      d[i]   = Math.max(0, Math.min(255, d[i]+n));
+      d[i+1] = Math.max(0, Math.min(255, d[i+1]+n));
+      d[i+2] = Math.max(0, Math.min(255, d[i+2]+n));
+    }
+  }
+  ctx.putImageData(fd, 0, 0);
+  /* ── weathering pass ── */
+  if(agingIntensity > 0){
+    applyFrameWeathering(ctx, width, height, outerT, innerT, matT, agingIntensity);
+  }
+  return opening;
+}
+/* ─────────────────────────────────────────────────────── *
+ *  applyFrameWeathering — aging / patina effects.         *
+ *  Mirrors museum-canvas.ts exactly.                      *
+ * ─────────────────────────────────────────────────────── */
+function applyFrameWeathering(ctx, width, height, outerT, innerT, matT, intensity){
+  const totalFrame = outerT + innerT;
+  let wSeed = 63491;
+  const wRng = () => { wSeed=(wSeed*16807)%2147483647; return(wSeed&0x7fffffff)/2147483647; };
+  /* 1. tarnish: desaturate + darken */
+  const td = ctx.getImageData(0,0,width,height);
+  const tdd = td.data;
+  const desat = 0.25 * intensity, darken = 18 * intensity;
+  for(let i=0; i<tdd.length; i+=4){
+    if(tdd[i+3]===0) continue;
+    const r=tdd[i], g=tdd[i+1], b=tdd[i+2];
+    const lum = 0.299*r + 0.587*g + 0.114*b;
+    tdd[i]   = Math.max(0, Math.min(255, r + (lum-r)*desat - darken));
+    tdd[i+1] = Math.max(0, Math.min(255, g + (lum-g)*desat - darken));
+    tdd[i+2] = Math.max(0, Math.min(255, b + (lum-b)*desat - darken));
+  }
+  ctx.putImageData(td, 0, 0);
+  /* 2. verdigris spots */
+  const vc = Math.round(8 + 18*intensity);
+  for(let v=0; v<vc; v++){
+    const side = Math.floor(wRng()*4);
+    let vx, vy; const margin = totalFrame*0.2;
+    if(side===0){ vx=margin+wRng()*(width-margin*2); vy=margin+wRng()*(outerT-margin); }
+    else if(side===1){ vx=width-outerT+margin+wRng()*(outerT-margin*2); vy=margin+wRng()*(height-margin*2); }
+    else if(side===2){ vx=margin+wRng()*(width-margin*2); vy=height-outerT+margin+wRng()*(outerT-margin*2); }
+    else { vx=margin+wRng()*(outerT-margin); vy=margin+wRng()*(height-margin*2); }
+    const vr = 3+wRng()*8*intensity, va = 0.08+wRng()*0.14*intensity;
+    const gr=Math.round(60+wRng()*30), gg=Math.round(120+wRng()*50), gb=Math.round(100+wRng()*40);
+    ctx.fillStyle = `rgba(${gr},${gg},${gb},${va})`;
+    ctx.beginPath(); ctx.ellipse(vx,vy,vr,vr*(0.6+wRng()*0.8),wRng()*Math.PI,0,Math.PI*2); ctx.fill();
+    if(wRng()>0.4){
+      ctx.fillStyle = `rgba(${gr-10},${gg+10},${gb+15},${va*0.7})`;
+      ctx.beginPath(); ctx.ellipse(vx+(wRng()-0.5)*vr*2,vy+(wRng()-0.5)*vr*2,vr*0.5,vr*0.4,wRng()*Math.PI,0,Math.PI*2); ctx.fill();
+    }
+  }
+  /* 3. chipped edges */
+  const cc = Math.round(6 + 14*intensity);
+  for(let c=0; c<cc; c++){
+    const edge = Math.floor(wRng()*4);
+    let cx, cy;
+    if(edge===0){ cx=4+wRng()*(width-8); cy=1+wRng()*3; }
+    else if(edge===1){ cx=width-1-wRng()*3; cy=4+wRng()*(height-8); }
+    else if(edge===2){ cx=4+wRng()*(width-8); cy=height-1-wRng()*3; }
+    else { cx=1+wRng()*3; cy=4+wRng()*(height-8); }
+    const cw=2+wRng()*5*intensity, ch=1+wRng()*3*intensity, ca=0.3+wRng()*0.4*intensity;
+    ctx.fillStyle = `rgba(48,36,18,${ca})`;
+    ctx.beginPath(); ctx.ellipse(cx,cy,cw,ch,wRng()*Math.PI,0,Math.PI*2); ctx.fill();
+  }
+  /* 4. dust accumulation */
+  const dustG = ctx.createLinearGradient(0,0,0,height);
+  const da = 0.04 + 0.08*intensity;
+  dustG.addColorStop(0, `rgba(180,160,120,${da*0.3})`);
+  dustG.addColorStop(0.6, `rgba(180,160,120,${da*0.5})`);
+  dustG.addColorStop(1, `rgba(160,140,100,${da})`);
+  ctx.fillStyle = dustG;
+  ctx.save(); ctx.beginPath(); ctx.rect(0,0,width,height);
+  const opX=outerT+innerT+matT, opY=opX, opW=width-opX*2, opH=height-opY*2;
+  ctx.rect(opX, opY+opH, opW, -opH);
+  ctx.clip('evenodd'); ctx.fillRect(0,0,width,height); ctx.restore();
+  /* 5. age stains on mat */
+  const sc = Math.round(2+5*intensity);
+  const miX=outerT+innerT, miY=miX, mW=width-miX*2, mH=height-miY*2;
+  for(let s=0; s<sc; s++){
+    const sx=miX+wRng()*mW, sy=miY+wRng()*mH;
+    const sr=4+wRng()*12*intensity, sa=0.04+wRng()*0.08*intensity;
+    ctx.fillStyle = `rgba(160,140,100,${sa})`;
+    ctx.beginPath(); ctx.ellipse(sx,sy,sr,sr*(0.5+wRng()*0.8),wRng()*Math.PI,0,Math.PI*2); ctx.fill();
+  }
+  /* 6. heavier noise */
+  const ad = ctx.getImageData(0,0,width,height);
+  const add = ad.data; const na = 6+10*intensity;
+  for(let i=0; i<add.length; i+=4){
+    if(add[i+3]===0) continue;
+    const n=(wRng()-0.5)*na;
+    add[i]=Math.max(0,Math.min(255,add[i]+n));
+    add[i+1]=Math.max(0,Math.min(255,add[i+1]+n));
+    add[i+2]=Math.max(0,Math.min(255,add[i+2]+n));
+  }
+  ctx.putImageData(ad, 0, 0);
+}
+/* ─────────────────────────────────────────────────────── *
+ *  Helper: render a single framed artwork into a wrapper  *
+ * ─────────────────────────────────────────────────────── */
+function renderFrame(artW, artH, imgSrc, label, opts = {}){
+  const shorter = Math.min(artW, artH);
+  const outerT = Math.round(shorter * (opts.mouldingRatio || 0.08));
+  const innerT = Math.round(outerT * (opts.innerMouldingRatio || 0.4));
+  const matT   = Math.round(outerT * (opts.matRatio || 0.35));
+  const totalT = outerT + innerT + matT;
+  const cw = artW + totalT*2, ch = artH + totalT*2;
+  const container = document.createElement('div');
+  container.className = 'frame-container';
+  const cv = document.createElement('canvas');
+  cv.width = cw; cv.height = ch;
+  const ctx = cv.getContext('2d');
+  const opening = drawArtworkFrame(ctx, cw, ch, opts);
+  const img = document.createElement('img');
+  img.src = imgSrc;
+  img.style.left = opening.x + 'px';
+  img.style.top  = opening.y + 'px';
+  img.style.width  = opening.w + 'px';
+  img.style.height = opening.h + 'px';
+  container.appendChild(cv);
+  container.appendChild(img);
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  const wrapper = document.createElement('div');
+  wrapper.appendChild(container);
+  wrapper.appendChild(lbl);
+  return wrapper;
+}
+/* ── Sample images ───────────────────────────────────── */
+const imgs = [
+  'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=400&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1547891654-e66ed7ebb968?w=400&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?w=400&auto=format&fit=crop',
+];
+/* ── Section 1: Pristine frames ─────────────────────── */
+const h1 = document.createElement('h2');
+h1.textContent = 'Pristine Gilded Frames';
+document.body.appendChild(h1);
+const row1 = document.createElement('div');
+row1.className = 'row';
+row1.appendChild(renderFrame(128, 128, imgs[0], '128px — pristine'));
+row1.appendChild(renderFrame(256, 256, imgs[1], '256px — pristine'));
+row1.appendChild(renderFrame(320, 240, imgs[2], '320×240 — pristine'));
+document.body.appendChild(row1);
+/* ── Divider ── */
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+/* ── Section 2: Lightly aged (intensity 0.3) ─────────── */
+const h2 = document.createElement('h2');
+h2.textContent = 'Lightly Aged (intensity 0.3)';
+document.body.appendChild(h2);
+const row2 = document.createElement('div');
+row2.className = 'row';
+row2.appendChild(renderFrame(128, 128, imgs[0], '128px — aged 0.3', { aged: 0.3 }));
+row2.appendChild(renderFrame(256, 256, imgs[1], '256px — aged 0.3', { aged: 0.3 }));
+row2.appendChild(renderFrame(320, 240, imgs[2], '320×240 — aged 0.3', { aged: 0.3 }));
+document.body.appendChild(row2);
+/* ── Divider ── */
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+/* ── Section 3: Moderately aged (intensity 0.6) ──────── */
+const h3 = document.createElement('h2');
+h3.textContent = 'Moderately Aged (intensity 0.6)';
+document.body.appendChild(h3);
+const row3 = document.createElement('div');
+row3.className = 'row';
+row3.appendChild(renderFrame(128, 128, imgs[0], '128px — aged 0.6', { aged: 0.6 }));
+row3.appendChild(renderFrame(256, 256, imgs[1], '256px — aged 0.6', { aged: 0.6 }));
+row3.appendChild(renderFrame(320, 240, imgs[2], '320×240 — aged 0.6', { aged: 0.6 }));
+document.body.appendChild(row3);
+/* ── Divider ── */
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+/* ── Section 4: Heavily aged (intensity 1.0) ─────────── */
+const h4 = document.createElement('h2');
+h4.textContent = 'Heavily Aged (intensity 1.0)';
+document.body.appendChild(h4);
+const row4 = document.createElement('div');
+row4.className = 'row';
+row4.appendChild(renderFrame(128, 128, imgs[0], '128px — aged 1.0', { aged: 1.0 }));
+row4.appendChild(renderFrame(256, 256, imgs[1], '256px — aged 1.0', { aged: 1.0 }));
+row4.appendChild(renderFrame(320, 240, imgs[2], '320×240 — aged 1.0', { aged: 1.0 }));
+document.body.appendChild(row4);
+/* ── Divider ── */
+document.body.appendChild(document.createElement('hr')).className = 'divider';
+/* ── Section 5: Side-by-side comparison (256px) ──────── */
+const h5 = document.createElement('h2');
+h5.textContent = 'Side-by-Side Comparison — 256px';
+document.body.appendChild(h5);
+const row5 = document.createElement('div');
+row5.className = 'row';
+row5.appendChild(renderFrame(256, 256, imgs[3], 'Pristine', {}));
+row5.appendChild(renderFrame(256, 256, imgs[3], 'aged: true (0.5)', { aged: true }));
+row5.appendChild(renderFrame(256, 256, imgs[3], 'aged: 1.0', { aged: 1.0 }));
+document.body.appendChild(row5);
+</script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import { dbClient } from '$lib/server/db';
 import { resetPlaywrightArtworkStorage } from '$lib/server/artwork/storage';
+import { resetPlaywrightAvatarStorage } from '$lib/server/user/storage';
 
 const RESET_SQL = `
 	truncate table
@@ -23,6 +24,7 @@ const RESET_SQL = `
 export const resetBackendState = async () => {
 	await dbClient.unsafe(RESET_SQL);
 	resetPlaywrightArtworkStorage();
+	resetPlaywrightAvatarStorage();
 
 	return {
 		resetAt: new Date().toISOString()

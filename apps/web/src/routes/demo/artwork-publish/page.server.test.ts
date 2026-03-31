@@ -188,13 +188,17 @@ describe('artwork publish demo page', () => {
 
 	it('returns domain publish failures without dropping the error code', async () => {
 		mocked.publishArtwork.mockRejectedValue(
-			new ArtworkFlowError(400, 'Artwork media must be AVIF', 'INVALID_MEDIA_FORMAT')
+			new ArtworkFlowError(
+				400,
+				'Artwork media must be AVIF, WebP, JPEG, or PNG',
+				'INVALID_MEDIA_FORMAT'
+			)
 		);
 
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(
 			createActionEvent({
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.png', { type: 'image/png' }),
+				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
 				title: 'Bad upload'
 			})
 		);
@@ -203,7 +207,7 @@ describe('artwork publish demo page', () => {
 			status: 400,
 			data: {
 				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Artwork media must be AVIF'
+				message: 'Artwork media must be AVIF, WebP, JPEG, or PNG'
 			}
 		});
 	});

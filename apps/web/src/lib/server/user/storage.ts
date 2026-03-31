@@ -3,6 +3,14 @@ import { ARTWORK_STORAGE_BUCKET } from '$lib/server/artwork/config';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import type { ArtworkStorage } from '$lib/server/artwork/types';
 
+const playwrightAvatarStorage = new Map<string, { body: Uint8Array; contentType: string }>();
+
+const isPlaywrightStorageRuntime = () => process.env.PLAYWRIGHT === '1';
+
+export const resetPlaywrightAvatarStorage = () => {
+	playwrightAvatarStorage.clear();
+};
+
 const getStorageConfig = () => {
 	const baseUrl = env.SUPABASE_PUBLIC_URL;
 	const serviceKey = env.SUPABASE_SECRET_KEY || env.SERVICE_ROLE_KEY;
@@ -33,6 +41,14 @@ const toStorageError = async (response: Response, fallback: string) => {
 
 export const supabaseAvatarStorage: ArtworkStorage = {
 	async upload(key, file) {
+		if (isPlaywrightStorageRuntime()) {
+			playwrightAvatarStorage.set(key, {
+				body: new Uint8Array(await file.arrayBuffer()),
+				contentType: file.type
+			});
+			return;
+		}
+
 		const { baseUrl, bucket, serviceKey } = getStorageConfig();
 		const response = await fetch(
 			`${baseUrl}/storage/v1/object/${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}`,
@@ -53,6 +69,11 @@ export const supabaseAvatarStorage: ArtworkStorage = {
 	},
 
 	async delete(key) {
+		if (isPlaywrightStorageRuntime()) {
+			playwrightAvatarStorage.delete(key);
+			return;
+		}
+
 		const { baseUrl, bucket, serviceKey } = getStorageConfig();
 		const response = await fetch(`${baseUrl}/storage/v1/object/${bucket}/${key}`, {
 			headers: {
@@ -68,6 +89,23 @@ export const supabaseAvatarStorage: ArtworkStorage = {
 };
 
 export const streamAvatarStorageObject = async (key: string) => {
+	if (isPlaywrightStorageRuntime()) {
+		const storedObject = playwrightAvatarStorage.get(key);
+
+		if (!storedObject) {
+			throw new ArtworkFlowError(404, 'Avatar not found', 'NOT_FOUND');
+		}
+
+		return new Response(
+			new Blob([Buffer.from(storedObject.body)], { type: storedObject.contentType }),
+			{
+				headers: {
+					'content-type': storedObject.contentType
+				}
+			}
+		);
+	}
+
 	const { baseUrl, bucket, serviceKey } = getStorageConfig();
 	const response = await fetch(
 		`${baseUrl}/storage/v1/object/${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}`,

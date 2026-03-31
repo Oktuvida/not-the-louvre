@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Detail: Brass Plaque — Not the Louvre</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@400;500;600;700;800&family=Caveat:wght@400;500;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Baloo 2', 'Trebuchet MS', sans-serif;
+    color: #2d2420;
+    background-color: #b8956e;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 56px, rgba(0,0,0,0.06) 56px, rgba(0,0,0,0.06) 59px),
+      repeating-linear-gradient(90deg, transparent, transparent 124px, rgba(0,0,0,0.04) 124px, rgba(0,0,0,0.04) 127px),
+      radial-gradient(circle at 85% 15%, rgba(255,248,225,0.2) 0%, transparent 45%);
+    padding: 2rem;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-family: 'Fredoka', sans-serif;
+    color: #fdfbf7;
+    text-align: center;
+    font-size: 1.6rem;
+    margin-bottom: 0.3rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+  .subtitle {
+    text-align: center;
+    color: rgba(253,251,247,0.7);
+    font-size: 0.85rem;
+    margin-bottom: 2rem;
+  }
+
+  .section-label {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(253,251,247,0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-align: center;
+    margin: 2.5rem 0 1rem;
+  }
+
+  .detail-callout {
+    max-width: 700px;
+    margin: 2rem auto;
+    background: rgba(253,251,247,0.08);
+    border: 1px solid rgba(253,251,247,0.15);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    color: rgba(253,251,247,0.75);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .detail-callout strong { color: #fdfbf7; font-weight: 600; }
+  .detail-callout ul { margin: 0.5rem 0 0 1.2rem; }
+  .detail-callout li { margin-bottom: 0.3rem; }
+
+  .note {
+    text-align: center;
+    font-family: 'Caveat', cursive;
+    font-size: 1rem;
+    color: rgba(253,251,247,0.6);
+    margin-top: 0.5rem;
+    font-style: italic;
+  }
+
+  .showcase-row {
+    display: flex;
+    gap: 2.5rem;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 1.5rem 0;
+  }
+
+  /* ============================================= */
+  /*   BRASS PLAQUE                                */
+  /* ============================================= */
+
+  .brass-plaque {
+    position: relative;
+    background: linear-gradient(135deg, #d4a84b 0%, #c49a3d 25%, #b8902f 50%, #c49a3d 75%, #d4a84b 100%);
+    border: 3px solid #8b6914;
+    border-radius: 6px;
+    padding: 0.6rem 2.2rem;
+    box-shadow:
+      0 4px 12px rgba(0,0,0,0.25),
+      inset 0 1px 3px rgba(255,248,200,0.4),
+      inset 0 -1px 2px rgba(0,0,0,0.2);
+  }
+
+  /* Inner bevel line */
+  .brass-plaque::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border: 1px solid rgba(255,248,225,0.2);
+    border-radius: 3px;
+    pointer-events: none;
+  }
+
+  /* Screws */
+  .brass-screw {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    background: radial-gradient(circle at 3px 3px, #d4a84b, #8b6914);
+    border-radius: 50%;
+    border: 1px solid #6b5010;
+  }
+  /* Slot line */
+  .brass-screw::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 1px;
+    width: 6px; height: 1.5px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 1px;
+  }
+  /* Different screw rotations for each corner */
+  .screw-tl { top: 5px; left: 6px; }
+  .screw-tl::after { transform: rotate(25deg); }
+  .screw-tr { top: 5px; right: 6px; }
+  .screw-tr::after { transform: rotate(-15deg); }
+  .screw-bl { bottom: 5px; left: 6px; }
+  .screw-bl::after { transform: rotate(45deg); }
+  .screw-br { bottom: 5px; right: 6px; }
+  .screw-br::after { transform: rotate(-30deg); }
+
+  /* Text */
+  .brass-text {
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 700;
+    color: #3d2a10;
+    letter-spacing: 0.12em;
+    text-shadow: 0 1px 1px rgba(255,248,225,0.3);
+    position: relative;
+    z-index: 2;
+    text-transform: uppercase;
+  }
+
+  /* ============================================= */
+  /*   SIZE VARIANTS                               */
+  /* ============================================= */
+
+  .plaque-large .brass-plaque {
+    padding: 0.8rem 3rem;
+  }
+  .plaque-large .brass-text {
+    font-size: 1.6rem;
+  }
+
+  .plaque-standard .brass-plaque {
+    padding: 0.6rem 2.2rem;
+  }
+  .plaque-standard .brass-text {
+    font-size: 1.3rem;
+  }
+
+  .plaque-small .brass-plaque {
+    padding: 0.4rem 1.4rem;
+    border-width: 2.5px;
+    border-radius: 4px;
+  }
+  .plaque-small .brass-text {
+    font-size: 0.9rem;
+    letter-spacing: 0.1em;
+  }
+  .plaque-small .brass-screw {
+    width: 7px;
+    height: 7px;
+  }
+  .plaque-small .screw-tl { top: 4px; left: 5px; }
+  .plaque-small .screw-tr { top: 4px; right: 5px; }
+  .plaque-small .screw-bl { bottom: 4px; left: 5px; }
+  .plaque-small .screw-br { bottom: 4px; right: 5px; }
+
+  /* ============================================= */
+  /*   CONTEXT: IN TOP BAR                         */
+  /* ============================================= */
+
+  .topbar-demo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.5rem 0.8rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .sticker-btn {
+    border: 2.5px solid #2d2420;
+    border-radius: 12px;
+    padding: 0.4rem 1rem;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    box-shadow: 2px 3px 6px rgba(0,0,0,0.2);
+    cursor: pointer;
+  }
+  .sticker-exit {
+    background: #e8b896;
+    color: #2d2420;
+    transform: rotate(-1.5deg);
+  }
+  .sticker-create {
+    background: #f4c430;
+    color: #2d2420;
+    transform: rotate(1deg);
+  }
+</style>
+</head>
+<body>
+
+<h1>Brass Plaque — Detailed Spec</h1>
+<p class="subtitle">Gallery title sign, screwed into the museum wall</p>
+
+<div class="detail-callout">
+  <strong>Key design points:</strong>
+  <ul>
+    <li><strong>Metallic gradient</strong> — diagonal sweep from bright gold to dark gold and back, simulating brushed brass</li>
+    <li><strong>Four screws</strong> — one in each corner, each with a different slot rotation angle (never uniform)</li>
+    <li><strong>Inner bevel</strong> — thin semi-transparent border inset 3px from the edge, simulating a beveled plate edge</li>
+    <li><strong>Engraved text</strong> — dark brown with a subtle light text-shadow underneath (like light catching engraved letters)</li>
+    <li><strong>Drop shadow</strong> — lifts the plaque off the wall slightly</li>
+    <li><strong>Dark border</strong> — solid #8b6914 edge with rounded corners</li>
+  </ul>
+</div>
+
+<!-- ============================================= -->
+<!--   SIZE VARIANTS                               -->
+<!-- ============================================= -->
+<p class="section-label">Size variants</p>
+
+<div class="showcase-row">
+  <div class="plaque-large">
+    <div class="brass-plaque">
+      <div class="brass-screw screw-tl"></div>
+      <div class="brass-screw screw-tr"></div>
+      <div class="brass-screw screw-bl"></div>
+      <div class="brass-screw screw-br"></div>
+      <div class="brass-text">The Gallery</div>
+    </div>
+    <p class="note" style="margin-top: 0.3rem;">Large — main gallery title</p>
+  </div>
+</div>
+
+<div class="showcase-row">
+  <div class="plaque-standard">
+    <div class="brass-plaque">
+      <div class="brass-screw screw-tl"></div>
+      <div class="brass-screw screw-tr"></div>
+      <div class="brass-screw screw-bl"></div>
+      <div class="brass-screw screw-br"></div>
+      <div class="brass-text">Hall of Fame</div>
+    </div>
+    <p class="note" style="margin-top: 0.3rem;">Standard — room name</p>
+  </div>
+</div>
+
+<div class="showcase-row">
+  <div class="plaque-small">
+    <div class="brass-plaque">
+      <div class="brass-screw screw-tl"></div>
+      <div class="brass-screw screw-tr"></div>
+      <div class="brass-screw screw-bl"></div>
+      <div class="brass-screw screw-br"></div>
+      <div class="brass-text">Hot Wall</div>
+    </div>
+    <p class="note" style="margin-top: 0.3rem;">Small — compact label</p>
+  </div>
+</div>
+
+<!-- ============================================= -->
+<!--   SCREW DETAIL                                -->
+<!-- ============================================= -->
+<p class="section-label">Screw close-up — each has different slot angle</p>
+
+<div class="showcase-row" style="gap: 2rem;">
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
+    <div style="width: 28px; height: 28px; background: radial-gradient(circle at 9px 9px, #d4a84b, #8b6914); border-radius: 50%; border: 2px solid #6b5010; position: relative;">
+      <div style="position: absolute; top: 10px; left: 4px; width: 18px; height: 4px; background: rgba(0,0,0,0.25); border-radius: 2px; transform: rotate(25deg);"></div>
+    </div>
+    <span class="seal-label" style="font-family: 'Fredoka'; font-size: 0.6rem; color: rgba(253,251,247,0.5);">25°</span>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
+    <div style="width: 28px; height: 28px; background: radial-gradient(circle at 9px 9px, #d4a84b, #8b6914); border-radius: 50%; border: 2px solid #6b5010; position: relative;">
+      <div style="position: absolute; top: 10px; left: 4px; width: 18px; height: 4px; background: rgba(0,0,0,0.25); border-radius: 2px; transform: rotate(-15deg);"></div>
+    </div>
+    <span class="seal-label" style="font-family: 'Fredoka'; font-size: 0.6rem; color: rgba(253,251,247,0.5);">-15°</span>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
+    <div style="width: 28px; height: 28px; background: radial-gradient(circle at 9px 9px, #d4a84b, #8b6914); border-radius: 50%; border: 2px solid #6b5010; position: relative;">
+      <div style="position: absolute; top: 10px; left: 4px; width: 18px; height: 4px; background: rgba(0,0,0,0.25); border-radius: 2px; transform: rotate(45deg);"></div>
+    </div>
+    <span class="seal-label" style="font-family: 'Fredoka'; font-size: 0.6rem; color: rgba(253,251,247,0.5);">45°</span>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
+    <div style="width: 28px; height: 28px; background: radial-gradient(circle at 9px 9px, #d4a84b, #8b6914); border-radius: 50%; border: 2px solid #6b5010; position: relative;">
+      <div style="position: absolute; top: 10px; left: 4px; width: 18px; height: 4px; background: rgba(0,0,0,0.25); border-radius: 2px; transform: rotate(-30deg);"></div>
+    </div>
+    <span class="seal-label" style="font-family: 'Fredoka'; font-size: 0.6rem; color: rgba(253,251,247,0.5);">-30°</span>
+  </div>
+</div>
+
+<p class="note">Anti-uniformity — each screw slot faces a different direction</p>
+
+<!-- ============================================= -->
+<!--   IN CONTEXT: TOP BAR                         -->
+<!-- ============================================= -->
+<p class="section-label">In context — gallery top bar</p>
+
+<div class="topbar-demo">
+  <div class="sticker-btn sticker-exit">← Exit Gallery</div>
+  <div class="plaque-standard">
+    <div class="brass-plaque">
+      <div class="brass-screw screw-tl"></div>
+      <div class="brass-screw screw-tr"></div>
+      <div class="brass-screw screw-bl"></div>
+      <div class="brass-screw screw-br"></div>
+      <div class="brass-text">The Gallery</div>
+    </div>
+  </div>
+  <div class="sticker-btn sticker-create">✦ Create Art</div>
+</div>
+
+<p class="note">Plaque sits between the sticker buttons — wall background shows through everywhere</p>
+
+<!-- ============================================= -->
+<!--   IMPLEMENTATION NOTES                        -->
+<!-- ============================================= -->
+<div class="detail-callout" style="margin-top: 3rem;">
+  <strong>Implementation notes:</strong>
+  <ul>
+    <li><strong>CSS-only</strong> — gradients, box-shadow, pseudo-elements. No canvas needed.</li>
+    <li><strong>Create a <code>BrassPlaque</code> Svelte component</strong> with props: <code>text: string</code>, <code>size: 'sm'|'md'|'lg'</code></li>
+    <li><strong>Used in:</strong> Gallery top bar title, potentially room headers</li>
+    <li><strong>No background on the top bar</strong> — the plaque just sits on the wall. Top bar is transparent (only <code>box-shadow</code> for depth separation).</li>
+    <li><strong>Screw rotations are hardcoded</strong> per corner position (TL: 25°, TR: -15°, BL: 45°, BR: -30°), not randomized</li>
+  </ul>
+</div>
+
+</body>
+</html>

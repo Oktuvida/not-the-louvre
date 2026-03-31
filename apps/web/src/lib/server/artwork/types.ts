@@ -4,12 +4,17 @@ export type ArtworkRecord = {
 	authorId: string;
 	commentCount: number;
 	createdAt: Date;
+	drawingDocument?: string | null;
+	drawingVersion?: number | null;
 	forkCount: number;
 	hiddenAt?: Date | null;
 	id: string;
 	isHidden?: boolean;
+	isNsfw: boolean;
 	mediaContentType: string;
 	mediaSizeBytes: number;
+	nsfwLabeledAt?: Date | null;
+	nsfwSource?: 'creator' | 'moderator' | null;
 	parentId: string | null;
 	score: number;
 	storageKey: string;
@@ -27,12 +32,16 @@ export type ArtworkFeedCard = {
 	author: ArtworkAuthorSummary;
 	commentCount: number;
 	createdAt: Date;
+	downvotes?: number;
 	forkCount: number;
 	id: string;
+	isNsfw: boolean;
 	lineage: ArtworkLineageSummary;
 	mediaUrl: string;
 	score: number;
 	title: string;
+	upvotes?: number;
+	viewerVote?: ArtworkVoteValue | null;
 };
 
 export type ArtworkLineageParentSummary = {
@@ -51,12 +60,15 @@ export type ArtworkChildForkSummary = {
 	author: ArtworkAuthorSummary;
 	createdAt: Date;
 	id: string;
+	isNsfw?: boolean;
 	mediaUrl: string;
 	title: string;
 };
 
 export type ArtworkDetail = ArtworkFeedCard & {
 	childForks: ArtworkChildForkSummary[];
+	drawingDocument?: string | null;
+	drawingVersion?: number | null;
 	mediaContentType: string;
 	mediaSizeBytes: number;
 	updatedAt: Date;
@@ -109,6 +121,7 @@ export type ArtworkReadRecord = ArtworkRecord & {
 		authorNickname: string;
 		createdAt: Date;
 		id: string;
+		isNsfw: boolean;
 		title: string;
 	}>;
 	parentAuthorAvatarUrl?: string | null;
@@ -116,6 +129,9 @@ export type ArtworkReadRecord = ArtworkRecord & {
 	parentAuthorNickname?: string | null;
 	parentTitle?: string | null;
 	rankingValue?: number;
+	downvotes?: number;
+	upvotes?: number;
+	viewerVote?: ArtworkVoteValue | null;
 };
 
 export type ArtworkVoteValue = 'down' | 'up';
@@ -200,6 +216,7 @@ export type ArtworkVoteRemovalResult = {
 };
 
 export type ListRecentArtworksInput = {
+	authorId?: string | null;
 	cursor: ArtworkRecentDiscoveryCursor | null;
 	limit: number;
 	viewer?: ArtworkVisibilityActor;
@@ -213,6 +230,7 @@ export type ListHotArtworksInput = {
 };
 
 export type ListTopArtworksInput = {
+	authorId?: string | null;
 	cursor: Extract<ArtworkRankedDiscoveryCursor, { sort: 'top' }> | null;
 	limit: number;
 	now: Date;
@@ -346,6 +364,14 @@ export type ArtworkRepository = {
 	resolveArtworkReports(input: ResolveContentReportsInput): Promise<number>;
 	resolveCommentReports(input: ResolveContentReportsInput): Promise<number>;
 	setArtworkHiddenState(id: string, input: HiddenStateUpdate): Promise<ArtworkRecord | null>;
+	updateArtworkModeration(
+		id: string,
+		input: Partial<
+			Pick<ArtworkRecord, 'hiddenAt' | 'isHidden' | 'isNsfw' | 'nsfwLabeledAt' | 'nsfwSource'>
+		> & {
+			updatedAt: Date;
+		}
+	): Promise<ArtworkRecord | null>;
 	setCommentHiddenState(id: string, input: HiddenStateUpdate): Promise<ArtworkCommentRecord | null>;
 	upsertVote(input: CreateArtworkVoteInput): Promise<ArtworkVoteMutationResult | null>;
 	updateArtworkTitle(id: string, title: string, updatedAt: Date): Promise<ArtworkRecord | null>;
@@ -412,5 +438,5 @@ export type ArtworkReadRepository = {
 
 export type ArtworkActorContext = {
 	ipAddress: string | null;
-	user: CanonicalUser;
+	user: Pick<CanonicalUser, 'id' | 'role'> & Partial<CanonicalUser>;
 };

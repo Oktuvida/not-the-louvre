@@ -9,6 +9,7 @@ import ts from 'typescript-eslint';
 import svelteConfig from './svelte.config.js';
 
 const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
+const extraFileExtensions = ['.svelte'];
 
 export default defineConfig(
 	includeIgnoreFile(gitignorePath),
@@ -21,7 +22,8 @@ export default defineConfig(
 		files: ['src/**/*.{ts,js}'],
 		languageOptions: {
 			parserOptions: {
-				projectService: true
+				projectService: true,
+				extraFileExtensions
 			}
 		},
 		rules: {
@@ -60,7 +62,7 @@ export default defineConfig(
 		languageOptions: {
 			parserOptions: {
 				projectService: true,
-				extraFileExtensions: ['.svelte'],
+				extraFileExtensions,
 				parser: ts.parser,
 				svelteConfig
 			}

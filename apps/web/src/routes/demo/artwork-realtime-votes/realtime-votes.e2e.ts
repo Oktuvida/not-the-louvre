@@ -33,17 +33,47 @@ test('shows vote score changes from another authenticated browser context withou
 		);
 
 		await expect(actorPage.getByText(`Tracked artwork ID: ${trackedArtworkId}`)).toBeVisible();
+		const upvoteResponse = actorPage.waitForResponse(
+			(response) =>
+				response.url().includes(`/api/artworks/${trackedArtworkId}/vote`) &&
+				response.request().method() === 'POST' &&
+				response.ok()
+		);
 		await actorPage.getByRole('button', { name: 'Upvote tracked artwork' }).click();
+		await upvoteResponse;
 		await expect(actorPage.getByText('Vote action requested: upvote')).toBeVisible();
 
-		await expect(page.getByText('Tracked artwork score: 1')).toBeVisible();
-		await expect(page.getByText('Vote event: up from realtime')).toBeVisible();
+		await expect
+			.poll(async () => await page.getByText(/Tracked artwork score:/).textContent(), {
+				timeout: 10000
+			})
+			.toContain('Tracked artwork score: 1');
+		await expect
+			.poll(async () => await page.locator('[aria-label="Realtime event log"]').textContent(), {
+				timeout: 10000
+			})
+			.toContain('Vote event: up from realtime');
 
+		const removeVoteResponse = actorPage.waitForResponse(
+			(response) =>
+				response.url().includes(`/api/artworks/${trackedArtworkId}/vote`) &&
+				response.request().method() === 'DELETE' &&
+				response.ok()
+		);
 		await actorPage.getByRole('button', { name: 'Remove vote' }).click();
+		await removeVoteResponse;
 		await expect(actorPage.getByText('Vote action requested: remove')).toBeVisible();
 
-		await expect(page.getByText('Tracked artwork score: 0')).toBeVisible();
-		await expect(page.getByText('Vote event: removed from realtime')).toBeVisible();
+		await expect
+			.poll(async () => await page.getByText(/Tracked artwork score:/).textContent(), {
+				timeout: 10000
+			})
+			.toContain('Tracked artwork score: 0');
+		await expect
+			.poll(async () => await page.locator('[aria-label="Realtime event log"]').textContent(), {
+				timeout: 10000
+			})
+			.toContain('Vote event: removed from realtime');
 	} finally {
 		await actorContext.close();
 	}

@@ -52,9 +52,14 @@ describe('GET /api/admin/users', () => {
 		mocked.listUsers.mockResolvedValue({
 			items: [
 				{
+					avatarIsHidden: true,
+					avatarIsNsfw: true,
 					avatarUrl: '/api/users/user-1/avatar',
+					banReason: 'spam ring',
+					bannedAt: '2026-01-01T00:00:00.000Z',
 					createdAt: '2026-01-01T00:00:00.000Z',
 					id: 'user-1',
+					isBanned: true,
 					nickname: 'artist',
 					role: 'user'
 				}
@@ -69,6 +74,12 @@ describe('GET /api/admin/users', () => {
 		expect(response.status).toBe(200);
 		const json = await response.json();
 		expect(json.items).toHaveLength(1);
+		expect(json.items[0]).toMatchObject({
+			avatarIsHidden: true,
+			avatarIsNsfw: true,
+			banReason: 'spam ring',
+			isBanned: true
+		});
 		expect(json.pageInfo.hasMore).toBe(false);
 	});
 

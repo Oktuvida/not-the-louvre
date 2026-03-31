@@ -4,6 +4,7 @@ import { hashPassword } from 'better-auth/crypto';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { account, authRateLimits, users } from '$lib/server/db/schema';
+import { checkTextModeration } from '$lib/server/moderation/service';
 import { logSecurityEvent } from '$lib/server/security/logging';
 import { AuthFlowError } from './errors';
 import { generateRecoveryKey, hashRecoveryKey, verifyRecoveryKey } from './recovery';
@@ -52,6 +53,8 @@ const mapProfileToCanonicalUser = (
 	nickname: profile.nickname,
 	role: profile.role,
 	avatarUrl: profile.avatarUrl ?? null,
+	avatarOnboardingCompletedAt: profile.avatarOnboardingCompletedAt ?? null,
+	isBanned: profile.isBanned,
 	name: authUser.name,
 	email: authUser.email,
 	emailVerified: authUser.emailVerified,
@@ -109,6 +112,11 @@ export const signUpWithNickname = async (
 	input: SignupInput,
 	requestHeaders?: HeadersInit
 ): Promise<AuthResult<{ recoveryKey: string; user: CanonicalUser }>> => {
+	const moderationResult = await checkTextModeration(input.nickname, 'nickname');
+	if (moderationResult.status !== 'allowed') {
+		throw toSafeAuthError(moderationResult.message, 'INVALID_NICKNAME');
+	}
+
 	const existing = await getProfileByNickname(input.nickname);
 	if (existing) {
 		throw toSafeAuthError('Nickname is already taken', 'NICKNAME_TAKEN', 409);
@@ -132,6 +140,7 @@ export const signUpWithNickname = async (
 		id: response.user.id,
 		nickname: input.nickname,
 		recoveryHash,
+		avatarOnboardingCompletedAt: null,
 		role: 'user'
 	});
 
@@ -212,12 +221,9 @@ export const signInWithNickname = async (
 };
 
 export const signOutCurrentSession = async (headers: HeadersInit) => {
-	const result = await auth.api.signOut({
-		headers: new Headers(headers),
-		returnHeaders: true
+	await auth.api.signOut({
+		headers: new Headers(headers)
 	});
-
-	return result.headers;
 };
 
 export const recoverAccount = async (
