@@ -163,7 +163,7 @@
 		bind:this={canvasRef}
 		width={768}
 		height={768}
-		class={`block border h-full w-full rounded-lg ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
+		class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
 		style="background: #fdfbf7;"
 		aria-disabled={!interactive}
 		onmousedown={startDrawing}
