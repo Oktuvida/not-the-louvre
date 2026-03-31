@@ -144,10 +144,10 @@
 				duration: FADE_DURATION,
 				ease: 'power2.in',
 				onUpdate: () => {
-					fadeOverlayOpacity = fade.opacity;
+					// fadeOverlayOpacity = fade.opacity;
 				},
 				onComplete: () => {
-					void goto(resolve('/draw'));
+					// void goto(resolve('/draw'));
 				}
 			});
 		});
