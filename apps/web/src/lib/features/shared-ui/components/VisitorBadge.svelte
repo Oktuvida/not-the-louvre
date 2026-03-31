@@ -13,11 +13,13 @@
 		avatarUrl = null,
 		className = '',
 		nickname,
+		onclick,
 		userId
 	}: {
 		avatarUrl?: string | null;
 		className?: string;
 		nickname: string;
+		onclick?: () => void;
 		userId: string;
 	} = $props();
 
@@ -33,9 +35,12 @@
 	});
 </script>
 
-<div
-	class={`visitor-badge relative w-[270px] overflow-visible ${className}`}
+<button
+	type="button"
+	class={`visitor-badge relative w-[270px] overflow-visible text-left ${onclick ? 'cursor-pointer transition-transform duration-200 hover:scale-105' : ''} ${className}`}
 	style={`transform: rotate(${rotation}deg);`}
+	{onclick}
+	aria-label={onclick ? `Edit avatar for ${nickname}` : undefined}
 >
 	<!-- Tape on top (sits outside the rounded card) -->
 	<div
@@ -105,4 +110,4 @@
 		<!-- Colored footer strip -->
 		<div class="h-[0.3rem]" style={`background:${palette.footer};`}></div>
 	</div>
-</div>
+</button>

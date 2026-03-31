@@ -21,6 +21,7 @@
 		children,
 		adultContentEnabled = false,
 		entryState = 'outside',
+		onAvatarSaved,
 		previewCards = [],
 		sceneArtworks = [],
 		user = null
@@ -28,6 +29,7 @@
 		children?: Snippet;
 		adultContentEnabled?: boolean;
 		entryState?: EntryFlowState;
+		onAvatarSaved?: (payload: { avatarOnboardingCompletedAt: Date; avatarUrl: string }) => void;
 		previewCards?: HomePreviewCard[];
 		sceneArtworks?: HomeSceneArtworkSlot[];
 		user?: HomeAuthUser | null;
@@ -172,6 +174,7 @@
 	<PersistentNav
 		{adultContentEnabled}
 		{isExiting}
+		{onAvatarSaved}
 		onGalleryNavigate={handleGalleryNavigate}
 		{previewCards}
 		{user}

@@ -66,17 +66,21 @@
 
 			return new File([blob], 'avatar.webp', { type: 'image/webp' });
 		},
+		loadAvatarUrl = null,
 		nickname,
 		onContinue,
 		saveAvatar = async () => ({
 			message: 'Avatar save is unavailable right now.',
 			success: false as const
-		})
+		}),
+		submitLabel = 'Enter the gallery'
 	}: {
 		createAvatarFile?: (sourceCanvas: HTMLCanvasElement) => Promise<File | null>;
+		loadAvatarUrl?: string | null;
 		nickname: string;
 		onContinue?: () => void;
 		saveAvatar?: (file: File) => Promise<AvatarSaveResult>;
+		submitLabel?: string;
 	} = $props();
 
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
@@ -151,6 +155,23 @@
 		context.fillStyle = '#f5f0e1';
 		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 		drawGhostSilhouette(context);
+	};
+
+	const loadExistingAvatar = (url: string) => {
+		if (!canvasElement) return;
+		const context = canvasElement.getContext('2d');
+		if (!context) return;
+
+		const img = new Image();
+		img.crossOrigin = 'anonymous';
+		img.onload = () => {
+			context.fillStyle = '#f5f0e1';
+			context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+			context.imageSmoothingEnabled = true;
+			context.imageSmoothingQuality = 'high';
+			context.drawImage(img, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+		};
+		img.src = url;
 	};
 
 	const getPoint = (event: MouseEvent | TouchEvent) => {
@@ -294,7 +315,12 @@
 
 		window.addEventListener('mouseup', handleWindowMouseUp);
 		window.addEventListener('touchend', handleWindowTouchEnd);
-		paintBackground();
+
+		if (loadAvatarUrl) {
+			loadExistingAvatar(loadAvatarUrl);
+		} else {
+			paintBackground();
+		}
 
 		return () => {
 			window.removeEventListener('mouseup', handleWindowMouseUp);
@@ -397,7 +423,7 @@
 				</div>
 			</div>
 
-			<div class="flex flex-col gap-3 sm:flex-row">
+			<div class="flex-center gap-3 sm:flex-row pl-4 pt-4">
 				<div class="flex gap-3 sm:ml-auto">
 					<GameButton
 						type="button"
@@ -418,7 +444,7 @@
 						size="md"
 						className="w-full sm:w-auto"
 					>
-						<span>{isSaving ? 'Saving...' : 'Enter the gallery'}</span>
+						<span>{isSaving ? 'Saving...' : submitLabel}</span>
 					</GameButton>
 				</div>
 			</div>
