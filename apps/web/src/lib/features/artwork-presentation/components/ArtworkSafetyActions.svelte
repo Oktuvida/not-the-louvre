@@ -27,11 +27,13 @@
 	let {
 		artwork,
 		compact = false,
+		request = fetch,
 		viewer = null,
 		onArtworkPatch
 	}: {
 		artwork: Artwork;
 		compact?: boolean;
+		request?: typeof fetch;
 		viewer?: { id: string; role: ViewerRole } | null;
 		onArtworkPatch?: (patch: ArtworkPatch) => void;
 	} = $props();
@@ -68,6 +70,17 @@
 		event.stopPropagation();
 	};
 
+	const toggleReportMenu = (event: Event) => {
+		stopEvent(event);
+		isReportMenuOpen = !isReportMenuOpen;
+		statusMessage = null;
+	};
+
+	const handleReportReasonClick = (event: Event, reason: ArtworkReportReason) => {
+		stopEvent(event);
+		void submitReport(reason);
+	};
+
 	const submitReport = async (reason: ArtworkReportReason) => {
 		if (!canReport || isBusy) {
 			return;
@@ -76,7 +89,7 @@
 		isBusy = true;
 
 		try {
-			const response = await fetch(`/api/artworks/${artwork.id}/reports`, {
+			const response = await request(`/api/artworks/${artwork.id}/reports`, {
 				body: JSON.stringify({ reason }),
 				headers: { 'content-type': 'application/json' },
 				method: 'POST'
@@ -108,7 +121,7 @@
 		isBusy = true;
 
 		try {
-			const response = await fetch(`/api/artworks/${artwork.id}/moderation`, {
+			const response = await request(`/api/artworks/${artwork.id}/moderation`, {
 				body: JSON.stringify({ action }),
 				headers: { 'content-type': 'application/json' },
 				method: 'PATCH'
@@ -157,11 +170,7 @@
 					aria-expanded={isReportMenuOpen}
 					aria-label="Report artwork"
 					disabled={isBusy}
-					onclick={(event) => {
-						stopEvent(event);
-						isReportMenuOpen = !isReportMenuOpen;
-						statusMessage = null;
-					}}
+					onclick={toggleReportMenu}
 				>
 					{#if compact}
 						<svg viewBox="0 0 24 24" aria-hidden="true">
@@ -179,23 +188,23 @@
 					{/if}
 				</button>
 
-				{#if isReportMenuOpen}
-					<div class="report-menu">
-						{#each reportReasons as reason (reason.value)}
-							<button
-								type="button"
-								class="reason-button"
-								disabled={isBusy}
-								onclick={(event) => {
-									stopEvent(event);
-									submitReport(reason.value);
-								}}
-							>
-								{reason.label}
-							</button>
-						{/each}
-					</div>
-				{/if}
+				<div
+					class="report-menu"
+					class:report-menu-compact={compact}
+					aria-hidden={!isReportMenuOpen}
+					hidden={!isReportMenuOpen}
+				>
+					{#each reportReasons as reason (reason.value)}
+						<button
+							type="button"
+							class="reason-button"
+							disabled={isBusy}
+							onclick={(event) => handleReportReasonClick(event, reason.value)}
+						>
+							{reason.label}
+						</button>
+					{/each}
+				</div>
 			</div>
 		{/if}
 
@@ -310,7 +319,7 @@
 		position: absolute;
 		z-index: 30;
 		top: calc(100% + 0.45rem);
-		right: 0;
+		left: 0;
 		min-width: 11rem;
 		display: grid;
 		gap: 0.35rem;
@@ -319,6 +328,11 @@
 		border-radius: 1rem;
 		background: rgba(255, 249, 239, 0.98);
 		box-shadow: 0 14px 30px rgba(45, 36, 32, 0.22);
+	}
+
+	.report-menu.report-menu-compact {
+		left: auto;
+		right: 0;
 	}
 
 	.status {

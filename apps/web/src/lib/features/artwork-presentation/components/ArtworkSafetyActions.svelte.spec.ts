@@ -32,10 +32,10 @@ describe('ArtworkSafetyActions', () => {
 					status: 201
 				})
 		);
-		vi.stubGlobal('fetch', fetchSpy);
 
 		render(ArtworkSafetyActions, {
 			artwork,
+			request: fetchSpy as typeof fetch,
 			viewer: { id: 'user-1', role: 'user' },
 			onArtworkPatch
 		});
@@ -43,10 +43,12 @@ describe('ArtworkSafetyActions', () => {
 		await page.getByRole('button', { name: 'Report artwork' }).click();
 		await page.getByRole('button', { name: 'Spam' }).click();
 
-		expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/reports', {
-			body: JSON.stringify({ reason: 'spam' }),
-			headers: { 'content-type': 'application/json' },
-			method: 'POST'
+		await vi.waitFor(() => {
+			expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/reports', {
+				body: JSON.stringify({ reason: 'spam' }),
+				headers: { 'content-type': 'application/json' },
+				method: 'POST'
+			});
 		});
 		expect(onArtworkPatch).not.toHaveBeenCalled();
 		await expect.element(page.getByText('Report submitted.')).toBeVisible();
@@ -63,10 +65,10 @@ describe('ArtworkSafetyActions', () => {
 					}
 				)
 		);
-		vi.stubGlobal('fetch', fetchSpy);
 
 		render(ArtworkSafetyActions, {
 			artwork,
+			request: fetchSpy as typeof fetch,
 			viewer: { id: 'admin-1', role: 'admin' },
 			onArtworkPatch
 		});
