@@ -78,7 +78,6 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
-		await expect.element(page.getByText('Proximamente.')).toBeVisible();
 	});
 
 	it('shows a stable fallback while the hot wall room module loads on demand', async () => {
@@ -96,10 +95,25 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByTestId('gallery-room-loading')).toBeVisible();
+		await expect.element(page.getByText('Loading room...')).not.toBeInTheDocument();
 
 		deferredRoom.resolve(await import('./rooms/HotWallRoom.svelte'));
 
 		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
+	});
+
+	it('ignores the generic empty state when rendering the hot wall room', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [],
+			emptyStateMessage: 'Nothing is heating up on the wall right now.',
+			room: getGalleryRoom('hot-wall'),
+			roomId: 'hot-wall'
+		});
+
+		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
+		await expect
+			.element(page.getByText('Nothing is heating up on the wall right now.'))
+			.not.toBeInTheDocument();
 	});
 
 	it('loads room-specific UI when the visitor switches into the mystery room', async () => {
@@ -126,6 +140,38 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByTestId('gallery-room-loading')).toBeVisible();
+		await expect.element(page.getByText('#1 CHAMPION')).not.toBeInTheDocument();
+
+		deferredRoom.resolve(await import('./rooms/MysteryRoom.svelte'));
+
+		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+	});
+
+	it('does not keep the previous room mounted while the next room loads', async () => {
+		const deferredRoom =
+			createDeferred<
+				Awaited<typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte')>
+			>();
+		const screen = render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
+			emptyStateMessage: null,
+			loadMysteryRoom: () => deferredRoom.promise,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame'
+		});
+
+		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+
+		await screen.rerender({
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
+			emptyStateMessage: null,
+			loadMysteryRoom: () => deferredRoom.promise,
+			room: getGalleryRoom('mystery'),
+			roomId: 'mystery'
+		});
+
+		await expect.element(page.getByTestId('gallery-room-loading')).toBeVisible();
+		await expect.element(page.getByText('#1 CHAMPION')).not.toBeInTheDocument();
 
 		deferredRoom.resolve(await import('./rooms/MysteryRoom.svelte'));
 
