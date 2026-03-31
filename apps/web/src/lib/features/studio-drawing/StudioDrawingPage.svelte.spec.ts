@@ -1,6 +1,7 @@
 import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { createEmptyDrawingDocument } from '$lib/features/stroke-json/document';
 import StudioDrawingPage from './StudioDrawingPage.svelte';
 
 const forkParentPreviewDataUrl =
@@ -75,8 +76,8 @@ describe('StudioDrawingPage', () => {
 
 	it('publishes the current drawing and shows a minimal success state', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
-		const createArtworkFile = vi.fn(
-			async () => new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' })
+		const createArtworkPayload = vi.fn(async () =>
+			JSON.stringify(createEmptyDrawingDocument('artwork'))
 		);
 		const publishDrawing = vi.fn(async () => ({
 			action: 'publish' as const,
@@ -91,7 +92,7 @@ describe('StudioDrawingPage', () => {
 		render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
-			createArtworkFile,
+			createArtworkPayload,
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
@@ -109,9 +110,9 @@ describe('StudioDrawingPage', () => {
 		await expect
 			.element(page.getByRole('button', { name: 'Draw again' }))
 			.toHaveAttribute('data-sticker-variant', 'accent');
-		expect(createArtworkFile).toHaveBeenCalled();
+		expect(createArtworkPayload).toHaveBeenCalled();
 		expect(checkTextContent).toHaveBeenCalledWith('My First Piece', 'artwork_title');
-		expect(publishDrawing).toHaveBeenCalledWith(expect.any(File), {
+		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: false,
 			parentArtworkId: null,
 			title: 'My First Piece'
@@ -129,8 +130,7 @@ describe('StudioDrawingPage', () => {
 		render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
-			createArtworkFile: async () =>
-				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
+			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
@@ -143,14 +143,14 @@ describe('StudioDrawingPage', () => {
 		await expect.element(page.getByText('Artwork published')).not.toBeInTheDocument();
 	});
 
-	it('shows a local export error when the browser cannot create upload media', async () => {
+	it('shows a local preparation error when the drawing payload cannot be created', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const publishDrawing = vi.fn();
 
 		render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
-			createArtworkFile: async () => null,
+			createArtworkPayload: async () => null,
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
@@ -160,7 +160,7 @@ describe('StudioDrawingPage', () => {
 		await page.getByRole('button', { name: 'Publish' }).click();
 
 		await expect
-			.element(page.getByText('This browser could not export your drawing. Please try again.'))
+			.element(page.getByText('This browser could not prepare your drawing. Please try again.'))
 			.toBeVisible();
 		expect(checkTextContent).toHaveBeenCalledWith('Export Trouble', 'artwork_title');
 		expect(publishDrawing).not.toHaveBeenCalled();
@@ -173,8 +173,7 @@ describe('StudioDrawingPage', () => {
 		render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
-			createArtworkFile: async () =>
-				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
+			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
@@ -203,9 +202,9 @@ describe('StudioDrawingPage', () => {
 		render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
-			createArtworkFile: async () =>
-				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
+			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
 			forkParent: {
+				drawingDocument: createEmptyDrawingDocument('artwork'),
 				id: 'artwork-parent',
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
@@ -220,7 +219,7 @@ describe('StudioDrawingPage', () => {
 		await page.getByPlaceholder('Give your piece a title').fill('Forked Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
 
-		expect(publishDrawing).toHaveBeenCalledWith(expect.any(File), {
+		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: false,
 			parentArtworkId: 'artwork-parent',
 			title: 'Forked Piece'
@@ -230,6 +229,7 @@ describe('StudioDrawingPage', () => {
 	it('auto-opens the sketchbook for a fork once the parent artwork preload is ready', async () => {
 		render(StudioDrawingPage, {
 			forkParent: {
+				drawingDocument: createEmptyDrawingDocument('artwork'),
 				id: 'artwork-parent',
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
@@ -254,8 +254,7 @@ describe('StudioDrawingPage', () => {
 		render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
-			createArtworkFile: async () =>
-				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
+			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
@@ -278,8 +277,7 @@ describe('StudioDrawingPage', () => {
 		render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
-			createArtworkFile: async () =>
-				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
+			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
@@ -312,8 +310,7 @@ describe('StudioDrawingPage', () => {
 		render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
-			createArtworkFile: async () =>
-				new File([new Uint8Array([1, 2, 3])], 'art.webp', { type: 'image/webp' }),
+			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
 			publishDrawing,
 			user: { nickname: 'journey_artist' }
 		});
@@ -323,7 +320,7 @@ describe('StudioDrawingPage', () => {
 		await page.getByRole('checkbox').click();
 		await page.getByRole('button', { name: 'Publish' }).click();
 
-		expect(publishDrawing).toHaveBeenCalledWith(expect.any(File), {
+		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: true,
 			parentArtworkId: null,
 			title: 'Figure Study'

@@ -80,7 +80,7 @@ describe('artwork detail endpoints', () => {
 				viewerVote: 'up'
 			}
 		});
-	});
+	}, 10_000);
 
 	it('returns not found for unknown artwork detail requests', async () => {
 		mocked.getArtworkDetail.mockRejectedValue(

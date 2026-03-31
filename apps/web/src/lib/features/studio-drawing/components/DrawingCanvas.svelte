@@ -1,105 +1,86 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import {
+		cloneDrawingDocument,
+		createEmptyDrawingDocument,
+		getDrawingPointWithinBounds,
+		type DrawingDocumentV1,
+		type DrawingPoint
+	} from '$lib/features/stroke-json/document';
+	import { renderDrawingDocumentToCanvas } from '$lib/features/stroke-json/canvas';
 	import { drawingTools } from '$lib/features/studio-drawing/state/drawing.svelte';
 
 	let {
 		canvasRef = $bindable<HTMLCanvasElement | null>(null),
+		drawingDocument = $bindable<DrawingDocumentV1>(createEmptyDrawingDocument('artwork')),
 		clearVersion = 0,
-		initialImageUrl = null,
+		initialDrawingDocument = null,
 		interactive = true,
 		onInitialImageSettled,
 		statusMessage = '',
 		statusTone = 'idle'
 	}: {
 		canvasRef?: HTMLCanvasElement | null;
+		drawingDocument?: DrawingDocumentV1;
 		clearVersion?: number;
-		initialImageUrl?: string | null;
+		initialDrawingDocument?: DrawingDocumentV1 | null;
 		interactive?: boolean;
 		onInitialImageSettled?: () => void;
 		statusMessage?: string;
 		statusTone?: 'error' | 'success' | 'idle';
 	} = $props();
 
-	let baseImage = $state<HTMLImageElement | null>(null);
+	let baselineDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('artwork'));
 	let isDrawing = $state(false);
+	let lastAppliedClearVersion = $state<number | null>(null);
 
-	const getBaseImagePlacement = (canvas: HTMLCanvasElement, image: HTMLImageElement) => {
-		const sourceWidth = image.naturalWidth || canvas.width;
-		const sourceHeight = image.naturalHeight || canvas.height;
-
-		if (!sourceWidth || !sourceHeight) {
-			return {
-				height: canvas.height,
-				width: canvas.width,
-				x: 0,
-				y: 0
-			};
-		}
-
-		const scale = Math.min(1, canvas.width / sourceWidth, canvas.height / sourceHeight);
-		const width = Math.max(1, Math.round(sourceWidth * scale));
-		const height = Math.max(1, Math.round(sourceHeight * scale));
-
-		return {
-			height,
-			width,
-			x: Math.round((canvas.width - width) / 2),
-			y: Math.round((canvas.height - height) / 2)
-		};
-	};
-
-	const paintCanvasBase = () => {
+	const renderCurrentDocument = () => {
 		if (!canvasRef) return;
-		const ctx = canvasRef.getContext('2d');
-		if (!ctx) return;
-		ctx.fillStyle = '#fdfbf7';
-		ctx.fillRect(0, 0, canvasRef.width, canvasRef.height);
-
-		if (baseImage) {
-			const placement = getBaseImagePlacement(canvasRef, baseImage);
-			ctx.imageSmoothingEnabled = true;
-			ctx.imageSmoothingQuality = 'high';
-			ctx.drawImage(baseImage, placement.x, placement.y, placement.width, placement.height);
-		}
+		renderDrawingDocumentToCanvas(canvasRef, drawingDocument);
 	};
 
 	const stopDrawing = () => {
 		isDrawing = false;
 	};
 
-	$effect(() => {
-		const nextInitialImageUrl = initialImageUrl?.trim() ?? '';
-		baseImage = null;
+	const getPoint = (event: MouseEvent): DrawingPoint | null => {
+		if (!canvasRef) return null;
 
-		if (!nextInitialImageUrl) {
-			onInitialImageSettled?.();
+		const rect = canvasRef.getBoundingClientRect();
+		const scaleX = canvasRef.width / rect.width;
+		const scaleY = canvasRef.height / rect.height;
+
+		return getDrawingPointWithinBounds(
+			[(event.clientX - rect.left) * scaleX, (event.clientY - rect.top) * scaleY],
+			drawingDocument
+		);
+	};
+
+	const appendPoint = (point: DrawingPoint) => {
+		const stroke = drawingDocument.strokes.at(-1);
+		if (!stroke) return;
+
+		const lastPoint = stroke.points.at(-1);
+		if (lastPoint && Math.hypot(point[0] - lastPoint[0], point[1] - lastPoint[1]) < 2) {
 			return;
 		}
 
-		let cancelled = false;
-		const image = new Image();
+		stroke.points.push(point);
+		renderCurrentDocument();
+	};
 
-		image.onload = () => {
-			if (cancelled) return;
-			baseImage = image;
-			onInitialImageSettled?.();
-		};
+	$effect(() => {
+		const nextBaseline = initialDrawingDocument
+			? cloneDrawingDocument(initialDrawingDocument)
+			: createEmptyDrawingDocument('artwork');
 
-		image.onerror = () => {
-			if (cancelled) return;
-			baseImage = null;
-			onInitialImageSettled?.();
-		};
-
-		image.src = nextInitialImageUrl;
-
-		return () => {
-			cancelled = true;
-		};
+		baselineDocument = nextBaseline;
+		drawingDocument = cloneDrawingDocument(nextBaseline);
+		onInitialImageSettled?.();
 	});
 
 	onMount(() => {
-		paintCanvasBase();
+		renderCurrentDocument();
 
 		window.addEventListener('mouseup', stopDrawing);
 		window.addEventListener('blur', stopDrawing);
@@ -111,25 +92,32 @@
 	});
 
 	$effect(() => {
-		if (clearVersion >= 0) {
-			paintCanvasBase();
+		if (lastAppliedClearVersion === null) {
+			lastAppliedClearVersion = clearVersion;
+			return;
 		}
+
+		if (clearVersion === lastAppliedClearVersion) return;
+
+		lastAppliedClearVersion = clearVersion;
+		drawingDocument = cloneDrawingDocument(baselineDocument);
+	});
+
+	$effect(() => {
+		renderCurrentDocument();
 	});
 
 	function startDrawing(e: MouseEvent) {
 		if (!interactive) return;
-		if (!canvasRef) return;
-		const rect = canvasRef.getBoundingClientRect();
-		const scaleX = canvasRef.width / rect.width;
-		const scaleY = canvasRef.height / rect.height;
-		const x = (e.clientX - rect.left) * scaleX;
-		const y = (e.clientY - rect.top) * scaleY;
+		const point = getPoint(e);
+		if (!point) return;
 
-		const ctx = canvasRef.getContext('2d');
-		if (!ctx) return;
-
-		ctx.beginPath();
-		ctx.moveTo(x, y);
+		drawingDocument.strokes.push({
+			color: drawingTools.activeColor,
+			points: [point],
+			size: drawingTools.brushSize
+		});
+		renderCurrentDocument();
 		isDrawing = true;
 	}
 
@@ -139,22 +127,21 @@
 			stopDrawing();
 			return;
 		}
-		if (!isDrawing || !canvasRef) return;
-		const rect = canvasRef.getBoundingClientRect();
-		const scaleX = canvasRef.width / rect.width;
-		const scaleY = canvasRef.height / rect.height;
-		const x = (e.clientX - rect.left) * scaleX;
-		const y = (e.clientY - rect.top) * scaleY;
+		if (!canvasRef) return;
+		const point = getPoint(e);
+		if (!point) return;
+		if (!isDrawing) {
+			drawingDocument.strokes.push({
+				color: drawingTools.activeColor,
+				points: [point],
+				size: drawingTools.brushSize
+			});
+			renderCurrentDocument();
+			isDrawing = true;
+			return;
+		}
 
-		const ctx = canvasRef.getContext('2d');
-		if (!ctx) return;
-
-		ctx.lineTo(x, y);
-		ctx.strokeStyle = drawingTools.activeColor;
-		ctx.lineWidth = drawingTools.brushSize;
-		ctx.lineCap = 'round';
-		ctx.lineJoin = 'round';
-		ctx.stroke();
+		appendPoint(point);
 	}
 </script>
 
@@ -167,6 +154,7 @@
 		style="background: #fdfbf7;"
 		aria-disabled={!interactive}
 		onmousedown={startDrawing}
+		onmouseleave={stopDrawing}
 		onmousemove={draw}
 		onmouseup={stopDrawing}
 	></canvas>

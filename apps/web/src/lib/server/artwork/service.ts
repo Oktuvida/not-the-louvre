@@ -11,6 +11,8 @@ import { ArtworkFlowError } from './errors';
 import { artworkRepository } from './repository';
 import { supabaseArtworkStorage } from './storage';
 import { checkTextModeration } from '$lib/server/moderation/service';
+import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+import { encodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import type {
 	ArtworkActorContext,
 	ArtworkCommentView,
@@ -26,11 +28,13 @@ import type {
 	ArtworkVoteValue
 } from './types';
 import { sanitizeArtworkMedia } from '../media/sanitization';
+import { createArtworkDrawingDocumentMedia } from '$lib/server/drawing-document/media';
 import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
 type PublishArtworkInput = {
+	drawingDocument?: string | null;
 	isNsfw?: boolean;
-	media: File;
+	media?: File | null;
 	parentArtworkId?: string | null;
 	title?: string | null;
 };
@@ -86,6 +90,7 @@ type ServiceDependencies = {
 	now?: () => Date;
 	randomSuffix?: () => number;
 	repository?: ArtworkRepository;
+	renderDrawingDocumentMedia?: typeof createArtworkDrawingDocumentMedia;
 	sanitizeMedia?: (file: File) => Promise<SanitizedMedia>;
 	storage?: ArtworkStorage;
 };
@@ -95,6 +100,8 @@ const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	now: dependencies.now ?? (() => new Date()),
 	randomSuffix: dependencies.randomSuffix ?? (() => Math.floor(Math.random() * 10000)),
 	repository: dependencies.repository ?? artworkRepository,
+	renderDrawingDocumentMedia:
+		dependencies.renderDrawingDocumentMedia ?? createArtworkDrawingDocumentMedia,
 	sanitizeMedia: dependencies.sanitizeMedia ?? sanitizeArtworkMedia,
 	storage: dependencies.storage ?? supabaseArtworkStorage
 });
@@ -386,6 +393,7 @@ export const publishArtwork = async (
 		now: getNow,
 		randomSuffix,
 		repository,
+		renderDrawingDocumentMedia,
 		sanitizeMedia,
 		storage
 	} = getDependencies(dependencies);
@@ -408,7 +416,30 @@ export const publishArtwork = async (
 		}
 	}
 
-	const media = await sanitizeMedia(input.media);
+	let media: SanitizedMedia;
+	let drawingDocument: string | null = null;
+	let drawingVersion: number | null = null;
+
+	const providedDrawingDocument = input.drawingDocument?.trim() ?? '';
+	if (providedDrawingDocument) {
+		const parsedDocument = parseDrawingDocument(providedDrawingDocument);
+		if (parsedDocument.kind !== 'artwork') {
+			throw new ArtworkFlowError(
+				400,
+				'Artwork publish requires an artwork drawing document',
+				'INVALID_MEDIA_FORMAT'
+			);
+		}
+
+		media = await renderDrawingDocumentMedia(parsedDocument);
+		drawingDocument = encodeCompressedDrawingDocument(parsedDocument);
+		drawingVersion = parsedDocument.version;
+	} else if (input.media instanceof File) {
+		media = await sanitizeMedia(input.media);
+	} else {
+		throw new ArtworkFlowError(400, 'Artwork media is required', 'INVALID_MEDIA_FORMAT');
+	}
+
 	const artworkId = nextId();
 	const storageKey = `artworks/${actor.user.id}/${artworkId}.avif`;
 
@@ -419,6 +450,8 @@ export const publishArtwork = async (
 			authorId: actor.user.id,
 			commentCount: 0,
 			createdAt: now,
+			drawingDocument,
+			drawingVersion,
 			forkCount: 0,
 			id: artworkId,
 			isNsfw: Boolean(input.isNsfw),

@@ -5,6 +5,8 @@ import {
 	ARTWORK_MEDIA_WIDTH,
 	ARTWORK_PUBLISH_RATE_LIMIT
 } from './config';
+import { createEmptyDrawingDocument } from '$lib/features/stroke-json/document';
+import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import { ArtworkFlowError } from './errors';
 import {
 	createAvifTestFile,
@@ -272,6 +274,69 @@ describe('artwork service', () => {
 		});
 	}, 10000);
 
+	it('publishes an artwork drawing document and stores the compressed source snapshot', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage, uploads } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+		const drawingDocument = JSON.stringify({
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [
+						[48, 48] as [number, number],
+						[320, 320] as [number, number],
+						[540, 220] as [number, number]
+					],
+					size: 12
+				}
+			]
+		});
+
+		const result = await publishArtwork(
+			{
+				drawingDocument,
+				title: 'Vector First'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		expect(result.storageKey).toBe('artworks/user-1/artwork-1.avif');
+		expect(result.drawingVersion).toBe(1);
+		expect(result.drawingDocument).toBeTruthy();
+		expect(uploads).toHaveLength(1);
+		expect(uploads[0]?.file.type).toBe('image/avif');
+		expect(JSON.parse(decodeCompressedDrawingDocument(result.drawingDocument!))).toEqual(
+			JSON.parse(drawingDocument)
+		);
+		expect(artworks.get('artwork-1')).toMatchObject({
+			drawingVersion: 1,
+			title: 'Vector First'
+		});
+	});
+
 	it('persists creator-labeled nsfw metadata on publish', async () => {
 		const { publishArtwork } = await import('./service');
 		const { artworks, repository } = createRepository();
@@ -370,15 +435,34 @@ describe('artwork service', () => {
 		const { artworks, repository } = createRepository();
 		const { storage } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
+		const parentDocument = JSON.stringify({
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [[120, 120] as [number, number], [240, 240] as [number, number]],
+					size: 8
+				}
+			]
+		});
+		const childDocument = JSON.stringify({
+			...JSON.parse(parentDocument),
+			strokes: [
+				...JSON.parse(parentDocument).strokes,
+				{
+					color: '#c84f4f',
+					points: [
+						[320, 320],
+						[480, 420]
+					],
+					size: 10
+				}
+			]
 		});
 
 		await publishArtwork(
 			{
-				media,
+				drawingDocument: parentDocument,
 				title: 'Original artwork'
 			},
 			{
@@ -407,7 +491,7 @@ describe('artwork service', () => {
 
 		const fork = await publishArtwork(
 			{
-				media,
+				drawingDocument: childDocument,
 				parentArtworkId: 'artwork-parent',
 				title: 'Forked artwork'
 			},
@@ -436,10 +520,14 @@ describe('artwork service', () => {
 		);
 
 		expect(fork).toMatchObject({
+			drawingVersion: 1,
 			id: 'artwork-child',
 			parentId: 'artwork-parent',
 			forkCount: 0
 		});
+		expect(JSON.parse(decodeCompressedDrawingDocument(fork.drawingDocument!))).toEqual(
+			JSON.parse(childDocument)
+		);
 		expect(artworks.get('artwork-parent')).toMatchObject({
 			forkCount: 1,
 			id: 'artwork-parent'
@@ -450,16 +538,12 @@ describe('artwork service', () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
+		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
 
 		await expect(
 			publishArtwork(
 				{
-					media,
+					drawingDocument,
 					parentArtworkId: 'missing-parent',
 					title: 'Broken fork'
 				},

@@ -2,6 +2,8 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
+import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { getArtworkDetail } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';
@@ -42,6 +44,9 @@ export const load: PageServerLoad = async (event) => {
 	const forkArtworkId = event.url.searchParams.get('fork');
 	const forkParent = forkArtworkId
 		? await getArtworkDetail(forkArtworkId, { user: event.locals.user }).then((artwork) => ({
+				drawingDocument: artwork.drawingDocument
+					? parseDrawingDocument(decodeCompressedDrawingDocument(artwork.drawingDocument))
+					: null,
 				id: artwork.id,
 				isNsfw: artwork.isNsfw,
 				mediaUrl: artwork.mediaUrl,
@@ -58,24 +63,26 @@ export const load: PageServerLoad = async (event) => {
 export const actions: Actions = {
 	publish: async (event) => {
 		const formData = await event.request.formData();
+		const drawingDocument = formData.get('drawingDocument')?.toString() ?? '';
 		const media = formData.get('media');
 		const title = formData.get('title')?.toString() ?? '';
 		const parentArtworkId = formData.get('parentArtworkId')?.toString() ?? null;
 		const isNsfw = formData.get('isNsfw')?.toString() === 'true';
 
-		if (!(media instanceof File)) {
+		if (!drawingDocument && !(media instanceof File)) {
 			return fail(400, {
 				action: 'publish',
 				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Artwork media is required'
+				message: 'Artwork media or drawing document is required'
 			});
 		}
 
 		try {
 			const artwork = await publishArtwork(
 				{
+					drawingDocument,
 					isNsfw,
-					media,
+					media: media instanceof File ? media : null,
 					parentArtworkId,
 					title
 				},
