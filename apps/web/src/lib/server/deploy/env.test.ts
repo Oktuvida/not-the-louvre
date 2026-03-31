@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	applyEnvUpdates,
+	createChildProcessEnv,
 	parseEnvDocument,
 	serializeEnvDocument,
 	validateProductionEnv
@@ -83,5 +84,28 @@ describe('validateProductionEnv', () => {
 		);
 		expect(result.errors).toContain('BETTER_AUTH_SECRET must be at least 32 characters');
 		expect(result.errors).toContain('SUPABASE_JWT_SECRET must be at least 32 characters');
+	});
+});
+
+describe('createChildProcessEnv', () => {
+	it('overrides runtime keys with the validated production env and defaults NODE_ENV', () => {
+		const result = createChildProcessEnv(
+			{
+				DATABASE_URL: 'postgres://wrong',
+				PATH: '/usr/bin',
+				PORT: '9999'
+			},
+			{
+				DATABASE_URL: 'postgres://correct',
+				ORIGIN: 'https://app.example.com',
+				PORT: '3000'
+			}
+		);
+
+		expect(result.DATABASE_URL).toBe('postgres://correct');
+		expect(result.ORIGIN).toBe('https://app.example.com');
+		expect(result.PORT).toBe('3000');
+		expect(result.PATH).toBe('/usr/bin');
+		expect(result.NODE_ENV).toBe('production');
 	});
 });

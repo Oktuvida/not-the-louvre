@@ -6,6 +6,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import {
 	applyEnvUpdates,
+	createChildProcessEnv,
 	envDocumentToRecord,
 	parseEnvDocument,
 	serializeEnvDocument,
@@ -47,11 +48,12 @@ const repoRoot = resolve(webRoot, '..', '..');
 const runCommand = (
 	command: string,
 	args: string[],
-	options: { cwd?: string; allowFailure?: boolean } = {}
+	options: { cwd?: string; allowFailure?: boolean; env?: NodeJS.ProcessEnv } = {}
 ) => {
 	const result = spawnSync(command, args, {
 		cwd: options.cwd,
 		encoding: 'utf8',
+		env: options.env ?? process.env,
 		stdio: ['inherit', 'pipe', 'pipe']
 	});
 
@@ -317,7 +319,8 @@ const deployCommand = async (options: CliOptions) => {
 	}
 
 	runCommand('bun', ['install', '--frozen-lockfile'], { cwd: config.repoRoot });
-	runCommand('bun', ['run', 'build'], { cwd: config.repoRoot });
+	const buildEnv = createChildProcessEnv(process.env, validation.env);
+	runCommand('bun', ['run', 'build'], { cwd: config.repoRoot, env: buildEnv });
 	await ensureBuildOutput(resolve(config.webRoot, DEFAULT_BUILD_DIR));
 	runCommand('systemctl', ['restart', config.serviceName]);
 	ensureServiceActive(config.serviceName);
