@@ -69,7 +69,7 @@
 	let isPublishing = $state(false);
 	let pendingStudioUnlock = $state(false);
 	let publishedArtwork = $state<DrawPublishedArtwork | null>(null);
-	let sceneState = $state<'closed' | 'opening' | 'open'>('closed');
+	let sceneState = $state<'closed' | 'opening' | 'open' | 'closing'>('closed');
 	let statusMessage = $state('');
 	let statusTone = $state<'error' | 'success' | 'idle'>('idle');
 	let artworkTitle = $state('');
@@ -78,9 +78,10 @@
 	let isExitingToHome = $state(false);
 	let showExitFade = $state(false);
 	let exitFadeOpacity = $state(0);
+	const EXIT_FADE_DURATION_S = 0.5;
 
 	let studioUnlocked = $derived(sceneState === 'open');
-	let toolsVisible = $derived(sceneState !== 'closed');
+	let toolsVisible = $derived(sceneState !== 'closed' && sceneState !== 'closing');
 	let hasForkParent = $derived(Boolean(forkParent?.mediaUrl));
 
 	$effect(() => {
@@ -128,6 +129,29 @@
 		}
 
 		completeStudioUnlock();
+	};
+
+	const handleBookClosed = () => {
+		if (sceneState !== 'closing') return;
+		sceneState = 'closed';
+		fadeAndExitHome();
+	};
+
+	const fadeAndExitHome = () => {
+		showExitFade = true;
+
+		const fade = { opacity: 0 };
+		gsap.to(fade, {
+			opacity: 1,
+			duration: EXIT_FADE_DURATION_S,
+			ease: 'power2.in',
+			onUpdate: () => {
+				exitFadeOpacity = fade.opacity;
+			},
+			onComplete: () => {
+				void goto(resolve('/?from=studio'));
+			}
+		});
 	};
 
 	const publishArtwork = async () => {
@@ -189,29 +213,17 @@
 		event.stopPropagation();
 		if (isExitingToHome) return;
 		isExitingToHome = true;
-		showExitFade = true;
 
-		const fade = { opacity: 0 };
-		gsap.to(fade, {
-			opacity: 1,
-			duration: 0.5,
-			ease: 'power2.in',
-			onUpdate: () => {
-				exitFadeOpacity = fade.opacity;
-			},
-			onComplete: () => {
-				const url = `${resolve('/')}?from=studio`;
-				// eslint-disable-next-line svelte/no-navigation-without-resolve -- URL is already resolved above
-				void goto(url);
-			}
-		});
+		if (sceneState === 'open') {
+			sceneState = 'closing';
+			return;
+		}
+
+		fadeAndExitHome();
 	};
 </script>
 
-<div
-	class="studio-page relative flex h-dvh flex-col overflow-hidden"
-	data-book-state={sceneState}
->
+<div class="studio-page relative flex h-dvh flex-col overflow-hidden" data-book-state={sceneState}>
 	<picture class="pointer-events-none absolute inset-0 z-0">
 		<source type="image/avif" srcset="/table.avif" />
 		<img
@@ -254,71 +266,72 @@
 		>
 			<div class="order-1 flex min-h-0 flex-col">
 				<div class="studio-book-frame">
-				<DrawingBookStage
-					stageState={sceneState}
-					onOpenRequest={startOpeningBook}
-					onOpened={unlockStudio}
-					{openingDurationMs}
-				>
-					{#snippet coverFields()}
-						<div class="cover-postit cover-postit-title">
-							<div class="postit-tape" aria-hidden="true"></div>
-							<p class="postit-label">Title your masterpiece</p>
-							{#if forkParent}
-								<p class="postit-fork-note">
-									Forking <span class="postit-fork-name">{forkParent.title}</span>
-								</p>
-							{/if}
-							<input
-								bind:value={artworkTitle}
-								type="text"
-								maxlength="80"
-								placeholder="Untitled genius"
-								disabled={!studioUnlocked}
-								class="postit-input"
-							/>
-							{#if titleError}
-								<p class="postit-error">{titleError}</p>
-							{/if}
-						</div>
+					<DrawingBookStage
+						stageState={sceneState}
+						onClosed={handleBookClosed}
+						onOpenRequest={startOpeningBook}
+						onOpened={unlockStudio}
+						{openingDurationMs}
+					>
+						{#snippet coverFields()}
+							<div class="cover-postit cover-postit-title">
+								<div class="postit-tape" aria-hidden="true"></div>
+								<p class="postit-label">Title your masterpiece</p>
+								{#if forkParent}
+									<p class="postit-fork-note">
+										Forking <span class="postit-fork-name">{forkParent.title}</span>
+									</p>
+								{/if}
+								<input
+									bind:value={artworkTitle}
+									type="text"
+									maxlength="80"
+									placeholder="Untitled genius"
+									disabled={!studioUnlocked}
+									class="postit-input"
+								/>
+								{#if titleError}
+									<p class="postit-error">{titleError}</p>
+								{/if}
+							</div>
 
-						<div class="cover-postit cover-postit-nsfw">
-							<div class="postit-tape" aria-hidden="true"></div>
-							<button
-								type="button"
-								role="checkbox"
-								aria-checked={isArtworkNsfw}
-								disabled={!studioUnlocked}
-								onclick={() => {
-									if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
-								}}
-								class="postit-nsfw-btn"
-							>
-								<span
-									class="nsfw-track"
-									style={`background: ${isArtworkNsfw ? '#c84f4f' : 'rgb(60 50 40 / 0.15)'};`}
+							<div class="cover-postit cover-postit-nsfw">
+								<div class="postit-tape" aria-hidden="true"></div>
+								<button
+									type="button"
+									role="checkbox"
+									aria-checked={isArtworkNsfw}
+									disabled={!studioUnlocked}
+									onclick={() => {
+										if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
+									}}
+									class="postit-nsfw-btn"
 								>
-								<span
-									class="nsfw-dot"
-									style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
-								></span>
-								</span>
-								<span class={isArtworkNsfw ? 'font-semibold text-[#c84f4f]' : ''}
-									>Not safe for the Louvre</span
-								>
-							</button>
-						</div>
-					{/snippet}
-					<DrawingCanvas
-						bind:canvasRef
-						{clearVersion}
-						initialImageUrl={forkParent?.mediaUrl ?? null}
-						interactive={studioUnlocked}
-						onInitialImageSettled={markForkPreloadSettled}
-						{statusMessage}
-						{statusTone}
-					/>
-				</DrawingBookStage>
+									<span
+										class="nsfw-track"
+										style={`background: ${isArtworkNsfw ? '#c84f4f' : 'rgb(60 50 40 / 0.15)'};`}
+									>
+										<span
+											class="nsfw-dot"
+											style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
+										></span>
+									</span>
+									<span class={isArtworkNsfw ? 'font-semibold text-[#c84f4f]' : ''}
+										>Not safe for the Louvre</span
+									>
+								</button>
+							</div>
+						{/snippet}
+						<DrawingCanvas
+							bind:canvasRef
+							{clearVersion}
+							initialImageUrl={forkParent?.mediaUrl ?? null}
+							interactive={studioUnlocked}
+							onInitialImageSettled={markForkPreloadSettled}
+							{statusMessage}
+							{statusTone}
+						/>
+					</DrawingBookStage>
 				</div>
 			</div>
 
@@ -367,10 +380,10 @@
 		--book-offset-y: 3rem;
 		--book-scale: 0.82;
 		--book-rotation: -6deg;
-		transform: translate(var(--book-offset-x), var(--book-offset-y)) scale(var(--book-scale)) rotate(var(--book-rotation));
+		transform: translate(var(--book-offset-x), var(--book-offset-y)) scale(var(--book-scale))
+			rotate(var(--book-rotation));
 		transform-origin: center center;
-		transition:
-			transform 800ms cubic-bezier(0.23, 1, 0.32, 1);
+		transition: transform 800ms cubic-bezier(0.23, 1, 0.32, 1);
 	}
 
 	/* Book approaches viewer when opening/open */

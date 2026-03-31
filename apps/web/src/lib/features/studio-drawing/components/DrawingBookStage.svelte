@@ -1,12 +1,13 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
-	export type BookStageState = 'closed' | 'opening' | 'open';
+	export type BookStageState = 'closed' | 'opening' | 'open' | 'closing';
 
 	let {
 		children,
 		coverBack,
 		coverFields,
+		onClosed,
 		onOpened,
 		onOpenRequest,
 		openingDurationMs = 950,
@@ -15,6 +16,7 @@
 		children?: Snippet;
 		coverBack?: Snippet;
 		coverFields?: Snippet;
+		onClosed?: () => void;
 		onOpened?: () => void;
 		onOpenRequest?: () => void;
 		openingDurationMs?: number;
@@ -27,16 +29,23 @@
 			? 'Closed sketchbook. Activate to begin drawing.'
 			: stageState === 'opening'
 				? 'Sketchbook opening.'
-				: 'Sketchbook open. Drawing surface ready.'
+				: stageState === 'closing'
+					? 'Sketchbook closing.'
+					: 'Sketchbook open. Drawing surface ready.'
 	);
 
 	$effect(() => {
-		if (stageState !== 'opening') {
+		if (stageState !== 'opening' && stageState !== 'closing') {
 			return;
 		}
 
 		const timer = window.setTimeout(() => {
-			onOpened?.();
+			if (stageState === 'opening') {
+				onOpened?.();
+				return;
+			}
+
+			onClosed?.();
 		}, effectiveOpeningDurationMs);
 
 		return () => {
@@ -80,7 +89,9 @@
 						</div>
 					</div>
 					<div class="page-tagline" aria-hidden="true">
-						<span>U might get a very expensive frame, so try not to do a very questionable drawing.</span>
+						<span
+							>U might get a very expensive frame, so try not to do a very questionable drawing.</span
+						>
 					</div>
 				</div>
 			</div>
