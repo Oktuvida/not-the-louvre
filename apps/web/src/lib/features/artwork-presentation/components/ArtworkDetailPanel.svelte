@@ -286,9 +286,9 @@
 						{#if viewer}
 							<div class="mt-6 grid grid-cols-2 gap-4">
 								<div class="col-span-2">
-								<ArtworkSafetyActions {artwork} {viewer} onArtworkPatch={patchArtwork} />
-							</div>
-							<GameButton
+									<ArtworkSafetyActions {artwork} {viewer} onArtworkPatch={patchArtwork} />
+								</div>
+								<GameButton
 									variant="secondary"
 									size="sm"
 									className="w-full justify-center"
