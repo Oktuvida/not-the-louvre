@@ -41,8 +41,10 @@ describe('EntrySceneController', () => {
 		});
 
 		await expect.element(page.getByText('HELLO')).toBeVisible();
-		await expect.element(page.getByText('artist_1')).toBeVisible();
-		await expect.element(page.getByRole('button', { name: 'LOGOUT' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: /Edit avatar for artist_1/ }))
+			.toBeVisible();
+		await expect.element(page.getByRole('button', { name: /logout/i })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Come In' })).not.toBeInTheDocument();
 	});
 
@@ -149,7 +151,7 @@ describe('EntrySceneController', () => {
 		});
 
 		await expect.element(page.getByText('Finish your avatar')).toBeVisible();
-		await expect.element(page.getByText('Signed in as')).not.toBeInTheDocument();
+		await expect.element(page.getByText('HELLO')).not.toBeInTheDocument();
 	});
 
 	it('lets authenticated users close the avatar onboarding overlay into the signed-in scene', async () => {
@@ -174,6 +176,8 @@ describe('EntrySceneController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 1800));
 
 		await expect.element(page.getByText('HELLO')).toBeVisible();
-		await expect.element(page.getByText('artist_1', { exact: true })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: /Edit avatar for artist_1/ }))
+			.toBeVisible();
 	});
 });

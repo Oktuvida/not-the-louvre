@@ -2,6 +2,16 @@ import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { createEmptyDrawingDocument } from '$lib/features/stroke-json/document';
+
+const { goto } = vi.hoisted(() => ({ goto: vi.fn() }));
+
+vi.mock('$app/navigation', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$app/navigation')>();
+	return {
+		...actual,
+		goto
+	};
+});
 import StudioDrawingPage from './StudioDrawingPage.svelte';
 
 const forkParentPreviewDataUrl =
@@ -20,7 +30,7 @@ const reducedMotionMediaQuery = {
 
 async function openSketchbook() {
 	await page.getByRole('button', { name: 'Open sketchbook' }).click();
-	await expect.element(page.getByPlaceholder('Give your piece a title')).toBeVisible();
+	await expect.element(page.getByPlaceholder('Untitled genius')).toBeVisible();
 }
 
 describe('StudioDrawingPage', () => {
@@ -29,27 +39,22 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('starts with a closed sketchbook and hides active studio controls', async () => {
-		render(StudioDrawingPage, {
-			openingDurationMs: 1,
-			user: { nickname: 'journey_artist' }
-		});
+		render(StudioDrawingPage, { openingDurationMs: 1 });
 
+		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Open sketchbook' })).toBeVisible();
-		await expect.element(page.getByPlaceholder('Give your piece a title')).toBeDisabled();
+		await expect.element(page.getByPlaceholder('Untitled genius')).toBeDisabled();
 		await expect.element(page.getByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
 	});
 
 	it('reveals the drawing controls after the sketchbook opens', async () => {
-		render(StudioDrawingPage, {
-			openingDurationMs: 1,
-			user: { nickname: 'journey_artist' }
-		});
+		render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await openSketchbook();
 
 		await expect.element(page.getByRole('button', { name: 'Clear' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
-		await expect.element(page.getByLabelText('Title')).toBeVisible();
+		await expect.element(page.getByPlaceholder('Untitled genius')).toBeVisible();
 	});
 
 	it('keeps the sketchbook opening animation duration even when reduced motion is requested', async () => {
@@ -59,19 +64,36 @@ describe('StudioDrawingPage', () => {
 		);
 
 		render(StudioDrawingPage, {
-			openingDurationMs: 300,
-			user: { nickname: 'journey_artist' }
+			openingDurationMs: 300
 		});
 
 		await page.getByRole('button', { name: 'Open sketchbook' }).click();
 		await new Promise((resolve) => setTimeout(resolve, 120));
 
-		await expect.element(page.getByPlaceholder('Give your piece a title')).toBeDisabled();
+		await expect.element(page.getByPlaceholder('Untitled genius')).toBeDisabled();
 		await expect.element(page.getByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
 
 		await new Promise((resolve) => setTimeout(resolve, 240));
 
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+	});
+
+	it('closes the sketchbook before starting the exit fade', async () => {
+		goto.mockReset();
+
+		render(StudioDrawingPage, { openingDurationMs: 120 });
+
+		await openSketchbook();
+		await page.getByRole('link', { name: 'Exit Studio' }).click();
+
+		await expect.element(page.getByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+		expect(goto).not.toHaveBeenCalled();
+
+		await new Promise((resolve) => setTimeout(resolve, 80));
+		expect(goto).not.toHaveBeenCalled();
+
+		await new Promise((resolve) => setTimeout(resolve, 620));
+		expect(goto).toHaveBeenCalledWith(expect.stringContaining('?from=studio'));
 	});
 
 	it('publishes the current drawing and shows a minimal success state', async () => {
@@ -97,11 +119,11 @@ describe('StudioDrawingPage', () => {
 			user: { nickname: 'journey_artist' }
 		});
 		await openSketchbook();
-		await page.getByPlaceholder('Give your piece a title').fill('My First Piece');
+		await page.getByPlaceholder('Untitled genius').fill('My First Piece');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
-		await expect.element(page.getByText('Artwork published', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Artwork published as Untitled #0001')).toBeVisible();
 		await expect.element(page.getByRole('heading', { name: 'Untitled #0001' })).toBeVisible();
 		await expect
 			.element(page.getByRole('link', { name: 'Exit Studio' }))
@@ -135,12 +157,12 @@ describe('StudioDrawingPage', () => {
 			user: { nickname: 'journey_artist' }
 		});
 		await openSketchbook();
-		await page.getByPlaceholder('Give your piece a title').fill('Problem Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Problem Piece');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
 		await expect.element(page.getByText('Artwork media must decode safely')).toBeVisible();
-		await expect.element(page.getByText('Artwork published')).not.toBeInTheDocument();
+		await expect.element(page.getByText(/Artwork published as/)).not.toBeInTheDocument();
 	});
 
 	it('shows a local preparation error when the drawing payload cannot be created', async () => {
@@ -155,7 +177,7 @@ describe('StudioDrawingPage', () => {
 			user: { nickname: 'journey_artist' }
 		});
 		await openSketchbook();
-		await page.getByPlaceholder('Give your piece a title').fill('Export Trouble');
+		await page.getByPlaceholder('Untitled genius').fill('Export Trouble');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
@@ -209,14 +231,12 @@ describe('StudioDrawingPage', () => {
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
 			},
-			publishDrawing,
-			user: { nickname: 'journey_artist' }
+			publishDrawing
 		});
 
-		await expect.element(page.getByText('Forking from')).toBeVisible();
-		await expect.element(page.getByText('Parent Artwork')).toBeVisible();
+		await expect.element(page.getByText('Forking Parent Artwork')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
-		await page.getByPlaceholder('Give your piece a title').fill('Forked Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Forked Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
 
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
@@ -267,15 +287,15 @@ describe('StudioDrawingPage', () => {
 			user: { nickname: 'journey_artist' }
 		});
 
-		await expect.element(page.getByText('Forking from')).toBeVisible();
+		await expect.element(page.getByText('Forking Parent Artwork')).toBeVisible();
 		await page.getByRole('button', { name: 'Cancel fork' }).click();
 
-		await expect.element(page.getByText('Forking from')).not.toBeInTheDocument();
+		await expect.element(page.getByText('Forking Parent Artwork')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Cancel fork' })).not.toBeInTheDocument();
 		expect(window.localStorage.getItem(forkDraftKey)).toBeNull();
 		expect(replaceStudioUrl).toHaveBeenCalledOnce();
 
-		await page.getByPlaceholder('Give your piece a title').fill('Fresh Start');
+		await page.getByPlaceholder('Untitled genius').fill('Fresh Start');
 		await page.getByRole('button', { name: 'Publish' }).click();
 
 		expect(checkTextContent).toHaveBeenCalledWith('Fresh Start', 'artwork_title');
@@ -295,14 +315,12 @@ describe('StudioDrawingPage', () => {
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
 			},
-			openingDurationMs: 1,
-			user: { nickname: 'journey_artist' }
+			openingDurationMs: 1
 		});
 
-		await expect.element(page.getByText('Forking from')).toBeVisible();
-		await expect.element(page.getByText('Parent Artwork')).toBeVisible();
+		await expect.element(page.getByText('Forking Parent Artwork')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
-		await expect.element(page.getByPlaceholder('Give your piece a title')).toBeEnabled();
+		await expect.element(page.getByPlaceholder('Untitled genius')).toBeEnabled();
 	});
 
 	it('blocks publishing when the artwork title filter rejects the title', async () => {
@@ -320,7 +338,7 @@ describe('StudioDrawingPage', () => {
 			user: { nickname: 'journey_artist' }
 		});
 		await openSketchbook();
-		await page.getByPlaceholder('Give your piece a title').fill('Blocked Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Blocked Piece');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
@@ -343,7 +361,7 @@ describe('StudioDrawingPage', () => {
 			user: { nickname: 'journey_artist' }
 		});
 		await openSketchbook();
-		await page.getByPlaceholder('Give your piece a title').fill('Retry Later Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Retry Later Piece');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
@@ -377,7 +395,7 @@ describe('StudioDrawingPage', () => {
 		});
 
 		await openSketchbook();
-		await page.getByPlaceholder('Give your piece a title').fill('Figure Study');
+		await page.getByPlaceholder('Untitled genius').fill('Figure Study');
 		await page.getByRole('checkbox').click();
 		await page.getByRole('button', { name: 'Publish' }).click();
 

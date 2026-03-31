@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { LogOut, Trophy, X } from 'lucide-svelte';
 	import { resolve } from '$app/paths';
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
 	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
@@ -272,23 +273,9 @@
 				className="group -rotate-1 hover:translate-x-[10px] hover:rotate-2"
 				onclick={handleGalleryClick}
 			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="24"
-					height="24"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
+				<Trophy
 					class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-					><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path
-						d="M4 22h16"
-					/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path
-						d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"
-					/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></svg
-				>
+				/>
 				<span>GALLERY</span>
 			</GameButton>
 		{:else}
@@ -298,23 +285,9 @@
 				size="lg"
 				className="group -rotate-1 hover:translate-x-[10px] hover:rotate-2"
 			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="24"
-					height="24"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
+				<Trophy
 					class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-					><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path
-						d="M4 22h16"
-					/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path
-						d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"
-					/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></svg
-				>
+				/>
 				<span>GALLERY</span>
 			</GameLink>
 		{/if}
@@ -352,21 +325,9 @@
 					size="lg"
 					className="group rotate-1 hover:translate-x-[10px] hover:rotate-[-2deg]"
 				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="24"
-						height="24"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
+					<LogOut
 						class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-						><path d="m9 21 6-6-6-6" /><path d="M15 15H3" /><path
-							d="M18 3h-7a2 2 0 0 0-2 2v4"
-						/><path d="M18 3a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-7" /></svg
-					>
+					/>
 					<span>LOGOUT</span>
 				</GameButton>
 			</form>
@@ -400,20 +361,7 @@
 						</h2>
 						<GameButton type="button" variant="ghost" size="sm" onclick={closeAvatarEditor}>
 							<span class="sr-only">Close</span>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<line x1="18" y1="6" x2="6" y2="18" />
-								<line x1="6" y1="6" x2="18" y2="18" />
-							</svg>
+							<X />
 						</GameButton>
 					</div>
 					<AvatarSketchpad
