@@ -150,11 +150,6 @@
 				onclick={openAvatarEditor}
 				userId={user.id}
 			/>
-			<p
-				class="mt-3 text-sm font-semibold text-[#2d2420] drop-shadow-[0_1px_0_rgba(255,255,255,0.55)]"
-			>
-				Signed in as <span class="font-black">{user.nickname}</span>
-			</p>
 		</div>
 	{/if}
 
