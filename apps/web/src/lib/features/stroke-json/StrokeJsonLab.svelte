@@ -3,7 +3,6 @@
 	import {
 		ARTWORK_DRAWING_DIMENSIONS,
 		AVATAR_DRAWING_DIMENSIONS,
-		clampDrawingPoint,
 		countDrawingPoints,
 		createEmptyDrawingDocument,
 		getDrawingPointWithinBounds,

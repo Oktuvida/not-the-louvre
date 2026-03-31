@@ -27,6 +27,11 @@ export const compressDrawingDocument = (
 	return new Uint8Array(compressed);
 };
 
+export const encodeCompressedDrawingDocument = (
+	document: DrawingDocumentV1,
+	limits: DrawingDocumentLimits = DEFAULT_DRAWING_DOCUMENT_LIMITS
+) => Buffer.from(compressDrawingDocument(document, limits)).toString('base64');
+
 export const decompressDrawingDocument = (payload: Uint8Array, options: DecompressOptions = {}) => {
 	const maxCompressedBytes =
 		options.maxCompressedBytes ?? DEFAULT_DRAWING_DOCUMENT_LIMITS.maxCompressedBytes;
@@ -50,4 +55,15 @@ export const decompressDrawingDocument = (payload: Uint8Array, options: Decompre
 	}
 
 	return decompressed.toString('utf-8');
+};
+
+export const decodeCompressedDrawingDocument = (
+	payload: string,
+	options: DecompressOptions = {}
+) => {
+	if (!payload.trim()) {
+		throw new Error('Drawing document payload is required');
+	}
+
+	return decompressDrawingDocument(new Uint8Array(Buffer.from(payload, 'base64')), options);
 };
