@@ -261,7 +261,7 @@
 	</div>
 
 	<div
-		class="pointer-events-auto absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-6 transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:bottom-20 md:left-16 md:items-start md:gap-4 md:translate-x-0"
+		class="pointer-events-auto absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-6 transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:bottom-20 md:left-16 md:translate-x-0 md:items-start md:gap-4"
 		class:translate-y-[calc(100%+6rem)]={isExiting}
 		class:opacity-0={isExiting}
 	>
