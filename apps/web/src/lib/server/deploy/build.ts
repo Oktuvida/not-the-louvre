@@ -1,5 +1,5 @@
-import { access, readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { access, cp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
+import { join, relative, resolve } from 'node:path';
 
 export const DEFAULT_BUILD_DIR = 'build';
 
@@ -56,4 +56,47 @@ export const ensureBuildOutput = async (buildDirectory: string) => {
 	}
 
 	return entryPoint;
+};
+
+export const ensureBuildManifestExcludesRoutePrefix = async (
+	buildDirectory: string,
+	routePrefix: string
+) => {
+	const manifestPath = join(buildDirectory, 'server', 'manifest.js');
+	const manifestContents = await readFile(manifestPath, 'utf8');
+	const escapedRoutePrefix = routePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const routePattern = new RegExp(`id:\\s+['\"]${escapedRoutePrefix}(?:/|['\"])`, 'u');
+
+	if (routePattern.test(manifestContents)) {
+		throw new Error(
+			`Expected production build manifest to exclude routes under ${routePrefix}, but found them in ${manifestPath}`
+		);
+	}
+};
+
+export const syncProductionRoutes = async (
+	sourceRoutesDirectory: string,
+	targetRoutesDirectory: string,
+	excludedTopLevelEntries: string[]
+) => {
+	const excludedEntries = new Set(excludedTopLevelEntries.map((entry) => entry.toLowerCase()));
+	const resolvedSourceDirectory = resolve(sourceRoutesDirectory);
+
+	await rm(targetRoutesDirectory, { force: true, recursive: true });
+	await mkdir(targetRoutesDirectory, { recursive: true });
+	await cp(sourceRoutesDirectory, targetRoutesDirectory, {
+		recursive: true,
+		filter: (entryPath) => {
+			const relativeEntryPath = relative(resolvedSourceDirectory, resolve(entryPath));
+
+			if (relativeEntryPath === '') {
+				return true;
+			}
+
+			const [topLevelEntry] = relativeEntryPath.split(/[/\\]/u);
+			return !excludedEntries.has(topLevelEntry.toLowerCase());
+		}
+	});
+
+	return targetRoutesDirectory;
 };

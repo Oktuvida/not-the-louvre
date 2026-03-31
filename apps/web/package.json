@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build && bun run scripts/validate-build-output.ts",
+		"build": "bun run scripts/build-production.ts",
 		"model:transform:studio": "bun run scripts/transform-studio-model.ts",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
