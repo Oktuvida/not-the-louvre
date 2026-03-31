@@ -16,7 +16,7 @@
 		onPublish?: () => void;
 		onClear?: () => void;
 	} = $props();
-	</script>
+</script>
 
 <div class="tool-tray">
 	<div class="tray-glow" aria-hidden="true"></div>
