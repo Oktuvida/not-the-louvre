@@ -56,6 +56,56 @@ The repository now uses a small Bun workspace so the root stays focused on share
 - App-specific configuration now lives in `apps/web`.
 - Environment files for the app now live in `apps/web/.env` and `apps/web/.env.example`.
 
+## Production deployment
+
+The MVP production target is a single VPS running:
+
+- `Caddy` on `:443` for HTTPS termination and automatic certificate renewal
+- the SvelteKit app as a `systemd` service on `127.0.0.1:3000`
+- managed Supabase for database, storage, and realtime services
+
+The production runtime uses `@sveltejs/adapter-node`, so the deployed server starts with `node build` after `bun run build` completes.
+
+### Production env file
+
+Production secrets should not live in the repository. Store them in an env file such as `/etc/not-the-louvre/not-the-louvre.env` and load that file through `systemd`.
+
+Canonical keys:
+
+- `ORIGIN=https://app.example.com`
+- `DATABASE_URL=...`
+- `BETTER_AUTH_SECRET=...`
+- `SUPABASE_PUBLIC_URL=...`
+- `SUPABASE_ANON_KEY=...`
+- exactly one of `SUPABASE_SECRET_KEY=...` or `SERVICE_ROLE_KEY=...`
+- `SUPABASE_JWT_SECRET=...`
+- optional `HOST=127.0.0.1`, `PORT=3000`, `ARTWORK_STORAGE_BUCKET=artworks`
+
+Values intentionally exposed to browser realtime clients today:
+
+- `SUPABASE_PUBLIC_URL`
+- `SUPABASE_ANON_KEY`
+
+### VPS helper script
+
+The repo includes a VPS helper at `scripts/deploy/vps.sh` with these subcommands:
+
+- `scripts/deploy/vps.sh install --domain app.example.com --email ops@example.com`
+- `scripts/deploy/vps.sh deploy`
+- `scripts/deploy/vps.sh env:set KEY=value`
+- `scripts/deploy/vps.sh env:edit`
+- `scripts/deploy/vps.sh status`
+- `scripts/deploy/vps.sh uninstall`
+
+### Rollback
+
+If a deploy fails after a build or restart:
+
+1. restore the previous working tree or release directory contents
+2. restore the previous env file if it changed
+3. restart the app service
+4. confirm the site is healthy through Caddy
+
 ## 📜 The philosophy
 
 The whole idea is to get people from "I opened the browser" to "I published a ridiculous drawing" in under two minutes. No long onboarding, no solemn creative process, no paywall pretending to be a feature. Just draw, laugh, judge, repeat.
