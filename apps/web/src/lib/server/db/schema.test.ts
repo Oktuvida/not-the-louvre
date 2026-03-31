@@ -116,7 +116,7 @@ describe('database schema namespaces', () => {
 		expect(policyColumns.find((candidate) => candidate.name === 'version')?.notNull).toBe(true);
 	});
 
-	it('stores viewer adult-content preferences separately from artworks', () => {
+	it('stores viewer adult-content and ambient-audio preferences separately from artworks', () => {
 		const preferenceColumns = getTableConfig(viewerContentPreferences).columns;
 
 		expect(preferenceColumns.find((candidate) => candidate.name === 'user_id')?.notNull).toBe(true);
@@ -129,6 +129,9 @@ describe('database schema namespaces', () => {
 		).toBe(false);
 		expect(
 			preferenceColumns.find((candidate) => candidate.name === 'adult_content_revoked_at')?.notNull
+		).toBe(false);
+		expect(
+			preferenceColumns.find((candidate) => candidate.name === 'ambient_audio_enabled')?.notNull
 		).toBe(false);
 	});
 

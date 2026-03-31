@@ -84,6 +84,7 @@ const createRepository = () => {
 				adultContentConsentedAt: input.adultContentConsentedAt,
 				adultContentEnabled: input.adultContentEnabled,
 				adultContentRevokedAt: input.adultContentRevokedAt,
+				ambientAudioEnabled: input.ambientAudioEnabled,
 				updatedAt: input.updatedAt
 			};
 
@@ -282,5 +283,39 @@ describe('moderation service', () => {
 		await expect(
 			getViewerContentPreferences({ user: createUser('user') }, { repository })
 		).resolves.toMatchObject({ adultContentEnabled: false });
+	});
+
+	it('keeps first-visit ambient audio unset until the viewer chooses and preserves adult-content state on audio updates', async () => {
+		const {
+			getViewerContentPreferences,
+			setViewerAdultContentEnabled,
+			setViewerAmbientAudioEnabled
+		} = await import('./service');
+		const { preferences, repository } = createRepository();
+
+		await expect(
+			getViewerContentPreferences({ user: createUser('user') }, { repository })
+		).resolves.toMatchObject({ ambientAudioEnabled: null, adultContentEnabled: false });
+
+		await setViewerAdultContentEnabled(
+			{ enabled: true },
+			{ user: createUser('user') },
+			{ now: () => now, repository }
+		);
+
+		const disabledAudio = await setViewerAmbientAudioEnabled(
+			{ enabled: false },
+			{ user: createUser('user') },
+			{ now: () => new Date('2026-03-29T14:00:00.000Z'), repository }
+		);
+
+		expect(disabledAudio).toMatchObject({
+			adultContentEnabled: true,
+			ambientAudioEnabled: false
+		});
+		expect(preferences.get('user-1')).toMatchObject({
+			adultContentEnabled: true,
+			ambientAudioEnabled: false
+		});
 	});
 });

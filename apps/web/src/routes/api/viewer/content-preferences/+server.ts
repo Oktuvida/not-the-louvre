@@ -3,7 +3,8 @@ import type { RequestHandler } from './$types';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import {
 	getViewerContentPreferences,
-	setViewerAdultContentEnabled
+	setViewerAdultContentEnabled,
+	setViewerAmbientAudioEnabled
 } from '$lib/server/moderation/service';
 
 const toErrorResponse = (error: unknown) => {
@@ -27,7 +28,20 @@ export const GET: RequestHandler = async (event) => {
 
 export const PATCH: RequestHandler = async (event) => {
 	try {
-		const body = (await event.request.json()) as { adultContentEnabled?: boolean };
+		const body = (await event.request.json()) as {
+			adultContentEnabled?: boolean;
+			ambientAudioEnabled?: boolean;
+		};
+
+		if (typeof body.ambientAudioEnabled === 'boolean') {
+			return json(
+				await setViewerAmbientAudioEnabled(
+					{ enabled: body.ambientAudioEnabled },
+					{ user: event.locals.user ?? null }
+				)
+			);
+		}
+
 		return json(
 			await setViewerAdultContentEnabled(
 				{ enabled: Boolean(body.adultContentEnabled) },

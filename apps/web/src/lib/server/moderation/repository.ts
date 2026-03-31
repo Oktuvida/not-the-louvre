@@ -14,6 +14,7 @@ const mapViewerPreference = (
 	adultContentConsentedAt: row.adultContentConsentedAt,
 	adultContentEnabled: row.adultContentEnabled,
 	adultContentRevokedAt: row.adultContentRevokedAt,
+	ambientAudioEnabled: row.ambientAudioEnabled,
 	createdAt: row.createdAt,
 	updatedAt: row.updatedAt,
 	userId: row.userId
@@ -62,6 +63,7 @@ export const moderationRepository: ModerationRepository = {
 				adultContentConsentedAt: input.adultContentConsentedAt,
 				adultContentEnabled: input.adultContentEnabled,
 				adultContentRevokedAt: input.adultContentRevokedAt,
+				ambientAudioEnabled: input.ambientAudioEnabled,
 				updatedAt: input.updatedAt,
 				userId: input.userId
 			})
@@ -71,6 +73,7 @@ export const moderationRepository: ModerationRepository = {
 					adultContentConsentedAt: input.adultContentConsentedAt,
 					adultContentEnabled: input.adultContentEnabled,
 					adultContentRevokedAt: input.adultContentRevokedAt,
+					ambientAudioEnabled: input.ambientAudioEnabled,
 					updatedAt: input.updatedAt
 				}
 			})
