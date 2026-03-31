@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Paintbrush } from 'lucide-svelte';
 	import { onMount } from 'svelte';
-	import gsap from 'gsap';
+	import { gsap } from '$lib/client/gsap';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import graffitiLogoUrl from '$lib/assets/logo-graffiti.svg';
 	import MuseumWindowFrame from '$lib/features/home-entry-scene/components/MuseumWindowFrame.svelte';
