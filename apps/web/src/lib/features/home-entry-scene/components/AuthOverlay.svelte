@@ -298,7 +298,9 @@
 	};
 
 	const submitSignup = async () => {
+		if (isSubmitting || allowValidatedSignupSubmit) return;
 		if (!(await validateSignUp())) return;
+		allowValidatedSignupSubmit = true;
 		signupFormElement?.requestSubmit();
 	};
 
@@ -520,7 +522,7 @@
 						{view === 'login'
 							? 'The room missed you. Probably.'
 							: view === 'signup-account'
-								? 'Claim your nickname, then sketch the avatar that walks into the gallery.'
+								? 'Claim a nickname, sketch an avatar and step inside.'
 								: view === 'recover'
 									? 'Use your one-time recovery key to get back inside.'
 									: 'One more step and you are in.'}
@@ -597,10 +599,15 @@
 						class="space-y-4"
 					>
 						<label class="block space-y-2">
-							<span
-								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
-								>Nickname</span
-							>
+							<div class="flex items-start justify-between gap-3">
+								<span
+									class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+									>Nickname</span
+								>
+								{#if nicknameError}
+									<p class="text-right text-xs text-[var(--color-danger)]">{nicknameError}</p>
+								{/if}
+							</div>
 							<input
 								bind:value={nickname}
 								name="nickname"
@@ -609,15 +616,17 @@
 								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 							/>
 						</label>
-						{#if nicknameError}<p class="text-sm text-[var(--color-danger)]">
-								{nicknameError}
-							</p>{/if}
 
 						<label class="block space-y-2">
-							<span
-								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
-								>Password</span
-							>
+							<div class="flex items-start justify-between gap-3">
+								<span
+									class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+									>Password</span
+								>
+								{#if passwordError}
+									<p class="text-right text-xs text-[var(--color-danger)]">{passwordError}</p>
+								{/if}
+							</div>
 							<input
 								bind:value={password}
 								name="password"
@@ -626,9 +635,6 @@
 								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 							/>
 						</label>
-						{#if passwordError}<p class="text-sm text-[var(--color-danger)]">
-								{passwordError}
-							</p>{/if}
 
 						<div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
 							<GameButton
@@ -662,10 +668,21 @@
 						class="space-y-4"
 					>
 						<label class="block space-y-2">
-							<span
-								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
-								>Nickname</span
-							>
+							<div class="flex items-start justify-between gap-3">
+								<span
+									class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+									>Nickname</span
+								>
+								{#if nicknameError}
+									<p class="text-right text-xs text-[var(--color-danger)]">{nicknameError}</p>
+								{:else if availabilityMessage}
+									<p
+										class={`text-right text-xs ${availabilityState === 'taken' ? 'text-[var(--color-danger)]' : availabilityState === 'available' ? 'text-[var(--color-secondary)]' : 'text-[var(--color-muted)]'}`}
+									>
+										{availabilityMessage}
+									</p>
+								{/if}
+							</div>
 							<input
 								bind:value={nickname}
 								name="nickname"
@@ -674,21 +691,17 @@
 								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 							/>
 						</label>
-						{#if nicknameError}
-							<p class="text-sm text-[var(--color-danger)]">{nicknameError}</p>
-						{:else if availabilityMessage}
-							<p
-								class={`text-sm ${availabilityState === 'taken' ? 'text-[var(--color-danger)]' : availabilityState === 'available' ? 'text-[var(--color-secondary)]' : 'text-[var(--color-muted)]'}`}
-							>
-								{availabilityMessage}
-							</p>
-						{/if}
 
 						<label class="block space-y-2">
-							<span
-								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
-								>Password</span
-							>
+							<div class="flex items-start justify-between gap-3">
+								<span
+									class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+									>Password</span
+								>
+								{#if passwordError}
+									<p class="text-right text-xs text-[var(--color-danger)]">{passwordError}</p>
+								{/if}
+							</div>
 							<input
 								bind:value={password}
 								name="password"
@@ -697,9 +710,6 @@
 								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 							/>
 						</label>
-						{#if passwordError}<p class="text-sm text-[var(--color-danger)]">
-								{passwordError}
-							</p>{/if}
 
 						<div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
 							<p class="font-display text-xs tracking-[0.18em] text-[var(--color-muted)] uppercase">
@@ -727,10 +737,15 @@
 						class="space-y-4"
 					>
 						<label class="block space-y-2">
-							<span
-								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
-								>Nickname</span
-							>
+							<div class="flex items-start justify-between gap-3">
+								<span
+									class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+									>Nickname</span
+								>
+								{#if nicknameError}
+									<p class="text-right text-xs text-[var(--color-danger)]">{nicknameError}</p>
+								{/if}
+							</div>
 							<input
 								bind:value={nickname}
 								name="nickname"
@@ -739,9 +754,6 @@
 								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 							/>
 						</label>
-						{#if nicknameError}<p class="text-sm text-[var(--color-danger)]">
-								{nicknameError}
-							</p>{/if}
 
 						<label class="block space-y-2">
 							<span
@@ -761,10 +773,15 @@
 							</p>{/if}
 
 						<label class="block space-y-2">
-							<span
-								class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
-								>New Password</span
-							>
+							<div class="flex items-start justify-between gap-3">
+								<span
+									class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+									>New Password</span
+								>
+								{#if newPasswordError}
+									<p class="text-right text-xs text-[var(--color-danger)]">{newPasswordError}</p>
+								{/if}
+							</div>
 							<input
 								bind:value={newPassword}
 								name="newPassword"
@@ -773,9 +790,6 @@
 								class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 							/>
 						</label>
-						{#if newPasswordError}<p class="text-sm text-[var(--color-danger)]">
-								{newPasswordError}
-							</p>{/if}
 
 						<div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
 							<GameButton

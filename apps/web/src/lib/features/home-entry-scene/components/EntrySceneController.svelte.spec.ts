@@ -66,6 +66,50 @@ describe('EntrySceneController', () => {
 		await expect.element(page.getByText('Signed in as')).not.toBeInTheDocument();
 	});
 
+	it('does not flash the avatar step before the signup recovery key when onboarding is also pending', async () => {
+		const headings: string[] = [];
+		const recordHeading = () => {
+			const heading = document.querySelector('h2')?.textContent?.trim();
+			if (heading) headings.push(heading);
+		};
+		const observer = new MutationObserver(recordHeading);
+
+		observer.observe(document.body, {
+			characterData: true,
+			childList: true,
+			subtree: true
+		});
+
+		render(EntrySceneController, {
+			auth: {
+				integrityFailure: null,
+				onboarding: { status: 'needs-avatar' },
+				status: 'authenticated',
+				user: {
+					authUserId: 'auth-user-1',
+					avatarOnboardingCompletedAt: null,
+					email: 'artist_1@not-the-louvre.local',
+					id: 'product-user-1',
+					nickname: 'artist_1',
+					role: 'user'
+				}
+			},
+			form: {
+				action: 'signUp',
+				onboarding: 'needs-avatar',
+				recoveryKey: 'signup-recovery-key',
+				success: true
+			}
+		});
+
+		recordHeading();
+
+		await expect.element(page.getByRole('heading', { name: 'Keep this key' })).toBeVisible();
+		observer.disconnect();
+
+		expect(headings).not.toContain('Finish your avatar');
+	});
+
 	it('renders a safe blocked message when auth bootstrap detects an integrity failure', async () => {
 		render(EntrySceneController, {
 			auth: {
