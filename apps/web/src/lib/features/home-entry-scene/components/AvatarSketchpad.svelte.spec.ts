@@ -6,6 +6,7 @@ import {
 	serializeDrawingDocument
 } from '$lib/features/stroke-json/document';
 import { buildDrawingDraftKey } from '$lib/features/stroke-json/drafts';
+import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
 import AvatarSketchpad from './AvatarSketchpad.svelte';
 
 describe('AvatarSketchpad', () => {
@@ -28,8 +29,12 @@ describe('AvatarSketchpad', () => {
 			nickname: 'artist_1'
 		});
 
-		const defaultSwatch = page.getByRole('button', { name: 'Select color #2B2622' });
-		const targetSwatch = page.getByRole('button', { name: 'Select color #2F4B9A' });
+		const defaultSwatch = page.getByRole('button', {
+			name: `Select color ${drawingPalette[4]}`
+		});
+		const targetSwatch = page.getByRole('button', {
+			name: `Select color ${drawingPalette[10]}`
+		});
 
 		await expect.element(defaultSwatch).toHaveAttribute('aria-pressed', 'true');
 		await targetSwatch.click();
@@ -81,12 +86,11 @@ describe('AvatarSketchpad', () => {
 		expect(resizedMetrics.shellWidth).toBe(initialMetrics.shellWidth);
 		expect(resizedMetrics.shellHeight).toBe(initialMetrics.shellHeight);
 
-		await page.getByRole('button', { name: 'Select color #2B2622' }).click();
+		await page.getByRole('button', { name: `Select color ${drawingPalette[4]}` }).click();
 
 		const recoloredMetrics = await readPreviewMetrics();
-		expect(recoloredMetrics.dotColor).toBe('rgb(43, 38, 34)');
+		expect(recoloredMetrics.dotColor).toBe('rgb(33, 118, 217)');
 	});
-
 	it('saves the exported avatar and continues into the gallery on success', async () => {
 		const onContinue = vi.fn();
 		const avatarPayload = serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
