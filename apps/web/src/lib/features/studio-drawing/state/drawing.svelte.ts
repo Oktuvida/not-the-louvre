@@ -19,7 +19,7 @@ export const drawingPalette = [
 	'#A9862A'
 ];
 
-export const brushSizeSteps = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
+export const brushSizeSteps = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 38, 45, 54, 64];
 
 export const drawingTools = createDrawingTools();
 
