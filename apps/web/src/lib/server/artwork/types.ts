@@ -216,6 +216,7 @@ export type ArtworkVoteRemovalResult = {
 };
 
 export type ListRecentArtworksInput = {
+	authorId?: string | null;
 	cursor: ArtworkRecentDiscoveryCursor | null;
 	limit: number;
 	viewer?: ArtworkVisibilityActor;

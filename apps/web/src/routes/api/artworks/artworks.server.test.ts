@@ -208,6 +208,35 @@ describe('artwork publish endpoint', () => {
 		);
 	});
 
+	it('passes an optional author filter through the discovery endpoint', async () => {
+		mocked.listArtworkDiscovery.mockResolvedValue({
+			items: [],
+			pageInfo: { hasMore: true, nextCursor: 'cursor-2' },
+			sort: 'recent'
+		});
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: {},
+			request: new Request(
+				'http://localhost/api/artworks?sort=recent&authorId=user-1&cursor=cursor-1'
+			),
+			url: new URL('http://localhost/api/artworks?sort=recent&authorId=user-1&cursor=cursor-1')
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
+			{
+				authorId: 'user-1',
+				cursor: 'cursor-1',
+				limit: undefined,
+				sort: 'recent',
+				window: null
+			},
+			{ user: undefined }
+		);
+	});
+
 	it('passes an optional fork parent reference through the publish endpoint', async () => {
 		const { POST } = await import('./+server');
 		const formData = new FormData();
