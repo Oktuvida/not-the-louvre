@@ -113,8 +113,11 @@
 					</div>
 					<div class="cover-title-area">
 						<strong class="cover-title">Sketchbook</strong>
-						<div class="cover-divider" aria-hidden="true"></div>
-						<span class="cover-subtitle">Not the Louvre</span>
+					</div>
+					<div class="cover-label" aria-hidden="true">
+						<span class="cover-label-title">Not the Louvre</span>
+						<div class="cover-label-line"></div>
+						<span class="cover-label-sub">sketch & create</span>
 					</div>
 					<span class="cover-invite">Tap the cover to begin</span>
 				</button>
@@ -174,11 +177,11 @@
 		display: flex;
 		width: fit-content;
 		height: 100%;
-		border: 3px solid #8a8078;
+		border: 3px solid #1a1611;
 		border-radius: 2px;
 		background: #fbf7f0;
 		box-shadow:
-			inset 0 0 0 1px rgb(255 255 255 / 0.25),
+			inset 0 0 0 1px rgb(255 255 255 / 0.06),
 			0 1.5rem 3rem rgb(47 36 28 / 0.2);
 		overflow: hidden;
 	}
@@ -190,42 +193,40 @@
 		width: 14px;
 		background: linear-gradient(
 			90deg,
-			#8a8078 0%,
-			#9e968d 20%,
-			#7a736b 40%,
-			#6e675f 50%,
-			#7a736b 60%,
-			#9e968d 80%,
-			#8a8078 100%
+			#1a1611 0%,
+			#252019 20%,
+			#2a241c 50%,
+			#252019 80%,
+			#1a1611 100%
 		);
 		position: relative;
 		z-index: 2;
 		box-shadow:
-			2px 0 8px rgb(0 0 0 / 0.15),
-			-1px 0 3px rgb(0 0 0 / 0.1);
+			2px 0 10px rgb(0 0 0 / 0.3),
+			-2px 0 10px rgb(0 0 0 / 0.3);
 	}
 
 	.book-spine::before {
 		content: '';
 		position: absolute;
 		inset: 8px 3px;
-		border-left: 1px solid rgb(255 255 255 / 0.12);
-		border-right: 1px solid rgb(0 0 0 / 0.08);
+		border-left: 1px solid rgb(255 255 255 / 0.04);
+		border-right: 1px solid rgb(0 0 0 / 0.15);
 	}
 
 	.book-spine::after {
 		content: '';
 		position: absolute;
-		top: 12px;
-		bottom: 12px;
+		top: 14px;
+		bottom: 14px;
 		left: 50%;
 		width: 1px;
 		background: repeating-linear-gradient(
 			180deg,
 			transparent,
-			transparent 4px,
-			rgb(255 255 255 / 0.1) 4px,
-			rgb(255 255 255 / 0.1) 5px
+			transparent 5px,
+			rgb(212 131 74 / 0.15) 5px,
+			rgb(212 131 74 / 0.15) 6px
 		);
 	}
 
@@ -236,14 +237,14 @@
 		flex-direction: column;
 		flex-shrink: 0;
 		width: 72px;
-		background: linear-gradient(135deg, #c6b69a, #b8a88e, #a89878);
-		border-top: 2px solid #8a8078;
-		border-bottom: 2px solid #8a8078;
+		background: #1e1a14;
+		border-top: 2px solid #1a1611;
+		border-bottom: 2px solid #1a1611;
 		position: relative;
 		overflow: hidden;
 	}
 
-	/* Subtle cross-hatch texture overlay */
+	/* Subtle grid texture overlay */
 	.inside-cover::before {
 		content: '';
 		position: absolute;
@@ -252,16 +253,16 @@
 			repeating-linear-gradient(
 				0deg,
 				transparent,
-				transparent 18px,
-				rgb(140 124 96 / 0.12) 18px,
-				rgb(140 124 96 / 0.12) 19px
+				transparent 20px,
+				rgb(255 255 255 / 0.015) 20px,
+				rgb(255 255 255 / 0.015) 21px
 			),
 			repeating-linear-gradient(
 				90deg,
 				transparent,
-				transparent 14px,
-				rgb(140 124 96 / 0.06) 14px,
-				rgb(140 124 96 / 0.06) 15px
+				transparent 16px,
+				rgb(255 255 255 / 0.01) 16px,
+				rgb(255 255 255 / 0.01) 17px
 			);
 		pointer-events: none;
 	}
@@ -274,7 +275,7 @@
 		top: 0;
 		bottom: 0;
 		width: 12px;
-		background: linear-gradient(90deg, transparent, rgb(0 0 0 / 0.06));
+		background: linear-gradient(90deg, transparent, rgb(0 0 0 / 0.15));
 		pointer-events: none;
 	}
 
@@ -293,7 +294,7 @@
 	.inside-cover-ornament {
 		width: 1px;
 		height: 30px;
-		background: linear-gradient(180deg, transparent, rgb(111 98 87 / 0.25), transparent);
+		background: linear-gradient(180deg, transparent, rgb(212 131 74 / 0.12), transparent);
 	}
 
 	.inside-cover-text {
@@ -303,13 +304,13 @@
 		font-size: 7px;
 		letter-spacing: 3px;
 		text-transform: uppercase;
-		color: rgb(111 98 87 / 0.35);
+		color: rgb(255 255 255 / 0.1);
 	}
 
 	.inside-cover-circle {
 		width: 20px;
 		height: 20px;
-		border: 1px solid rgb(111 98 87 / 0.15);
+		border: 1px solid rgb(212 131 74 / 0.12);
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
@@ -320,7 +321,7 @@
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: rgb(111 98 87 / 0.15);
+		background: rgb(212 131 74 / 0.15);
 	}
 
 	/* --- Main page --- */
@@ -329,7 +330,7 @@
 		position: relative;
 		border-radius: 0;
 		background: #fbf7f0;
-		border-left: 1px solid rgb(138 128 120 / 0.3);
+		border-left: 1px solid rgb(30 26 20 / 0.15);
 	}
 
 	/* Page aging — corner gradients */
@@ -425,16 +426,16 @@
 		line-height: 7;
 	}
 
-	/* --- Book cover (3D flip) — sandstone surface --- */
+	/* --- Book cover (3D flip) — cloth surface --- */
 
 	.book-cover {
 		position: absolute;
 		inset: clamp(0.5rem, 1vw, 1rem);
-		border-radius: 2px;
-		background: linear-gradient(145deg, #c6b69a 0%, #b8a88e 30%, #a89878 60%, #9e8e72 100%);
+		border-radius: 3px 6px 6px 3px;
+		background: linear-gradient(155deg, #e8e0d4 0%, #ddd5c8 30%, #d5cdc0 60%, #cec5b8 100%);
 		box-shadow:
-			inset 0 0 0 2px rgb(255 248 230 / 0.14),
-			inset -22px 0 30px rgb(0 0 0 / 0.08),
+			inset 0 0 0 1px rgb(255 255 255 / 0.3),
+			inset -3px 0 15px rgb(0 0 0 / 0.06),
 			0 1.6rem 3rem rgb(47 36 28 / 0.3);
 		color: #fbf7f0;
 		text-align: left;
@@ -472,19 +473,22 @@
 		outline-offset: 5px;
 	}
 
-	/* Sandstone texture overlay on cover */
+	.cover-front:active {
+		transform: none !important;
+	}
+
+	/* Apply the press feedback to the whole cover instead of the inner button contents. */
+	.book-cover:has(.cover-front:active) {
+		transform: scale(0.985);
+	}
+
+	/* Linen cloth texture overlay on cover */
 	.cover-surface {
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
-		background: repeating-linear-gradient(
-			45deg,
-			transparent,
-			transparent 3px,
-			rgb(255 255 255 / 0.02) 3px,
-			rgb(255 255 255 / 0.02) 6px
-		);
-		mix-blend-mode: overlay;
+		background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+		mix-blend-mode: multiply;
 		pointer-events: none;
 	}
 
@@ -493,16 +497,14 @@
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
-		background:
-			radial-gradient(ellipse at 30% 20%, rgb(255 248 230 / 0.18), transparent 50%),
-			radial-gradient(ellipse at 80% 80%, rgb(0 0 0 / 0.08), transparent 50%);
+		background: radial-gradient(ellipse at 35% 25%, rgb(255 255 255 / 0.12), transparent 55%);
 		pointer-events: none;
 	}
 
 	.cover-border-outer {
 		position: absolute;
 		inset: 0;
-		border: 3px solid #8a8078;
+		border: none;
 		border-radius: inherit;
 		pointer-events: none;
 	}
@@ -510,7 +512,7 @@
 	.cover-border-inner {
 		position: absolute;
 		inset: 10px;
-		border: 1px solid rgb(111 98 87 / 0.2);
+		border: none;
 		border-radius: 2px;
 		pointer-events: none;
 	}
@@ -520,10 +522,17 @@
 		left: 0;
 		top: 0;
 		bottom: 0;
-		width: 12px;
-		background: linear-gradient(90deg, #8a8078, #9e968d, #8a8078);
+		width: 16px;
+		background: linear-gradient(
+			90deg,
+			#1a1611 0%,
+			#252019 30%,
+			#2a241c 50%,
+			#252019 70%,
+			#1a1611 100%
+		);
 		border-radius: 0;
-		box-shadow: 2px 0 6px rgb(0 0 0 / 0.1);
+		box-shadow: 3px 0 12px rgb(0 0 0 / 0.3);
 		pointer-events: none;
 	}
 
@@ -538,76 +547,104 @@
 			180deg,
 			transparent,
 			transparent 5px,
-			rgb(255 255 255 / 0.12) 5px,
-			rgb(255 255 255 / 0.12) 6px
+			rgb(212 131 74 / 0.12) 5px,
+			rgb(212 131 74 / 0.12) 6px
 		);
 	}
 
-	/* Cover strap band */
+	/* Cover elastic band (replaces old strap) */
 	.cover-strap {
 		position: absolute;
-		top: 52%;
-		left: 14px;
-		right: 0;
-		transform: translateY(-50%);
-		height: 34px;
-		background: linear-gradient(180deg, #918779, #7e756a, #918779);
-		border-top: 1px solid rgb(255 255 255 / 0.1);
-		border-bottom: 1px solid rgb(0 0 0 / 0.08);
-		display: flex;
-		align-items: center;
-		justify-content: center;
+		right: 9px;
+		top: -4px;
+		bottom: -4px;
+		width: 3px;
+		height: auto;
+		transform: none;
+		background: var(--color-primary, #d4834a);
+		border: none;
+		border-radius: 2px;
+		display: block;
+		box-shadow: 0 0 8px rgb(212 131 74 / 0.25);
 		pointer-events: none;
+		z-index: 6;
 	}
 
 	.cover-strap-text {
-		font-family: var(--font-display, 'Fredoka', sans-serif);
-		font-size: 8px;
-		letter-spacing: 4px;
-		text-transform: uppercase;
-		color: rgb(251 247 240 / 0.45);
+		display: none;
 	}
 
 	.cover-title-area {
-		position: relative;
+		position: absolute;
+		top: clamp(7rem, 3vw, 2rem);
+		left: 50%;
+		transform: translateX(-50%);
 		z-index: 5;
 		text-align: center;
-		margin-bottom: 40px;
+		width: max-content;
 	}
 
 	.cover-title {
-		font-family: Georgia, 'Times New Roman', serif;
-		font-size: clamp(1.2rem, 3vw, 1.4rem);
-		color: rgb(251 247 240 / 0.8);
-		letter-spacing: 1px;
-		text-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
+		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-size: clamp(3rem, 9vw, 4.5rem);
+		font-weight: 700;
+		letter-spacing: 6px;
+		text-transform: uppercase;
+		color: transparent;
+		-webkit-text-stroke: 1px rgb(160 150 135 / 0.45);
+		text-shadow: 0 1px 0 rgb(255 255 255 / 0.35);
 		line-height: 1;
 	}
 
-	.cover-divider {
-		width: 40px;
-		height: 1px;
-		background: linear-gradient(90deg, transparent, rgb(251 247 240 / 0.3), transparent);
-		margin: 8px auto;
+	/* Paper label sticker on cover */
+	.cover-label {
+		position: absolute;
+		bottom: clamp(3.5rem, 12vh, 6rem);
+		left: 50%;
+		transform: translateX(-50%);
+		background: #fbf7f0;
+		border: 1px solid rgb(0 0 0 / 0.06);
+		border-radius: 3px;
+		box-shadow: 0 2px 6px rgb(0 0 0 / 0.1);
+		padding: 14px 36px 12px;
+		text-align: center;
+		z-index: 5;
+		white-space: nowrap;
 	}
 
-	.cover-subtitle {
+	.cover-label-title {
 		font-family: var(--font-display, 'Fredoka', sans-serif);
-		font-size: 9px;
-		letter-spacing: 3px;
+		font-size: 1.3rem;
+		font-weight: 600;
+		letter-spacing: 4px;
 		text-transform: uppercase;
-		color: rgb(251 247 240 / 0.35);
+		color: #2f241c;
+		display: block;
+	}
+
+	.cover-label-line {
+		width: 60px;
+		height: 1px;
+		background: rgb(47 36 28 / 0.12);
+		margin: 6px auto;
+	}
+
+	.cover-label-sub {
+		font-family: 'Caveat', cursive;
+		font-size: 1.35rem;
+		color: rgb(47 36 28 / 0.45);
 	}
 
 	.cover-invite {
 		position: absolute;
-		bottom: clamp(1rem, 2vw, 1.5rem);
+		bottom: clamp(1rem, 2.5vw, 2rem);
 		left: 50%;
 		transform: translateX(-50%);
-		max-width: 16ch;
-		font-size: clamp(0.75rem, 1.2vw, 0.95rem);
+		max-width: 20ch;
+		font-family: 'Caveat', cursive;
+		font-size: 1.5rem;
 		line-height: 1.5;
-		color: rgb(251 247 240 / 0.5);
+		color: rgba(33, 31, 29, 0.76);
 		white-space: nowrap;
 	}
 
@@ -615,7 +652,7 @@
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
-		background: linear-gradient(135deg, #c6b69a 0%, #b8a88e 40%, #a89878 100%);
+		background: linear-gradient(135deg, #e8e0d4 0%, #ddd5c8 40%, #cec5b8 100%);
 		backface-visibility: hidden;
 		transform: rotateY(180deg);
 		display: flex;
@@ -623,26 +660,13 @@
 		overflow: hidden;
 	}
 
-	/* Cross-hatch texture on cover back */
+	/* Linen texture on cover back */
 	.cover-back-face::before {
 		content: '';
 		position: absolute;
 		inset: 0;
-		background:
-			repeating-linear-gradient(
-				0deg,
-				transparent,
-				transparent 18px,
-				rgb(140 124 96 / 0.12) 18px,
-				rgb(140 124 96 / 0.12) 19px
-			),
-			repeating-linear-gradient(
-				90deg,
-				transparent,
-				transparent 14px,
-				rgb(140 124 96 / 0.06) 14px,
-				rgb(140 124 96 / 0.06) 15px
-			);
+		background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+		mix-blend-mode: multiply;
 		pointer-events: none;
 		z-index: 0;
 	}
@@ -651,7 +675,7 @@
 	.book-shell[data-state='open'] .book-cover {
 		transform: rotateY(-180deg);
 		box-shadow:
-			inset 0 0 0 2px rgb(255 248 230 / 0.1),
+			inset 0 0 0 1px rgb(255 255 255 / 0.15),
 			0 1rem 2rem rgb(47 36 28 / 0.16);
 	}
 
@@ -679,11 +703,25 @@
 		}
 
 		.cover-invite {
-			font-size: 0.78rem;
+			font-size: 0.9rem;
 		}
 
-		.book-cover strong {
-			font-size: clamp(1.2rem, 9vw, 1.4rem);
+		.cover-title {
+			font-size: clamp(1.8rem, 9vw, 2.4rem);
+			letter-spacing: 4px;
+		}
+
+		.cover-label {
+			padding: 10px 20px 8px;
+		}
+
+		.cover-label-title {
+			font-size: 0.9rem;
+			letter-spacing: 2px;
+		}
+
+		.cover-label-sub {
+			font-size: 1rem;
 		}
 	}
 </style>
