@@ -52,6 +52,10 @@ describe('gallery root route', () => {
 			{ user: undefined }
 		);
 		expect(result).toMatchObject({
+			discovery: {
+				pageInfo: { hasMore: false, nextCursor: null },
+				request: null
+			},
 			emptyStateMessage: null,
 			roomId: 'hall-of-fame',
 			viewer: null

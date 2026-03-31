@@ -16,6 +16,19 @@ type ProductUser = {
 
 type GalleryRoomData = {
 	artworks: ReturnType<typeof toGalleryArtwork>[];
+	discovery: {
+		pageInfo: {
+			hasMore: boolean;
+			nextCursor: string | null;
+		};
+		request: {
+			authorId: string | null;
+			limit: number;
+			scalable: boolean;
+			sort: 'hot' | 'recent' | 'top';
+			window: 'all' | null;
+		} | null;
+	};
 	emptyStateMessage: string | null;
 	realtimeConfig: {
 		anonKey: string | null;
@@ -27,7 +40,9 @@ type GalleryRoomData = {
 	viewer: ProductUser | null;
 };
 
-const roomDiscoveryRequest = (roomId: GalleryRoomId) => {
+const SCALABLE_GALLERY_PAGE_SIZE = 24;
+
+const roomDiscoveryRequest = (roomId: GalleryRoomId, user?: ProductUser) => {
 	if (roomId === 'hall-of-fame') {
 		return { cursor: null, limit: 12, sort: 'top' as const, window: 'all' as const };
 	}
@@ -36,7 +51,17 @@ const roomDiscoveryRequest = (roomId: GalleryRoomId) => {
 		return { cursor: null, limit: 12, sort: 'hot' as const, window: null };
 	}
 
-	return { cursor: null, limit: 50, sort: 'recent' as const, window: null };
+	if (roomId === 'your-studio' && user) {
+		return {
+			authorId: user.id,
+			cursor: null,
+			limit: SCALABLE_GALLERY_PAGE_SIZE,
+			sort: 'recent' as const,
+			window: null
+		};
+	}
+
+	return { cursor: null, limit: 12, sort: 'recent' as const, window: null };
 };
 
 const emptyStateMessageForRoom = (roomId: GalleryRoomId) =>
@@ -59,22 +84,35 @@ export const loadGalleryRoomData = async (
 	}
 
 	const room = getGalleryRoom(roomId);
+	const discoveryRequest = roomDiscoveryRequest(roomId, user);
 	const [discovery, viewerContentPreferences] = await Promise.all([
-		listArtworkDiscovery(roomDiscoveryRequest(roomId), { user }),
+		listArtworkDiscovery(discoveryRequest, { user }),
 		user ? getViewerContentPreferences({ user }) : Promise.resolve({ adultContentEnabled: false })
 	]);
 
-	const visibleItems =
+	const visibleItems = (
 		roomId === 'your-studio' && user
 			? discovery.items.filter((item) => item.author.id === user.id)
-			: roomId === 'your-studio'
-				? []
-				: discovery.items.slice(0, 12);
+			: discovery.items
+	).slice(0, discoveryRequest.limit);
+	const scalableRoom = roomId === 'your-studio' && Boolean(user);
 
 	return {
 		artworks: visibleItems.map((item, index) =>
 			toGalleryArtwork(item, roomId === 'hall-of-fame' ? index + 1 : undefined)
 		),
+		discovery: {
+			pageInfo: discovery.pageInfo,
+			request: scalableRoom
+				? {
+						authorId: user?.id ?? null,
+						limit: discoveryRequest.limit,
+						scalable: true,
+						sort: discoveryRequest.sort,
+						window: discoveryRequest.window
+					}
+				: null
+		},
 		emptyStateMessage: visibleItems.length === 0 ? emptyStateMessageForRoom(roomId) : null,
 		realtimeConfig: {
 			anonKey: env.PUBLIC_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || env.ANON_KEY || null,
