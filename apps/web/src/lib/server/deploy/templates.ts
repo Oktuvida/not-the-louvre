@@ -18,11 +18,7 @@ TimeoutStopSec=20
 WantedBy=multi-user.target
 `;
 
-export const CADDY_SITE_TEMPLATE = `{
-	email {{EMAIL}}
-}
-
-{{DOMAIN}} {
+export const CADDY_SITE_TEMPLATE = `{{DOMAIN}} {
 	encode zstd gzip
 	reverse_proxy {{HOST}}:{{PORT}}
 }
@@ -40,7 +36,6 @@ export type SystemdUnitOptions = {
 
 export type CaddySiteOptions = {
 	domain: string;
-	email: string;
 	host: string;
 	port: string;
 };
@@ -65,13 +60,8 @@ export const renderCaddySite = (options: CaddySiteOptions) => {
 		throw new Error('domain is required to render the Caddy site');
 	}
 
-	if (!options.email) {
-		throw new Error('email is required to render the Caddy site');
-	}
-
 	return renderTemplate(CADDY_SITE_TEMPLATE, {
 		DOMAIN: options.domain,
-		EMAIL: options.email,
 		HOST: options.host,
 		PORT: options.port
 	});
