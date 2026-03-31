@@ -33,6 +33,7 @@
 
 	const shouldHoldSignupOverlay = (actionData?: HomeAuthActionForm) =>
 		actionData?.action === 'signUp' && 'success' in actionData && actionData.success;
+	const showingSignupRecoveryKey = $derived(shouldHoldSignupOverlay(form));
 	const getInitialEntryState = () =>
 		shouldHoldSignupOverlay(form)
 			? 'auth-signup'
@@ -68,6 +69,7 @@
 			!avatarOnboardingDismissed &&
 			!avatarOnboardingResolved
 	);
+	const shouldResumeAvatarOnboarding = $derived(needsAvatarOnboarding && !showingSignupRecoveryKey);
 	const navUser = $derived(flowState === 'inside' ? user : null);
 
 	const dispatch = (event: EntryFlowEvent) => {
@@ -148,6 +150,21 @@
 <HomeEntryPage
 	{adultContentEnabled}
 	entryState={flowState}
+	onAvatarSaved={(payload) => {
+		if (user) {
+			avatarOverride = {
+				avatarOnboardingCompletedAt: payload.avatarOnboardingCompletedAt,
+				avatarUrl: payload.avatarUrl,
+				userId: user.id
+			};
+
+			user = {
+				...user,
+				avatarOnboardingCompletedAt: payload.avatarOnboardingCompletedAt,
+				avatarUrl: payload.avatarUrl
+			};
+		}
+	}}
 	previewCards={topArtworks}
 	sceneArtworks={studioArtworks}
 	user={navUser}
@@ -198,7 +215,7 @@
 				avatarOnboardingResolved = true;
 				avatarOnboardingDismissed = false;
 			}}
-			resumeAvatarOnboarding={needsAvatarOnboarding}
+			resumeAvatarOnboarding={shouldResumeAvatarOnboarding}
 		/>
 	{/if}
 </HomeEntryPage>

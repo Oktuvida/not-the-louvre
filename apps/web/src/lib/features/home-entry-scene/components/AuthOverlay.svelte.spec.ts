@@ -123,6 +123,37 @@ describe('AuthOverlay', () => {
 		await expect.element(page.getByText('That nickname is already taken')).toBeVisible();
 	});
 
+	it('submits signup only once after successful validation', async () => {
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const requestSubmit = vi.fn();
+		const fetchSpy = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({
+						type: 'success',
+						data: { action: 'checkNickname', availability: 'available' }
+					})
+				)
+		);
+
+		vi.stubGlobal('fetch', fetchSpy);
+		vi.spyOn(HTMLFormElement.prototype, 'requestSubmit').mockImplementation(requestSubmit);
+
+		render(AuthOverlay, {
+			checkTextContent,
+			dispatch: vi.fn(),
+			entryState: 'auth-signup'
+		});
+
+		await page.getByPlaceholder('artist_123').fill('single_submit_name');
+		await page.getByPlaceholder('Enter your password').fill('password123');
+		await submitButton('Start account').click();
+
+		await vi.waitFor(() => {
+			expect(requestSubmit).toHaveBeenCalledTimes(1);
+		});
+	});
+
 	it('shows the backend-issued signup recovery key and waits for acknowledgement', async () => {
 		const dispatch = vi.fn();
 		render(AuthOverlay, {
