@@ -16,7 +16,7 @@
 		onPublish?: () => void;
 		onClear?: () => void;
 	} = $props();
-</script>
+	</script>
 
 <div class="tool-tray">
 	<div class="tray-glow" aria-hidden="true"></div>
@@ -107,7 +107,7 @@
 		background: linear-gradient(180deg, rgb(251 247 240 / 0.97), rgb(245 235 220 / 0.97));
 		border: 3px solid var(--color-ink, #2f241c);
 		border-radius: 16px;
-		padding: 16px;
+		padding: 20px;
 		box-shadow:
 			0 12px 32px rgb(47 36 28 / 0.18),
 			inset 0 1px 0 rgb(255 255 255 / 0.5);
@@ -124,26 +124,26 @@
 	}
 
 	.tray-section {
-		margin-bottom: 14px;
+		margin-bottom: 16px;
 		position: relative;
 	}
 
 	.tray-label {
 		font-family: var(--font-display, 'Fredoka', sans-serif);
-		font-size: 9px;
+		font-size: 10px;
 		font-weight: 600;
 		letter-spacing: 2.5px;
 		text-transform: uppercase;
 		color: var(--color-muted, #6f6257);
-		margin-bottom: 8px;
+		margin-bottom: 10px;
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: 5px;
 	}
 
 	.tray-label :global(svg) {
-		width: 12px;
-		height: 12px;
+		width: 14px;
+		height: 14px;
 		flex-shrink: 0;
 	}
 
@@ -152,7 +152,7 @@
 	.palette-grid {
 		display: grid;
 		grid-template-columns: repeat(6, 1fr);
-		gap: 5px;
+		gap: 6px;
 	}
 
 	.palette-swatch {
@@ -198,15 +198,15 @@
 
 	.slider-wrapper {
 		position: relative;
-		margin: 8px 0;
+		margin: 10px 0;
 	}
 
 	.brush-slider {
 		-webkit-appearance: none;
 		appearance: none;
 		width: 100%;
-		height: 4px;
-		border-radius: 2px;
+		height: 5px;
+		border-radius: 2.5px;
 		background: linear-gradient(
 			90deg,
 			#d9b07b 0%,
@@ -221,8 +221,8 @@
 	.brush-slider::-webkit-slider-thumb {
 		-webkit-appearance: none;
 		appearance: none;
-		width: 18px;
-		height: 18px;
+		width: 20px;
+		height: 20px;
 		border-radius: 50%;
 		background: #fdfbf7;
 		border: 2.5px solid var(--color-ink, #2f241c);
@@ -231,8 +231,8 @@
 	}
 
 	.brush-slider::-moz-range-thumb {
-		width: 18px;
-		height: 18px;
+		width: 20px;
+		height: 20px;
 		border-radius: 50%;
 		background: #fdfbf7;
 		border: 2.5px solid var(--color-ink, #2f241c);
@@ -247,12 +247,12 @@
 		align-items: center;
 		justify-content: center;
 		gap: 8px;
-		margin-top: 4px;
+		margin-top: 6px;
 	}
 
 	.brush-preview-shell {
-		width: 36px;
-		height: 36px;
+		width: 40px;
+		height: 40px;
 		border-radius: 50%;
 		border: 1.5px solid rgb(47 36 28 / 0.1);
 		display: flex;
@@ -270,7 +270,7 @@
 
 	.brush-size-text {
 		font-family: var(--font-body, 'Baloo 2', sans-serif);
-		font-size: 11px;
+		font-size: 12px;
 		color: var(--color-muted, #6f6257);
 		font-weight: 600;
 	}
@@ -280,7 +280,7 @@
 	.tray-sep {
 		height: 1px;
 		background: linear-gradient(90deg, transparent, rgb(47 36 28 / 0.1), transparent);
-		margin: 12px 0;
+		margin: 14px 0;
 	}
 
 	/* --- Action buttons --- */
@@ -288,6 +288,6 @@
 	.tray-actions {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 8px;
 	}
 </style>
