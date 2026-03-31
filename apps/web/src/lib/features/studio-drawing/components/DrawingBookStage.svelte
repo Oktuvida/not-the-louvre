@@ -69,8 +69,8 @@
 				<div class="book-spine" aria-hidden="true"></div>
 
 				<!-- Inside cover decorative peek -->
-				<div class="inside-cover" aria-hidden="true">
-					<div class="inside-cover-content">
+				<div class="inside-cover">
+					<div class="inside-cover-content" aria-hidden="true">
 						<div class="inside-cover-ornament"></div>
 						<span class="inside-cover-text">Not the Louvre</span>
 						<div class="inside-cover-ornament"></div>
