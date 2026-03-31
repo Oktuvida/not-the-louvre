@@ -1,6 +1,8 @@
 import adapter from '@sveltejs/adapter-node';
 import { relative, sep } from 'node:path';
 
+const routesDirectory = process.env.SVELTEKIT_ROUTES_DIR ?? 'src/routes';
+
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	compilerOptions: {
@@ -14,7 +16,10 @@ const config = {
 		}
 	},
 	kit: {
-		adapter: adapter()
+		adapter: adapter(),
+		files: {
+			routes: routesDirectory
+		}
 	}
 };
 
