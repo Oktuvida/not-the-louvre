@@ -22,6 +22,15 @@ export type ProductionEnvValidation = {
 	errors: string[];
 };
 
+export const createChildProcessEnv = (
+	baseEnv: Record<string, string | undefined>,
+	productionEnv: Record<string, string>
+	): NodeJS.ProcessEnv => ({
+	...baseEnv,
+	...productionEnv,
+	NODE_ENV: baseEnv.NODE_ENV ?? 'production'
+});
+
 const ENV_ENTRY_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/;
 const SIMPLE_ENV_VALUE_PATTERN = /^[A-Za-z0-9_.-]+$/;
 const MIN_SECRET_LENGTH = 32;
