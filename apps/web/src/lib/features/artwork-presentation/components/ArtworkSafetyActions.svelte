@@ -153,6 +153,7 @@
 				<button
 					type="button"
 					class="action-button report"
+					class:icon-only={compact}
 					aria-expanded={isReportMenuOpen}
 					aria-label="Report artwork"
 					disabled={isBusy}
@@ -162,7 +163,20 @@
 						statusMessage = null;
 					}}
 				>
-					Report
+					{#if compact}
+						<svg viewBox="0 0 24 24" aria-hidden="true">
+							<path
+								fill="currentColor"
+								d="M6 3a1 1 0 0 1 1 1v1h8.6l.2-.4A1.8 1.8 0 0 1 17.4 3H20a1 1 0 1 1 0 2h-2.6a.2.2 0 0 0-.18.11l-.48.95a1 1 0 0 1-.9.54H7v13a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1Z"
+							/>
+							<path
+								fill="currentColor"
+								d="M8 7h9.38a1.5 1.5 0 0 1 1.34.83l.94 1.87a1.5 1.5 0 0 1-.02 1.38l-.91 1.73a1.5 1.5 0 0 1-1.33.79H8z"
+							/>
+						</svg>
+					{:else}
+						Report
+					{/if}
 				</button>
 
 				{#if isReportMenuOpen}
@@ -260,6 +274,21 @@
 		background: rgba(248, 240, 225, 0.98);
 	}
 
+	.action-button.icon-only {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.35rem;
+		height: 2.35rem;
+		padding: 0;
+		border-radius: 999px;
+	}
+
+	.action-button.icon-only :global(svg) {
+		width: 1rem;
+		height: 1rem;
+	}
+
 	.action-button.admin {
 		background: rgba(228, 214, 195, 0.98);
 	}
@@ -281,7 +310,7 @@
 		position: absolute;
 		z-index: 30;
 		top: calc(100% + 0.45rem);
-		left: 0;
+		right: 0;
 		min-width: 11rem;
 		display: grid;
 		gap: 0.35rem;
