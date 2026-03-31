@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { gsap } from 'gsap';
+	import gsap from 'gsap';
 	import { Canvas, T } from '@threlte/core';
 	import { GLTF, OrbitControls, useDraco } from '@threlte/extras';
 	import type { Group, Object3D, OrthographicCamera } from 'three';

@@ -4,7 +4,7 @@
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
-	import { gsap } from 'gsap';
+	import gsap from 'gsap';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker

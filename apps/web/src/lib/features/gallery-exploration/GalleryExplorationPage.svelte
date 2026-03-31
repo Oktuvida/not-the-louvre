@@ -5,7 +5,7 @@
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
 	import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
-	import { gsap } from 'gsap';
+	import gsap from 'gsap';
 	import { fly } from 'svelte/transition';
 	import ArtworkCard from '$lib/features/artwork-presentation/components/ArtworkCard.svelte';
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';

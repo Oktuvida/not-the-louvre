@@ -45,12 +45,17 @@ const { gsapSet, gsapTimeline, timelineInstances } = vi.hoisted(() => {
 	return { gsapSet, gsapTimeline, timelineInstances };
 });
 
-vi.mock('gsap', () => ({
-	gsap: {
+vi.mock('gsap', () => {
+	const gsap = {
 		set: gsapSet,
 		timeline: gsapTimeline
-	}
-}));
+	};
+
+	return {
+		default: gsap,
+		gsap
+	};
+});
 
 const reducedMotionMediaQuery = {
 	addEventListener: vi.fn(),
