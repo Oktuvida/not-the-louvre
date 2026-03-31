@@ -92,12 +92,7 @@ export const getDrawingPointWithinBounds = (
 	point: [number, number],
 	dimensions: Pick<DrawingDocumentV1, 'height' | 'width'>
 ): DrawingPoint | null => {
-	if (
-		point[0] < 0 ||
-		point[1] < 0 ||
-		point[0] > dimensions.width ||
-		point[1] > dimensions.height
-	) {
+	if (point[0] < 0 || point[1] < 0 || point[0] > dimensions.width || point[1] > dimensions.height) {
 		return null;
 	}
 
@@ -138,6 +133,19 @@ export const createEmptyDrawingDocument = (kind: DrawingKind): DrawingDocumentV1
 		width: dimensions.width
 	};
 };
+
+export const cloneDrawingDocument = (document: DrawingDocumentV1): DrawingDocumentV1 => ({
+	background: document.background,
+	height: document.height,
+	kind: document.kind,
+	strokes: document.strokes.map((stroke) => ({
+		color: stroke.color,
+		points: stroke.points.map((point) => [point[0], point[1]] as DrawingPoint),
+		size: stroke.size
+	})),
+	version: document.version,
+	width: document.width
+});
 
 export const parseDrawingDocument = (input: string): DrawingDocumentV1 => {
 	let parsed: unknown;
