@@ -43,7 +43,10 @@ describe('ensureBuildOutput', () => {
 		await mkdir(serverDir, { recursive: true });
 		await writeFile(join(buildDir, 'index.js'), 'console.log("ok")');
 		await writeFile(join(buildDir, 'handler.js'), 'export const handler = () => {}');
-		await writeFile(join(serverDir, '_page.js'), 'const animation = { to: () => {} };\nexport default animation;');
+		await writeFile(
+			join(serverDir, '_page.js'),
+			'const animation = { to: () => {} };\nexport default animation;'
+		);
 
 		await expect(ensureServerDependencyBundled(buildDir, 'gsap')).resolves.toBeUndefined();
 	});
