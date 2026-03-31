@@ -41,9 +41,11 @@
 
 	let { data }: PageProps = $props();
 
-	const initialPermissions = data.permissions;
-	const initialUsersPage = data.usersPage;
-	const initialModerationPage = data.moderationPage;
+	const {
+		moderationPage: initialModerationPage,
+		permissions: initialPermissions,
+		usersPage: initialUsersPage
+	} = (() => $state.snapshot(data))();
 	const defaultTab: TabKey = initialPermissions.canManageUsers ? 'users' : 'moderation';
 
 	let activeTab = $state<TabKey>(defaultTab);
