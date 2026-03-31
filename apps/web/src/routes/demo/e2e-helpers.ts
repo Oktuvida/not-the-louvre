@@ -9,7 +9,6 @@ import {
 	createAvifTestFile,
 	createJpegTestFile,
 	createMalformedAvifFile,
-	createMalformedWebpFile,
 	createWebpTestFile
 } from '../../lib/server/media/test-helpers';
 
@@ -56,50 +55,19 @@ export const readVisibleOneTimeKey = async (page: Page) => {
 };
 
 export const installAvatarExportHarness = async (page: Page) => {
-	const validAvatar = await createWebpTestFile({ height: 256, name: 'avatar.webp', width: 256 });
-	const invalidAvatar = createMalformedWebpFile();
-	const validBase64 = Buffer.from(await validAvatar.arrayBuffer()).toString('base64');
-	const invalidBase64 = Buffer.from(await invalidAvatar.arrayBuffer()).toString('base64');
+	await page.addInitScript(() => {
+		Object.defineProperty(window, '__ntlBypassClientContentFilters', {
+			configurable: true,
+			value: true,
+			writable: true
+		});
 
-	await page.addInitScript(
-		({ bad, good }) => {
-			Object.defineProperty(window, '__ntlBypassClientContentFilters', {
-				configurable: true,
-				value: true,
-				writable: true
-			});
-
-			const decode = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
-			const originalToBlob = HTMLCanvasElement.prototype.toBlob;
-
-			Object.defineProperty(window, '__avatarExportMode', {
-				configurable: true,
-				value: 'good',
-				writable: true
-			});
-
-			HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
-				if (type === 'image/webp') {
-					const mode = (window as Window & { __avatarExportMode?: string }).__avatarExportMode;
-
-					if (mode === 'unsupported') {
-						callback(null);
-						return;
-					}
-
-					callback(
-						new Blob([decode(mode === 'bad' ? bad : good)], {
-							type: 'image/webp'
-						})
-					);
-					return;
-				}
-
-				originalToBlob.call(this, callback, type, quality);
-			};
-		},
-		{ bad: invalidBase64, good: validBase64 }
-	);
+		Object.defineProperty(window, '__avatarExportMode', {
+			configurable: true,
+			value: 'good',
+			writable: true
+		});
+	});
 };
 
 export const setAvatarExportMode = async (page: Page, mode: 'bad' | 'good' | 'unsupported') => {

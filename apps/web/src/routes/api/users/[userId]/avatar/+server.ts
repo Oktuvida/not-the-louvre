@@ -39,16 +39,16 @@ export const GET: RequestHandler = async (event) => {
 export const PUT: RequestHandler = async (event) => {
 	try {
 		const formData = await event.request.formData();
-		const file = formData.get('file');
+		const drawingDocument = formData.get('drawingDocument')?.toString() ?? '';
 
-		if (!(file instanceof File)) {
+		if (!drawingDocument.trim()) {
 			return json(
-				{ code: 'INVALID_MEDIA_FORMAT', message: 'Avatar file must be provided' },
+				{ code: 'INVALID_MEDIA_FORMAT', message: 'Avatar drawing document must be provided' },
 				{ status: 400 }
 			);
 		}
 
-		const updated = await avatarService.uploadAvatar(event.locals.user ?? null, file);
+		const updated = await avatarService.uploadAvatar(event.locals.user ?? null, drawingDocument);
 
 		return json({
 			avatarUrl: resolveUserAvatarUrl(updated.id, updated.avatarUrl, updated.updatedAt.getTime())

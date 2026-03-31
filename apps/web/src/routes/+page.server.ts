@@ -1,9 +1,12 @@
 import { fail } from '@sveltejs/kit';
+import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { getViewerContentPreferences } from '$lib/server/moderation/service';
 import { avatarService } from '$lib/server/user/avatar.service';
+import { userRepository } from '$lib/server/user/repository';
 import { AuthFlowError } from '$lib/server/auth/errors';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import {
@@ -57,21 +60,23 @@ const toFailure = (action: HomeActionName, error: unknown, fallback: string) => 
 };
 
 export const load: PageServerLoad = async ({ locals }) => {
-	const [topDiscovery, viewerContentPreferences, studioDiscovery] = await Promise.all([
-		listArtworkDiscovery(
-			{ cursor: null, limit: 3, sort: 'top', window: 'all' },
-			{ user: locals.user }
-		),
-		locals.user
-			? getViewerContentPreferences({ user: locals.user })
-			: Promise.resolve({ adultContentEnabled: false }),
-		locals.user
-			? listArtworkDiscovery(
-					{ authorId: locals.user.id, cursor: null, limit: 50, sort: 'top', window: 'all' },
-					{ user: locals.user }
-				)
-			: Promise.resolve(null)
-	]);
+	const [topDiscovery, viewerContentPreferences, studioDiscovery, avatarUserRecord] =
+		await Promise.all([
+			listArtworkDiscovery(
+				{ cursor: null, limit: 3, sort: 'top', window: 'all' },
+				{ user: locals.user }
+			),
+			locals.user
+				? getViewerContentPreferences({ user: locals.user })
+				: Promise.resolve({ adultContentEnabled: false }),
+			locals.user
+				? listArtworkDiscovery(
+						{ authorId: locals.user.id, cursor: null, limit: 50, sort: 'top', window: 'all' },
+						{ user: locals.user }
+					)
+				: Promise.resolve(null),
+			locals.user ? userRepository.findUserById(locals.user.id) : Promise.resolve(null)
+		]);
 	const topArtworks = toHomePreviewCards(topDiscovery.items);
 	const adultContentEnabled = viewerContentPreferences.adultContentEnabled;
 	const studioArtworks = studioDiscovery ? toHomeSceneArtworkSlots(studioDiscovery.items) : [];
@@ -116,6 +121,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			status: 'authenticated',
 			user: {
 				...locals.user,
+				avatarDrawingDocument: avatarUserRecord?.avatarDocument
+					? parseDrawingDocument(decodeCompressedDrawingDocument(avatarUserRecord.avatarDocument))
+					: null,
 				avatarUrl: resolveUserAvatarUrl(
 					locals.user.id,
 					locals.user.avatarUrl,
@@ -181,17 +189,20 @@ export const actions: Actions = {
 	},
 	saveAvatar: async (event) => {
 		const formData = await event.request.formData();
-		const file = formData.get('file');
+		const drawingDocument = formData.get('drawingDocument')?.toString() ?? '';
 
-		if (!(file instanceof File)) {
+		if (!drawingDocument.trim()) {
 			return fail(400, {
 				action: 'saveAvatar',
-				message: 'Avatar file is required'
+				message: 'Avatar drawing document is required'
 			});
 		}
 
 		try {
-			const updatedUser = await avatarService.uploadAvatar(event.locals.user ?? null, file);
+			const updatedUser = await avatarService.uploadAvatar(
+				event.locals.user ?? null,
+				drawingDocument
+			);
 
 			if (event.locals.user) {
 				event.locals.user = {

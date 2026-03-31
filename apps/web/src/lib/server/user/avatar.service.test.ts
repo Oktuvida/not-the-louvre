@@ -1,17 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AVATAR_MEDIA_MAX_BYTES } from './config';
 import { createAvatarService } from './avatar.service';
 import type { UserRecord, UserRepository } from './types';
 import type { ArtworkStorage } from '$lib/server/artwork/types';
 import type { CanonicalUser } from '$lib/server/auth/types';
 import {
-	createAvifTestFile,
-	createMalformedWebpFile,
-	createWebpTestFile,
-	fileToBytes
-} from '../media/test-helpers';
+	createEmptyDrawingDocument,
+	serializeDrawingDocument
+} from '$lib/features/stroke-json/document';
 
 const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
+	avatarDocument: null,
+	avatarDocumentVersion: null,
 	avatarIsHidden: false,
 	avatarIsNsfw: false,
 	avatarUrl: null,
@@ -50,6 +49,11 @@ const createRepository = (initial: UserRecord | null = null): UserRepository => 
 	return {
 		findUserById: vi.fn(async (id) => (stored?.id === id ? stored : null)),
 		listUsers: vi.fn(async () => []),
+		updateUserAvatar: vi.fn(async (id, input) => {
+			if (!stored || stored.id !== id) return null;
+			stored = { ...stored, ...input };
+			return stored;
+		}),
 		updateAvatarModeration: vi.fn(async (id, input) => {
 			if (!stored || stored.id !== id) return null;
 			stored = { ...stored, ...input };
@@ -77,6 +81,7 @@ const createStorage = (): ArtworkStorage => ({
 describe('avatar upload', () => {
 	let repository: UserRepository;
 	let storage: ArtworkStorage;
+	const avatarDocument = serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
 
 	beforeEach(() => {
 		repository = createRepository(makeUserRecord());
@@ -86,12 +91,7 @@ describe('avatar upload', () => {
 	it('rejects unauthenticated requests', async () => {
 		const service = createAvatarService({ repository, storage });
 
-		await expect(
-			service.uploadAvatar(
-				null,
-				await createWebpTestFile({ height: 256, name: 'avatar.webp', width: 256 })
-			)
-		).rejects.toMatchObject({
+		await expect(service.uploadAvatar(null, avatarDocument)).rejects.toMatchObject({
 			code: 'UNAUTHENTICATED',
 			status: 401
 		});
@@ -101,39 +101,20 @@ describe('avatar upload', () => {
 		const service = createAvatarService({ repository, storage });
 
 		await expect(
-			service.uploadAvatar(
-				makeCanonicalUser({ isBanned: true }),
-				await createWebpTestFile({ height: 256, name: 'avatar.webp', width: 256 })
-			)
+			service.uploadAvatar(makeCanonicalUser({ isBanned: true }), avatarDocument)
 		).rejects.toMatchObject({ code: 'BANNED_USER', status: 403 });
 
 		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
-	it('rejects non-WebP media', async () => {
+	it('rejects non-avatar drawing documents', async () => {
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser();
 
 		await expect(
-			service.uploadAvatar(
-				user,
-				await createAvifTestFile({ height: 256, name: 'avatar.avif', width: 256 })
-			)
+			service.uploadAvatar(user, serializeDrawingDocument(createEmptyDrawingDocument('artwork')))
 		).rejects.toMatchObject({
 			code: 'INVALID_MEDIA_FORMAT',
-			status: 400
-		});
-	});
-
-	it('rejects media that exceeds the size budget', async () => {
-		const service = createAvatarService({ repository, storage });
-		const user = makeCanonicalUser();
-		const oversized = new File([new Uint8Array(AVATAR_MEDIA_MAX_BYTES + 1)], 'avatar.png', {
-			type: 'image/webp'
-		});
-
-		await expect(service.uploadAvatar(user, oversized)).rejects.toMatchObject({
-			code: 'MEDIA_TOO_LARGE',
 			status: 400
 		});
 	});
@@ -141,69 +122,21 @@ describe('avatar upload', () => {
 	it('stores the avatar and updates the user profile on valid upload', async () => {
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser({ id: 'user-1' });
-		const media = await createWebpTestFile({ height: 256, name: 'avatar.webp', width: 256 });
 
-		const result = await service.uploadAvatar(user, media);
+		const result = await service.uploadAvatar(user, avatarDocument);
 
 		expect(storage.upload).toHaveBeenCalledWith('avatars/user-1.avif', expect.any(File));
-		expect(await fileToBytes(vi.mocked(storage.upload).mock.calls[0]![1] as File)).not.toEqual(
-			await fileToBytes(media)
-		);
+		expect(result.avatarDocument).toBeTruthy();
+		expect(result.avatarDocumentVersion).toBe(1);
 		expect(result.avatarUrl).toBe('avatars/user-1.avif');
-	});
-
-	it('rejects malformed WebP payloads before touching storage', async () => {
-		const service = createAvatarService({ repository, storage });
-		const user = makeCanonicalUser();
-
-		await expect(service.uploadAvatar(user, createMalformedWebpFile())).rejects.toMatchObject({
-			code: 'INVALID_MEDIA_CONTENT',
-			status: 400
-		});
-
-		expect(storage.upload).not.toHaveBeenCalled();
-	});
-
-	it('rejects avatar media whose decoded dimensions are not canonical', async () => {
-		const service = createAvatarService({ repository, storage });
-		const user = makeCanonicalUser();
-		const media = await createWebpTestFile({ height: 320, name: 'avatar.webp', width: 256 });
-
-		await expect(service.uploadAvatar(user, media)).rejects.toMatchObject({
-			code: 'INVALID_MEDIA_DIMENSIONS',
-			status: 400
-		});
-
-		expect(storage.upload).not.toHaveBeenCalled();
-	});
-
-	it('rejects avatar media when canonical sanitized output exceeds the stored-media budget', async () => {
-		const service = createAvatarService({ repository, storage });
-		const user = makeCanonicalUser();
-		const media = await createWebpTestFile({
-			height: 256,
-			name: 'avatar.webp',
-			pattern: 'striped-noise',
-			width: 256
-		});
-
-		expect(media.size).toBeLessThanOrEqual(AVATAR_MEDIA_MAX_BYTES);
-
-		await expect(service.uploadAvatar(user, media)).rejects.toMatchObject({
-			code: 'MEDIA_TOO_LARGE',
-			status: 400
-		});
-
-		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
 	it('overwrites the previous avatar key in place without a separate deletion', async () => {
 		repository = createRepository(makeUserRecord({ avatarUrl: 'avatars/user-1.avif' }));
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser({ id: 'user-1', avatarUrl: 'avatars/user-1.avif' });
-		const media = await createWebpTestFile({ height: 256, name: 'avatar.webp', width: 256 });
 
-		const result = await service.uploadAvatar(user, media);
+		const result = await service.uploadAvatar(user, avatarDocument);
 
 		expect(storage.upload).toHaveBeenCalledWith('avatars/user-1.avif', expect.any(File));
 		expect(storage.delete).not.toHaveBeenCalled();
@@ -214,10 +147,7 @@ describe('avatar upload', () => {
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser({ id: 'user-1', avatarUrl: null });
 
-		await service.uploadAvatar(
-			user,
-			await createWebpTestFile({ height: 256, name: 'avatar.webp', width: 256 })
-		);
+		await service.uploadAvatar(user, avatarDocument);
 
 		expect(storage.delete).not.toHaveBeenCalled();
 	});
@@ -256,6 +186,7 @@ describe('avatar deletion', () => {
 		const result = await service.deleteAvatar(user);
 
 		expect(storage.delete).toHaveBeenCalledWith('avatars/user-1.avif');
+		expect(result.avatarDocument).toBeNull();
 		expect(result.avatarUrl).toBeNull();
 	});
 

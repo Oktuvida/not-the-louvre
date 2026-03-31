@@ -255,11 +255,6 @@ describe('AuthOverlay', () => {
 					}
 				)
 		);
-		const toBlobSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'toBlob')
-			.mockImplementation((callback) => {
-				callback(new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' }));
-			});
 
 		vi.stubGlobal('fetch', fetchSpy);
 
@@ -283,10 +278,13 @@ describe('AuthOverlay', () => {
 		await page.getByRole('button', { name: 'Enter the gallery' }).click();
 
 		await vi.waitFor(() => {
-			expect(onAvatarSaved).toHaveBeenCalledWith({
-				avatarOnboardingCompletedAt: expect.any(Date),
-				avatarUrl: '/api/users/product-user-1/avatar?v=1711713600000'
-			});
+			expect(onAvatarSaved).toHaveBeenCalledWith(
+				expect.objectContaining({
+					avatarDrawingDocument: expect.objectContaining({ kind: 'avatar', version: 1 }),
+					avatarOnboardingCompletedAt: expect.any(Date),
+					avatarUrl: '/api/users/product-user-1/avatar?v=1711713600000'
+				})
+			);
 			expect(dispatch).toHaveBeenCalledWith('AUTH_SUCCESS');
 		});
 
@@ -294,7 +292,5 @@ describe('AuthOverlay', () => {
 			body: expect.any(FormData),
 			method: 'PUT'
 		});
-
-		toBlobSpy.mockRestore();
 	});
 });

@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import type { UserRecord } from '$lib/server/user/types';
+import {
+	createEmptyDrawingDocument,
+	serializeDrawingDocument
+} from '$lib/features/stroke-json/document';
 
 const mocked = vi.hoisted(() => ({
 	avatarService: {
@@ -152,7 +156,8 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		mocked.avatarService.uploadAvatar.mockResolvedValue(updated);
 
 		const formData = new FormData();
-		formData.append('file', new File([new Uint8Array(128)], 'avatar.webp', { type: 'image/webp' }));
+		const avatarDocument = serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
+		formData.append('drawingDocument', avatarDocument);
 
 		const { PUT } = await import('./+server');
 		const response = await PUT({
@@ -180,7 +185,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		expect(response.headers.get('content-type')).toMatch(/application\/json/);
 		expect(await response.json()).toMatchObject({
 			code: 'INVALID_MEDIA_FORMAT',
-			message: 'Avatar file must be provided'
+			message: 'Avatar drawing document must be provided'
 		});
 		expect(mocked.avatarService.uploadAvatar).not.toHaveBeenCalled();
 	});
@@ -191,7 +196,10 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		);
 
 		const formData = new FormData();
-		formData.append('file', new File([new Uint8Array(128)], 'avatar.webp', { type: 'image/webp' }));
+		formData.append(
+			'drawingDocument',
+			serializeDrawingDocument(createEmptyDrawingDocument('avatar'))
+		);
 
 		const { PUT } = await import('./+server');
 		const response = await PUT({
@@ -210,11 +218,18 @@ describe('PUT /api/users/[userId]/avatar', () => {
 
 	it('returns 400 for invalid media format', async () => {
 		mocked.avatarService.uploadAvatar.mockRejectedValue(
-			new ArtworkFlowError(400, 'Avatar media must be WebP', 'INVALID_MEDIA_FORMAT')
+			new ArtworkFlowError(
+				400,
+				'Avatar save requires an avatar drawing document',
+				'INVALID_MEDIA_FORMAT'
+			)
 		);
 
 		const formData = new FormData();
-		formData.append('file', new File([new Uint8Array(128)], 'avatar.avif', { type: 'image/avif' }));
+		formData.append(
+			'drawingDocument',
+			serializeDrawingDocument(createEmptyDrawingDocument('artwork'))
+		);
 
 		const { PUT } = await import('./+server');
 		const response = await PUT({
@@ -227,7 +242,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		expect(response.headers.get('content-type')).toMatch(/application\/json/);
 		expect(await response.json()).toMatchObject({
 			code: 'INVALID_MEDIA_FORMAT',
-			message: 'Avatar media must be WebP'
+			message: 'Avatar save requires an avatar drawing document'
 		});
 	});
 
@@ -237,7 +252,10 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		);
 
 		const formData = new FormData();
-		formData.append('file', new File([new Uint8Array(128)], 'avatar.webp', { type: 'image/webp' }));
+		formData.append(
+			'drawingDocument',
+			serializeDrawingDocument(createEmptyDrawingDocument('avatar'))
+		);
 
 		const { PUT } = await import('./+server');
 		const response = await PUT({

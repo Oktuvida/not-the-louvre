@@ -1,11 +1,13 @@
 import { AVATAR_STORAGE_KEY_PREFIX } from './config';
+import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+import { encodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import {
 	assertActiveUser,
 	assertAuthenticatedUser,
 	assertNotBanned
 } from '$lib/server/auth/guards';
-import { sanitizeAvatarMedia } from '$lib/server/media/sanitization';
+import { createAvatarDrawingDocumentMedia } from '$lib/server/drawing-document/media';
 import type { ArtworkStorage } from '$lib/server/artwork/types';
 import type { CanonicalUser } from '$lib/server/auth/types';
 import { userRepository } from './repository';
@@ -23,21 +25,34 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 	const { repository, storage } = deps;
 
 	return {
-		async uploadAvatar(user: CanonicalUser | null, media: File): Promise<UserRecord> {
+		async uploadAvatar(user: CanonicalUser | null, drawingDocument: string): Promise<UserRecord> {
 			const activeUser = assertActiveUser(user);
 
-			const sanitizedMedia = await sanitizeAvatarMedia(media);
+			const parsedDocument = parseDrawingDocument(drawingDocument);
+			if (parsedDocument.kind !== 'avatar') {
+				throw new ArtworkFlowError(
+					400,
+					'Avatar save requires an avatar drawing document',
+					'INVALID_MEDIA_FORMAT'
+				);
+			}
+
+			const sanitizedMedia = await createAvatarDrawingDocumentMedia(parsedDocument);
+			const encodedDocument = encodeCompressedDrawingDocument(parsedDocument);
 
 			const storageKey = getAvatarStorageKey(activeUser.id);
 			await storage.upload(storageKey, sanitizedMedia.file);
 			const completedAt = new Date();
 
-			const updatedUser = await repository.updateUserAvatarUrl(
-				activeUser.id,
-				storageKey,
-				completedAt,
-				completedAt
-			);
+			const updatedUser = repository.updateUserAvatar
+				? await repository.updateUserAvatar(activeUser.id, {
+						avatarDocument: encodedDocument,
+						avatarDocumentVersion: parsedDocument.version,
+						avatarOnboardingCompletedAt: completedAt,
+						avatarUrl: storageKey,
+						updatedAt: completedAt
+					})
+				: await repository.updateUserAvatarUrl(activeUser.id, storageKey, completedAt, completedAt);
 			if (!updatedUser) {
 				await storage.delete(storageKey).catch(() => {});
 				throw new ArtworkFlowError(500, 'Avatar upload failed', 'PUBLISH_FAILED');
@@ -59,12 +74,20 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 			}
 
 			const storageKey = record.avatarUrl;
-			const updatedUser = await repository.updateUserAvatarUrl(
-				activeUser.id,
-				null,
-				record.avatarOnboardingCompletedAt ?? null,
-				new Date()
-			);
+			const updatedUser = repository.updateUserAvatar
+				? await repository.updateUserAvatar(activeUser.id, {
+						avatarDocument: null,
+						avatarDocumentVersion: null,
+						avatarOnboardingCompletedAt: record.avatarOnboardingCompletedAt ?? null,
+						avatarUrl: null,
+						updatedAt: new Date()
+					})
+				: await repository.updateUserAvatarUrl(
+						activeUser.id,
+						null,
+						record.avatarOnboardingCompletedAt ?? null,
+						new Date()
+					);
 			if (!updatedUser) {
 				throw new ArtworkFlowError(500, 'Avatar deletion failed', 'PUBLISH_FAILED');
 			}

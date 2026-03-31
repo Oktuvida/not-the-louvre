@@ -49,6 +49,7 @@
 	const entryState = createEntryState(getInitialEntryState());
 
 	type AvatarOverride = {
+		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV1 | null;
 		avatarOnboardingCompletedAt: Date;
 		avatarUrl: string;
 		userId: string;
@@ -110,6 +111,8 @@
 				avatarOverride?.userId === auth.user.id
 					? {
 							...auth.user,
+							avatarDrawingDocument:
+								avatarOverride.avatarDrawingDocument ?? auth.user.avatarDrawingDocument,
 							avatarOnboardingCompletedAt: avatarOverride.avatarOnboardingCompletedAt,
 							avatarUrl: avatarOverride.avatarUrl
 						}
@@ -153,6 +156,7 @@
 	onAvatarSaved={(payload) => {
 		if (user) {
 			avatarOverride = {
+				avatarDrawingDocument: payload.avatarDrawingDocument,
 				avatarOnboardingCompletedAt: payload.avatarOnboardingCompletedAt,
 				avatarUrl: payload.avatarUrl,
 				userId: user.id
@@ -160,6 +164,7 @@
 
 			user = {
 				...user,
+				avatarDrawingDocument: payload.avatarDrawingDocument ?? user.avatarDrawingDocument,
 				avatarOnboardingCompletedAt: payload.avatarOnboardingCompletedAt,
 				avatarUrl: payload.avatarUrl
 			};
@@ -200,6 +205,7 @@
 			onAvatarSaved={(payload) => {
 				if (user) {
 					avatarOverride = {
+						avatarDrawingDocument: payload.avatarDrawingDocument,
 						avatarOnboardingCompletedAt: payload.avatarOnboardingCompletedAt,
 						avatarUrl: payload.avatarUrl,
 						userId: user.id
@@ -207,6 +213,7 @@
 
 					user = {
 						...user,
+						avatarDrawingDocument: payload.avatarDrawingDocument ?? user.avatarDrawingDocument,
 						avatarOnboardingCompletedAt: payload.avatarOnboardingCompletedAt,
 						avatarUrl: payload.avatarUrl
 					};
