@@ -24,7 +24,6 @@
 
 	const CANVAS_WIDTH = 520;
 	const CANVAS_HEIGHT = 320;
-	const EXPORT_SIZE = 256;
 
 	type AvatarSaveResult =
 		| { success: true }
@@ -374,26 +373,26 @@
 		<div class="order-2 md:order-1">
 			<div class="grid gap-3 md:h-[27rem] md:grid-cols-[3.5rem_minmax(0,1fr)]">
 				<div
-					class="flex flex-col items-center justify-between rounded-[1rem] border border-[rgb(107_74_46_/_0.15)] bg-[rgb(255_255_255_/_0.32)] px-2 py-3"
+					class="flex items-center gap-3 rounded-[1rem] border border-[rgb(107_74_46_/_0.15)] bg-[rgb(255_255_255_/_0.32)] px-3 py-3 md:flex-col md:justify-between md:px-2"
 				>
 					<p
-						class="font-display text-[0.62rem] font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase md:rotate-180 md:[writing-mode:vertical-rl]"
+						class="font-display shrink-0 text-[0.62rem] font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase md:rotate-180 md:[writing-mode:vertical-rl]"
 					>
 						Brush
 					</p>
-					<div class="flex flex-1 items-center justify-center py-2">
+					<div class="flex min-w-0 flex-1 items-center justify-center py-1 md:py-2">
 						<input
 							bind:value={brushStep}
 							type="range"
 							min="0"
 							max={(BRUSH_SIZES.length - 1).toString()}
 							step="1"
-							class="brush-slider h-8 w-24 -rotate-90 cursor-pointer appearance-none md:w-60"
+							class="brush-slider h-8 w-full min-w-0 cursor-pointer appearance-none md:w-60 md:-rotate-90"
 							aria-label="Brush size"
 						/>
 					</div>
 					<div
-						class="flex items-center justify-center"
+						class="flex shrink-0 items-center justify-center"
 						data-testid="brush-preview-shell"
 						style={`width:${BRUSH_PREVIEW_SIZE}px;height:${BRUSH_PREVIEW_SIZE}px;`}
 					>
@@ -405,11 +404,11 @@
 					</div>
 				</div>
 
-				<div class="grid h-full grid-cols-2 content-start gap-2">
+				<div class="grid h-full grid-cols-4 content-start gap-2 sm:grid-cols-6 md:grid-cols-2">
 					{#each palette as color (color)}
 						<button
 							type="button"
-							class={`h-10 w-10 rounded-xl border-2 ${activeColor === color ? 'border-[var(--color-ink)] shadow-[0_0_0_3px_rgb(47_36_28_/_0.18)]' : 'border-[var(--color-accent)]'}`}
+							class={`h-11 w-11 justify-self-center rounded-xl border-2 md:h-10 md:w-10 ${activeColor === color ? 'border-[var(--color-ink)] shadow-[0_0_0_3px_rgb(47_36_28_/_0.18)]' : 'border-[var(--color-accent)]'}`}
 							style={`background:${color};`}
 							aria-pressed={activeColor === color}
 							onclick={() => {
@@ -424,7 +423,7 @@
 
 		<div class="order-1 space-y-3 md:order-2">
 			<div
-				class="mx-auto aspect-square w-full max-w-[27rem] rounded-[1.25rem] border-2 border-[var(--color-ink)] bg-[var(--color-paper)] p-2.5 shadow-[6px_6px_0_rgb(47_36_28_/_0.14)]"
+				class="mx-auto aspect-[13/8] w-full max-w-[27rem] rounded-[1.25rem] border-2 border-[var(--color-ink)] bg-[var(--color-paper)] p-2 shadow-[6px_6px_0_rgb(47_36_28_/_0.14)] sm:p-2.5 md:aspect-square"
 			>
 				<div
 					class="relative h-full w-full overflow-hidden rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)]"
@@ -451,8 +450,8 @@
 				</div>
 			</div>
 
-			<div class="flex-center gap-3 pt-4 pl-4 sm:flex-row">
-				<div class="flex gap-3 sm:ml-auto">
+			<div class="pt-2 md:pt-4 md:pl-4">
+				<div class="flex flex-col gap-3 sm:flex-row">
 					<GameButton
 						type="button"
 						variant="ghost"
