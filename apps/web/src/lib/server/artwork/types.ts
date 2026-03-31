@@ -4,6 +4,8 @@ export type ArtworkRecord = {
 	authorId: string;
 	commentCount: number;
 	createdAt: Date;
+	drawingDocument?: string | null;
+	drawingVersion?: number | null;
 	forkCount: number;
 	hiddenAt?: Date | null;
 	id: string;
@@ -65,6 +67,8 @@ export type ArtworkChildForkSummary = {
 
 export type ArtworkDetail = ArtworkFeedCard & {
 	childForks: ArtworkChildForkSummary[];
+	drawingDocument?: string | null;
+	drawingVersion?: number | null;
 	mediaContentType: string;
 	mediaSizeBytes: number;
 	updatedAt: Date;

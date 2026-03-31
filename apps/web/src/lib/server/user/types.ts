@@ -1,6 +1,8 @@
 import type { ProductRole } from '$lib/server/auth/types';
 
 export type UserRecord = {
+	avatarDocument?: string | null;
+	avatarDocumentVersion?: number | null;
 	avatarIsHidden: boolean;
 	avatarIsNsfw: boolean;
 	avatarUrl: string | null;
@@ -23,6 +25,16 @@ export type ListUsersInput = {
 export type UserRepository = {
 	findUserById(id: string): Promise<UserRecord | null>;
 	listUsers(input: ListUsersInput): Promise<UserRecord[]>;
+	updateUserAvatar?(
+		id: string,
+		input: {
+			avatarDocument?: string | null;
+			avatarDocumentVersion?: number | null;
+			avatarOnboardingCompletedAt: Date | null;
+			avatarUrl: string | null;
+			updatedAt: Date;
+		}
+	): Promise<UserRecord | null>;
 	updateUserAvatarUrl(
 		id: string,
 		avatarUrl: string | null,
