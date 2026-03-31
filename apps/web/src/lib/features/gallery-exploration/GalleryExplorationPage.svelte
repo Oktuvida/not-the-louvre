@@ -171,6 +171,9 @@
 	let isRefreshingGallery = $state(false);
 	let previousRoomIndex = $state(-1);
 	let museumWallPatternUrl = $state('');
+	let mysteryRoomModule = $state<{
+		default: typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default;
+	} | null>(null);
 
 	const roomComponentPromise = $derived.by<Promise<
 		| {
@@ -468,6 +471,16 @@
 		};
 	});
 
+	$effect(() => {
+		if (roomId !== 'mystery' || mysteryRoomModule) {
+			return;
+		}
+
+		void loadMysteryRoom().then((module) => {
+			mysteryRoomModule = module;
+		});
+	});
+
 	const podiumMeta = {
 		1: {
 			color: '#f4c430',
@@ -674,7 +687,15 @@
 							</p>
 						</div>
 					{:else if roomId === 'mystery' && artworks.length > 0}
-						{#if roomComponentPromise}
+						{#if mysteryRoomModule}
+							{@const MysteryRoom =
+								mysteryRoomModule.default as typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default}
+							<MysteryRoom
+								adultContentEnabled={adultContentAllowed}
+								{artworks}
+								onSelect={openArtwork}
+							/>
+						{:else if roomComponentPromise}
 							{#await roomComponentPromise}
 								<div
 									class="min-h-[400px] rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"

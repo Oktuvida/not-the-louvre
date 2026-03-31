@@ -178,6 +178,59 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 	});
 
+	it('does not flash the mystery loading state after the room module has already loaded once', async () => {
+		const deferredRoom =
+			createDeferred<
+				Awaited<typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte')>
+			>();
+		const loadMysteryRoom = vi.fn(() => deferredRoom.promise);
+		const screen = render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
+			emptyStateMessage: null,
+			loadMysteryRoom,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame'
+		});
+
+		await screen.rerender({
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
+			emptyStateMessage: null,
+			loadMysteryRoom,
+			room: getGalleryRoom('mystery'),
+			roomId: 'mystery'
+		});
+
+		await expect.element(page.getByTestId('gallery-room-loading')).toBeVisible();
+
+		deferredRoom.resolve(await import('./rooms/MysteryRoom.svelte'));
+
+		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+
+		await screen.rerender({
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
+			emptyStateMessage: null,
+			loadMysteryRoom,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame'
+		});
+
+		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+
+		await screen.rerender({
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
+			emptyStateMessage: null,
+			loadMysteryRoom,
+			room: getGalleryRoom('mystery'),
+			roomId: 'mystery'
+		});
+
+		loadMysteryRoom.mockClear();
+
+		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+		await expect.element(page.getByTestId('gallery-room-loading')).not.toBeInTheDocument();
+		expect(loadMysteryRoom).not.toHaveBeenCalled();
+	});
+
 	it('keeps hall-of-fame podium hero artwork eager while deferring ranked cards', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [
