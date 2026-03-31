@@ -4,21 +4,31 @@
 	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
 	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
 	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
+	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
+	import StudioPanel from '$lib/features/shared-ui/components/StudioPanel.svelte';
 	import VisitorBadge from '$lib/features/shared-ui/components/VisitorBadge.svelte';
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
+
+	type AvatarSavedPayload = {
+		avatarOnboardingCompletedAt: Date;
+		avatarUrl: string;
+	};
 
 	let {
 		adultContentEnabled = false,
 		isExiting = false,
+		onAvatarSaved,
 		onGalleryNavigate,
 		previewCards = [],
 		user = null
 	}: {
 		adultContentEnabled?: boolean;
 		isExiting?: boolean;
+		onAvatarSaved?: (payload: AvatarSavedPayload) => void;
 		onGalleryNavigate?: () => void;
 		previewCards?: HomePreviewCard[];
 		user?: HomeAuthUser | null;
@@ -27,6 +37,7 @@
 	let adultContentPreferenceOverride = $state<boolean | null>(null);
 	let adultContentError = $state<string | null>(null);
 	let isSavingAdultContentPreference = $state(false);
+	let isAvatarEditorOpen = $state(false);
 
 	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
 	const hasSensitivePreview = $derived(previewCards.some((card) => card.isNsfw));
@@ -64,6 +75,66 @@
 	const handleGalleryClick = () => {
 		onGalleryNavigate?.();
 	};
+
+	const openAvatarEditor = () => {
+		isAvatarEditorOpen = true;
+	};
+
+	const closeAvatarEditor = () => {
+		isAvatarEditorOpen = false;
+	};
+
+	const saveAvatar = async (file: File) => {
+		if (!user?.id) {
+			return {
+				message: 'Your session is not ready for avatar upload. Please sign in again.',
+				success: false as const
+			};
+		}
+
+		const formData = new FormData();
+		formData.set('file', file);
+
+		const response = await fetch(`/api/users/${user.id}/avatar`, {
+			body: formData,
+			method: 'PUT'
+		});
+
+		if (response.ok) {
+			const data = (await response.json()) as { avatarUrl?: string };
+
+			if (!data.avatarUrl) {
+				return {
+					message: 'Avatar save succeeded but no avatar URL was returned.',
+					success: false as const
+				};
+			}
+
+			dispatchAvatarFaviconUpdate(user.id);
+			onAvatarSaved?.({
+				avatarOnboardingCompletedAt: new Date(),
+				avatarUrl: data.avatarUrl
+			});
+			return { success: true as const };
+		}
+
+		try {
+			const data = (await response.json()) as { code?: string; message?: string };
+
+			return {
+				code: data.code,
+				message: data.message ?? 'Avatar save failed. Please try again.',
+				success: false as const
+			};
+		} catch {
+			// Ignore invalid error bodies and fall back to a generic message.
+		}
+
+		return {
+			message: 'Avatar save failed. Please try again.',
+			success: false as const
+		};
+	};
 </script>
 
 <div class="pointer-events-none absolute inset-0 z-[30]">
@@ -76,6 +147,7 @@
 			<VisitorBadge
 				avatarUrl={user.avatarUrl ?? user.image ?? null}
 				nickname={user.nickname}
+				onclick={openAvatarEditor}
 				userId={user.id}
 			/>
 			<p
@@ -284,3 +356,57 @@
 		{/if}
 	</div>
 </div>
+
+{#if isAvatarEditorOpen && user}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-8 backdrop-blur-sm"
+		role="dialog"
+		aria-modal="true"
+		aria-label="Edit your avatar"
+		tabindex="-1"
+		onclick={closeAvatarEditor}
+		onkeydown={(event) => {
+			if (event.key === 'Escape') closeAvatarEditor();
+		}}
+	>
+		<div
+			role="presentation"
+			class="w-full max-w-[52rem]"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+		>
+			<StudioPanel tone="paper" className="w-full">
+				<div class="p-6 md:p-8">
+					<div class="mb-4 flex items-center justify-between">
+						<h2 class="font-display text-xl tracking-[0.06em] text-[var(--color-ink)] uppercase">
+							Redraw your avatar
+						</h2>
+						<GameButton type="button" variant="ghost" size="sm" onclick={closeAvatarEditor}>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="20"
+								height="20"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<line x1="18" y1="6" x2="6" y2="18" />
+								<line x1="6" y1="6" x2="18" y2="18" />
+							</svg>
+						</GameButton>
+					</div>
+					<AvatarSketchpad
+						loadAvatarUrl={user.avatarUrl ?? user.image ?? null}
+						nickname={user.nickname}
+						{saveAvatar}
+						onContinue={closeAvatarEditor}
+						submitLabel="Done"
+					/>
+				</div>
+			</StudioPanel>
+		</div>
+	</div>
+{/if}
