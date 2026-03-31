@@ -12,6 +12,7 @@ import {
 	validateProductionEnv
 } from '../../src/lib/server/deploy/env';
 import { DEFAULT_BUILD_DIR, ensureBuildOutput } from '../../src/lib/server/deploy/build';
+import { ensureCaddyGlobalEmail } from '../../src/lib/server/deploy/caddy';
 import { renderCaddySite, renderSystemdUnit } from '../../src/lib/server/deploy/templates';
 
 type CommandName = 'install' | 'deploy' | 'env:set' | 'env:edit' | 'status' | 'uninstall';
@@ -240,12 +241,16 @@ const writeSystemFiles = async (config: DeployConfig) => {
 	const existingCaddyfile = existsSync(config.caddyfilePath)
 		? await readFile(config.caddyfilePath, 'utf8')
 		: '';
-	const nextCaddyfile = updateManagedBlock(
+	const caddyfileWithGlobalEmail = ensureCaddyGlobalEmail(
 		existingCaddyfile,
+		config.email,
+		`${config.serviceName}:global`
+	);
+	const nextCaddyfile = updateManagedBlock(
+		caddyfileWithGlobalEmail,
 		config.serviceName,
 		renderCaddySite({
 			domain: config.domain,
-			email: config.email,
 			host: config.host,
 			port: config.port
 		})
@@ -422,7 +427,11 @@ const uninstallCommand = async (options: CliOptions) => {
 
 	if (existsSync(config.caddyfilePath)) {
 		const existing = await readFile(config.caddyfilePath, 'utf8');
-		await writeFile(config.caddyfilePath, removeManagedBlock(existing, config.serviceName), 'utf8');
+		await writeFile(
+			config.caddyfilePath,
+			removeManagedBlock(removeManagedBlock(existing, `${config.serviceName}:global`), config.serviceName),
+			'utf8'
+		);
 		await runValidatedCaddy(config.caddyfilePath);
 		runCommand('systemctl', ['reload', 'caddy']);
 	}
