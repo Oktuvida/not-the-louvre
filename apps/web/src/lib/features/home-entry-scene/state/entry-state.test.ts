@@ -41,6 +41,14 @@ describe('createEntryState', () => {
 		expect(entryState.state).toBe('inside');
 	});
 
+	it('moves from auth-recovery to inside after AUTH_SUCCESS', () => {
+		const entryState = createEntryState('auth-recovery');
+
+		entryState.dispatch('AUTH_SUCCESS');
+
+		expect(entryState.state).toBe('inside');
+	});
+
 	it('switches between login, signup, and recovery auth states explicitly', () => {
 		const entryState = createEntryState('auth-login');
 
