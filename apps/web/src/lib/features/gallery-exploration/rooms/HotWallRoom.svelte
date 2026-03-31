@@ -20,7 +20,6 @@
 		risers?: Artwork[];
 		viewer?: Viewer | null;
 	};
-
 	let {
 		adultContentEnabled = false,
 		artworks = [],
