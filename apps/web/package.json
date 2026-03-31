@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "bun run scripts/build-production.ts",
+		"build:e2e": "vite build",
 		"model:transform:studio": "bun run scripts/transform-studio-model.ts",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",

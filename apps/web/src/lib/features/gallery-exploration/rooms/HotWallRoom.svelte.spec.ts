@@ -33,7 +33,7 @@ describe('HotWallRoom', () => {
 		render(HotWallRoom);
 
 		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
-		await expect.element(page.getByText('Proximamente.')).toBeVisible();
+		await expect.element(page.getByText('Soon.')).toBeVisible();
 		await expect.element(page.getByText('The Hot Wall')).toBeVisible();
 	});
 

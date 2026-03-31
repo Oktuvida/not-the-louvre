@@ -65,7 +65,7 @@ export const ensureBuildManifestExcludesRoutePrefix = async (
 	const manifestPath = join(buildDirectory, 'server', 'manifest.js');
 	const manifestContents = await readFile(manifestPath, 'utf8');
 	const escapedRoutePrefix = routePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-	const routePattern = new RegExp(`id:\\s+['\"]${escapedRoutePrefix}(?:/|['\"])`, 'u');
+	const routePattern = new RegExp(`id:\\s+['"]${escapedRoutePrefix}(?:/|['"])`, 'u');
 
 	if (routePattern.test(manifestContents)) {
 		throw new Error(
