@@ -226,6 +226,67 @@ describe('StudioDrawingPage', () => {
 		});
 	});
 
+	it('lets the user cancel a fork and continue as a new artwork', async () => {
+		const forkDraftDocument = {
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [[24, 24] as [number, number], [120, 160] as [number, number]],
+					size: 8
+				}
+			]
+		};
+		const forkDraftKey = 'drawing-draft:v1:artwork:journey_artist:artwork-parent';
+		window.localStorage.setItem(forkDraftKey, JSON.stringify(forkDraftDocument));
+
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const publishDrawing = vi.fn(async () => ({
+			action: 'publish' as const,
+			artwork: {
+				id: 'artwork-new',
+				mediaUrl: '/api/artworks/artwork-new/media',
+				title: 'Fresh Start'
+			},
+			success: true as const
+		}));
+		const replaceStudioUrl = vi.fn();
+
+		render(StudioDrawingPage, {
+			openingDurationMs: 1,
+			checkTextContent,
+			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
+			forkParent: {
+				drawingDocument: createEmptyDrawingDocument('artwork'),
+				id: 'artwork-parent',
+				mediaUrl: forkParentPreviewDataUrl,
+				title: 'Parent Artwork'
+			},
+			publishDrawing,
+			replaceStudioUrl,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await expect.element(page.getByText('Forking from')).toBeVisible();
+		await page.getByRole('button', { name: 'Cancel fork' }).click();
+
+		await expect.element(page.getByText('Forking from')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Cancel fork' })).not.toBeInTheDocument();
+		expect(window.localStorage.getItem(forkDraftKey)).toBeNull();
+		expect(replaceStudioUrl).toHaveBeenCalledOnce();
+
+		await page.getByPlaceholder('Give your piece a title').fill('Fresh Start');
+		await page.getByRole('button', { name: 'Publish' }).click();
+
+		expect(checkTextContent).toHaveBeenCalledWith('Fresh Start', 'artwork_title');
+		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
+			isNsfw: false,
+			parentArtworkId: null,
+			title: 'Fresh Start'
+		});
+		window.localStorage.clear();
+	});
+
 	it('auto-opens the sketchbook for a fork once the parent artwork preload is ready', async () => {
 		render(StudioDrawingPage, {
 			forkParent: {
