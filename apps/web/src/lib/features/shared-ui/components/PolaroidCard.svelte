@@ -80,7 +80,13 @@
 					Forked
 				</div>
 			{/if}
-			<img src={artwork.imageUrl} alt={artwork.title} class="h-full w-full object-cover" />
+			<img
+				src={artwork.imageUrl}
+				alt={artwork.title}
+				loading="lazy"
+				decoding="async"
+				class="h-full w-full object-cover"
+			/>
 		</div>
 
 		<!-- Caption area -->

@@ -58,4 +58,13 @@ describe('PolaroidCard', () => {
 		await expect.element(page.getByText('Forked')).toBeVisible();
 		await expect.element(page.getByText('From Fork Source')).toBeVisible();
 	});
+
+	it('marks the artwork image for progressive loading', async () => {
+		render(PolaroidCard, { artwork });
+
+		const image = page.getByAltText('Pinned Study');
+
+		await expect.element(image).toHaveAttribute('loading', 'lazy');
+		await expect.element(image).toHaveAttribute('decoding', 'async');
+	});
 });

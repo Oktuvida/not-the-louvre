@@ -76,6 +76,8 @@
 				<img
 					src={artwork.imageUrl}
 					alt={artwork.title}
+					loading="lazy"
+					decoding="async"
 					class={`h-full w-full object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
 				/>
 				{#if isSensitiveBlurred}

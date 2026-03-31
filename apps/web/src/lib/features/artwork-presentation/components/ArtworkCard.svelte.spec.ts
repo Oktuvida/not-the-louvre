@@ -65,6 +65,15 @@ describe('ArtworkCard', () => {
 		await expect.element(page.getByText('From Original Piece')).toBeVisible();
 	});
 
+	it('marks artwork media for progressive loading by default', async () => {
+		render(ArtworkCard, { artwork });
+
+		const image = page.getByAltText('Framed Study');
+
+		await expect.element(image).toHaveAttribute('loading', 'lazy');
+		await expect.element(image).toHaveAttribute('decoding', 'async');
+	});
+
 	it('renders report and admin moderation controls without triggering card open', async () => {
 		const onclick = vi.fn();
 		const fetchSpy = vi.fn(
