@@ -42,6 +42,14 @@
 	let commentInput: HTMLInputElement | undefined = $state();
 
 	const isSensitiveBlurred = $derived(Boolean(artwork?.isNsfw) && !adultContentEnabled);
+	const forkAttribution = $derived.by(() => {
+		if (!artwork?.lineage?.isFork) return null;
+		if (artwork.lineage.parentStatus !== 'available' || !artwork.lineage.parent) {
+			return 'Forked artwork';
+		}
+
+		return `Forked from ${artwork.lineage.parent.title} by ${artwork.lineage.parent.author.nickname}`;
+	});
 
 	const requireViewer = () => {
 		if (!viewer) {
@@ -317,6 +325,11 @@
 						>
 							{artwork.title}
 						</h2>
+						{#if forkAttribution}
+							<p class="mt-2 text-xs font-semibold tracking-[0.08em] text-[#8a6a42] uppercase">
+								{forkAttribution}
+							</p>
+						{/if}
 						<div class="mt-3 flex items-center justify-between gap-3">
 							<div class="flex items-center gap-3">
 								{#if artwork.artistAvatar}
