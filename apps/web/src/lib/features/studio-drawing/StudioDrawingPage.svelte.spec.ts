@@ -36,6 +36,7 @@ async function openSketchbook() {
 describe('StudioDrawingPage', () => {
 	beforeEach(() => {
 		vi.unstubAllGlobals();
+		window.localStorage.clear();
 	});
 
 	it('starts with a closed sketchbook and hides active studio controls', async () => {
@@ -99,7 +100,7 @@ describe('StudioDrawingPage', () => {
 	it('does not reopen or drop fork context while exiting a forked artwork', async () => {
 		goto.mockReset();
 
-		render(StudioDrawingPage, {
+		const { unmount } = render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: createEmptyDrawingDocument('artwork'),
 				id: 'artwork-parent',
@@ -126,6 +127,16 @@ describe('StudioDrawingPage', () => {
 
 		await new Promise((resolve) => setTimeout(resolve, 420));
 		expect(goto).toHaveBeenCalledWith(expect.stringContaining('?from=studio'));
+
+		unmount();
+
+		render(StudioDrawingPage, {
+			openingDurationMs: 1,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await expect.element(page.getByText('Forking Parent Artwork')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 	});
 
 	it('publishes the current drawing and shows a minimal success state', async () => {
