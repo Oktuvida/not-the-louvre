@@ -1,0 +1,1 @@
+See [docs/superpowers/specs/2026-03-30-drawing-document-product-adoption-design.md](../../../../docs/superpowers/specs/2026-03-30-drawing-document-product-adoption-design.md) for the approved design that drives this change.
