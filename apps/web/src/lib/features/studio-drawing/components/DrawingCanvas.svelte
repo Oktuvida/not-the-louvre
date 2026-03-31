@@ -31,6 +31,7 @@
 	} = $props();
 
 	let baselineDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('artwork'));
+	let activePointerId = $state<number | null>(null);
 	let isDrawing = $state(false);
 	let lastAppliedClearVersion = $state<number | null>(null);
 
@@ -41,9 +42,10 @@
 
 	const stopDrawing = () => {
 		isDrawing = false;
+		activePointerId = null;
 	};
 
-	const getPoint = (event: MouseEvent): DrawingPoint | null => {
+	const getPoint = (event: PointerEvent): DrawingPoint | null => {
 		if (!canvasRef) return null;
 
 		const rect = canvasRef.getBoundingClientRect();
@@ -82,11 +84,13 @@
 	onMount(() => {
 		renderCurrentDocument();
 
-		window.addEventListener('mouseup', stopDrawing);
+		window.addEventListener('pointerup', stopDrawing);
+		window.addEventListener('pointercancel', stopDrawing);
 		window.addEventListener('blur', stopDrawing);
 
 		return () => {
-			window.removeEventListener('mouseup', stopDrawing);
+			window.removeEventListener('pointerup', stopDrawing);
+			window.removeEventListener('pointercancel', stopDrawing);
 			window.removeEventListener('blur', stopDrawing);
 		};
 	});
@@ -107,9 +111,15 @@
 		renderCurrentDocument();
 	});
 
-	function startDrawing(e: MouseEvent) {
+	function startDrawing(event: PointerEvent) {
 		if (!interactive) return;
-		const point = getPoint(e);
+		if (!canvasRef) return;
+
+		event.preventDefault();
+		canvasRef.setPointerCapture(event.pointerId);
+		activePointerId = event.pointerId;
+
+		const point = getPoint(event);
 		if (!point) return;
 
 		drawingDocument.strokes.push({
@@ -121,27 +131,35 @@
 		isDrawing = true;
 	}
 
-	function draw(e: MouseEvent) {
+	function draw(event: PointerEvent) {
 		if (!interactive) return;
-		if (e.buttons === 0) {
-			stopDrawing();
-			return;
-		}
-		if (!canvasRef) return;
-		const point = getPoint(e);
-		if (!point) return;
+		if (activePointerId !== event.pointerId) return;
+
+		event.preventDefault();
+
 		if (!isDrawing) {
-			drawingDocument.strokes.push({
-				color: drawingTools.activeColor,
-				points: [point],
-				size: drawingTools.brushSize
-			});
-			renderCurrentDocument();
-			isDrawing = true;
 			return;
 		}
 
+		if (!canvasRef) return;
+		const point = getPoint(event);
+		if (!point) return;
+
 		appendPoint(point);
+	}
+
+	function finishDrawing(event?: PointerEvent) {
+		if (canvasRef && event && canvasRef.hasPointerCapture(event.pointerId)) {
+			canvasRef.releasePointerCapture(event.pointerId);
+		}
+
+		stopDrawing();
+	}
+
+	function cancelDrawing(event: PointerEvent) {
+		event.preventDefault();
+			stopDrawing();
+		finishDrawing(event);
 	}
 </script>
 
@@ -151,12 +169,13 @@
 		width={768}
 		height={768}
 		class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
-		style="background: #fdfbf7;"
+		style="background: #fdfbf7; touch-action: none;"
 		aria-disabled={!interactive}
-		onmousedown={startDrawing}
-		onmouseleave={stopDrawing}
-		onmousemove={draw}
-		onmouseup={stopDrawing}
+		onpointerdown={startDrawing}
+		onpointerleave={cancelDrawing}
+		onpointermove={draw}
+		onpointerup={finishDrawing}
+		onpointercancel={cancelDrawing}
 	></canvas>
 
 	{#if statusMessage}

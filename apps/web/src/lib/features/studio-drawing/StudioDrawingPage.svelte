@@ -35,6 +35,7 @@
 	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 
 	const FORK_CONTEXT_STORAGE_PREFIX = 'studio-fork-context';
+	const MOBILE_STUDIO_MEDIA_QUERY = '(max-width: 700px)';
 
 	const getForkContextStorageKey = (user?: DrawPageUser) => {
 		if (!user) return null;
@@ -169,6 +170,7 @@
 	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('artwork'));
 	let forkPreloadSettled = $state(true);
 	let isPublishing = $state(false);
+	let isMobileViewport = $state(false);
 	let pendingStudioUnlock = $state(false);
 	let publishedArtwork = $state<DrawPublishedArtwork | null>(null);
 	let sceneState = $state<'closed' | 'opening' | 'open' | 'closing'>('closed');
@@ -200,8 +202,10 @@
 			: null
 	);
 
-	let studioUnlocked = $derived(sceneState === 'open');
-	let toolsVisible = $derived(sceneState !== 'closed' && sceneState !== 'closing');
+	let studioUnlocked = $derived(isMobileViewport || sceneState === 'open');
+	let toolsVisible = $derived(
+		isMobileViewport || (sceneState !== 'closed' && sceneState !== 'closing')
+	);
 	let hasForkParent = $derived(Boolean(currentForkParent?.mediaUrl));
 
 	$effect(() => {
@@ -216,6 +220,15 @@
 			return;
 		}
 
+		if (isMobileViewport) {
+			forkPreloadSettled = true;
+			pendingStudioUnlock = false;
+			if (sceneState !== 'open') {
+				sceneState = 'open';
+			}
+			return;
+		}
+
 		forkPreloadSettled = !hasForkParent;
 		pendingStudioUnlock = false;
 
@@ -225,6 +238,20 @@
 	});
 
 	onMount(() => {
+		const mobileMediaQuery = window.matchMedia(MOBILE_STUDIO_MEDIA_QUERY);
+
+		const syncViewportMode = (matches: boolean) => {
+			isMobileViewport = matches;
+		};
+
+		syncViewportMode(mobileMediaQuery.matches);
+
+		const handleViewportChange = (event: MediaQueryListEvent) => {
+			syncViewportMode(event.matches);
+		};
+
+		mobileMediaQuery.addEventListener('change', handleViewportChange);
+
 		const persistedForkParent =
 			!forkParent && forkContextStorageKey ? loadPersistedForkParent(forkContextStorageKey) : null;
 		const resolvedForkParent = forkParent ?? persistedForkParent ?? null;
@@ -258,6 +285,10 @@
 				: resolvedForkParent?.drawingDocument
 					? cloneDrawingDocument(resolvedForkParent.drawingDocument)
 					: createEmptyDrawingDocument('artwork');
+
+		return () => {
+			mobileMediaQuery.removeEventListener('change', handleViewportChange);
+		};
 	});
 
 	$effect(() => {
@@ -422,7 +453,7 @@
 		if (isExitingToHome) return;
 		isExitingToHome = true;
 
-		if (sceneState === 'open') {
+		if (!isMobileViewport && sceneState === 'open') {
 			sceneState = 'closing';
 			return;
 		}
@@ -469,80 +500,10 @@
 	<main
 		class="relative z-10 mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col px-4 pt-3 pb-4 sm:px-6"
 	>
-		<div class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_15rem] xl:gap-8">
-			<div class="order-1 flex min-h-0 flex-col">
-				<div class="studio-book-frame">
-					<DrawingBookStage
-						stageState={sceneState}
-						onClosed={handleBookClosed}
-						onOpenRequest={startOpeningBook}
-						onOpened={unlockStudio}
-						{openingDurationMs}
-					>
-						{#snippet coverFields()}
-							<div class="cover-postit cover-postit-title">
-								<div class="postit-tape" aria-hidden="true"></div>
-								<p class="postit-label">Title your masterpiece</p>
-								<input
-									bind:value={artworkTitle}
-									type="text"
-									maxlength="80"
-									placeholder="Untitled genius"
-									disabled={!studioUnlocked}
-									class="postit-input"
-								/>
-								{#if titleError}
-									<p class="postit-error">{titleError}</p>
-								{/if}
-							</div>
-
-							{#if currentForkParent}
-								<div class="cover-postit cover-postit-cancel">
-									<div class="postit-tape" aria-hidden="true"></div>
-									<p class="postit-label">Change of plan</p>
-									<p class="postit-fork-note postit-fork-note-compact">
-										Forking <span class="postit-fork-name">{currentForkParent.title}</span>
-									</p>
-									<GameButton
-										type="button"
-										variant="ghost"
-										size="sm"
-										disabled={!studioUnlocked}
-										onclick={cancelFork}
-										className="postit-cancel-btn"
-									>
-										<span>Cancel fork</span>
-									</GameButton>
-								</div>
-							{/if}
-
-							<div class="cover-postit cover-postit-nsfw">
-								<div class="postit-tape" aria-hidden="true"></div>
-								<button
-									type="button"
-									role="checkbox"
-									aria-checked={isArtworkNsfw}
-									disabled={!studioUnlocked}
-									onclick={() => {
-										if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
-									}}
-									class="postit-nsfw-btn"
-								>
-									<span
-										class="nsfw-track"
-										style={`background: ${isArtworkNsfw ? '#c84f4f' : 'rgb(60 50 40 / 0.15)'};`}
-									>
-										<span
-											class="nsfw-dot"
-											style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
-										></span>
-									</span>
-									<span class={isArtworkNsfw ? 'font-semibold text-[#c84f4f]' : ''}
-										>Not safe for the Louvre</span
-									>
-								</button>
-							</div>
-						{/snippet}
+		{#if isMobileViewport}
+			<div class="studio-mobile-layout">
+				<div class="studio-mobile-canvas-shell">
+					<div class="studio-mobile-canvas-card">
 						<DrawingCanvas
 							bind:canvasRef
 							bind:drawingDocument
@@ -553,23 +514,88 @@
 							{statusMessage}
 							{statusTone}
 						/>
-					</DrawingBookStage>
+					</div>
 				</div>
-			</div>
 
-			<div
-				class={`tools-stage order-2 ${toolsVisible ? 'tools-stage-open' : 'tools-stage-hidden'}`}
-				aria-hidden={!studioUnlocked}
-				inert={!studioUnlocked}
-			>
-				<DrawingToolTray {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
+				<div class="studio-mobile-notes">
+					<div class="cover-postit cover-postit-title studio-mobile-postit-title">
+						<div class="postit-tape" aria-hidden="true"></div>
+						<p class="postit-label">Title your masterpiece</p>
+						<input
+							bind:value={artworkTitle}
+							type="text"
+							maxlength="80"
+							placeholder="Untitled genius"
+							disabled={!studioUnlocked}
+							class="postit-input"
+						/>
+						{#if titleError}
+							<p class="postit-error">{titleError}</p>
+						{/if}
+					</div>
+
+					<div class="studio-mobile-note-row">
+						<div class="cover-postit cover-postit-nsfw studio-mobile-postit-toggle">
+							<div class="postit-tape" aria-hidden="true"></div>
+							<button
+								type="button"
+								role="checkbox"
+								aria-checked={isArtworkNsfw}
+								disabled={!studioUnlocked}
+								onclick={() => {
+									if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
+								}}
+								class="postit-nsfw-btn"
+							>
+								<span
+									class="nsfw-track"
+									style={`background: ${isArtworkNsfw ? '#c84f4f' : 'rgb(60 50 40 / 0.15)'};`}
+								>
+									<span
+										class="nsfw-dot"
+										style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
+									></span>
+								</span>
+								<span class={isArtworkNsfw ? 'font-semibold text-[#c84f4f]' : ''}
+									>Not safe for the Louvre</span
+								>
+							</button>
+						</div>
+
+						{#if currentForkParent}
+							<div class="cover-postit cover-postit-cancel studio-mobile-postit-cancel">
+								<div class="postit-tape" aria-hidden="true"></div>
+								<p class="postit-label">Change of plan</p>
+								<p class="postit-fork-note postit-fork-note-compact">
+									Forking <span class="postit-fork-name">{currentForkParent.title}</span>
+								</p>
+								<GameButton
+									type="button"
+									variant="ghost"
+									size="sm"
+									disabled={!studioUnlocked}
+									onclick={cancelFork}
+									className="postit-cancel-btn"
+								>
+									<span>Cancel fork</span>
+								</GameButton>
+							</div>
+						{/if}
+					</div>
+				</div>
+
+				<div class="studio-mobile-tools">
+					<DrawingToolTray mobile {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
+				</div>
 
 				{#if publishedArtwork}
-					<div class="publish-postit" style="animation: studioPanelReveal 280ms ease-out both;">
+					<div
+						class="publish-postit studio-mobile-publish"
+						style="animation: studioPanelReveal 280ms ease-out both;"
+					>
 						<div class="postit-tape" aria-hidden="true"></div>
 						<p class="postit-label">Hung on the wall!</p>
 						<h2 class="publish-postit-title">{publishedArtwork.title}</h2>
-						<!-- <p class="publish-postit-id">id: {publishedArtwork.id}</p> -->
 						<div class="publish-postit-actions">
 							<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
 								<span>Draw again</span>
@@ -582,7 +608,123 @@
 					</div>
 				{/if}
 			</div>
-		</div>
+		{:else}
+			<div
+				class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_15rem] xl:gap-8"
+			>
+				<div class="order-1 flex min-h-0 flex-col">
+					<div class="studio-book-frame">
+						<DrawingBookStage
+							stageState={sceneState}
+							onClosed={handleBookClosed}
+							onOpenRequest={startOpeningBook}
+							onOpened={unlockStudio}
+							{openingDurationMs}
+						>
+							{#snippet coverFields()}
+								<div class="cover-postit cover-postit-title">
+									<div class="postit-tape" aria-hidden="true"></div>
+									<p class="postit-label">Title your masterpiece</p>
+									<input
+										bind:value={artworkTitle}
+										type="text"
+										maxlength="80"
+										placeholder="Untitled genius"
+										disabled={!studioUnlocked}
+										class="postit-input"
+									/>
+									{#if titleError}
+										<p class="postit-error">{titleError}</p>
+									{/if}
+								</div>
+
+								{#if currentForkParent}
+									<div class="cover-postit cover-postit-cancel">
+										<div class="postit-tape" aria-hidden="true"></div>
+										<p class="postit-label">Change of plan</p>
+										<p class="postit-fork-note postit-fork-note-compact">
+											Forking <span class="postit-fork-name">{currentForkParent.title}</span>
+										</p>
+										<GameButton
+											type="button"
+											variant="ghost"
+											size="sm"
+											disabled={!studioUnlocked}
+											onclick={cancelFork}
+											className="postit-cancel-btn"
+										>
+											<span>Cancel fork</span>
+										</GameButton>
+									</div>
+								{/if}
+
+								<div class="cover-postit cover-postit-nsfw">
+									<div class="postit-tape" aria-hidden="true"></div>
+									<button
+										type="button"
+										role="checkbox"
+										aria-checked={isArtworkNsfw}
+										disabled={!studioUnlocked}
+										onclick={() => {
+											if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
+										}}
+										class="postit-nsfw-btn"
+									>
+										<span
+											class="nsfw-track"
+											style={`background: ${isArtworkNsfw ? '#c84f4f' : 'rgb(60 50 40 / 0.15)'};`}
+										>
+											<span
+												class="nsfw-dot"
+												style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
+											></span>
+										</span>
+										<span class={isArtworkNsfw ? 'font-semibold text-[#c84f4f]' : ''}
+											>Not safe for the Louvre</span
+										>
+									</button>
+								</div>
+							{/snippet}
+							<DrawingCanvas
+								bind:canvasRef
+								bind:drawingDocument
+								{clearVersion}
+								initialDrawingDocument={currentForkParent?.drawingDocument ?? null}
+								interactive={studioUnlocked}
+								onInitialImageSettled={markForkPreloadSettled}
+								{statusMessage}
+								{statusTone}
+							/>
+						</DrawingBookStage>
+					</div>
+				</div>
+
+				<div
+					class={`tools-stage order-2 ${toolsVisible ? 'tools-stage-open' : 'tools-stage-hidden'}`}
+					aria-hidden={!studioUnlocked}
+					inert={!studioUnlocked}
+				>
+					<DrawingToolTray {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
+
+					{#if publishedArtwork}
+						<div class="publish-postit" style="animation: studioPanelReveal 280ms ease-out both;">
+							<div class="postit-tape" aria-hidden="true"></div>
+							<p class="postit-label">Hung on the wall!</p>
+							<h2 class="publish-postit-title">{publishedArtwork.title}</h2>
+							<div class="publish-postit-actions">
+								<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
+									<span>Draw again</span>
+								</GameButton>
+								<GameLink href="/gallery" variant="secondary" size="sm">
+									<span>Open gallery</span>
+								</GameLink>
+							</div>
+							<div class="postit-curl" aria-hidden="true"></div>
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
 	</main>
 </div>
 
@@ -641,6 +783,93 @@
 	.tools-stage-open {
 		opacity: 1;
 		animation: toolTrayCrashIn 210ms cubic-bezier(0.2, 0.9, 0.24, 1.12) both;
+	}
+
+	.studio-mobile-layout {
+		display: flex;
+		min-height: 0;
+		flex: 1;
+		flex-direction: column;
+		gap: 1rem;
+		position: relative;
+		isolation: isolate;
+		overflow-y: auto;
+		-ms-overflow-style: none;
+		scrollbar-width: none;
+		padding-bottom: 0.75rem;
+	}
+
+	.studio-mobile-layout::-webkit-scrollbar {
+		display: none;
+		width: 0;
+		height: 0;
+	}
+
+	.studio-mobile-canvas-shell {
+		position: relative;
+		z-index: 1;
+	}
+
+	.studio-mobile-canvas-card {
+		position: relative;
+		overflow: visible;
+		border: 3px solid rgb(47 36 28 / 0.8);
+		border-radius: 1.4rem;
+		background:
+			linear-gradient(180deg, rgb(251 247 240 / 0.98), rgb(243 234 220 / 0.98)),
+			radial-gradient(circle at top, rgb(255 255 255 / 0.4), transparent 60%);
+		padding: 0.9rem;
+		box-shadow:
+			0 1.2rem 2.5rem rgb(47 36 28 / 0.14),
+			inset 0 1px 0 rgb(255 255 255 / 0.4);
+	}
+
+	.studio-mobile-canvas-card::before {
+		content: '';
+		position: absolute;
+		inset: 0.65rem;
+		border: 1px solid rgb(47 36 28 / 0.08);
+		border-radius: 1rem;
+		pointer-events: none;
+	}
+
+	.studio-mobile-notes {
+		position: relative;
+		z-index: 2;
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+	}
+
+	.studio-mobile-note-row {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.85rem;
+		align-items: start;
+	}
+
+	.studio-mobile-postit-title,
+	.studio-mobile-postit-toggle,
+	.studio-mobile-postit-cancel,
+	.studio-mobile-tools,
+	.studio-mobile-publish {
+		width: 100%;
+		max-width: none;
+	}
+
+	.studio-mobile-postit-cancel {
+		margin-right: 0;
+		justify-self: stretch;
+	}
+
+	.studio-mobile-tools {
+		position: relative;
+		z-index: 12;
+		overflow: visible;
+	}
+
+	.studio-mobile-publish {
+		margin-top: 0.25rem;
 	}
 
 	/* --- Post-it notes (inside cover fields) --- */
@@ -895,6 +1124,10 @@
 	}
 
 	@media (max-width: 700px) {
+		main {
+			overflow: hidden;
+		}
+
 		.studio-book-frame {
 			height: clamp(24rem, 68vh, 48rem);
 			--book-closed-offset-x: 0rem;
@@ -908,6 +1141,39 @@
 		.cover-postit-cancel {
 			margin-right: 0.2rem;
 			max-width: 170px;
+		}
+
+		.studio-mobile-layout {
+			gap: 0.9rem;
+		}
+
+		.studio-mobile-note-row {
+			grid-template-columns: 1fr;
+		}
+
+		.studio-mobile-canvas-card {
+			padding: 0.8rem;
+			border-radius: 1.15rem;
+		}
+
+		.studio-mobile-canvas-card :global(canvas) {
+			aspect-ratio: 1 / 1;
+			height: auto;
+			max-height: min(70vw, 24rem);
+			width: 100%;
+		}
+
+		.studio-mobile-postit-title {
+			transform: rotate(-1deg);
+		}
+
+		.studio-mobile-postit-toggle {
+			transform: rotate(1.25deg);
+		}
+
+		.studio-mobile-postit-cancel {
+			transform: rotate(-0.75deg);
+			max-width: none;
 		}
 
 		.tools-stage-hidden {

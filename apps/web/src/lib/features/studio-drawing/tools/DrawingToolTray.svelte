@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ImageUp, Palette, Trash2 } from 'lucide-svelte';
+	import { ChevronDown, ChevronUp, ImageUp, Palette, Trash2 } from 'lucide-svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import {
 		brushSizeSteps,
@@ -9,38 +9,109 @@
 
 	let {
 		isPublishing = false,
+		mobile = false,
 		onPublish,
 		onClear
 	}: {
 		isPublishing?: boolean;
+		mobile?: boolean;
 		onPublish?: () => void;
 		onClear?: () => void;
 	} = $props();
+
+	let mobilePaletteExpanded = $state(false);
+	const compactPalette = drawingPalette.slice(0, 6);
+	const expandedPalette = drawingPalette.slice(compactPalette.length);
+
+	const selectColor = (color: string) => {
+		drawingTools.activeColor = color;
+		if (mobile) {
+			mobilePaletteExpanded = false;
+		}
+	};
 </script>
 
-<div class="tool-tray">
+<div class:tool-tray-mobile={mobile} class="tool-tray">
 	<div class="tray-glow" aria-hidden="true"></div>
 
 	<!-- Palette section -->
-	<div class="tray-section">
+	<div class:tray-section-mobile-palette={mobile} class="tray-section">
 		<div class="tray-label">
 			<Palette size={12} />
 			<span>Colors</span>
 		</div>
-		<div class="palette-grid">
-			{#each drawingPalette as color (color)}
-				<button
-					type="button"
-					class="palette-swatch"
-					class:active={drawingTools.activeColor === color}
-					style={`--swatch-color:${color}`}
-					onclick={() => {
-						drawingTools.activeColor = color;
-					}}
-					aria-label={`Select color ${color}`}
-				></button>
-			{/each}
-		</div>
+		{#if mobile}
+			<div class:palette-mobile-row-expanded={mobilePaletteExpanded} class="palette-mobile-row">
+				<div class="palette-mobile-grid">
+					{#each compactPalette as color (color)}
+						<button
+							type="button"
+							class="palette-swatch"
+							class:active={drawingTools.activeColor === color}
+							style={`--swatch-color:${color}`}
+							onclick={() => selectColor(color)}
+							aria-label={`Select color ${color}`}
+						></button>
+					{/each}
+				</div>
+
+				{#if mobilePaletteExpanded && expandedPalette.length > 0}
+					<div
+						class="palette-popover"
+						role="dialog"
+						aria-label="Additional colors"
+					>
+						<div class="palette-popover-scroller">
+							<div class="palette-popover-strip">
+								{#each expandedPalette as color (color)}
+									<button
+										type="button"
+										class="palette-swatch palette-swatch-popover"
+										class:active={drawingTools.activeColor === color}
+										style={`--swatch-color:${color}`}
+										onclick={() => selectColor(color)}
+										aria-label={`Select color ${color}`}
+									></button>
+								{/each}
+							</div>
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			<button
+				type="button"
+				class="palette-expand-button"
+				aria-expanded={mobilePaletteExpanded}
+				aria-label={mobilePaletteExpanded ? 'Collapse additional colors' : 'Expand additional colors'}
+				onclick={() => {
+					mobilePaletteExpanded = !mobilePaletteExpanded;
+				}}
+			>
+				<span class="palette-expand-label">
+					<span class="palette-expand-preview" style={`--swatch-color:${drawingTools.activeColor}`}></span>
+					{mobilePaletteExpanded ? 'Hide palette' : 'More colors'}
+				</span>
+				{#if mobilePaletteExpanded}
+					<ChevronDown size={14} />
+				{:else}
+					<ChevronUp size={14} />
+				{/if}
+			</button>
+		{:else}
+			<div class="palette-grid">
+				{#each drawingPalette as color (color)}
+					<button
+						type="button"
+						class="palette-swatch"
+						class:active={drawingTools.activeColor === color}
+						style={`--swatch-color:${color}`}
+						onclick={() => selectColor(color)}
+						aria-label={`Select color ${color}`}
+					></button>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<!-- Brush size section -->
@@ -128,6 +199,10 @@
 		position: relative;
 	}
 
+	.tray-section-mobile-palette {
+		z-index: 2;
+	}
+
 	.tray-label {
 		font-family: var(--font-display, 'Fredoka', sans-serif);
 		font-size: 10px;
@@ -153,6 +228,28 @@
 		display: grid;
 		grid-template-columns: repeat(6, 1fr);
 		gap: 6px;
+	}
+
+	.palette-mobile-row {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.7rem;
+		overflow: visible;
+		z-index: 6;
+	}
+
+	.palette-mobile-row-expanded {
+		z-index: 10;
+	}
+
+	.palette-mobile-grid {
+		display: grid;
+		min-width: 0;
+		flex: 1;
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+		gap: 0.45rem;
 	}
 
 	.palette-swatch {
@@ -192,6 +289,92 @@
 		border-radius: 4px 4px 50% 0;
 		background: linear-gradient(180deg, rgb(255 255 255 / 0.3), transparent);
 		pointer-events: none;
+	}
+
+	.palette-expand-button {
+		display: inline-flex;
+		width: 100%;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.55rem;
+		border-radius: 12px;
+		border: 2.5px solid var(--color-ink, #2f241c);
+		background: rgb(255 250 241 / 0.92);
+		padding: 0.6rem 0.75rem;
+		font-family: var(--font-body, 'Baloo 2', sans-serif);
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--color-ink, #2f241c);
+		box-shadow: 0 8px 20px rgb(47 36 28 / 0.12);
+	}
+
+	.palette-expand-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+
+	.palette-expand-preview {
+		width: 1rem;
+		height: 1rem;
+		flex-shrink: 0;
+		border-radius: 9999px;
+		border: 2px solid var(--color-ink, #2f241c);
+		background: var(--swatch-color);
+	}
+
+	.palette-popover {
+		position: absolute;
+		right: 0;
+		bottom: calc(100% + 0.8rem);
+		left: 0;
+		z-index: 30;
+		border: 3px solid var(--color-ink, #2f241c);
+		border-radius: 16px;
+		background: linear-gradient(180deg, rgb(251 247 240 / 0.98), rgb(245 235 220 / 0.98));
+		padding: 0.85rem;
+		box-shadow:
+			0 18px 32px rgb(47 36 28 / 0.16),
+			inset 0 1px 0 rgb(255 255 255 / 0.45);
+		animation: palettePopoverRise 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+		transform-origin: bottom center;
+	}
+
+	.palette-popover-scroller {
+		overflow-x: auto;
+		overflow-y: visible;
+		padding-bottom: 0.1rem;
+		-ms-overflow-style: none;
+		scrollbar-width: none;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.palette-popover-scroller::-webkit-scrollbar {
+		display: none;
+	}
+
+	.palette-popover-strip {
+		display: grid;
+		grid-auto-flow: column;
+		grid-auto-columns: minmax(2.9rem, 2.9rem);
+		gap: 0.55rem;
+		width: max-content;
+	}
+
+	.palette-swatch-popover {
+		width: 2.9rem;
+	}
+
+	@keyframes palettePopoverRise {
+		from {
+			opacity: 0;
+			transform: translateY(0.6rem) scale(0.96);
+		}
+
+		to {
+			opacity: 1;
+			transform: translateY(0) scale(1);
+		}
 	}
 
 	/* --- Brush size slider --- */
@@ -289,5 +472,44 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+	}
+
+	.tool-tray-mobile {
+		overflow: visible;
+		transform: rotate(0.8deg);
+	}
+
+	@media (max-width: 700px) {
+		.tool-tray-mobile {
+			padding: 18px 16px;
+		}
+
+		.palette-expand-button {
+			padding-inline: 0.65rem;
+		}
+
+		.palette-mobile-row {
+			gap: 0.65rem;
+		}
+
+		.palette-mobile-grid {
+			gap: 0.4rem;
+		}
+
+		.palette-swatch {
+			min-height: 2.45rem;
+		}
+
+		.palette-popover {
+			padding: 0.75rem;
+		}
+
+		.palette-popover-strip {
+			grid-auto-columns: minmax(2.75rem, 2.75rem);
+		}
+
+		.palette-swatch-popover {
+			width: 2.75rem;
+		}
 	}
 </style>
