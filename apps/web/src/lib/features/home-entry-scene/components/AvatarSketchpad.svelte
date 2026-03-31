@@ -423,7 +423,7 @@
 				</div>
 			</div>
 
-			<div class="flex-center gap-3 sm:flex-row pl-4 pt-4">
+			<div class="flex-center gap-3 pt-4 pl-4 sm:flex-row">
 				<div class="flex gap-3 sm:ml-auto">
 					<GameButton
 						type="button"
