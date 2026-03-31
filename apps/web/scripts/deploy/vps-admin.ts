@@ -432,7 +432,10 @@ const uninstallCommand = async (options: CliOptions) => {
 		const existing = await readFile(config.caddyfilePath, 'utf8');
 		await writeFile(
 			config.caddyfilePath,
-			removeManagedBlock(removeManagedBlock(existing, `${config.serviceName}:global`), config.serviceName),
+			removeManagedBlock(
+				removeManagedBlock(existing, `${config.serviceName}:global`),
+				config.serviceName
+			),
 			'utf8'
 		);
 		await runValidatedCaddy(config.caddyfilePath);
