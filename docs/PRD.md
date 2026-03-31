@@ -4,7 +4,7 @@
 > vote on artwork — all from the browser.
 
 **Version**: 0.2.0 (MVP)
-**Last Updated**: 2026-03-28
+**Last Updated**: 2026-03-30
 
 ---
 
@@ -126,8 +126,8 @@ Feed → "New Artwork" button → Canvas opens (fullscreen-ish)
 ### 4.3 Forking
 
 ```
-Viewing an artwork → "Fork" button → Canvas opens with original as
-locked background layer → Draw on top → Publish as fork
+Viewing an artwork → "Fork" button → Canvas opens with a full editable
+snapshot of the parent's drawing document → Draw → Publish as fork
 → Fork appears in feed with "forked from @user" attribution
 ```
 
@@ -171,15 +171,20 @@ fully custom session system.
   eye placement dots, mouth line) as a guide. The template is purely visual and
   not part of the final avatar.
 - **Tools**: Same minimalist toolset as the main canvas (see 5.3).
-- **Client upload format**: The browser exports and uploads avatars as WebP.
-  WebP preserves transparency while reducing upload size enough to fit the
-  product's image budget for simple canvas drawings.
-- **Ingress validation**: The backend accepts WebP avatar uploads, verifies the
-  declared media type against the decoded payload, and rejects payloads that do
-  not decode as a single still 256x256 image.
-- **Canonical output**: After validation, the backend re-encodes the avatar to
-  256x256 AVIF, capped at roughly 100KB per image, and stores that canonical
-  AVIF in Supabase Storage behind a cache layer.
+- **Editable source**: The avatar editor uses a product-owned JSON drawing
+  document as the only editable source of truth.
+- **Client draft**: The browser may store a local draft copy of the current
+  avatar document so refreshes do not discard in-progress work before
+  confirmation.
+- **Confirmation payload**: On save, the client submits the avatar drawing
+  document rather than a raster image.
+- **Ingress validation**: The backend validates the submitted drawing document
+  against the avatar schema, aggregate limits, and canonical avatar dimensions
+  before persisting it or rendering derived media.
+- **Canonical output**: After validation, the backend persists the compressed
+  avatar drawing document and renders a canonical 256x256 AVIF derivative,
+  capped at roughly 100KB per image, storing that AVIF in Supabase Storage
+  behind a cache layer.
 - **Delivery format**: Avatar reads from backend to frontend remain AVIF.
 - **Display**: Shown next to every artwork, comment, and in the feed.
 - **Edit**: Users can re-draw their avatar at any time from settings.
@@ -206,12 +211,13 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
 
 #### Canvas Specs
 
-| Property      | Value                                        |
-| ------------- | -------------------------------------------- |
-| Resolution    | 768x768 canonical artwork size                |
-| Format        | Browser upload uses compressed WebP           |
-| Max file size | ~100KB after compression                      |
-| Stroke data   | Stored as vector paths for replay (optional)  |
+| Property         | Value                                           |
+| ---------------- | ----------------------------------------------- |
+| Resolution       | 768x768 canonical artwork size                  |
+| Editable source  | Product-owned versioned JSON drawing document   |
+| Persistence form | Compact JSON compressed with gzip               |
+| Derived media    | Canonical AVIF rendered from the drawing source |
+| Source limits    | Schema + aggregate limits enforced in backend   |
 
 #### Drawing Experience
 
@@ -219,6 +225,8 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
   for a hand-drawn feel.
 - The surrounding 3D scene reacts subtly while drawing (see Section 9).
 - Canvas sits on a virtual easel/surface within the Threlte scene.
+- The client may keep a local draft of the current drawing document until the
+  user confirms publish.
 
 ### 5.4 Artwork Publishing
 
@@ -230,17 +238,22 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
   publish or later from artwork management. NSFW artworks render blurred by
   default in feeds and detail views until the viewer confirms they are 18+ and
   wants to reveal the piece.
-- **Client upload format**: The browser exports draw-canvas content as
-  compressed WebP before submission to the backend.
-- **Ingress validation**: The backend validates that the uploaded artwork media
-  decodes safely as a single still image, matches the declared media type, and
-  can be normalized into the canonical 768x768 artwork image.
-- **Publish**: The application server re-encodes the validated upload to
-  canonical AVIF, tries progressively lower AVIF quality levels with 4:2:0
-  chroma subsampling to stay within the roughly 100KB stored-image budget, and
-  rejects the publish only if the sanitized result still exceeds that budget.
-  The canonical AVIF is then uploaded to object storage and the DB record is
-  created.
+- **Editable source**: New artworks and forks are edited as product-owned JSON
+  drawing documents. Raster media is never the editable source.
+- **Client draft**: The browser may store a local draft copy of an artwork
+  document before publish so reloads do not discard in-progress work.
+- **Confirmation payload**: On publish, the client submits the drawing document
+  plus metadata rather than a compressed raster image.
+- **Ingress validation**: The backend validates the submitted artwork document
+  against the artwork schema, aggregate limits, and canonical artwork
+  dimensions before persisting it or rendering derived media.
+- **Publish**: The application server persists the compressed drawing document,
+  renders a canonical AVIF derivative from that source, tries progressively
+  lower AVIF quality levels with 4:2:0 chroma subsampling to stay within the
+  roughly 100KB stored-image budget, and rejects the publish only if the
+  sanitized result still exceeds that budget. The canonical AVIF is then
+  uploaded to object storage and the DB record is created in the same confirm
+  flow.
 - **Delivery format**: Artwork reads from the backend remain AVIF.
 - **Edit**: Title can be edited post-publish. Artwork image cannot be changed
   (fork instead).
@@ -261,8 +274,9 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
 
 ### 5.5 Fork System
 
-- **Fork action**: Creates a new canvas pre-loaded with the parent artwork as
-  a locked, semi-transparent background layer. User draws on top.
+- **Fork action**: Creates a new artwork document by copying the full parent
+  drawing document into an independent editable snapshot. The child then
+  diverges from that snapshot.
 - **Attribution**: Every fork displays "forked from @username" linking to the
   parent artwork.
 - **Navigation**: From any artwork, you can see:
@@ -272,7 +286,8 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
 - **Deleted parents**: If the parent is deleted, attribution shows
   "forked from [deleted]" — the fork remains intact.
 - **Metadata**: Each artwork stores `parent_id` (nullable). The tree is
-  inferred from these relationships.
+  inferred from these relationships, but a fork never depends on the parent
+  document for reconstruction.
 
 ### 5.6 Voting
 
@@ -407,12 +422,13 @@ onto a 3D plane in the Threlte scene. This gives us:
 - Full Canvas 2D API performance for drawing (no WebGL overhead on strokes).
 - The ability to wrap the canvas in a 3D scene with lighting, particles, and
   camera effects.
-- A deterministic media pipeline where canvas-based client uploads are exported
-  as compressed WebP, then canonicalized to AVIF in backend sanitization before
-  persistence.
+- A deterministic editing pipeline where the client operates on a versioned JSON
+  drawing document and the backend renders canonical AVIF only as a derived
+  persistence and delivery artifact.
 
-All canvas-generated media in the MVP follow the same contract: compressed WebP
-for browser-to-backend ingress and canonical AVIF for backend persistence and
+All canvas-generated editing flows in the MVP follow the same contract: JSON
+drawing document for browser-to-backend confirm, gzip-compressed JSON for
+editable persistence, and canonical AVIF for backend media persistence and
 delivery.
 
 **Storage and egress budget first**: The storage tier is capped at 1GB capacity
@@ -420,8 +436,10 @@ and 5GB of egress, so image handling must optimize for both footprint and
 delivery efficiency from day one.
 
 - All persisted artwork and avatar images should be stored as AVIF.
-- Canvas-based media ingress uses WebP at the public API boundary, with media
-  type and decode validation before AVIF re-encoding.
+- Artwork and avatar editing source should be stored as compact JSON drawing
+  documents compressed with gzip.
+- Backend confirm flows validate the drawing document first, then render AVIF
+  from that validated source.
 - Each stored image should target a hard ceiling of roughly 100KB.
 - Users should fetch media through cached application-controlled URLs rather
   than downloading directly from the storage bucket.
@@ -531,40 +549,48 @@ generated migrations.
 
 #### `users`
 
-| Column          | Type         | Notes                                    |
-| --------------- | ------------ | ---------------------------------------- |
-| id              | uuid PK      | Default `gen_random_uuid()`             |
-| nickname        | varchar(20)  | UNIQUE, lowercase enforced              |
-| password_hash   | text         | Argon2id hash                           |
-| recovery_hash   | text         | Argon2id hash of recovery key           |
-| avatar_url      | text         | Path in Supabase Storage                |
-| avatar_is_nsfw  | boolean      | Default false. Set by moderator review  |
-| avatar_is_hidden| boolean      | Default false. Hidden when moderated    |
-| role            | enum         | `user` \| `moderator` \| `admin`        |
-| is_banned       | boolean      | Default false                           |
-| banned_at       | timestamptz  | Nullable                                |
-| ban_reason      | varchar(200) | Nullable                                |
-| created_at      | timestamptz  | Default `now()`                         |
+| Column               | Type         | Notes                                             |
+| -------------------- | ------------ | ------------------------------------------------- |
+| id                   | uuid PK      | Default `gen_random_uuid()`                      |
+| nickname             | varchar(20)  | UNIQUE, lowercase enforced                       |
+| password_hash        | text         | Argon2id hash                                    |
+| recovery_hash        | text         | Argon2id hash of recovery key                    |
+| avatar_url           | text         | Path in Supabase Storage for derived avatar AVIF |
+| avatar_document      | bytea/text   | Gzip-compressed avatar drawing document          |
+| avatar_document_version | smallint  | Drawing document schema version                  |
+| avatar_is_nsfw       | boolean      | Default false. Set by moderator review           |
+| avatar_is_hidden     | boolean      | Default false. Hidden when moderated             |
+| role                 | enum         | `user` \| `moderator` \| `admin`                 |
+| is_banned            | boolean      | Default false                                    |
+| banned_at            | timestamptz  | Nullable                                         |
+| ban_reason           | varchar(200) | Nullable                                         |
+| created_at           | timestamptz  | Default `now()`                                  |
 
 #### `artworks`
 
-| Column       | Type         | Notes                                       |
-| ------------ | ------------ | ------------------------------------------- |
-| id           | uuid PK      | Default `gen_random_uuid()`                |
-| author_id    | uuid FK      | References `users.id`                      |
-| parent_id    | uuid FK      | Nullable. References `artworks.id` (fork)  |
-| title        | varchar(100) | Default "Untitled #XXXX"                   |
-| image_url    | text         | Path in Supabase Storage                   |
-| is_nsfw      | boolean      | Default false                              |
-| nsfw_source  | enum         | `user` \| `moderator` \| null              |
-| score        | int          | Denormalized. Default 0. Updated by trigger|
-| comment_count| int          | Denormalized. Default 0. Updated by trigger|
-| fork_count   | int          | Denormalized. Default 0. Updated by trigger|
-| is_hidden    | boolean      | Default false. Set by moderation           |
-| created_at   | timestamptz  | Default `now()`                            |
+| Column            | Type         | Notes                                              |
+| ----------------- | ------------ | -------------------------------------------------- |
+| id                | uuid PK      | Default `gen_random_uuid()`                       |
+| author_id         | uuid FK      | References `users.id`                             |
+| parent_id         | uuid FK      | Nullable. References `artworks.id` (fork)         |
+| title             | varchar(100) | Default "Untitled #XXXX"                          |
+| image_url         | text         | Path in Supabase Storage for derived artwork AVIF |
+| drawing_document  | bytea/text   | Gzip-compressed artwork drawing document          |
+| drawing_version   | smallint     | Drawing document schema version                   |
+| is_nsfw           | boolean      | Default false                                     |
+| nsfw_source       | enum         | `user` \| `moderator` \| null                     |
+| score             | int          | Denormalized. Default 0. Updated by trigger       |
+| comment_count     | int          | Denormalized. Default 0. Updated by trigger       |
+| fork_count        | int          | Denormalized. Default 0. Updated by trigger       |
+| is_hidden         | boolean      | Default false. Set by moderation                  |
+| created_at        | timestamptz  | Default `now()`                                   |
 
 Indexes: `(author_id)`, `(parent_id)`, `(created_at DESC)`,
 `(score DESC, created_at DESC)`.
+
+Client-side drafts are intentionally excluded from backend tables. They exist
+only in browser storage and are discarded or replaced when the user confirms a
+new avatar save or artwork publish.
 
 #### `votes`
 
