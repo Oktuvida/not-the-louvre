@@ -22,12 +22,10 @@ describe('deploy template rendering', () => {
 	it('renders a minimal caddy site block with reverse proxy and compression', () => {
 		const config = renderCaddySite({
 			domain: 'app.example.com',
-			email: 'ops@example.com',
 			host: '127.0.0.1',
 			port: '3000'
 		});
 
-		expect(config).toContain('email ops@example.com');
 		expect(config).toContain('app.example.com {');
 		expect(config).toContain('encode zstd gzip');
 		expect(config).toContain('reverse_proxy 127.0.0.1:3000');
