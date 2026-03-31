@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
+	import AmbientAudioController from '$lib/features/ambient-audio/AmbientAudioController.svelte';
 	import './layout.css';
 	import type { LayoutProps } from './$types';
 	import { faviconUpdateEventName } from '$lib/favicon';
@@ -46,6 +47,11 @@
 </svelte:head>
 
 {@render children()}
+
+<AmbientAudioController
+	bootstrappedPreference={data.ambientAudioEnabled}
+	viewerId={data.viewer?.id ?? null}
+/>
 
 {#if data.viewer && !data.viewer.isBanned && data.viewer.role !== 'user'}
 	<a class="ops-link" href={resolve('/admin')}>Internal ops</a>
