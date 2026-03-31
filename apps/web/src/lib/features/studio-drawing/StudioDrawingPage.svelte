@@ -383,7 +383,7 @@
 		class="relative z-10 mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col px-4 pt-3 pb-4 sm:px-6"
 	>
 		<div
-			class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)]"
+			class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_15rem] xl:gap-8"
 		>
 			<div class="order-1 flex min-h-0 flex-col">
 				<div class="studio-book-frame">
@@ -394,43 +394,10 @@
 						onOpened={unlockStudio}
 						{openingDurationMs}
 					>
-						{#snippet coverBack()}
-							<div class="flex h-full flex-col justify-between gap-3 text-[#d4c4ae]">
-								<div>
-									<p
-										class="text-[0.6rem] font-bold tracking-[0.25em] uppercase"
-										style="color: rgb(212 196 174 / 0.6);"
-									>
-										{currentForkParent ? 'Fork Details' : 'Artwork Details'}
-									</p>
-									{#if currentForkParent}
-										<p class="mt-1.5 text-xs" style="color: rgb(212 196 174 / 0.7);">
-											Loaded from the selected artwork.
-										</p>
-									{/if}
-								</div>
-							</div>
-						{/snippet}
 						{#snippet coverFields()}
 							<div class="cover-postit cover-postit-title">
 								<div class="postit-tape" aria-hidden="true"></div>
 								<p class="postit-label">Title your masterpiece</p>
-								{#if currentForkParent}
-									<p class="postit-fork-note">
-										Forking <span class="postit-fork-name">{currentForkParent.title}</span>
-									</p>
-									<div class="mt-3 flex justify-end">
-										<GameButton
-											type="button"
-											variant="ghost"
-											size="sm"
-											disabled={!studioUnlocked}
-											onclick={cancelFork}
-										>
-											<span>Cancel fork</span>
-										</GameButton>
-									</div>
-								{/if}
 								<input
 									bind:value={artworkTitle}
 									type="text"
@@ -443,6 +410,26 @@
 									<p class="postit-error">{titleError}</p>
 								{/if}
 							</div>
+
+							{#if currentForkParent}
+								<div class="cover-postit cover-postit-cancel">
+									<div class="postit-tape" aria-hidden="true"></div>
+									<p class="postit-label">Change of plan</p>
+									<p class="postit-fork-note postit-fork-note-compact">
+										Forking <span class="postit-fork-name">{currentForkParent.title}</span>
+									</p>
+									<GameButton
+										type="button"
+										variant="ghost"
+										size="sm"
+										disabled={!studioUnlocked}
+										onclick={cancelFork}
+										className="postit-cancel-btn"
+									>
+										<span>Cancel fork</span>
+									</GameButton>
+								</div>
+							{/if}
 
 							<div class="cover-postit cover-postit-nsfw">
 								<div class="postit-tape" aria-hidden="true"></div>
@@ -526,10 +513,18 @@
 		height: clamp(29rem, 78vh, 56rem);
 		flex: 0 0 auto;
 		justify-self: center;
-		--book-offset-x: 22rem;
-		--book-offset-y: 3rem;
-		--book-scale: 0.82;
-		--book-rotation: -6deg;
+		--book-closed-offset-x: 20rem;
+		--book-closed-offset-y: 7rem;
+		--book-closed-scale: 0.8;
+		--book-closed-rotation: -4deg;
+		--book-open-offset-x: 25rem;
+		--book-open-offset-y: 2rem;
+		--book-open-scale: 1.14;
+		--book-open-rotation: 0deg;
+		--book-offset-x: var(--book-closed-offset-x);
+		--book-offset-y: var(--book-closed-offset-y);
+		--book-scale: var(--book-closed-scale);
+		--book-rotation: var(--book-closed-rotation);
 		transform: translate(var(--book-offset-x), var(--book-offset-y)) scale(var(--book-scale))
 			rotate(var(--book-rotation));
 		transform-origin: center center;
@@ -539,14 +534,15 @@
 	/* Book approaches viewer when opening/open */
 	.studio-page[data-book-state='opening'] .studio-book-frame,
 	.studio-page[data-book-state='open'] .studio-book-frame {
-		--book-offset-x: 36rem;
-		--book-offset-y: 2rem;
-		--book-scale: 1.3;
-		--book-rotation: 0deg;
+		--book-offset-x: var(--book-open-offset-x);
+		--book-offset-y: var(--book-open-offset-y);
+		--book-scale: var(--book-open-scale);
+		--book-rotation: var(--book-open-rotation);
 	}
 
 	.tools-stage {
-		width: min(100%, 18rem);
+		width: min(100%, 15rem);
+		margin-left: clamp(1.5rem, 3vw, 3rem);
 		transform-origin: left center;
 		will-change: opacity, transform;
 	}
@@ -566,9 +562,9 @@
 
 	.cover-postit {
 		position: relative;
-		padding: 16px 16px 6px;
+		padding: 12px 12px 8px;
 		box-shadow: 2px 3px 8px rgb(0 0 0 / 0.18);
-		max-width: 240px;
+		max-width: 214px;
 	}
 
 	.cover-postit-title {
@@ -579,6 +575,14 @@
 	.cover-postit-nsfw {
 		background: linear-gradient(160deg, #ffcdd2 0%, #f7929e 100%);
 		transform: rotate(2deg);
+	}
+
+	.cover-postit-cancel {
+		background: linear-gradient(160deg, #d5ecff 0%, #a9d4ff 100%);
+		transform: rotate(1deg);
+		align-self: flex-end;
+		max-width: 188px;
+		margin-right: 0.35rem;
 	}
 
 	.postit-tape {
@@ -596,7 +600,7 @@
 
 	.postit-label {
 		font-family: var(--font-display, 'Fredoka', sans-serif);
-		font-size: 0.75rem;
+		font-size: 0.68rem;
 		font-weight: 600;
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
@@ -606,9 +610,14 @@
 
 	.postit-fork-note {
 		font-family: 'Caveat', cursive;
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		color: #3d3530;
 		margin-bottom: 2px;
+	}
+
+	.postit-fork-note-compact {
+		margin-bottom: 0.35rem;
+		line-height: 1.05;
 	}
 
 	.postit-fork-name {
@@ -622,7 +631,7 @@
 		border-bottom: 1.5px solid rgb(61 53 48 / 0.2);
 		padding: 3px 2px;
 		font-family: 'Caveat', cursive;
-		font-size: 1rem;
+		font-size: 0.92rem;
 		color: #3d3530;
 		outline: none;
 	}
@@ -647,17 +656,31 @@
 		margin-top: 2px;
 	}
 
+	:global(.postit-cancel-btn) {
+		width: 100%;
+		justify-content: center;
+		border-color: rgb(44 75 112 / 0.28);
+		background: rgb(255 255 255 / 0.32);
+		color: #244b70;
+		box-shadow: none;
+	}
+
+	:global(.postit-cancel-btn:hover:not(:disabled)) {
+		background: rgb(255 255 255 / 0.5);
+	}
+
 	.postit-nsfw-btn {
 		display: flex;
 		align-items: center;
-		gap: 5px;
+		gap: 4px;
 		background: none;
 		border: none;
 		padding: 0;
 		cursor: pointer;
 		font-family: 'Caveat', cursive;
-		font-size: 1rem;
+		font-size: 0.82rem;
 		color: #3d3530;
+		flex-wrap: wrap;
 	}
 
 	.postit-nsfw-btn:disabled {
@@ -772,18 +795,34 @@
 	@media (max-width: 1279px) {
 		.studio-book-frame {
 			height: clamp(27rem, 74vh, 52rem);
-			--book-offset-x: 1.5rem;
+			--book-closed-offset-x: 0rem;
+			--book-closed-offset-y: 0.8rem;
+			--book-closed-scale: 0.9;
+			--book-open-offset-x: 7rem;
+			--book-open-offset-y: 1rem;
+			--book-open-scale: 1.08;
 		}
 
 		.tools-stage {
 			width: min(100%, 14rem);
+			margin-left: 0;
 		}
 	}
 
 	@media (max-width: 700px) {
 		.studio-book-frame {
 			height: clamp(24rem, 68vh, 48rem);
-			--book-offset-x: 0.5rem;
+			--book-closed-offset-x: 0rem;
+			--book-closed-offset-y: 0.65rem;
+			--book-closed-scale: 0.88;
+			--book-open-offset-x: 4.5rem;
+			--book-open-offset-y: 0.8rem;
+			--book-open-scale: 1.02;
+		}
+
+		.cover-postit-cancel {
+			margin-right: 0.2rem;
+			max-width: 170px;
 		}
 
 		.tools-stage-hidden {

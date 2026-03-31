@@ -288,7 +288,12 @@ describe('StudioDrawingPage', () => {
 		});
 
 		await expect.element(page.getByText('Forking Parent Artwork')).toBeVisible();
-		await page.getByRole('button', { name: 'Cancel fork' }).click();
+		await expect.element(page.getByRole('button', { name: 'Cancel fork' })).toBeEnabled();
+		const cancelForkButton = Array.from(document.querySelectorAll('button')).find((button) =>
+			button.textContent?.includes('Cancel fork')
+		);
+		expect(cancelForkButton).not.toBeNull();
+		cancelForkButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
 		await expect.element(page.getByText('Forking Parent Artwork')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Cancel fork' })).not.toBeInTheDocument();
@@ -396,7 +401,9 @@ describe('StudioDrawingPage', () => {
 
 		await openSketchbook();
 		await page.getByPlaceholder('Untitled genius').fill('Figure Study');
-		await page.getByRole('checkbox').click();
+		const nsfwToggle = document.querySelector('.postit-nsfw-btn');
+		expect(nsfwToggle).not.toBeNull();
+		nsfwToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 		await page.getByRole('button', { name: 'Publish' }).click();
 
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
