@@ -1,5 +1,19 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import {
+		buildDrawingDraftKey,
+		clearDrawingDraft,
+		loadDrawingDraft,
+		saveDrawingDraft
+	} from '$lib/features/stroke-json/drafts';
+	import {
+		cloneDrawingDocument,
+		createEmptyDrawingDocument,
+		getDrawingPointWithinBounds,
+		serializeDrawingDocument,
+		type DrawingDocumentV1
+	} from '$lib/features/stroke-json/document';
+	import { renderDrawingStroke } from '$lib/features/stroke-json/canvas';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 
 	const palette = [
@@ -27,7 +41,6 @@
 
 	const CANVAS_WIDTH = 340;
 	const CANVAS_HEIGHT = 340;
-	const EXPORT_SIZE = 256;
 
 	type AvatarSaveResult =
 		| { success: true }
@@ -38,35 +51,28 @@
 		  };
 
 	let {
-		createAvatarFile = async (sourceCanvas: HTMLCanvasElement) => {
-			const exportCanvas = document.createElement('canvas');
-			exportCanvas.width = EXPORT_SIZE;
-			exportCanvas.height = EXPORT_SIZE;
+		createAvatarPayload = async (documentState: DrawingDocumentV1) => {
+			const mode =
+				typeof window === 'undefined'
+					? 'good'
+					: ((
+							window as Window & {
+								__avatarExportMode?: 'bad' | 'good' | 'unsupported';
+							}
+						).__avatarExportMode ?? 'good');
 
-			const exportContext = exportCanvas.getContext('2d');
-			if (!exportContext) {
-				throw new Error('Canvas 2D context is unavailable for avatar export.');
+			if (mode === 'unsupported') {
+				return null;
 			}
 
-			exportContext.fillStyle = '#f5f0e1';
-			exportContext.fillRect(0, 0, EXPORT_SIZE, EXPORT_SIZE);
-			exportContext.drawImage(sourceCanvas, 0, 0, EXPORT_SIZE, EXPORT_SIZE);
-
-			const blob = await new Promise<Blob | null>((resolve) => {
-				exportCanvas.toBlob((nextBlob) => resolve(nextBlob), 'image/webp', 0.68);
-			});
-
-			if (!blob) {
-				throw new Error('Canvas export returned no blob for image/webp output.');
+			if (mode === 'bad') {
+				return serializeDrawingDocument(createEmptyDrawingDocument('artwork'));
 			}
 
-			if (blob.type !== 'image/webp') {
-				throw new Error(`Canvas export returned unexpected blob type: ${blob.type || 'unknown'}.`);
-			}
-
-			return new File([blob], 'avatar.webp', { type: 'image/webp' });
+			return serializeDrawingDocument(documentState);
 		},
-		loadAvatarUrl = null,
+		draftUserKey = null,
+		initialDrawingDocument = null,
 		nickname,
 		onContinue,
 		saveAvatar = async () => ({
@@ -75,23 +81,36 @@
 		}),
 		submitLabel = 'Enter the gallery'
 	}: {
-		createAvatarFile?: (sourceCanvas: HTMLCanvasElement) => Promise<File | null>;
-		loadAvatarUrl?: string | null;
+		createAvatarPayload?: (documentState: DrawingDocumentV1) => Promise<string | null>;
+		draftUserKey?: string | null;
+		initialDrawingDocument?: DrawingDocumentV1 | null;
 		nickname: string;
 		onContinue?: () => void;
-		saveAvatar?: (file: File) => Promise<AvatarSaveResult>;
+		saveAvatar?: (drawingDocument: string) => Promise<AvatarSaveResult>;
 		submitLabel?: string;
 	} = $props();
 
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
 	let activeColor = $state(palette[0]);
+	let baselineDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
 	let brushStep = $state(Math.floor((BRUSH_SIZES.length - 1) / 2));
+	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
 	let isDrawing = $state(false);
 	let isSaving = $state(false);
 	let saveError = $state('');
 
 	const brushSize = $derived(BRUSH_SIZES[brushStep] ?? BRUSH_SIZES[BRUSH_SIZES.length - 1]);
 	const brushPreviewDiameter = $derived(Math.max(4, brushSize + 2));
+	const draftKey = $derived(
+		draftUserKey
+			? buildDrawingDraftKey({
+					schemaVersion: drawingDocument.version,
+					scope: 'profile',
+					surface: 'avatar',
+					userKey: draftUserKey
+				})
+			: null
+	);
 
 	const drawGhostSilhouette = (ctx: CanvasRenderingContext2D) => {
 		ctx.save();
@@ -147,31 +166,18 @@
 		ctx.restore();
 	};
 
-	const paintBackground = () => {
+	const renderCurrentDocument = () => {
 		if (!canvasElement) return;
 		const context = canvasElement.getContext('2d');
 		if (!context) return;
 
-		context.fillStyle = '#f5f0e1';
+		context.fillStyle = drawingDocument.background;
 		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 		drawGhostSilhouette(context);
-	};
 
-	const loadExistingAvatar = (url: string) => {
-		if (!canvasElement) return;
-		const context = canvasElement.getContext('2d');
-		if (!context) return;
-
-		const img = new Image();
-		img.crossOrigin = 'anonymous';
-		img.onload = () => {
-			context.fillStyle = '#f5f0e1';
-			context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-			context.imageSmoothingEnabled = true;
-			context.imageSmoothingQuality = 'high';
-			context.drawImage(img, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-		};
-		img.src = url;
+		for (const stroke of drawingDocument.strokes) {
+			renderDrawingStroke(context, stroke);
+		}
 	};
 
 	const getPoint = (event: MouseEvent | TouchEvent) => {
@@ -194,35 +200,56 @@
 			clientY = event.clientY;
 		}
 
+		const point = getDrawingPointWithinBounds(
+			[(clientX - rect.left) * scaleX, (clientY - rect.top) * scaleY],
+			drawingDocument
+		);
+
+		if (!point) return null;
+
 		return {
-			x: (clientX - rect.left) * scaleX,
-			y: (clientY - rect.top) * scaleY
+			x: point[0],
+			y: point[1]
 		};
+	};
+
+	const startStroke = (point: { x: number; y: number }) => {
+		drawingDocument.strokes.push({
+			color: activeColor,
+			points: [[point.x, point.y]],
+			size: brushSize
+		});
+		renderCurrentDocument();
+	};
+
+	const appendPoint = (point: { x: number; y: number }) => {
+		const stroke = drawingDocument.strokes.at(-1);
+		if (!stroke) return;
+
+		const lastPoint = stroke.points.at(-1);
+		if (lastPoint && Math.hypot(point.x - lastPoint[0], point.y - lastPoint[1]) < 1.5) {
+			return;
+		}
+
+		stroke.points.push([point.x, point.y]);
+		renderCurrentDocument();
 	};
 
 	const startDrawing = (event: MouseEvent | TouchEvent) => {
 		const point = getPoint(event);
-		if (!point || !canvasElement) return;
+		if (!point) return;
 
-		const context = canvasElement.getContext('2d');
-		if (!context) return;
-
-		context.beginPath();
-		context.moveTo(point.x, point.y);
+		startStroke(point);
 		isDrawing = true;
 	};
 
 	const continueDrawingFromEntry = (event: MouseEvent) => {
-		if (!isDrawing || (event.buttons & 1) === 0 || !canvasElement) return;
+		if (!isDrawing || (event.buttons & 1) === 0) return;
 
 		const point = getPoint(event);
 		if (!point) return;
 
-		const context = canvasElement.getContext('2d');
-		if (!context) return;
-
-		context.beginPath();
-		context.moveTo(point.x, point.y);
+		startStroke(point);
 	};
 
 	const draw = (event: MouseEvent | TouchEvent) => {
@@ -236,15 +263,7 @@
 		const point = getPoint(event);
 		if (!point) return;
 
-		const context = canvasElement.getContext('2d');
-		if (!context) return;
-
-		context.lineTo(point.x, point.y);
-		context.strokeStyle = activeColor;
-		context.lineWidth = brushSize;
-		context.lineCap = 'round';
-		context.lineJoin = 'round';
-		context.stroke();
+		appendPoint(point);
 	};
 
 	const stopDrawing = () => {
@@ -252,35 +271,39 @@
 	};
 
 	const handleEnterGallery = async () => {
-		if (isSaving || !canvasElement) return;
+		if (isSaving) return;
 
 		saveError = '';
 		isSaving = true;
 
 		try {
-			let avatarFile: File | null;
+			let avatarPayload: string | null;
 
 			try {
-				avatarFile = await createAvatarFile(canvasElement);
+				avatarPayload = await createAvatarPayload(drawingDocument);
 			} catch (error) {
-				console.error('Failed to create avatar file', error);
-				saveError = 'This browser could not export your avatar. Please try again.';
+				console.error('Failed to create avatar payload', error);
+				saveError = 'This browser could not prepare your avatar. Please try again.';
 				return;
 			}
 
-			if (!avatarFile) {
+			if (!avatarPayload) {
 				console.error(
-					'Failed to create avatar file',
-					new Error('createAvatarFile returned no file')
+					'Failed to create avatar payload',
+					new Error('createAvatarPayload returned no payload')
 				);
-				saveError = 'This browser could not export your avatar. Please try again.';
+				saveError = 'This browser could not prepare your avatar. Please try again.';
 				return;
 			}
 
-			const result = await saveAvatar(avatarFile);
+			const result = await saveAvatar(avatarPayload);
 			if (!result.success) {
 				saveError = result.message;
 				return;
+			}
+
+			if (draftKey) {
+				clearDrawingDraft(draftKey);
 			}
 
 			onContinue?.();
@@ -305,6 +328,17 @@
 	};
 
 	onMount(() => {
+		baselineDocument = initialDrawingDocument
+			? cloneDrawingDocument(initialDrawingDocument)
+			: createEmptyDrawingDocument('avatar');
+
+		if (draftKey) {
+			const draft = loadDrawingDraft(draftKey);
+			drawingDocument = draft?.kind === 'avatar' ? draft : cloneDrawingDocument(baselineDocument);
+		} else {
+			drawingDocument = cloneDrawingDocument(baselineDocument);
+		}
+
 		const handleWindowMouseUp = () => {
 			stopDrawing();
 		};
@@ -316,16 +350,21 @@
 		window.addEventListener('mouseup', handleWindowMouseUp);
 		window.addEventListener('touchend', handleWindowTouchEnd);
 
-		if (loadAvatarUrl) {
-			loadExistingAvatar(loadAvatarUrl);
-		} else {
-			paintBackground();
-		}
+		renderCurrentDocument();
 
 		return () => {
 			window.removeEventListener('mouseup', handleWindowMouseUp);
 			window.removeEventListener('touchend', handleWindowTouchEnd);
 		};
+	});
+
+	$effect(() => {
+		if (!draftKey) return;
+		saveDrawingDraft(draftKey, drawingDocument);
+	});
+
+	$effect(() => {
+		renderCurrentDocument();
 	});
 </script>
 
@@ -432,7 +471,7 @@
 						className="w-full sm:w-auto"
 						onclick={() => {
 							saveError = '';
-							paintBackground();
+							drawingDocument = cloneDrawingDocument(baselineDocument);
 						}}
 						disabled={isSaving}
 					>

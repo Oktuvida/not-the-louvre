@@ -5,6 +5,7 @@
 	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
 	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
+	import { parseDrawingDocument } from '$lib/features/stroke-json/document';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
@@ -14,6 +15,7 @@
 	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
 
 	type AvatarSavedPayload = {
+		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV1 | null;
 		avatarOnboardingCompletedAt: Date;
 		avatarUrl: string;
 	};
@@ -84,7 +86,7 @@
 		isAvatarEditorOpen = false;
 	};
 
-	const saveAvatar = async (file: File) => {
+	const saveAvatar = async (drawingDocument: string) => {
 		if (!user?.id) {
 			return {
 				message: 'Your session is not ready for avatar upload. Please sign in again.',
@@ -93,7 +95,7 @@
 		}
 
 		const formData = new FormData();
-		formData.set('file', file);
+		formData.set('drawingDocument', drawingDocument);
 
 		const response = await fetch(`/api/users/${user.id}/avatar`, {
 			body: formData,
@@ -112,6 +114,7 @@
 
 			dispatchAvatarFaviconUpdate(user.id);
 			onAvatarSaved?.({
+				avatarDrawingDocument: parseDrawingDocument(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
 				avatarUrl: data.avatarUrl
 			});
@@ -394,7 +397,8 @@
 						</GameButton>
 					</div>
 					<AvatarSketchpad
-						loadAvatarUrl={user.avatarUrl ?? user.image ?? null}
+						draftUserKey={user.id}
+						initialDrawingDocument={user.avatarDrawingDocument ?? null}
 						nickname={user.nickname}
 						{saveAvatar}
 						onContinue={closeAvatarEditor}

@@ -29,7 +29,11 @@
 		children?: Snippet;
 		adultContentEnabled?: boolean;
 		entryState?: EntryFlowState;
-		onAvatarSaved?: (payload: { avatarOnboardingCompletedAt: Date; avatarUrl: string }) => void;
+		onAvatarSaved?: (payload: {
+			avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV1 | null;
+			avatarOnboardingCompletedAt: Date;
+			avatarUrl: string;
+		}) => void;
 		previewCards?: HomePreviewCard[];
 		sceneArtworks?: HomeSceneArtworkSlot[];
 		user?: HomeAuthUser | null;

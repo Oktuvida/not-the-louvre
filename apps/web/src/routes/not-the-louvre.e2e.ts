@@ -23,6 +23,15 @@ const openDrawSketchbook = async (page: import('@playwright/test').Page) => {
 	await expect(page.getByPlaceholder('Give your piece a title')).toBeVisible();
 };
 
+const expectSignedInHomeChrome = async (
+	page: import('@playwright/test').Page,
+	nickname: string
+) => {
+	await expect(page.getByText('HELLO')).toBeVisible();
+	await expect(page.getByText(nickname, { exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
+};
+
 const readDrawingCanvasCenterPixel = async (page: import('@playwright/test').Page) =>
 	page.locator('canvas[width="768"][height="768"]').evaluate((node) => {
 		const canvas = node as HTMLCanvasElement;
@@ -61,7 +70,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/');
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
 		await page.getByRole('button', { name: 'Logout' }).click();
 
@@ -70,10 +79,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByPlaceholder('Enter your password').fill(deterministicAuthUser.password);
 		await page.getByRole('button', { name: 'Sign In' }).last().click();
 
-		await expect(page.getByText('Signed in as')).toBeVisible();
-		await expect(
-			page.getByText(new RegExp(`Signed in as\\s*${deterministicAuthUser.nickname}`))
-		).toBeVisible();
+		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 	});
 
 	test('home signup flow uses the backend recovery key and keeps the avatar onboarding step', async ({
@@ -97,13 +103,10 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
-		await expect(
-			page.getByText(new RegExp(`Signed in as\\s*${deterministicAuthUser.nickname}`))
-		).toBeVisible();
 		await page.reload();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await expect(page.getByText('Finish your avatar')).not.toBeVisible();
 	});
 
@@ -123,7 +126,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.reload();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
-		await expect(page.getByText('Signed in as')).not.toBeVisible();
+		await expect(page.getByText('HELLO')).not.toBeVisible();
 	});
 
 	test('avatar save failure stays in onboarding and retry can complete the flow', async ({
@@ -141,14 +144,12 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await setAvatarExportMode(page, 'bad');
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-		await expect(
-			page.getByText('Avatar media must decode as a single still WebP image')
-		).toBeVisible();
+		await expect(page.getByText('Avatar save requires an avatar drawing document')).toBeVisible();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 
 		await setAvatarExportMode(page, 'good');
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
 	});
 
@@ -164,7 +165,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/');
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await page.getByRole('button', { name: 'Logout' }).click();
 
 		await openHomeAuthOverlay(page);
@@ -194,7 +195,7 @@ test.describe('Not the Louvre frontend port', () => {
 			.getByPlaceholder('Enter your password')
 			.fill(deterministicAuthUser.recoveredPassword);
 		await page.getByRole('button', { name: 'Sign In' }).last().click();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 	});
 
 	test('existing authenticated sessions bootstrap directly into the signed-in home scene and can log out', async ({
@@ -210,17 +211,14 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByRole('button', { name: 'Start account' }).click();
 		await page.getByText('I Stored It').click();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 
 		await page.goto('/');
-		await expect(page.getByText('Signed in as')).toBeVisible();
-		await expect(
-			page.getByText(new RegExp(`Signed in as\\s*${deterministicAuthUser.nickname}`))
-		).toBeVisible();
+		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await page.getByRole('button', { name: 'Logout' }).click();
 
 		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
-		await expect(page.getByText('Signed in as')).not.toBeVisible();
+		await expect(page.getByText('HELLO')).not.toBeVisible();
 	});
 
 	test('draw route publishes real artwork through the product flow', async ({ page }) => {
@@ -399,7 +397,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByPlaceholder('Give your piece a title').fill('Retry Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(
-			page.getByText('This browser could not export your drawing. Please try again.')
+			page.getByText('This browser could not prepare your drawing. Please try again.')
 		).toBeVisible();
 		await expect(page).toHaveURL(/\/draw$/);
 
@@ -417,6 +415,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
 		await openDrawSketchbook(page);
+		await setDrawingExportMode(page, 'webp');
 		await page.getByPlaceholder('Give your piece a title').fill('Fork Source');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();
@@ -429,7 +428,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 		await expect(page.getByText('Forking from')).toBeVisible();
 		await expect(page.getByText('Fork Source')).toBeVisible();
-		await expect(await readDrawingCanvasCenterPixel(page)).not.toEqual([253, 251, 247, 255]);
+		await expect.poll(() => readDrawingCanvasCenterPixel(page)).not.toEqual([253, 251, 247, 255]);
 		await page.getByPlaceholder('Give your piece a title').fill('Fork Child');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText('Artwork published', { exact: true })).toBeVisible();

@@ -40,8 +40,9 @@ describe('EntrySceneController', () => {
 			}
 		});
 
-		await expect.element(page.getByText('Signed in as')).toBeInTheDocument();
-		await expect.element(page.getByText(/Signed in as/)).toHaveTextContent('artist_1');
+		await expect.element(page.getByText('HELLO')).toBeVisible();
+		await expect.element(page.getByText('artist_1')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'LOGOUT' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Come In' })).not.toBeInTheDocument();
 	});
 
@@ -63,7 +64,7 @@ describe('EntrySceneController', () => {
 
 		await expect.element(page.getByRole('heading', { name: 'Keep this key' })).toBeVisible();
 		await expect.element(page.getByText('signup-recovery-key')).toBeVisible();
-		await expect.element(page.getByText('Signed in as')).not.toBeInTheDocument();
+		await expect.element(page.getByText('HELLO')).not.toBeInTheDocument();
 	});
 
 	it('does not flash the avatar step before the signup recovery key when onboarding is also pending', async () => {
@@ -127,7 +128,7 @@ describe('EntrySceneController', () => {
 		await expect
 			.element(page.getByText('Authenticated session is missing its product user profile'))
 			.toBeVisible();
-		await expect.element(page.getByText('Signed in as')).not.toBeInTheDocument();
+		await expect.element(page.getByText('HELLO')).not.toBeInTheDocument();
 	});
 
 	it('resumes avatar onboarding for authenticated users who have not completed it yet', async () => {
@@ -172,6 +173,7 @@ describe('EntrySceneController', () => {
 		await page.getByRole('button', { name: 'Close' }).click();
 		await new Promise((resolve) => setTimeout(resolve, 1800));
 
-		await expect.element(page.getByText('Signed in as')).toBeVisible();
+		await expect.element(page.getByText('HELLO')).toBeVisible();
+		await expect.element(page.getByText('artist_1', { exact: true })).toBeVisible();
 	});
 });

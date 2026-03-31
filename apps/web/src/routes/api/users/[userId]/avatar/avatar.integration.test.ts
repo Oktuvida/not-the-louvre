@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
-import { createWebpTestFile } from '$lib/server/media/test-helpers';
+import {
+	createEmptyDrawingDocument,
+	serializeDrawingDocument
+} from '$lib/features/stroke-json/document';
 
 const testFileDirectory = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(testFileDirectory, '../../../../../../');
@@ -145,17 +148,13 @@ describeWithStorage('avatar backend integration', () => {
 	it('uploads avatar media, streams it back through the backend endpoint, and deletes it', async () => {
 		const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 		const userId = `avatar-user-${uniqueSuffix}`;
-		const avatarFile = await createWebpTestFile({
-			height: 256,
-			name: 'integration-avatar.webp',
-			width: 256
-		});
+		const avatarDocument = serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
 
 		try {
 			await insertUser(sql, userId);
 
 			const formData = new FormData();
-			formData.append('file', avatarFile);
+			formData.append('drawingDocument', avatarDocument);
 
 			const avatarModule = await import('./+server');
 			const uploadResponse = await avatarModule.PUT({
@@ -171,12 +170,15 @@ describeWithStorage('avatar backend integration', () => {
 			const uploadPayload = (await uploadResponse.json()) as { avatarUrl: string };
 			expect(uploadPayload.avatarUrl).toMatch(new RegExp(`^/api/users/${userId}/avatar\\?v=\\d+$`));
 
-			const [storedUser] = await sql<Array<{ avatar_url: string | null }>>`
-				select avatar_url
+			const [storedUser] = await sql<
+				Array<{ avatar_document: string | null; avatar_url: string | null }>
+			>`
+				select avatar_document, avatar_url
 				from app.users
 				where id = ${userId}
 			`;
 
+			expect(storedUser?.avatar_document).toBeTruthy();
 			expect(storedUser?.avatar_url).toBe(`avatars/${userId}.avif`);
 
 			const getResponse = await avatarModule.GET({

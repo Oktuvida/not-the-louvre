@@ -5,6 +5,7 @@
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
 	} from '$lib/client/content-filter';
+	import { parseDrawingDocument } from '$lib/features/stroke-json/document';
 	import { NICKNAME_PATTERN, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '$lib/auth/config';
 	import type {
 		HomeAuthActionData,
@@ -47,7 +48,11 @@
 		checkTextContent?: TextContentChecker;
 		form?: HomeAuthActionForm;
 		onAvatarDismiss?: () => void;
-		onAvatarSaved?: (payload: { avatarOnboardingCompletedAt: Date; avatarUrl: string }) => void;
+		onAvatarSaved?: (payload: {
+			avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV1 | null;
+			avatarOnboardingCompletedAt: Date;
+			avatarUrl: string;
+		}) => void;
 		resumeAvatarOnboarding?: boolean;
 		overlayElement?: HTMLDivElement | null;
 	} = $props();
@@ -378,7 +383,7 @@
 		}
 	};
 
-	const saveAvatar = async (file: File) => {
+	const saveAvatar = async (drawingDocument: string) => {
 		if (!authenticatedUser?.id) {
 			return {
 				message: 'Your session is not ready for avatar upload. Please sign in again.',
@@ -387,7 +392,7 @@
 		}
 
 		const formData = new FormData();
-		formData.set('file', file);
+		formData.set('drawingDocument', drawingDocument);
 
 		const response = await fetch(`/api/users/${authenticatedUser.id}/avatar`, {
 			body: formData,
@@ -406,6 +411,7 @@
 
 			dispatchAvatarFaviconUpdate(authenticatedUser.id);
 			onAvatarSaved?.({
+				avatarDrawingDocument: parseDrawingDocument(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
 				avatarUrl: data.avatarUrl
 			});
@@ -862,7 +868,13 @@
 						</GameButton>
 					</div>
 				{:else}
-					<AvatarSketchpad {nickname} {saveAvatar} onContinue={enterStudio} />
+					<AvatarSketchpad
+						draftUserKey={authenticatedUser?.id ?? authenticatedUser?.nickname ?? null}
+						initialDrawingDocument={authenticatedUser?.avatarDrawingDocument ?? null}
+						{nickname}
+						{saveAvatar}
+						onContinue={enterStudio}
+					/>
 				{/if}
 			</div>
 		</div>

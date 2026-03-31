@@ -1,6 +1,11 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import {
+	createEmptyDrawingDocument,
+	serializeDrawingDocument
+} from '$lib/features/stroke-json/document';
+import { buildDrawingDraftKey } from '$lib/features/stroke-json/drafts';
 import AvatarSketchpad from './AvatarSketchpad.svelte';
 
 describe('AvatarSketchpad', () => {
@@ -84,13 +89,12 @@ describe('AvatarSketchpad', () => {
 
 	it('saves the exported avatar and continues into the gallery on success', async () => {
 		const onContinue = vi.fn();
-		const createAvatarFile = vi.fn(
-			async () => new File([new Uint8Array([1, 2, 3])], 'avatar.webp', { type: 'image/webp' })
-		);
+		const avatarPayload = serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
+		const createAvatarPayload = vi.fn(async () => avatarPayload);
 		const saveAvatar = vi.fn(async () => ({ success: true as const }));
 
 		render(AvatarSketchpad, {
-			createAvatarFile,
+			createAvatarPayload,
 			nickname: 'artist_1',
 			onContinue,
 			saveAvatar
@@ -99,42 +103,79 @@ describe('AvatarSketchpad', () => {
 		await enterGalleryButton().click();
 
 		await vi.waitFor(() => {
-			expect(saveAvatar).toHaveBeenCalled();
+			expect(saveAvatar).toHaveBeenCalledWith(avatarPayload);
 			expect(onContinue).toHaveBeenCalled();
 		});
 	});
 
+	it('recovers a saved local draft before publishing', async () => {
+		const draftDocument = {
+			...createEmptyDrawingDocument('avatar'),
+			strokes: [
+				{
+					color: '#2B2622',
+					points: [[24, 24] as [number, number], [80, 80] as [number, number]],
+					size: 8
+				}
+			]
+		};
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: draftDocument.version,
+			scope: 'profile',
+			surface: 'avatar',
+			userKey: 'artist_1'
+		});
+		window.localStorage.setItem(draftKey, serializeDrawingDocument(draftDocument));
+		const saveAvatar = vi.fn(async () => ({ success: true as const }));
+
+		render(AvatarSketchpad, {
+			draftUserKey: 'artist_1',
+			nickname: 'artist_1',
+			saveAvatar
+		});
+
+		await enterGalleryButton().click();
+
+		expect(saveAvatar).toHaveBeenCalledWith(serializeDrawingDocument(draftDocument));
+		window.localStorage.clear();
+	});
+
+	it('publishes the stored avatar drawing document when reopening the editor', async () => {
+		const storedDocument = {
+			...createEmptyDrawingDocument('avatar'),
+			strokes: [
+				{
+					color: '#2F4B9A',
+					points: [[16, 18] as [number, number], [140, 180] as [number, number]],
+					size: 10
+				}
+			]
+		};
+		const saveAvatar = vi.fn(async () => ({ success: true as const }));
+
+		render(AvatarSketchpad, {
+			initialDrawingDocument: storedDocument,
+			nickname: 'artist_1',
+			saveAvatar
+		});
+
+		await enterGalleryButton().click();
+
+		expect(saveAvatar).toHaveBeenCalledWith(serializeDrawingDocument(storedDocument));
+	});
+
 	it('shows a retryable save error and stays in the avatar step when persistence fails', async () => {
 		const onContinue = vi.fn();
-		const createAvatarFile = vi.fn(
-			async () => new File([new Uint8Array([1, 2, 3])], 'avatar.webp', { type: 'image/webp' })
+		const createAvatarPayload = vi.fn(async () =>
+			serializeDrawingDocument(createEmptyDrawingDocument('avatar'))
 		);
 		const saveAvatar = vi.fn(async () => ({
-			message: 'Avatar media must be WebP',
+			message: 'Avatar save requires an avatar drawing document',
 			success: false as const
 		}));
 
 		render(AvatarSketchpad, {
-			createAvatarFile,
-			nickname: 'artist_1',
-			onContinue,
-			saveAvatar
-		});
-
-		await enterGalleryButton().click();
-
-		await expect.element(page.getByText('Avatar media must be WebP')).toBeVisible();
-		expect(onContinue).not.toHaveBeenCalled();
-	});
-
-	it('surfaces an unsupported export error when the browser cannot create a valid avatar file', async () => {
-		const onContinue = vi.fn();
-		const createAvatarFile = vi.fn(async () => null);
-		const saveAvatar = vi.fn();
-		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-		render(AvatarSketchpad, {
-			createAvatarFile,
+			createAvatarPayload,
 			nickname: 'artist_1',
 			onContinue,
 			saveAvatar
@@ -143,11 +184,32 @@ describe('AvatarSketchpad', () => {
 		await enterGalleryButton().click();
 
 		await expect
-			.element(page.getByText('This browser could not export your avatar. Please try again.'))
+			.element(page.getByText('Avatar save requires an avatar drawing document'))
+			.toBeVisible();
+		expect(onContinue).not.toHaveBeenCalled();
+	});
+
+	it('surfaces an unsupported payload error when the browser cannot create a valid avatar payload', async () => {
+		const onContinue = vi.fn();
+		const createAvatarPayload = vi.fn(async () => null);
+		const saveAvatar = vi.fn();
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		render(AvatarSketchpad, {
+			createAvatarPayload,
+			nickname: 'artist_1',
+			onContinue,
+			saveAvatar
+		});
+
+		await enterGalleryButton().click();
+
+		await expect
+			.element(page.getByText('This browser could not prepare your avatar. Please try again.'))
 			.toBeVisible();
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'Failed to create avatar file',
-			expect.objectContaining({ message: 'createAvatarFile returned no file' })
+			'Failed to create avatar payload',
+			expect.objectContaining({ message: 'createAvatarPayload returned no payload' })
 		);
 		expect(saveAvatar).not.toHaveBeenCalled();
 		expect(onContinue).not.toHaveBeenCalled();
@@ -155,17 +217,17 @@ describe('AvatarSketchpad', () => {
 		consoleErrorSpy.mockRestore();
 	});
 
-	it('logs the exact export error when avatar file creation throws', async () => {
+	it('logs the exact payload error when avatar payload creation throws', async () => {
 		const onContinue = vi.fn();
-		const exportError = new Error('AVIF encoder crashed');
-		const createAvatarFile = vi.fn(async () => {
-			throw exportError;
+		const payloadError = new Error('Avatar serializer crashed');
+		const createAvatarPayload = vi.fn(async () => {
+			throw payloadError;
 		});
 		const saveAvatar = vi.fn();
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
 		render(AvatarSketchpad, {
-			createAvatarFile,
+			createAvatarPayload,
 			nickname: 'artist_1',
 			onContinue,
 			saveAvatar
@@ -174,40 +236,12 @@ describe('AvatarSketchpad', () => {
 		await enterGalleryButton().click();
 
 		await expect
-			.element(page.getByText('This browser could not export your avatar. Please try again.'))
+			.element(page.getByText('This browser could not prepare your avatar. Please try again.'))
 			.toBeVisible();
-		expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to create avatar file', exportError);
+		expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to create avatar payload', payloadError);
 		expect(saveAvatar).not.toHaveBeenCalled();
 		expect(onContinue).not.toHaveBeenCalled();
 
-		consoleErrorSpy.mockRestore();
-	});
-
-	it('logs the exact default export error when webp blob creation fails', async () => {
-		const onContinue = vi.fn();
-		const saveAvatar = vi.fn();
-		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-		const toBlobSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'toBlob')
-			.mockImplementation((callback) => {
-				callback(null);
-			});
-
-		render(AvatarSketchpad, { nickname: 'artist_1', onContinue, saveAvatar });
-
-		await enterGalleryButton().click();
-
-		await expect
-			.element(page.getByText('This browser could not export your avatar. Please try again.'))
-			.toBeVisible();
-		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'Failed to create avatar file',
-			expect.objectContaining({ message: 'Canvas export returned no blob for image/webp output.' })
-		);
-		expect(saveAvatar).not.toHaveBeenCalled();
-		expect(onContinue).not.toHaveBeenCalled();
-
-		toBlobSpy.mockRestore();
 		consoleErrorSpy.mockRestore();
 	});
 });

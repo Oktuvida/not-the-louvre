@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Actions } from './$types';
 import { AuthFlowError } from '$lib/server/auth/errors';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import {
+	createEmptyDrawingDocument,
+	serializeDrawingDocument
+} from '$lib/features/stroke-json/document';
 
 type HomeActionEvent = Parameters<Actions['signUp']>[0];
 
@@ -317,7 +321,7 @@ describe('home route auth contract', () => {
 		});
 
 		const { actions } = await import('./+page.server');
-		const avatarFile = new File([new Uint8Array([1, 2, 3])], 'avatar.webp', { type: 'image/webp' });
+		const avatarDocument = serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
 		const localUser = {
 			id: 'product-user-1',
 			authUserId: 'auth-user-1',
@@ -336,7 +340,7 @@ describe('home route auth contract', () => {
 					method: 'POST',
 					body: (() => {
 						const formData = new FormData();
-						formData.set('file', avatarFile);
+						formData.set('drawingDocument', avatarDocument);
 						return formData;
 					})()
 				})
@@ -345,10 +349,7 @@ describe('home route auth contract', () => {
 
 		const result = await actions.saveAvatar(event as never);
 
-		expect(mocked.uploadAvatar).toHaveBeenCalledWith(
-			localUser,
-			expect.objectContaining({ name: 'avatar.webp', type: 'image/webp' })
-		);
+		expect(mocked.uploadAvatar).toHaveBeenCalledWith(localUser, avatarDocument);
 		expect(event.locals.user).toMatchObject({
 			avatarOnboardingCompletedAt: new Date('2026-03-28T12:00:00.000Z'),
 			avatarUrl: 'avatars/product-user-1.avif'
@@ -367,9 +368,8 @@ describe('home route auth contract', () => {
 		);
 
 		const { actions } = await import('./+page.server');
-		const avatarFile = new File([new Uint8Array([1, 2, 3])], 'avatar.webp', { type: 'image/webp' });
 		const formData = new FormData();
-		formData.set('file', avatarFile);
+		formData.set('drawingDocument', serializeDrawingDocument(createEmptyDrawingDocument('avatar')));
 
 		const result = await actions.saveAvatar(
 			createEvent(
