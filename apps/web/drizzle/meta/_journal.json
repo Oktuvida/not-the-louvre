@@ -92,6 +92,13 @@
       "when": 1774766284364,
       "tag": "0012_panoramic_wasp",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1774930994840,
+      "tag": "0013_luxuriant_master_chief",
+      "breakpoints": true
     }
   ]
 }

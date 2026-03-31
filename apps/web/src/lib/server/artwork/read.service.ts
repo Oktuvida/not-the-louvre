@@ -137,6 +137,8 @@ const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 const toDetail = (record: ArtworkReadRecord): ArtworkDetail => ({
 	...toFeedCard(record),
 	childForks: (record.childForks ?? []).map(toChildForkSummary),
+	drawingDocument: record.drawingDocument ?? null,
+	drawingVersion: record.drawingVersion ?? null,
 	mediaContentType: record.mediaContentType,
 	mediaSizeBytes: record.mediaSizeBytes,
 	updatedAt: record.updatedAt

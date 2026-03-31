@@ -4,6 +4,8 @@ import { users } from '$lib/server/db/schema';
 import type { ListUsersInput, UserRecord, UserRepository } from './types';
 
 const mapRow = (row: typeof users.$inferSelect): UserRecord => ({
+	avatarDocument: row.avatarDocument ?? null,
+	avatarDocumentVersion: row.avatarDocumentVersion ?? null,
 	avatarIsHidden: row.avatarIsHidden,
 	avatarIsNsfw: row.avatarIsNsfw,
 	avatarUrl: row.avatarUrl ?? null,
@@ -40,6 +42,21 @@ export const userRepository: UserRepository = {
 			.limit(input.limit);
 
 		return rows.map(mapRow);
+	},
+
+	async updateUserAvatar(id, input) {
+		const rows = await db
+			.update(users)
+			.set({
+				avatarDocument: input.avatarDocument,
+				avatarDocumentVersion: input.avatarDocumentVersion,
+				avatarOnboardingCompletedAt: input.avatarOnboardingCompletedAt,
+				avatarUrl: input.avatarUrl,
+				updatedAt: input.updatedAt
+			})
+			.where(eq(users.id, id))
+			.returning();
+		return rows[0] ? mapRow(rows[0]) : null;
 	},
 
 	async updateUserAvatarUrl(id, avatarUrl, avatarOnboardingCompletedAt, updatedAt) {

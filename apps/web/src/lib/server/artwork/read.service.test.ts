@@ -1022,6 +1022,14 @@ describe('artwork read service', () => {
 			})
 		);
 
+		const storedArtwork = artworks.get('artwork-101');
+		if (!storedArtwork) {
+			throw new Error('Expected seeded artwork record to exist');
+		}
+
+		storedArtwork.drawingDocument = 'compressed-drawing-document';
+		storedArtwork.drawingVersion = 1;
+
 		const discovery = await listArtworkDiscovery(
 			{ limit: 10, sort: 'recent' },
 			asReadDeps(readRepository)
@@ -1057,6 +1065,8 @@ describe('artwork read service', () => {
 			id: 'artwork-101',
 			isNsfw: false,
 			title: 'Projection test',
+			drawingDocument: 'compressed-drawing-document',
+			drawingVersion: 1,
 			mediaUrl: '/api/artworks/artwork-101/media',
 			mediaContentType: 'image/avif',
 			mediaSizeBytes: 128,
