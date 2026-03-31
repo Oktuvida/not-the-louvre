@@ -1,5 +1,5 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 
 const { goto, invalidateAll } = vi.hoisted(() => ({
@@ -34,7 +34,21 @@ const baseArtwork = {
 	viewerVote: null
 };
 
+const createDeferred = <T>() => {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((innerResolve) => {
+		resolve = innerResolve;
+	});
+
+	return { promise, resolve };
+};
+
 describe('GalleryExplorationPage', () => {
+	beforeEach(() => {
+		vi.unstubAllGlobals?.();
+		window.scrollTo(0, 0);
+	});
+
 	it('renders real discovery artwork cards from route data', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [
@@ -65,6 +79,78 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
 		await expect.element(page.getByText('Proximamente.')).toBeVisible();
+	});
+
+	it('shows a stable fallback while the hot wall room module loads on demand', async () => {
+		const deferredRoom =
+			createDeferred<
+				Awaited<typeof import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte')>
+			>();
+
+		render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Lead Heat' }],
+			emptyStateMessage: null,
+			loadHotWallRoom: () => deferredRoom.promise,
+			room: getGalleryRoom('hot-wall'),
+			roomId: 'hot-wall'
+		});
+
+		await expect.element(page.getByTestId('gallery-room-loading')).toBeVisible();
+
+		deferredRoom.resolve(await import('./rooms/HotWallRoom.svelte'));
+
+		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
+	});
+
+	it('loads room-specific UI when the visitor switches into the mystery room', async () => {
+		const deferredRoom =
+			createDeferred<
+				Awaited<typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte')>
+			>();
+		const screen = render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
+			emptyStateMessage: null,
+			loadMysteryRoom: () => deferredRoom.promise,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame'
+		});
+
+		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+
+		await screen.rerender({
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
+			emptyStateMessage: null,
+			loadMysteryRoom: () => deferredRoom.promise,
+			room: getGalleryRoom('mystery'),
+			roomId: 'mystery'
+		});
+
+		await expect.element(page.getByTestId('gallery-room-loading')).toBeVisible();
+
+		deferredRoom.resolve(await import('./rooms/MysteryRoom.svelte'));
+
+		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+	});
+
+	it('keeps hall-of-fame podium hero artwork eager while deferring ranked cards', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [
+				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
+				{ ...baseArtwork, id: 'artwork-2', rank: 2, title: 'Runner Up' },
+				{ ...baseArtwork, id: 'artwork-3', rank: 3, title: 'Bronze Star' },
+				{ ...baseArtwork, id: 'artwork-4', rank: 4, title: 'Gallery Favorite' }
+			],
+			emptyStateMessage: null,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame'
+		});
+
+		await expect.element(page.getByAltText('Champion')).toHaveAttribute('loading', 'eager');
+		await expect.element(page.getByAltText('Champion')).toHaveAttribute('decoding', 'sync');
+		await expect.element(page.getByAltText('Gallery Favorite')).toHaveAttribute('loading', 'lazy');
+		await expect
+			.element(page.getByAltText('Gallery Favorite'))
+			.toHaveAttribute('decoding', 'async');
 	});
 
 	it('shows a product empty state instead of fixture content', async () => {
@@ -155,7 +241,7 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByRole('button', { name: /Desk Study/ })).toBeVisible();
 	});
 
-	it.skip('loads and opens real artwork detail when a user selects a card', async () => {
+	it('does not request artwork detail during initial gallery render', async () => {
 		const loadArtworkDetail = vi.fn(async () => ({
 			...baseArtwork,
 			forkCount: 0,
@@ -167,14 +253,123 @@ describe('GalleryExplorationPage', () => {
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
 			emptyStateMessage: null,
 			loadArtworkDetail,
-			room: getGalleryRoom('hot-wall'),
-			roomId: 'hot-wall',
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect
+			.element(page.getByRole('button', { name: /Deterministic Gallery Study/ }))
+			.toBeVisible();
+		expect(loadArtworkDetail).not.toHaveBeenCalled();
+	});
+
+	it('does not request artwork detail while scrolling the virtualized studio grid', async () => {
+		const loadArtworkDetail = vi.fn(async () => ({
+			...baseArtwork,
+			forkCount: 0,
+			id: 'artwork-1',
+			title: 'Artwork 1'
+		}));
+		const loadMoreArtworks = vi.fn(async () => ({
+			artworks: Array.from({ length: 12 }, (_, index) => ({
+				...baseArtwork,
+				id: `artwork-${index + 25}`,
+				title: `Artwork ${index + 25}`
+			})),
+			pageInfo: { hasMore: false, nextCursor: null }
+		}));
+
+		render(GalleryExplorationPage, {
+			artworks: Array.from({ length: 24 }, (_, index) => ({
+				...baseArtwork,
+				id: `artwork-${index + 1}`,
+				title: `Artwork ${index + 1}`
+			})),
+			discovery: {
+				pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
+				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			loadMoreArtworks,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		window.scrollTo(0, 10000);
+		window.dispatchEvent(new Event('scroll'));
+
+		await vi.waitFor(() => {
+			expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+		});
+		expect(loadArtworkDetail).not.toHaveBeenCalled();
+	});
+
+	it('loads and opens real artwork detail when a user selects a card', async () => {
+		const loadArtworkDetail = vi.fn(async () => ({
+			...baseArtwork,
+			forkCount: 0,
+			id: 'artwork-1',
+			title: 'Deterministic Gallery Study'
+		}));
+
+		render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
 		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
-		await expect.element(page.getByText('Artwork details')).toBeVisible();
-		expect(loadArtworkDetail).toHaveBeenCalledWith('artwork-1');
+		await vi.waitFor(() => {
+			expect(loadArtworkDetail).toHaveBeenCalledWith('artwork-1');
+		});
+		await expect
+			.element(
+				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
+			)
+			.toBeVisible();
+	});
+
+	it('opens artwork detail from a visible virtualized studio card without losing room context', async () => {
+		const loadArtworkDetail = vi.fn(async () => ({
+			...baseArtwork,
+			forkCount: 0,
+			id: 'artwork-18',
+			title: 'Artwork 18'
+		}));
+
+		render(GalleryExplorationPage, {
+			artworks: Array.from({ length: 24 }, (_, index) => ({
+				...baseArtwork,
+				id: `artwork-${index + 1}`,
+				title: `Artwork ${index + 1}`
+			})),
+			discovery: {
+				pageInfo: { hasMore: false, nextCursor: null },
+				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		window.scrollTo(0, 1200);
+		window.dispatchEvent(new Event('scroll'));
+
+		await page.getByRole('button', { name: /Artwork 18/ }).click();
+
+		await expect
+			.element(page.getByRole('dialog', { name: 'Artwork details for Artwork 18' }))
+			.toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
+		expect(loadArtworkDetail).toHaveBeenCalledWith('artwork-18');
 	});
 
 	it('renders a partially-filled hall-of-fame podium without duplicate key crashes', async () => {

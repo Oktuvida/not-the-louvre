@@ -11,17 +11,19 @@
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
 	import ArtworkDetailPanel from '$lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { hashString, resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
-	import { toGalleryArtworkDetail } from '$lib/features/gallery-exploration/gallery-adapter';
+	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
+	import {
+		toGalleryArtwork,
+		toGalleryArtworkDetail
+	} from '$lib/features/gallery-exploration/gallery-adapter';
 	import GalleryRoomNav from '$lib/features/gallery-exploration/components/GalleryRoomNav.svelte';
+	import VirtualizedArtworkGrid from '$lib/features/gallery-exploration/components/VirtualizedArtworkGrid.svelte';
 	import { createMuseumWallPatternUrl } from '$lib/features/home-entry-scene/canvas/museum-canvas';
 	import {
 		galleryRoomIds,
 		type GalleryRoomConfig,
 		type GalleryRoomId
 	} from '$lib/features/gallery-exploration/model/rooms';
-	import HotWallRoom from '$lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
-	import MysteryRoom from '$lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
 	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
@@ -33,7 +35,48 @@
 	let {
 		adultContentEnabled = false,
 		artworks,
+		discovery = { pageInfo: { hasMore: false, nextCursor: null }, request: null },
 		emptyStateMessage = null,
+		loadHotWallRoom = () => import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte'),
+		loadMoreArtworks = async (request: {
+			authorId: string | null;
+			cursor: string;
+			limit: number;
+			sort: 'hot' | 'recent' | 'top';
+			window: 'all' | null;
+		}) => {
+			const query = [
+				`cursor=${encodeURIComponent(request.cursor)}`,
+				`limit=${encodeURIComponent(String(request.limit))}`,
+				`sort=${encodeURIComponent(request.sort)}`
+			];
+
+			if (request.authorId) {
+				query.push(`authorId=${encodeURIComponent(request.authorId)}`);
+			}
+
+			if (request.window) {
+				query.push(`window=${encodeURIComponent(request.window)}`);
+			}
+
+			const response = await fetch(`/api/artworks?${query.join('&')}`, {
+				headers: { accept: 'application/json' }
+			});
+
+			if (!response.ok) {
+				throw new Error('Gallery discovery could not be loaded');
+			}
+
+			const payload = (await response.json()) as {
+				items: Parameters<typeof toGalleryArtwork>[0][];
+				pageInfo: { hasMore: boolean; nextCursor: string | null };
+			};
+
+			return {
+				artworks: payload.items.map((item) => toGalleryArtwork(item)),
+				pageInfo: payload.pageInfo
+			};
+		},
 		loadArtworkDetail = async (artworkId: string) => {
 			const [detailResponse, commentsResponse] = await Promise.all([
 				fetch(`/api/artworks/${artworkId}`),
@@ -74,6 +117,7 @@
 				}))
 			};
 		},
+		loadMysteryRoom = () => import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte'),
 		room,
 		roomId,
 		realtimeConfig = { anonKey: null, url: null },
@@ -81,8 +125,33 @@
 	}: {
 		adultContentEnabled?: boolean;
 		artworks: Artwork[];
+		discovery?: {
+			pageInfo: { hasMore: boolean; nextCursor: string | null };
+			request: {
+				authorId: string | null;
+				limit: number;
+				sort: 'hot' | 'recent' | 'top';
+				window: 'all' | null;
+			} | null;
+		};
 		emptyStateMessage?: string | null;
+		loadHotWallRoom?: () => Promise<{
+			default: typeof import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte').default;
+		}>;
+		loadMoreArtworks?: (request: {
+			authorId: string | null;
+			cursor: string;
+			limit: number;
+			sort: 'hot' | 'recent' | 'top';
+			window: 'all' | null;
+		}) => Promise<{
+			artworks: Artwork[];
+			pageInfo: { hasMore: boolean; nextCursor: string | null };
+		}>;
 		loadArtworkDetail?: (artworkId: string) => Promise<Artwork>;
+		loadMysteryRoom?: () => Promise<{
+			default: typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default;
+		}>;
 		realtimeConfig?: { anonKey: string | null; url: string | null };
 		room: GalleryRoomConfig;
 		roomId: GalleryRoomId;
@@ -102,6 +171,15 @@
 	let isRefreshingGallery = $state(false);
 	let previousRoomIndex = $state(-1);
 	let museumWallPatternUrl = $state('');
+
+	const roomComponentPromise = $derived.by<Promise<
+		| {
+				default: typeof import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte').default;
+		  }
+		| {
+				default: typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default;
+		  }
+	> | null>(() => resolveRoomComponentPromise(roomId));
 
 	const selectedArtworkId = $derived(selectedArtwork?.id ?? null);
 	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
@@ -424,6 +502,18 @@
 	const frameForArtwork = (artworkId: string, podiumPosition?: 1 | 2 | 3) =>
 		resolveArtworkFrame({ artworkId, podiumPosition });
 
+	const resolveRoomComponentPromise = (targetRoomId: GalleryRoomId) => {
+		if (targetRoomId === 'hot-wall') {
+			return loadHotWallRoom();
+		}
+
+		if (targetRoomId === 'mystery') {
+			return loadMysteryRoom();
+		}
+
+		return null;
+	};
+
 	const roomNoteClassNames: Record<GalleryRoomId, string> = {
 		'hall-of-fame': '',
 		'hot-wall': '',
@@ -584,11 +674,24 @@
 							</p>
 						</div>
 					{:else if roomId === 'mystery' && artworks.length > 0}
-						<MysteryRoom
-							adultContentEnabled={adultContentAllowed}
-							{artworks}
-							onSelect={openArtwork}
-						/>
+						{#if roomComponentPromise}
+							{#await roomComponentPromise}
+								<div
+									class="min-h-[400px] rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
+									data-testid="gallery-room-loading"
+								>
+									<p class="font-display text-2xl text-[#2d2420]">Loading room...</p>
+								</div>
+							{:then roomModule}
+								{@const MysteryRoom =
+									roomModule.default as typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default}
+								<MysteryRoom
+									adultContentEnabled={adultContentAllowed}
+									{artworks}
+									onSelect={openArtwork}
+								/>
+							{/await}
+						{/if}
 					{:else if roomId === 'hall-of-fame'}
 						<div class="space-y-12">
 							<div
@@ -633,6 +736,8 @@
 															<img
 																src={artwork.imageUrl}
 																alt={artwork.title}
+																loading={position === 1 ? 'eager' : 'lazy'}
+																decoding={position === 1 ? 'sync' : 'async'}
 																class={`h-full w-full object-cover transition duration-200 ${artwork.isNsfw && !adultContentAllowed ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
 															/>
 															{#if artwork.isNsfw && !adultContentAllowed}
@@ -694,25 +799,35 @@
 							</div>
 						</div>
 					{:else if roomId === 'hot-wall'}
-						<HotWallRoom
-							adultContentEnabled={adultContentAllowed}
-							gridArtworks={hotWallGridArtworks}
-							leadArtwork={hotWallLeadArtwork}
-							{viewer}
-							onArtworkPatch={patchArtwork}
-							onSelect={openArtwork}
-							risers={hotWallRisers}
-						/>
-					{:else if roomId === 'your-studio'}
-						<div class="grid grid-cols-1 gap-15 md:grid-cols-2 lg:grid-cols-3">
-							{#each artworks as artwork (artwork.id)}
-								{@const seed = hashString(artwork.id)}
-								{@const offsetY = ((seed >> 4) % 21) - 10}
-								<div style={`transform: translateY(${offsetY}px);`}>
-									<PolaroidCard {artwork} onclick={() => openArtwork(artwork)} />
+						{#if roomComponentPromise}
+							{#await roomComponentPromise}
+								<div
+									class="min-h-[28rem] rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
+									data-testid="gallery-room-loading"
+								>
+									<p class="font-display text-2xl text-[#2d2420]">Loading room...</p>
 								</div>
-							{/each}
-						</div>
+							{:then roomModule}
+								{@const HotWallRoom =
+									roomModule.default as typeof import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte').default}
+								<HotWallRoom
+									adultContentEnabled={adultContentAllowed}
+									gridArtworks={hotWallGridArtworks}
+									leadArtwork={hotWallLeadArtwork}
+									{viewer}
+									onArtworkPatch={patchArtwork}
+									onSelect={openArtwork}
+									risers={hotWallRisers}
+								/>
+							{/await}
+						{/if}
+					{:else if roomId === 'your-studio'}
+						<VirtualizedArtworkGrid
+							{artworks}
+							{discovery}
+							{loadMoreArtworks}
+							onSelect={openArtwork}
+						/>
 					{:else}
 						<div class="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
 							{#each artworks as artwork, index (artwork.id)}
