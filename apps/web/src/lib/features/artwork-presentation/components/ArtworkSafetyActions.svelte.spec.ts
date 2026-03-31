@@ -75,11 +75,13 @@ describe('ArtworkSafetyActions', () => {
 
 		await page.getByRole('button', { name: 'Hide artwork' }).click();
 
-		expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/moderation', {
-			body: JSON.stringify({ action: 'hide' }),
-			headers: { 'content-type': 'application/json' },
-			method: 'PATCH'
+		await vi.waitFor(() => {
+			expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/moderation', {
+				body: JSON.stringify({ action: 'hide' }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			});
+			expect(onArtworkPatch).toHaveBeenCalledWith({ isHidden: true, isNsfw: false });
 		});
-		expect(onArtworkPatch).toHaveBeenCalledWith({ isHidden: true, isNsfw: false });
 	});
 });
