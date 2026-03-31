@@ -34,6 +34,50 @@
 	import DrawingCanvas from '$lib/features/studio-drawing/components/DrawingCanvas.svelte';
 	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 
+	const FORK_CONTEXT_STORAGE_PREFIX = 'studio-fork-context';
+
+	const getForkContextStorageKey = (user?: DrawPageUser) => {
+		if (!user) return null;
+		return `${FORK_CONTEXT_STORAGE_PREFIX}:${user.id ?? user.nickname}`;
+	};
+
+	const loadPersistedForkParent = (storageKey: string): DrawForkParent | null => {
+		const rawValue = window.localStorage.getItem(storageKey);
+		if (!rawValue) return null;
+
+		try {
+			const parsed = JSON.parse(rawValue) as Partial<DrawForkParent>;
+			if (
+				typeof parsed.id !== 'string' ||
+				typeof parsed.mediaUrl !== 'string' ||
+				typeof parsed.title !== 'string'
+			) {
+				window.localStorage.removeItem(storageKey);
+				return null;
+			}
+
+			return {
+				drawingDocument: parsed.drawingDocument ?? null,
+				id: parsed.id,
+				isNsfw: parsed.isNsfw,
+				mediaUrl: parsed.mediaUrl,
+				title: parsed.title
+			};
+		} catch {
+			window.localStorage.removeItem(storageKey);
+			return null;
+		}
+	};
+
+	const savePersistedForkParent = (storageKey: string, forkParent: DrawForkParent | null) => {
+		if (!forkParent) {
+			window.localStorage.removeItem(storageKey);
+			return;
+		}
+
+		window.localStorage.setItem(storageKey, JSON.stringify(forkParent));
+	};
+
 	let {
 		checkTextContent = defaultCheckTextContent,
 		createArtworkPayload = async (documentState: DrawingDocumentV1) => {
@@ -137,12 +181,14 @@
 	let isExitingToHome = $state(false);
 	let showExitFade = $state(false);
 	let exitFadeOpacity = $state(0);
+	let forkContextHydrated = $state(false);
 	const EXIT_FADE_DURATION_S = 0.5;
 	const initialDrawingDocument = $derived(
 		currentForkParent?.drawingDocument
 			? cloneDrawingDocument(currentForkParent.drawingDocument)
 			: createEmptyDrawingDocument('artwork')
 	);
+	const forkContextStorageKey = $derived(getForkContextStorageKey(user));
 	const draftKey = $derived(
 		user
 			? buildDrawingDraftKey({
@@ -179,19 +225,49 @@
 	});
 
 	onMount(() => {
-		if (!draftKey) {
-			drawingDocument = cloneDrawingDocument(initialDrawingDocument);
+		const persistedForkParent =
+			!forkParent && forkContextStorageKey ? loadPersistedForkParent(forkContextStorageKey) : null;
+		const resolvedForkParent = forkParent ?? persistedForkParent ?? null;
+
+		if (resolvedForkParent) {
+			currentForkParent = resolvedForkParent;
+		}
+
+		forkContextHydrated = true;
+
+		const resolvedDraftKey = user
+			? buildDrawingDraftKey({
+					schemaVersion: drawingDocument.version,
+					scope: resolvedForkParent?.id ?? 'new',
+					surface: 'artwork',
+					userKey: user.id ?? user.nickname
+				})
+			: null;
+
+		if (!resolvedDraftKey) {
+			drawingDocument = resolvedForkParent?.drawingDocument
+				? cloneDrawingDocument(resolvedForkParent.drawingDocument)
+				: createEmptyDrawingDocument('artwork');
 			return;
 		}
 
-		const draft = loadDrawingDraft(draftKey);
+		const draft = loadDrawingDraft(resolvedDraftKey);
 		drawingDocument =
-			draft?.kind === 'artwork' ? draft : cloneDrawingDocument(initialDrawingDocument);
+			draft?.kind === 'artwork'
+				? draft
+				: resolvedForkParent?.drawingDocument
+					? cloneDrawingDocument(resolvedForkParent.drawingDocument)
+					: createEmptyDrawingDocument('artwork');
 	});
 
 	$effect(() => {
 		if (!draftKey) return;
 		saveDrawingDraft(draftKey, drawingDocument);
+	});
+
+	$effect(() => {
+		if (!forkContextHydrated || !forkContextStorageKey) return;
+		savePersistedForkParent(forkContextStorageKey, currentForkParent);
 	});
 
 	const clearCanvas = () => {
@@ -209,6 +285,9 @@
 		const forkDraftKey = draftKey;
 		if (forkDraftKey) {
 			clearDrawingDraft(forkDraftKey);
+		}
+		if (forkContextStorageKey) {
+			savePersistedForkParent(forkContextStorageKey, null);
 		}
 
 		currentForkParent = null;
@@ -319,6 +398,9 @@
 				if (draftKey) {
 					clearDrawingDraft(draftKey);
 				}
+				if (forkContextStorageKey) {
+					savePersistedForkParent(forkContextStorageKey, null);
+				}
 				publishedArtwork = result.artwork;
 				statusMessage = `Artwork published as ${result.artwork.title}`;
 				statusTone = 'success';
@@ -387,9 +469,7 @@
 	<main
 		class="relative z-10 mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col px-4 pt-3 pb-4 sm:px-6"
 	>
-		<div
-			class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_15rem] xl:gap-8"
-		>
+		<div class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_15rem] xl:gap-8">
 			<div class="order-1 flex min-h-0 flex-col">
 				<div class="studio-book-frame">
 					<DrawingBookStage
