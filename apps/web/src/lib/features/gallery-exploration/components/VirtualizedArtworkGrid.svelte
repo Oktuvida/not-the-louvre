@@ -34,7 +34,7 @@
 	} = $props();
 
 	const ROW_HEIGHT = 360;
-	const OVERSCAN_ROWS = 2;
+	const OVERSCAN_ROWS = 3;
 	const CARDS_PER_ROW = 3;
 
 	let appendedArtworks = $state<Artwork[]>([]);
@@ -42,6 +42,7 @@
 	let viewportHeight = $state(900);
 	let scrollTop = $state(0);
 	let isLoadingMore = $state(false);
+	let pendingFrame = $state<number | null>(null);
 
 	const allArtworks = $derived([...artworks, ...appendedArtworks]);
 	const totalRows = $derived(Math.max(1, Math.ceil(allArtworks.length / CARDS_PER_ROW)));
@@ -57,6 +58,18 @@
 	const syncViewport = () => {
 		scrollTop = window.scrollY;
 		viewportHeight = window.innerHeight || 900;
+	};
+
+	const scheduleViewportSync = () => {
+		if (pendingFrame !== null) {
+			return;
+		}
+
+		pendingFrame = window.requestAnimationFrame(() => {
+			pendingFrame = null;
+			syncViewport();
+			void maybeLoadMore();
+		});
 	};
 
 	const maybeLoadMore = async () => {
@@ -101,18 +114,21 @@
 	$effect(() => {
 		syncViewport();
 		const onScroll = () => {
-			syncViewport();
-			void maybeLoadMore();
+			scheduleViewportSync();
 		};
 		const onResize = () => {
-			syncViewport();
-			void maybeLoadMore();
+			scheduleViewportSync();
 		};
 
 		window.addEventListener('scroll', onScroll);
 		window.addEventListener('resize', onResize);
 
 		return () => {
+			if (pendingFrame !== null) {
+				window.cancelAnimationFrame(pendingFrame);
+				pendingFrame = null;
+			}
+
 			window.removeEventListener('scroll', onScroll);
 			window.removeEventListener('resize', onResize);
 		};
