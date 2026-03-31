@@ -165,6 +165,11 @@
 	});
 
 	$effect(() => {
+		if (isExitingToHome) {
+			pendingStudioUnlock = false;
+			return;
+		}
+
 		forkPreloadSettled = !hasForkParent;
 		pendingStudioUnlock = false;
 
