@@ -158,12 +158,12 @@
 	}
 </script>
 
-<div class="relative flex h-full w-full items-stretch">
+<div class="relative flex h-full w-full items-center justify-center">
 	<canvas
 		bind:this={canvasRef}
 		width={768}
 		height={768}
-		class={`aspect-square h-full max-h-full w-auto max-w-full self-center rounded-lg ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
+		class={`block border h-full w-full rounded-lg ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
 		style="background: #fdfbf7;"
 		aria-disabled={!interactive}
 		onmousedown={startDrawing}
