@@ -53,6 +53,6 @@
 		color="#f4aacb"
 		label="The Hot Wall"
 		seedKey="hot-wall-coming-soon"
-		text="Proximamente."
+		text="Soon."
 	/>
 </div>

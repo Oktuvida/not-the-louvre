@@ -520,6 +520,7 @@
 		mystery: '',
 		'your-studio': ''
 	};
+	const showEmptyState = $derived(Boolean(emptyStateMessage) && roomId !== 'hot-wall');
 	const emptyStateSupportMessage = $derived.by(() => {
 		if (viewer && roomId === 'your-studio') {
 			return 'Publish a new piece from the studio and it will show up here.';
@@ -599,7 +600,6 @@
 			<div
 				class="relative overflow-visible"
 				in:fly={{ x: slideDirection * 300, duration: slideDirection === 0 ? 0 : 300 }}
-				out:fly={{ x: slideDirection * -300, duration: slideDirection === 0 ? 0 : 300 }}
 			>
 				{#if roomId === 'your-studio'}
 					<div class="mb-6 flex justify-start" data-testid="your-studio-room-note-flow">
@@ -664,7 +664,7 @@
 						</div>
 					{/if}
 
-					{#if emptyStateMessage}
+					{#if showEmptyState}
 						<div
 							class="rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
 						>
@@ -802,10 +802,17 @@
 						{#if roomComponentPromise}
 							{#await roomComponentPromise}
 								<div
-									class="min-h-[28rem] rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
+									class="flex min-h-[28rem] items-center justify-center px-6 py-12"
 									data-testid="gallery-room-loading"
 								>
-									<p class="font-display text-2xl text-[#2d2420]">Loading room...</p>
+									<PostItNote
+										attachment="pin"
+										className="max-w-sm"
+										color="#f4aacb"
+										label="The Hot Wall"
+										seedKey="hot-wall-coming-soon"
+										text="Proximamente."
+									/>
 								</div>
 							{:then roomModule}
 								{@const HotWallRoom =

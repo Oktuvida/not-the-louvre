@@ -602,9 +602,9 @@
 		--book-closed-offset-y: 7rem;
 		--book-closed-scale: 0.8;
 		--book-closed-rotation: -4deg;
-		--book-open-offset-x: 25rem;
+		--book-open-offset-x: 30rem;
 		--book-open-offset-y: 2rem;
-		--book-open-scale: 1.14;
+		--book-open-scale: 1.3;
 		--book-open-rotation: 0deg;
 		--book-offset-x: var(--book-closed-offset-x);
 		--book-offset-y: var(--book-closed-offset-y);
@@ -885,7 +885,7 @@
 			--book-closed-scale: 0.9;
 			--book-open-offset-x: 7rem;
 			--book-open-offset-y: 1rem;
-			--book-open-scale: 1.08;
+			--book-open-scale: 1.48;
 		}
 
 		.tools-stage {

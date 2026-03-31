@@ -28,7 +28,7 @@ export const ensureServerDependencyBundled = async (
 	const serverFiles = await collectJavaScriptFiles(serverDirectory);
 	const escapedDependencyName = dependencyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	const dependencyPattern = new RegExp(
-		`from\\s+['\"]${escapedDependencyName}['\"]|import\\(\\s*['\"]${escapedDependencyName}['\"]\\s*\\)`,
+		`from\\s+['"]${escapedDependencyName}['"]|import\\(\\s*['"]${escapedDependencyName}['"]\\s*\\)`,
 		'u'
 	);
 
