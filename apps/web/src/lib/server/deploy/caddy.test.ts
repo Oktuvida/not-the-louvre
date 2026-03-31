@@ -3,7 +3,11 @@ import { ensureCaddyGlobalEmail } from './caddy';
 
 describe('ensureCaddyGlobalEmail', () => {
 	it('prepends a managed global block when none exists', () => {
-		const result = ensureCaddyGlobalEmail('app.example.com {\n\treverse_proxy 127.0.0.1:3000\n}\n', 'ops@example.com', 'not-the-louvre:global');
+		const result = ensureCaddyGlobalEmail(
+			'app.example.com {\n\treverse_proxy 127.0.0.1:3000\n}\n',
+			'ops@example.com',
+			'not-the-louvre:global'
+		);
 
 		expect(result).toContain('# BEGIN not-the-louvre:global managed block');
 		expect(result).toContain('email ops@example.com');
@@ -23,8 +27,11 @@ describe('ensureCaddyGlobalEmail', () => {
 	});
 
 	it('leaves an existing email untouched', () => {
-		const original = '{\n\temail existing@example.com\n}\n\napp.example.com {\n\treverse_proxy 127.0.0.1:3000\n}\n';
+		const original =
+			'{\n\temail existing@example.com\n}\n\napp.example.com {\n\treverse_proxy 127.0.0.1:3000\n}\n';
 
-		expect(ensureCaddyGlobalEmail(original, 'ops@example.com', 'not-the-louvre:global')).toBe(original);
+		expect(ensureCaddyGlobalEmail(original, 'ops@example.com', 'not-the-louvre:global')).toBe(
+			original
+		);
 	});
 });
