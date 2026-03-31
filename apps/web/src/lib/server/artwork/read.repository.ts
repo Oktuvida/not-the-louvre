@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, gte, isNotNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { artworkComments, artworks, contentReports, users } from '$lib/server/db/schema';
 import type {
@@ -41,8 +41,11 @@ const getTopWindowStart = (now: Date, window: ArtworkDiscoveryTopWindow) => {
 	);
 };
 
-const hotRankingSql = (now: Date) =>
-	sql<number>`(${artworks.score}::double precision / power(((extract(epoch from ${now}) - extract(epoch from ${artworks.createdAt})) / 3600.0) + 2, ${HOT_RANKING_GRAVITY}))`;
+const hotRankingSql = (now: Date) => {
+	const nowEpochSeconds = now.getTime() / 1000;
+
+	return sql<number>`(${artworks.score}::double precision / power(((${nowEpochSeconds} - extract(epoch from ${artworks.createdAt})) / 3600.0) + 2, ${HOT_RANKING_GRAVITY}))`;
+};
 
 const rankedCursorWhere = (
 	cursor:
@@ -69,10 +72,13 @@ const baseSelect = {
 	id: artworks.id,
 	authorId: artworks.authorId,
 	title: artworks.title,
+	drawingDocument: artworks.drawingDocument,
+	drawingVersion: artworks.drawingVersion,
 	storageKey: artworks.storageKey,
 	mediaContentType: artworks.mediaContentType,
 	mediaSizeBytes: artworks.mediaSizeBytes,
 	isHidden: artworks.isHidden,
+	isNsfw: artworks.isNsfw,
 	hiddenAt: artworks.hiddenAt,
 	score: artworks.score,
 	commentCount: artworks.commentCount,
@@ -84,6 +90,32 @@ const baseSelect = {
 	authorAvatarUrl: users.avatarUrl
 };
 
+const voteCountSql = (value: 'down' | 'up') =>
+	sql<number>`coalesce((
+		select count(*)::int
+		from "app"."artwork_votes" vote
+		where vote.artwork_id = ${artworks.id}
+			and vote.value = ${sql.raw(`'${value}'::app.artwork_vote_value`)}
+	), 0)`;
+
+const viewerVoteSql = (viewer: { isModerator: boolean; userId: string | null }) =>
+	viewer.userId
+		? sql<'down' | 'up' | null>`(
+			select vote.value
+			from "app"."artwork_votes" vote
+			where vote.artwork_id = ${artworks.id}
+				and vote.user_id = ${viewer.userId}
+			limit 1
+		)`
+		: sql<null>`null`;
+
+const buildBaseSelect = (viewer: { isModerator: boolean; userId: string | null }) => ({
+	...baseSelect,
+	downvotes: voteCountSql('down').as('downvotes'),
+	upvotes: voteCountSql('up').as('upvotes'),
+	viewerVote: viewerVoteSql(viewer).as('viewerVote')
+});
+
 type ArtworkReadRow = {
 	authorAvatarUrl: string | null;
 	authorId: string;
@@ -92,6 +124,9 @@ type ArtworkReadRow = {
 	hiddenAt: Date | null;
 	id: string;
 	isHidden: boolean;
+	isNsfw: boolean;
+	drawingDocument?: string | null;
+	drawingVersion?: number | null;
 	mediaContentType: string;
 	mediaSizeBytes: number;
 	commentCount: number;
@@ -101,15 +136,17 @@ type ArtworkReadRow = {
 	storageKey: string;
 	title: string;
 	updatedAt: Date;
+	parentAuthorAvatarUrl?: string | null;
+	parentAuthorId?: string | null;
+	parentAuthorNickname?: string | null;
+	parentTitle?: string | null;
+	downvotes?: number;
+	upvotes?: number;
+	viewerVote?: 'down' | 'up' | null;
 	rankingValue?: number;
 };
 
-const artworkVisibilityWhere = (viewer: { isModerator: boolean; userId: string | null }) =>
-	viewer.isModerator
-		? undefined
-		: viewer.userId
-			? or(eq(artworks.isHidden, false), eq(artworks.authorId, viewer.userId))
-			: eq(artworks.isHidden, false);
+const artworkVisibilityWhere = () => eq(artworks.isHidden, false);
 
 const commentVisibilityWhere = (
 	artworkId: string,
@@ -139,63 +176,122 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	hiddenAt: row.hiddenAt,
 	id: row.id,
 	isHidden: row.isHidden,
+	isNsfw: row.isNsfw,
+	drawingDocument: row.drawingDocument ?? null,
+	drawingVersion: row.drawingVersion ?? null,
 	mediaContentType: row.mediaContentType,
 	mediaSizeBytes: row.mediaSizeBytes,
+	parentAuthorAvatarUrl: row.parentAuthorAvatarUrl ?? null,
+	parentAuthorId: row.parentAuthorId ?? null,
+	parentAuthorNickname: row.parentAuthorNickname ?? null,
 	parentId: row.parentId,
+	parentTitle: row.parentTitle ?? null,
 	score: row.score,
 	storageKey: row.storageKey,
 	title: row.title,
+	downvotes: row.downvotes,
+	upvotes: row.upvotes,
+	viewerVote: row.viewerVote ?? null,
 	rankingValue: row.rankingValue,
 	updatedAt: row.updatedAt
 });
 
-const rankedBaseSelect = (rankingExpression: ReturnType<typeof sql<number>>) => ({
-	...baseSelect,
+const buildRankedBaseSelect = (
+	viewer: { isModerator: boolean; userId: string | null },
+	rankingExpression: ReturnType<typeof sql<number>>
+) => ({
+	...buildBaseSelect(viewer),
 	rankingValue: rankingExpression.as('rankingValue')
 });
+
+const hydrateDiscoveryParents = async (records: ArtworkReadRecord[]) => {
+	const parentIds = Array.from(
+		new Set(records.flatMap((record) => (record.parentId ? [record.parentId] : [])))
+	);
+
+	if (parentIds.length === 0) {
+		return records;
+	}
+
+	const parentRows = await db
+		.select({
+			authorAvatarUrl: users.avatarUrl,
+			authorId: artworks.authorId,
+			authorNickname: users.nickname,
+			id: artworks.id,
+			title: artworks.title
+		})
+		.from(artworks)
+		.innerJoin(users, eq(users.id, artworks.authorId))
+		.where(and(inArray(artworks.id, parentIds), eq(artworks.isHidden, false)));
+
+	const parentsById = new Map(parentRows.map((row) => [row.id, row]));
+
+	return records.map((record) => {
+		if (!record.parentId) return record;
+
+		const parent = parentsById.get(record.parentId);
+		if (!parent) return record;
+
+		return {
+			...record,
+			parentAuthorAvatarUrl: parent.authorAvatarUrl,
+			parentAuthorId: parent.authorId,
+			parentAuthorNickname: parent.authorNickname,
+			parentTitle: parent.title
+		};
+	});
+};
 
 export const artworkReadRepository: ArtworkReadRepository = {
 	async listRecentArtworks(input: ListRecentArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
 		const rows = await db
-			.select(baseSelect)
+			.select(buildBaseSelect(viewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(and(artworkVisibilityWhere(viewer), recentCursorWhere(input.cursor) ?? undefined))
+			.where(
+				and(
+					artworkVisibilityWhere(),
+					input.authorId ? eq(artworks.authorId, input.authorId) : undefined,
+					recentCursorWhere(input.cursor) ?? undefined
+				)
+			)
 			.orderBy(desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
-		return rows.map(mapRow);
+		return hydrateDiscoveryParents(rows.map(mapRow));
 	},
 	async listHotArtworks(input: ListHotArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
 		const rankingExpression = hotRankingSql(input.now);
 		const rows = await db
-			.select(rankedBaseSelect(rankingExpression))
+			.select(buildRankedBaseSelect(viewer, rankingExpression))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(
 				and(
-					artworkVisibilityWhere(viewer),
+					artworkVisibilityWhere(),
 					rankedCursorWhere(input.cursor, rankingExpression) ?? undefined
 				)
 			)
 			.orderBy(desc(rankingExpression), desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
-		return rows.map(mapRow);
+		return hydrateDiscoveryParents(rows.map(mapRow));
 	},
 	async listTopArtworks(input: ListTopArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
 		const rankingExpression = sql<number>`${artworks.score}::double precision`;
 		const windowStart = getTopWindowStart(input.now, input.window);
 		const rows = await db
-			.select(rankedBaseSelect(rankingExpression))
+			.select(buildRankedBaseSelect(viewer, rankingExpression))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(
 				and(
-					artworkVisibilityWhere(viewer),
+					artworkVisibilityWhere(),
+					input.authorId ? eq(artworks.authorId, input.authorId) : undefined,
 					windowStart ? gte(artworks.createdAt, windowStart) : undefined,
 					rankedCursorWhere(input.cursor, rankingExpression) ?? undefined
 				)
@@ -203,15 +299,15 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.orderBy(desc(artworks.score), desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
-		return rows.map(mapRow);
+		return hydrateDiscoveryParents(rows.map(mapRow));
 	},
 	async findArtworkDetailById(id, viewer) {
 		const activeViewer = defaultViewer(viewer);
 		const row = await db
-			.select(baseSelect)
+			.select(buildBaseSelect(activeViewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(and(eq(artworks.id, id), artworkVisibilityWhere(activeViewer)))
+			.where(and(eq(artworks.id, id), artworkVisibilityWhere()))
 			.limit(1);
 
 		const record = row[0] ? mapRow(row[0]) : null;
@@ -239,6 +335,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				authorNickname: users.nickname,
 				createdAt: artworks.createdAt,
 				id: artworks.id,
+				isNsfw: artworks.isNsfw,
 				title: artworks.title
 			})
 			.from(artworks)
@@ -255,8 +352,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			parentTitle: parent[0]?.title ?? null
 		};
 	},
-	async findArtworkMediaById(id, viewer) {
-		const activeViewer = defaultViewer(viewer);
+	async findArtworkMediaById(id) {
 		const row = await db
 			.select({
 				id: artworks.id,
@@ -264,7 +360,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				storageKey: artworks.storageKey
 			})
 			.from(artworks)
-			.where(and(eq(artworks.id, id), artworkVisibilityWhere(activeViewer)))
+			.where(and(eq(artworks.id, id), artworkVisibilityWhere()))
 			.limit(1);
 
 		return row[0] ?? null;

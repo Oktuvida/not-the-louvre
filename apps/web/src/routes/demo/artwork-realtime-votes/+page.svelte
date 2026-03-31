@@ -14,6 +14,11 @@
 		id: string;
 		value: 'down' | 'up';
 	};
+	type ArtworkDetailResponse = {
+		artwork?: {
+			score?: number;
+		} | null;
+	};
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let trackedScore = $state(0);
@@ -24,26 +29,11 @@
 	let actionStatus = $state('');
 	let eventLog = $state<string[]>([]);
 	let currentArtworkId = $state<string | null>(null);
-	let trackedVoteValues = $state<Record<string, VoteRow['value']>>({});
 	let cleanupRealtime: (() => void) | null = null;
+	let reconciliationIntervalId: number | null = null;
 
 	const pushEvent = (message: string) => {
 		eventLog = [message, ...eventLog].slice(0, 6);
-	};
-
-	const voteDelta = (value: VoteRow['value']) => (value === 'up' ? 1 : -1);
-
-	const getVoteId = (candidate: unknown) => {
-		if (
-			typeof candidate === 'object' &&
-			candidate !== null &&
-			'id' in candidate &&
-			typeof candidate.id === 'string'
-		) {
-			return candidate.id;
-		}
-
-		return null;
 	};
 
 	const getVoteArtworkId = (candidate: unknown) => {
@@ -59,33 +49,49 @@
 		return null;
 	};
 
-	const getVoteValue = (candidate: unknown): VoteRow['value'] | null => {
-		if (
-			typeof candidate === 'object' &&
-			candidate !== null &&
-			'value' in candidate &&
-			(candidate.value === 'up' || candidate.value === 'down')
-		) {
-			return candidate.value;
-		}
-
-		return null;
-	};
-
 	const getPayloadArtworkId = (payload: RealtimePostgresChangesPayload<VoteRow>) =>
 		getVoteArtworkId(payload.new) ?? getVoteArtworkId(payload.old) ?? null;
 
 	const isTrackedVoteEvent = (
 		payload: RealtimePostgresChangesPayload<VoteRow>,
 		artworkId: string
-	) => {
-		const payloadArtworkId = getPayloadArtworkId(payload);
-		if (payloadArtworkId === artworkId) {
-			return true;
+	) => getPayloadArtworkId(payload) === artworkId;
+
+	const stopScoreReconciliation = () => {
+		if (reconciliationIntervalId !== null) {
+			window.clearInterval(reconciliationIntervalId);
+			reconciliationIntervalId = null;
+		}
+	};
+
+	const reconcileTrackedScore = (nextScore: number) => {
+		if (nextScore === trackedScore) {
+			return;
 		}
 
-		const oldVoteId = getVoteId(payload.old);
-		return Boolean(oldVoteId && trackedVoteValues[oldVoteId]);
+		pushEvent(
+			nextScore > trackedScore
+				? 'Vote event: up from realtime'
+				: 'Vote event: removed from realtime'
+		);
+		trackedScore = nextScore;
+	};
+
+	const reconcileTrackedArtworkScore = async (artworkId: string) => {
+		const response = await fetch(`/api/artworks/${artworkId}`, {
+			headers: { accept: 'application/json' }
+		});
+
+		if (!response.ok) {
+			return;
+		}
+
+		const payload = (await response.json()) as ArtworkDetailResponse;
+		const nextScore = payload.artwork?.score;
+
+		if (typeof nextScore === 'number') {
+			reconcileTrackedScore(nextScore);
+		}
 	};
 
 	const applyRealtimePayload = (
@@ -96,47 +102,11 @@
 			return;
 		}
 
-		const nextVoteId = getVoteId(payload.new);
-		const previousVoteId = getVoteId(payload.old);
-		const nextVoteValue = getVoteValue(payload.new);
-		const previousVoteValue = getVoteValue(payload.old);
-
-		if (payload.eventType === 'INSERT' && nextVoteId && nextVoteValue) {
-			trackedVoteValues = {
-				...trackedVoteValues,
-				[nextVoteId]: nextVoteValue
-			};
-			trackedScore += voteDelta(nextVoteValue);
-			pushEvent(`Vote event: ${nextVoteValue} from realtime`);
-			return;
-		}
-
-		if (payload.eventType === 'UPDATE' && nextVoteId && nextVoteValue) {
-			const previousValue = trackedVoteValues[nextVoteId] ?? previousVoteValue;
-			trackedVoteValues = {
-				...trackedVoteValues,
-				[nextVoteId]: nextVoteValue
-			};
-			trackedScore += previousValue
-				? voteDelta(nextVoteValue) - voteDelta(previousValue)
-				: voteDelta(nextVoteValue);
-			pushEvent(`Vote event: ${nextVoteValue} from realtime`);
-			return;
-		}
-
-		if (payload.eventType === 'DELETE' && previousVoteId) {
-			const previousValue = trackedVoteValues[previousVoteId] ?? previousVoteValue;
-			if (previousValue) {
-				trackedScore -= voteDelta(previousValue);
-			}
-			const remainingVoteValues = { ...trackedVoteValues };
-			delete remainingVoteValues[previousVoteId];
-			trackedVoteValues = remainingVoteValues;
-			pushEvent('Vote event: removed from realtime');
-		}
+		void reconcileTrackedArtworkScore(artworkId);
 	};
 
 	const stopRealtime = () => {
+		stopScoreReconciliation();
 		cleanupRealtime?.();
 		cleanupRealtime = null;
 	};
@@ -146,7 +116,6 @@
 		trackedScore = data.trackedArtwork?.score ?? 0;
 		subscriptionError = '';
 		eventLog = [];
-		trackedVoteValues = {};
 
 		if (!data.realtimeConfig.url || !data.realtimeConfig.anonKey) {
 			subscriptionState = 'errored';
@@ -192,6 +161,11 @@
 				if (status === 'SUBSCRIBED') {
 					subscriptionState = 'subscribed';
 					pushEvent('Realtime status: subscribed');
+					void reconcileTrackedArtworkScore(artworkId);
+					stopScoreReconciliation();
+					reconciliationIntervalId = window.setInterval(() => {
+						void reconcileTrackedArtworkScore(artworkId);
+					}, 1000);
 					return;
 				}
 

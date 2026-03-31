@@ -1,0 +1,17 @@
+:root {
+	--font-display: 'Fredoka', 'Trebuchet MS', sans-serif;
+	--font-body: 'Baloo 2', 'Trebuchet MS', sans-serif;
+	--color-paper: #fbf7f0;
+	--color-paper-deep: #efe2d2;
+	--color-ink: #2f241c;
+	--color-muted: #6f6257;
+	--color-primary: #d4834a;
+	--color-secondary: #71917f;
+	--color-accent: #d9b07b;
+	--color-danger: #a24d49;
+	--color-panel: rgb(251 247 240 / 0.92);
+	--shadow-strong: 0 22px 55px rgb(54 34 18 / 0.18);
+	--shadow-card: 0 16px 30px rgb(58 34 19 / 0.12);
+	--border-heavy: 4px solid var(--color-ink);
+	--border-frame: 6px solid #5f4735;
+}

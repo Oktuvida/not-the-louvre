@@ -1,4 +1,5 @@
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { assertNotBanned } from '$lib/server/auth/guards';
 import type { CanonicalUser } from '$lib/server/auth/types';
 import type { ProductRole } from '$lib/server/auth/types';
 import { userRepository as defaultRepository } from './repository';
@@ -16,17 +17,27 @@ const resolveAvatarUrl = (userId: string, storageKey: string | null) =>
 	storageKey ? `/api/users/${userId}/avatar` : null;
 
 type PublicUserProfile = {
+	avatarIsHidden: boolean;
+	avatarIsNsfw: boolean;
 	avatarUrl: string | null;
+	banReason: string | null;
+	bannedAt: Date | null;
 	createdAt: Date;
 	id: string;
+	isBanned: boolean;
 	nickname: string;
 	role: ProductRole;
 };
 
 const toPublicProfile = (record: UserRecord): PublicUserProfile => ({
-	avatarUrl: resolveAvatarUrl(record.id, record.avatarUrl),
+	avatarIsHidden: record.avatarIsHidden,
+	avatarIsNsfw: record.avatarIsNsfw,
+	avatarUrl: record.avatarIsHidden ? null : resolveAvatarUrl(record.id, record.avatarUrl),
+	banReason: record.banReason,
+	bannedAt: record.bannedAt,
 	createdAt: record.createdAt,
 	id: record.id,
+	isBanned: record.isBanned,
 	nickname: record.nickname,
 	role: record.role
 });
@@ -48,6 +59,7 @@ const requireAdmin = (context: AdminContext) => {
 	if (!context.user) {
 		throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
 	}
+	assertNotBanned(context.user);
 	if (context.user.role !== 'admin') {
 		throw new ArtworkFlowError(403, 'Admin access required', 'FORBIDDEN');
 	}
@@ -141,6 +153,78 @@ export const updateUserRole = async (
 	);
 	if (!updated) {
 		throw new ArtworkFlowError(500, 'Role update failed', 'PUBLISH_FAILED');
+	}
+
+	return toPublicProfile(updated);
+};
+
+type BanUserInput = {
+	reason: string;
+	userId: string;
+};
+
+export const banUser = async (
+	input: BanUserInput,
+	context: AdminContext,
+	dependencies: AdminDependencies = {}
+): Promise<PublicUserProfile> => {
+	const admin = requireAdmin(context);
+	const repository = dependencies.repository ?? defaultRepository;
+	const reason = input.reason.trim();
+
+	if (!reason) {
+		throw new ArtworkFlowError(400, 'Ban reason is required', 'VALIDATION_ERROR');
+	}
+
+	if (input.userId === admin.id) {
+		throw new ArtworkFlowError(403, 'Cannot ban yourself', 'FORBIDDEN');
+	}
+
+	const target = await repository.findUserById(input.userId);
+	if (!target) {
+		throw new ArtworkFlowError(404, 'User not found', 'NOT_FOUND');
+	}
+
+	const updated = await repository.updateBanState(input.userId, {
+		banReason: reason,
+		bannedAt: new Date(),
+		isBanned: true,
+		updatedAt: new Date()
+	});
+
+	if (!updated) {
+		throw new ArtworkFlowError(500, 'Ban update failed', 'PUBLISH_FAILED');
+	}
+
+	return toPublicProfile(updated);
+};
+
+type UnbanUserInput = {
+	userId: string;
+};
+
+export const unbanUser = async (
+	input: UnbanUserInput,
+	context: AdminContext,
+	dependencies: AdminDependencies = {}
+): Promise<PublicUserProfile> => {
+	requireAdmin(context);
+	const repository = dependencies.repository ?? defaultRepository;
+	const target = await repository.findUserById(input.userId);
+
+	if (!target) {
+		throw new ArtworkFlowError(404, 'User not found', 'NOT_FOUND');
+	}
+
+	const updated = await repository.updateBanState(input.userId, {
+		banReason: null,
+		bannedAt: null,
+		isBanned: false,
+		updatedAt: new Date()
+	});
+
+	if (!updated) {
+		throw new ArtworkFlowError(500, 'Ban update failed', 'PUBLISH_FAILED');
 	}
 
 	return toPublicProfile(updated);

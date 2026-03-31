@@ -71,6 +71,7 @@ export const actions: Actions = {
 		try {
 			const artwork = await publishArtwork(
 				{
+					isNsfw: formData.get('isNsfw')?.toString() === 'true',
 					media,
 					title: formData.get('title')?.toString() ?? ''
 				},

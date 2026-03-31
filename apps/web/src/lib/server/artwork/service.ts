@@ -1,4 +1,5 @@
 import { generateId } from 'better-auth';
+import { assertNotBanned } from '$lib/server/auth/guards';
 import {
 	ARTWORK_COMMENT_MAX_LENGTH,
 	ARTWORK_COMMENT_RATE_LIMIT,
@@ -9,6 +10,9 @@ import {
 import { ArtworkFlowError } from './errors';
 import { artworkRepository } from './repository';
 import { supabaseArtworkStorage } from './storage';
+import { checkTextModeration } from '$lib/server/moderation/service';
+import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+import { encodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import type {
 	ArtworkActorContext,
 	ArtworkCommentView,
@@ -24,10 +28,13 @@ import type {
 	ArtworkVoteValue
 } from './types';
 import { sanitizeArtworkMedia } from '../media/sanitization';
+import { createArtworkDrawingDocumentMedia } from '$lib/server/drawing-document/media';
 import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
 type PublishArtworkInput = {
-	media: File;
+	drawingDocument?: string | null;
+	isNsfw?: boolean;
+	media?: File | null;
 	parentArtworkId?: string | null;
 	title?: string | null;
 };
@@ -68,7 +75,7 @@ type SubmitContentReportInput = {
 };
 
 type ModerateArtworkInput = {
-	action: 'delete' | 'dismiss' | 'hide' | 'unhide';
+	action: 'clear_nsfw' | 'delete' | 'dismiss' | 'hide' | 'mark_nsfw' | 'unhide';
 	artworkId: string;
 };
 
@@ -83,6 +90,7 @@ type ServiceDependencies = {
 	now?: () => Date;
 	randomSuffix?: () => number;
 	repository?: ArtworkRepository;
+	renderDrawingDocumentMedia?: typeof createArtworkDrawingDocumentMedia;
 	sanitizeMedia?: (file: File) => Promise<SanitizedMedia>;
 	storage?: ArtworkStorage;
 };
@@ -92,6 +100,8 @@ const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	now: dependencies.now ?? (() => new Date()),
 	randomSuffix: dependencies.randomSuffix ?? (() => Math.floor(Math.random() * 10000)),
 	repository: dependencies.repository ?? artworkRepository,
+	renderDrawingDocumentMedia:
+		dependencies.renderDrawingDocumentMedia ?? createArtworkDrawingDocumentMedia,
 	sanitizeMedia: dependencies.sanitizeMedia ?? sanitizeArtworkMedia,
 	storage: dependencies.storage ?? supabaseArtworkStorage
 });
@@ -100,6 +110,7 @@ const requireActor = (context: Partial<ArtworkActorContext>): ArtworkActorContex
 	if (!context.user) {
 		throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
 	}
+	assertNotBanned(context.user as ArtworkActorContext['user'] & { isBanned: boolean });
 
 	return {
 		ipAddress: context.ipAddress ?? null,
@@ -369,7 +380,7 @@ const isPendingReportUniqueViolation = (error: unknown) => {
 const getResolutionStatus = (
 	action: ModerateArtworkInput['action'] | ModerateCommentInput['action']
 ): Exclude<ContentReportStatus, 'pending'> =>
-	action === 'hide' || action === 'delete' ? 'actioned' : 'reviewed';
+	action === 'hide' || action === 'delete' || action === 'mark_nsfw' ? 'actioned' : 'reviewed';
 
 export const publishArtwork = async (
 	input: PublishArtworkInput,
@@ -382,6 +393,7 @@ export const publishArtwork = async (
 		now: getNow,
 		randomSuffix,
 		repository,
+		renderDrawingDocumentMedia,
 		sanitizeMedia,
 		storage
 	} = getDependencies(dependencies);
@@ -390,6 +402,11 @@ export const publishArtwork = async (
 	await assertPublishRateLimit(actor, repository, now);
 
 	const title = normalizePublishTitle(input.title, randomSuffix());
+	const titleModeration = await checkTextModeration(title, 'artwork_title');
+	if (titleModeration.status !== 'allowed') {
+		throw new ArtworkFlowError(400, titleModeration.message, 'INVALID_TITLE');
+	}
+
 	const parentArtworkId = input.parentArtworkId?.trim() ? input.parentArtworkId.trim() : null;
 
 	if (parentArtworkId) {
@@ -399,7 +416,30 @@ export const publishArtwork = async (
 		}
 	}
 
-	const media = await sanitizeMedia(input.media);
+	let media: SanitizedMedia;
+	let drawingDocument: string | null = null;
+	let drawingVersion: number | null = null;
+
+	const providedDrawingDocument = input.drawingDocument?.trim() ?? '';
+	if (providedDrawingDocument) {
+		const parsedDocument = parseDrawingDocument(providedDrawingDocument);
+		if (parsedDocument.kind !== 'artwork') {
+			throw new ArtworkFlowError(
+				400,
+				'Artwork publish requires an artwork drawing document',
+				'INVALID_MEDIA_FORMAT'
+			);
+		}
+
+		media = await renderDrawingDocumentMedia(parsedDocument);
+		drawingDocument = encodeCompressedDrawingDocument(parsedDocument);
+		drawingVersion = parsedDocument.version;
+	} else if (input.media instanceof File) {
+		media = await sanitizeMedia(input.media);
+	} else {
+		throw new ArtworkFlowError(400, 'Artwork media is required', 'INVALID_MEDIA_FORMAT');
+	}
+
 	const artworkId = nextId();
 	const storageKey = `artworks/${actor.user.id}/${artworkId}.avif`;
 
@@ -410,10 +450,15 @@ export const publishArtwork = async (
 			authorId: actor.user.id,
 			commentCount: 0,
 			createdAt: now,
+			drawingDocument,
+			drawingVersion,
 			forkCount: 0,
 			id: artworkId,
+			isNsfw: Boolean(input.isNsfw),
 			mediaContentType: media.contentType,
 			mediaSizeBytes: media.sizeBytes,
+			nsfwLabeledAt: input.isNsfw ? now : null,
+			nsfwSource: input.isNsfw ? 'creator' : null,
 			parentId: parentArtworkId,
 			score: 0,
 			storageKey,
@@ -450,12 +495,13 @@ export const updateArtworkTitle = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 	assertAuthor(artwork.authorId, actor.user.id);
+	const title = normalizeUpdatedTitle(input.title);
+	const titleModeration = await checkTextModeration(title, 'artwork_title');
+	if (titleModeration.status !== 'allowed') {
+		throw new ArtworkFlowError(400, titleModeration.message, 'INVALID_TITLE');
+	}
 
-	const updated = await repository.updateArtworkTitle(
-		artwork.id,
-		normalizeUpdatedTitle(input.title),
-		getNow()
-	);
+	const updated = await repository.updateArtworkTitle(artwork.id, title, getNow());
 
 	if (!updated) {
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
@@ -555,11 +601,16 @@ export const createArtworkComment = async (
 		ARTWORK_COMMENT_RATE_LIMIT,
 		'Too many comment attempts. Please wait before trying again.'
 	);
+	const body = normalizeCommentBody(input.body);
+	const textModeration = await checkTextModeration(body, 'comment');
+	if (textModeration.status !== 'allowed') {
+		throw new ArtworkFlowError(400, textModeration.message, 'INVALID_COMMENT');
+	}
 
 	const comment = await repository.createComment({
 		authorId: actor.user.id,
 		artworkId: artwork.id,
-		body: normalizeCommentBody(input.body),
+		body,
 		createdAt: now,
 		id: nextId(),
 		updatedAt: now
@@ -699,6 +750,40 @@ export const moderateArtwork = async (
 	if (input.action === 'dismiss') {
 		await repository.resolveArtworkReports(resolution);
 		return artwork;
+	}
+
+	if (input.action === 'mark_nsfw') {
+		const updated = await repository.updateArtworkModeration(artwork.id, {
+			hiddenAt: now,
+			isHidden: true,
+			isNsfw: true,
+			nsfwLabeledAt: now,
+			nsfwSource: 'moderator',
+			updatedAt: now
+		});
+		await repository.resolveArtworkReports(resolution);
+
+		if (!updated) {
+			throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+		}
+
+		return updated;
+	}
+
+	if (input.action === 'clear_nsfw') {
+		const updated = await repository.updateArtworkModeration(artwork.id, {
+			isNsfw: false,
+			nsfwLabeledAt: null,
+			nsfwSource: null,
+			updatedAt: now
+		});
+		await repository.resolveArtworkReports(resolution);
+
+		if (!updated) {
+			throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
+		}
+
+		return updated;
 	}
 
 	const updated = await repository.setArtworkHiddenState(artwork.id, {

@@ -19,6 +19,12 @@
 			name: 'Artwork realtime vote demo'
 		},
 		{
+			description:
+				'Compares 20x bitmap reload degradation against replaying a compact stroke JSON document.',
+			href: '/demo/stroke-json',
+			name: 'Stroke JSON lab'
+		},
+		{
 			description: 'Minimal smoke route for Playwright server wiring.',
 			href: '/demo/playwright',
 			name: 'Playwright smoke demo'

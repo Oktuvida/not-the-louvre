@@ -4,7 +4,7 @@
 > vote on artwork — all from the browser.
 
 **Version**: 0.2.0 (MVP)
-**Last Updated**: 2026-03-25
+**Last Updated**: 2026-03-30
 
 ---
 
@@ -126,8 +126,8 @@ Feed → "New Artwork" button → Canvas opens (fullscreen-ish)
 ### 4.3 Forking
 
 ```
-Viewing an artwork → "Fork" button → Canvas opens with original as
-locked background layer → Draw on top → Publish as fork
+Viewing an artwork → "Fork" button → Canvas opens with a full editable
+snapshot of the parent's drawing document → Draw → Publish as fork
 → Fork appears in feed with "forked from @user" attribution
 ```
 
@@ -171,10 +171,26 @@ fully custom session system.
   eye placement dots, mouth line) as a guide. The template is purely visual and
   not part of the final avatar.
 - **Tools**: Same minimalist toolset as the main canvas (see 5.3).
-- **Output**: Rasterized to 256x256 AVIF, capped at roughly 100KB per image,
-  and stored in Supabase Storage behind a cache layer.
+- **Editable source**: The avatar editor uses a product-owned JSON drawing
+  document as the only editable source of truth.
+- **Client draft**: The browser may store a local draft copy of the current
+  avatar document so refreshes do not discard in-progress work before
+  confirmation.
+- **Confirmation payload**: On save, the client submits the avatar drawing
+  document rather than a raster image.
+- **Ingress validation**: The backend validates the submitted drawing document
+  against the avatar schema, aggregate limits, and canonical avatar dimensions
+  before persisting it or rendering derived media.
+- **Canonical output**: After validation, the backend persists the compressed
+  avatar drawing document and renders a canonical 256x256 AVIF derivative,
+  capped at roughly 100KB per image, storing that AVIF in Supabase Storage
+  behind a cache layer.
+- **Delivery format**: Avatar reads from backend to frontend remain AVIF.
 - **Display**: Shown next to every artwork, comment, and in the feed.
 - **Edit**: Users can re-draw their avatar at any time from settings.
+- **Moderation**: Avatars are not self-labeled by users as NSFW. Moderators can
+  mark an avatar as NSFW, hide it from public surfaces, require replacement,
+  or escalate to profile bans for abusive cases.
 
 ### 5.3 Canvas / Drawing Engine
 
@@ -195,12 +211,13 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
 
 #### Canvas Specs
 
-| Property      | Value                                        |
-| ------------- | -------------------------------------------- |
-| Resolution    | 1024x1024 internal, responsive display        |
-| Format        | Exported as AVIF                              |
-| Max file size | ~100KB after compression                      |
-| Stroke data   | Stored as vector paths for replay (optional)  |
+| Property         | Value                                           |
+| ---------------- | ----------------------------------------------- |
+| Resolution       | 768x768 canonical artwork size                  |
+| Editable source  | Product-owned versioned JSON drawing document   |
+| Persistence form | Compact JSON compressed with gzip               |
+| Derived media    | Canonical AVIF rendered from the drawing source |
+| Source limits    | Schema + aggregate limits enforced in backend   |
 
 #### Drawing Experience
 
@@ -208,6 +225,8 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
   for a hand-drawn feel.
 - The surrounding 3D scene reacts subtly while drawing (see Section 9).
 - Canvas sits on a virtual easel/surface within the Threlte scene.
+- The client may keep a local draft of the current drawing document until the
+  user confirms publish.
 
 ### 5.4 Artwork Publishing
 
@@ -215,19 +234,49 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
   suffix (e.g., "Untitled #4827").
 - **Preview**: Before publishing, show a preview of how it will look in the
   feed (with frame, avatar, title).
-- **Publish**: Encodes the final image as AVIF, enforces the ~100KB size budget,
-  uploads it to object storage, and creates the DB record through the
-  application server.
+- **NSFW category**: The creator can explicitly mark an artwork as NSFW during
+  publish or later from artwork management. NSFW artworks render blurred by
+  default in feeds and detail views until the viewer confirms they are 18+ and
+  wants to reveal the piece.
+- **Editable source**: New artworks and forks are edited as product-owned JSON
+  drawing documents. Raster media is never the editable source.
+- **Client draft**: The browser may store a local draft copy of an artwork
+  document before publish so reloads do not discard in-progress work.
+- **Confirmation payload**: On publish, the client submits the drawing document
+  plus metadata rather than a compressed raster image.
+- **Ingress validation**: The backend validates the submitted artwork document
+  against the artwork schema, aggregate limits, and canonical artwork
+  dimensions before persisting it or rendering derived media.
+- **Publish**: The application server persists the compressed drawing document,
+  renders a canonical AVIF derivative from that source, tries progressively
+  lower AVIF quality levels with 4:2:0 chroma subsampling to stay within the
+  roughly 100KB stored-image budget, and rejects the publish only if the
+  sanitized result still exceeds that budget. The canonical AVIF is then
+  uploaded to object storage and the DB record is created in the same confirm
+  flow.
+- **Delivery format**: Artwork reads from the backend remain AVIF.
 - **Edit**: Title can be edited post-publish. Artwork image cannot be changed
   (fork instead).
 - **Delete**: Author can delete their own artwork. Forks remain but show
   "original deleted" in attribution.
 - **Rate limit**: Max 20 publishes per hour per user (prevent storage abuse).
 
+### 5.4.1 NSFW Reveal Experience
+
+- NSFW artworks remain publishable when labeled honestly by the creator.
+- Artwork cards and detail views show blurred media plus a clear adult-content
+  indicator.
+- Revealing NSFW content requires an explicit +18 confirmation flow with
+  consent capture appropriate for GDPR-facing age-gate expectations.
+- The reveal interaction should be reversible, and the product should retain a
+  minimal auditable record that the viewer acknowledged the adult-content gate.
+- Unlabeled adult content remains a moderation violation.
+
 ### 5.5 Fork System
 
-- **Fork action**: Creates a new canvas pre-loaded with the parent artwork as
-  a locked, semi-transparent background layer. User draws on top.
+- **Fork action**: Creates a new artwork document by copying the full parent
+  drawing document into an independent editable snapshot. The child then
+  diverges from that snapshot.
 - **Attribution**: Every fork displays "forked from @username" linking to the
   parent artwork.
 - **Navigation**: From any artwork, you can see:
@@ -237,7 +286,8 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
 - **Deleted parents**: If the parent is deleted, attribution shows
   "forked from [deleted]" — the fork remains intact.
 - **Metadata**: Each artwork stores `parent_id` (nullable). The tree is
-  inferred from these relationships.
+  inferred from these relationships, but a fork never depends on the parent
+  document for reconstruction.
 
 ### 5.6 Voting
 
@@ -297,6 +347,8 @@ Full-screen view of a single artwork:
 - Direct forks carousel (horizontal scroll).
 - Comments section below.
 - Action buttons: Fork, Share (copy link), Report.
+- If the artwork is NSFW, the media remains blurred until the viewer confirms
+  the adult-content gate.
 
 ---
 
@@ -314,7 +366,7 @@ Full-screen view of a single artwork:
 | Auth           | Better Auth with nickname-first UX                |
 | Real-time      | Supabase Realtime for votes/comments only (RLS-protected) |
 | Storage        | Supabase Storage + cache layer (AVIF artworks, avatars) |
-| NSFW Filter    | NSFWJS (client-side pre-publish check)            |
+| Content Safety | User-applied NSFW artwork labeling + moderator review |
 | Hosting        | TBD (any Node-compatible host)                    |
 
 ### 6.2 Architecture Diagram
@@ -333,9 +385,9 @@ Full-screen view of a single artwork:
 │        └──────────┬───┘───────────────┘          │
 │                   │                              │
 │         ┌─────────▼──────────┐                   │
-│         │    NSFWJS          │                   │
-│         │  (pre-publish      │                   │
-│         │   client filter)   │                   │
+│         │ NSFW Label + 18+   │                   │
+│         │ Reveal Gate        │                   │
+│         │ (blur + consent)   │                   │
 │         └─────────┬──────────┘                   │
 └───────────────────┼──────────────────────────────┘
                     │  HTTPS + WebSocket
@@ -370,14 +422,24 @@ onto a 3D plane in the Threlte scene. This gives us:
 - Full Canvas 2D API performance for drawing (no WebGL overhead on strokes).
 - The ability to wrap the canvas in a 3D scene with lighting, particles, and
   camera effects.
-- A deterministic export pipeline that converts the final canvas output to AVIF
-  before persistence.
+- A deterministic editing pipeline where the client operates on a versioned JSON
+  drawing document and the backend renders canonical AVIF only as a derived
+  persistence and delivery artifact.
+
+All canvas-generated editing flows in the MVP follow the same contract: JSON
+drawing document for browser-to-backend confirm, gzip-compressed JSON for
+editable persistence, and canonical AVIF for backend media persistence and
+delivery.
 
 **Storage and egress budget first**: The storage tier is capped at 1GB capacity
 and 5GB of egress, so image handling must optimize for both footprint and
 delivery efficiency from day one.
 
 - All persisted artwork and avatar images should be stored as AVIF.
+- Artwork and avatar editing source should be stored as compact JSON drawing
+  documents compressed with gzip.
+- Backend confirm flows validate the drawing document first, then render AVIF
+  from that validated source.
 - Each stored image should target a hard ceiling of roughly 100KB.
 - Users should fetch media through cached application-controlled URLs rather
   than downloading directly from the storage bucket.
@@ -400,11 +462,19 @@ Schema boundary for MVP:
 - `better-auth` schema: auth/session internals owned by Better Auth.
 - Realtime-facing relations: only the minimum set needed for live vote/comment updates, protected with RLS.
 
-**NSFWJS client-side**: Running the NSFW check on the client before upload
-avoids server-side image processing infra for MVP. The model (~3MB) is loaded
-once and cached. If the image is flagged above a threshold, the publish button
-is blocked with a message. This is the first line of defense — moderators
-handle the rest.
+**User-labeled NSFW with moderated enforcement**: The product does not attempt
+automatic NSFW classification for drawings in MVP. Instead, creators can mark
+artworks as NSFW at publish time, and the product treats that label as a first-
+class content state.
+
+- NSFW-labeled artworks are blurred by default in browse and detail surfaces.
+- Viewers must explicitly pass a +18 reveal gate before seeing the media.
+- The reveal gate should be implemented in a GDPR-conscious way with explicit
+  acknowledgement rather than implicit exposure.
+- Moderators can mark artworks or avatars as NSFW retroactively, hide them,
+  delete them, or ban abusive accounts.
+- Backend moderation state is the trust boundary; the UI label is only one
+  input into that state.
 
 ### 6.4 Real-time Strategy
 
@@ -479,33 +549,48 @@ generated migrations.
 
 #### `users`
 
-| Column          | Type         | Notes                                    |
-| --------------- | ------------ | ---------------------------------------- |
-| id              | uuid PK      | Default `gen_random_uuid()`             |
-| nickname        | varchar(20)  | UNIQUE, lowercase enforced              |
-| password_hash   | text         | Argon2id hash                           |
-| recovery_hash   | text         | Argon2id hash of recovery key           |
-| avatar_url      | text         | Path in Supabase Storage                |
-| role            | enum         | `user` \| `moderator` \| `admin`        |
-| created_at      | timestamptz  | Default `now()`                         |
+| Column               | Type         | Notes                                             |
+| -------------------- | ------------ | ------------------------------------------------- |
+| id                   | uuid PK      | Default `gen_random_uuid()`                      |
+| nickname             | varchar(20)  | UNIQUE, lowercase enforced                       |
+| password_hash        | text         | Argon2id hash                                    |
+| recovery_hash        | text         | Argon2id hash of recovery key                    |
+| avatar_url           | text         | Path in Supabase Storage for derived avatar AVIF |
+| avatar_document      | bytea/text   | Gzip-compressed avatar drawing document          |
+| avatar_document_version | smallint  | Drawing document schema version                  |
+| avatar_is_nsfw       | boolean      | Default false. Set by moderator review           |
+| avatar_is_hidden     | boolean      | Default false. Hidden when moderated             |
+| role                 | enum         | `user` \| `moderator` \| `admin`                 |
+| is_banned            | boolean      | Default false                                    |
+| banned_at            | timestamptz  | Nullable                                         |
+| ban_reason           | varchar(200) | Nullable                                         |
+| created_at           | timestamptz  | Default `now()`                                  |
 
 #### `artworks`
 
-| Column       | Type         | Notes                                       |
-| ------------ | ------------ | ------------------------------------------- |
-| id           | uuid PK      | Default `gen_random_uuid()`                |
-| author_id    | uuid FK      | References `users.id`                      |
-| parent_id    | uuid FK      | Nullable. References `artworks.id` (fork)  |
-| title        | varchar(100) | Default "Untitled #XXXX"                   |
-| image_url    | text         | Path in Supabase Storage                   |
-| score        | int          | Denormalized. Default 0. Updated by trigger|
-| comment_count| int          | Denormalized. Default 0. Updated by trigger|
-| fork_count   | int          | Denormalized. Default 0. Updated by trigger|
-| is_hidden    | boolean      | Default false. Set by moderation           |
-| created_at   | timestamptz  | Default `now()`                            |
+| Column            | Type         | Notes                                              |
+| ----------------- | ------------ | -------------------------------------------------- |
+| id                | uuid PK      | Default `gen_random_uuid()`                       |
+| author_id         | uuid FK      | References `users.id`                             |
+| parent_id         | uuid FK      | Nullable. References `artworks.id` (fork)         |
+| title             | varchar(100) | Default "Untitled #XXXX"                          |
+| image_url         | text         | Path in Supabase Storage for derived artwork AVIF |
+| drawing_document  | bytea/text   | Gzip-compressed artwork drawing document          |
+| drawing_version   | smallint     | Drawing document schema version                   |
+| is_nsfw           | boolean      | Default false                                     |
+| nsfw_source       | enum         | `user` \| `moderator` \| null                     |
+| score             | int          | Denormalized. Default 0. Updated by trigger       |
+| comment_count     | int          | Denormalized. Default 0. Updated by trigger       |
+| fork_count        | int          | Denormalized. Default 0. Updated by trigger       |
+| is_hidden         | boolean      | Default false. Set by moderation                  |
+| created_at        | timestamptz  | Default `now()`                                   |
 
 Indexes: `(author_id)`, `(parent_id)`, `(created_at DESC)`,
 `(score DESC, created_at DESC)`.
+
+Client-side drafts are intentionally excluded from backend tables. They exist
+only in browser storage and are discarded or replaced when the user confirms a
+new avatar save or artwork publish.
 
 #### `votes`
 
@@ -580,19 +665,23 @@ Moderators/admins bypass `is_hidden` filtering where moderation policy allows it
 
 ## 8. Content Moderation
 
-### 8.1 Automated (First Line)
+### 8.1 Creator-Labeled NSFW + Viewer Age Gate
 
-**NSFWJS** runs client-side before publish:
+Creators can explicitly label an artwork as NSFW when publishing it or editing
+its metadata later.
 
-- Model categories: `Porn`, `Hentai`, `Sexy` (flag), `Drawing`, `Neutral`.
-- Threshold: Block if `Porn > 0.7` or `Hentai > 0.7`. Warn (but allow) if
-  `Sexy > 0.6`.
-- This is a soft gate — it catches obvious cases. Users can bypass if
-  determined (it's client-side). That's acceptable.
+- NSFW-labeled artworks are blurred by default anywhere public media is shown.
+- Revealing them requires an explicit +18 confirmation flow.
+- The reveal flow should capture a minimal acknowledgement record suitable for
+  GDPR-conscious age-gate handling.
+- Unlabeled adult content is still a moderation violation.
+- The MVP intentionally avoids automatic drawing classification because false
+  positives are worse than the value provided by the model in this product.
 
 ### 8.2 Community Reporting
 
 - Any authenticated user can report an artwork or comment.
+- Reports can also be used for unlabeled NSFW content or offensive avatars.
 - Report requires selecting a reason (predefined list + optional free text).
 - Reports go into the `reports` table with `status = pending`.
 - After N reports (configurable, start with 3), auto-hide the content pending
@@ -603,17 +692,23 @@ Moderators/admins bypass `is_hidden` filtering where moderation policy allows it
 Moderators (assigned by admins) can:
 
 - View a moderation queue (pending reports sorted by count).
+- **Mark artwork as NSFW** when the creator failed to label it correctly.
+- **Mark avatar as NSFW** and remove it from public display.
 - **Hide** an artwork or comment (sets `is_hidden = true`). Content is not
   deleted — it's hidden from public but visible to author with a "hidden by
   moderator" notice.
 - **Unhide** (false positive).
 - **Delete** (permanent removal from DB + storage).
+- **Ban** user profiles for repeated or severe abuse, including abusive avatar
+  uploads or repeated unlabeled adult content.
 - **Warn** user (future: notification system, for now just a log).
 
 ### 8.4 Moderation Principles
 
 - Err on the side of leniency. This is an art game, not a corporate platform.
-- Obvious NSFW/hate content: remove.
+- Honestly labeled adult artwork can exist behind the blur + 18+ reveal gate.
+- Unlabeled adult content, abusive avatars, and hate content should be removed.
+- Repeated abuse should escalate from hide/delete to profile bans.
 - Edgy but not harmful: leave it. Let votes handle it.
 - Moderators should be active community members who understand the vibe.
 
@@ -758,6 +853,9 @@ Every phase is only complete when the standard repository scripts pass:
 - The MVP must fit within a storage ceiling of 1GB and an egress ceiling of 5GB.
 - Artwork and avatar media are stored as AVIF to maximize compression quality
   for the available budget.
+- Browser uploads generated from canvas are accepted as compressed WebP first,
+  then normalized to AVIF on the backend so storage and egress remain canonical
+  while ingress payloads stay small.
 - The publish pipeline must enforce an image size budget of roughly 100KB per
   stored image.
 - Media delivery should go through a cache layer in front of object storage;
@@ -769,6 +867,8 @@ Every phase is only complete when the standard repository scripts pass:
 - **Canvas flows**: publish, fork, undo/redo, and title validation.
 - **Social flows**: vote transitions, comments, feed sorting, and moderation
   permissions.
+- **Sensitive content flows**: NSFW labeling, blur/reveal gating, moderator
+  overrides, and ban enforcement.
 - **Infrastructure-sensitive features**: migrations, storage integration, and
   realtime subscriptions should have automated validation where practical.
 
@@ -858,9 +958,10 @@ completed in a different phase.
 ### Phase 4 — Moderation (Week 8)
 
 - [ ] Failing tests for report thresholds and moderator permissions
-- [ ] NSFWJS integration (client-side pre-publish gate)
+- [ ] Creator-applied NSFW artwork labeling with blurred feed/detail rendering
+- [ ] +18 reveal confirmation flow for NSFW artwork
 - [ ] Report system (create report, auto-hide threshold)
-- [ ] Moderator dashboard (queue, hide/unhide/delete)
+- [ ] Moderator dashboard (queue, mark NSFW, hide/unhide/delete, ban)
 - [ ] Moderator role assignment (admin only)
 
 ### Phase 5 — Polish & Animation (Weeks 9-10)

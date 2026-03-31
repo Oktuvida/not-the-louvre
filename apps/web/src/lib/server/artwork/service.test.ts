@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ARTWORK_MEDIA_MAX_BYTES, ARTWORK_PUBLISH_RATE_LIMIT } from './config';
+import {
+	ARTWORK_MEDIA_HEIGHT,
+	ARTWORK_MEDIA_MAX_BYTES,
+	ARTWORK_MEDIA_WIDTH,
+	ARTWORK_PUBLISH_RATE_LIMIT
+} from './config';
+import { createEmptyDrawingDocument } from '$lib/features/stroke-json/document';
+import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import { ArtworkFlowError } from './errors';
 import {
 	createAvifTestFile,
 	createJpegTestFile,
 	createMalformedAvifFile,
+	createPngTestFile,
+	createWebpTestFile,
 	fileToBytes
 } from '../media/test-helpers';
 import type {
@@ -15,8 +24,20 @@ import type {
 	PublishRateLimitRecord
 } from './types';
 
-const createPngFile = (size = 128) =>
-	new File([new Uint8Array(size)], 'artwork.png', { type: 'image/png' });
+type ModerationCheckResult = { status: 'allowed' } | { message: string; status: 'blocked' };
+
+const moderation = vi.hoisted(() => ({
+	checkTextModeration: vi.fn<() => Promise<ModerationCheckResult>>(async () => ({
+		status: 'allowed'
+	}))
+}));
+
+vi.mock('$lib/server/moderation/service', () => ({
+	checkTextModeration: moderation.checkTextModeration
+}));
+
+const createUnsupportedImageFile = (size = 128) =>
+	new File([new Uint8Array(size)], 'artwork.gif', { type: 'image/gif' });
 
 const createRepository = () => {
 	const artworks = new Map<string, ArtworkRecord>();
@@ -133,6 +154,13 @@ const createRepository = () => {
 			artworks.set(id, next);
 			return next;
 		}),
+		updateArtworkModeration: vi.fn(async (id: string, input) => {
+			const current = artworks.get(id);
+			if (!current) return null;
+			const next = { ...current, ...input };
+			artworks.set(id, next);
+			return next;
+		}),
 		setCommentHiddenState: vi.fn(async (id: string, input) => {
 			const current = comments.get(id);
 			if (!current) return null;
@@ -184,6 +212,8 @@ const createStorage = () => {
 describe('artwork service', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		moderation.checkTextModeration.mockReset();
+		moderation.checkTextModeration.mockResolvedValue({ status: 'allowed' });
 	});
 
 	it('publishes an artwork with a stable ownership-aware storage key', async () => {
@@ -192,10 +222,10 @@ describe('artwork service', () => {
 		const { storage, uploads } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
 		const media = await createAvifTestFile({
-			height: 1024,
+			height: ARTWORK_MEDIA_HEIGHT,
 			name: 'artwork.avif',
 			quality: 95,
-			width: 1024
+			width: ARTWORK_MEDIA_WIDTH
 		});
 
 		const result = await publishArtwork(
@@ -237,10 +267,167 @@ describe('artwork service', () => {
 		expect(artworks.get('artwork-1')).toMatchObject({
 			title: 'Evening Light',
 			authorId: 'user-1',
+			isNsfw: false,
 			storageKey: 'artworks/user-1/artwork-1.avif',
 			parentId: null,
 			forkCount: 0
 		});
+	}, 10000);
+
+	it('publishes an artwork drawing document and stores the compressed source snapshot', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage, uploads } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+		const drawingDocument = JSON.stringify({
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [
+						[48, 48] as [number, number],
+						[320, 320] as [number, number],
+						[540, 220] as [number, number]
+					],
+					size: 12
+				}
+			]
+		});
+
+		const result = await publishArtwork(
+			{
+				drawingDocument,
+				title: 'Vector First'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		expect(result.storageKey).toBe('artworks/user-1/artwork-1.avif');
+		expect(result.drawingVersion).toBe(1);
+		expect(result.drawingDocument).toBeTruthy();
+		expect(uploads).toHaveLength(1);
+		expect(uploads[0]?.file.type).toBe('image/avif');
+		expect(JSON.parse(decodeCompressedDrawingDocument(result.drawingDocument!))).toEqual(
+			JSON.parse(drawingDocument)
+		);
+		expect(artworks.get('artwork-1')).toMatchObject({
+			drawingVersion: 1,
+			title: 'Vector First'
+		});
+	});
+
+	it('persists creator-labeled nsfw metadata on publish', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
+
+		const result = await publishArtwork(
+			{
+				isNsfw: true,
+				media,
+				title: 'Figure Study'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		expect(result).toMatchObject({
+			isNsfw: true,
+			nsfwSource: 'creator'
+		});
+		expect(artworks.get('artwork-1')).toMatchObject({
+			isNsfw: true,
+			nsfwSource: 'creator'
+		});
+	});
+
+	it('rejects artwork titles blocked by backend moderation before upload', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage, uploads } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+		moderation.checkTextModeration.mockResolvedValue({
+			message: 'Choose a different artwork title.',
+			status: 'blocked'
+		});
+
+		await expect(
+			publishArtwork(
+				{
+					media: await createAvifTestFile({
+						height: ARTWORK_MEDIA_HEIGHT,
+						name: 'artwork.avif',
+						width: ARTWORK_MEDIA_WIDTH
+					}),
+					title: 'mierda'
+				},
+				{
+					ipAddress: '127.0.0.1',
+					user: {
+						id: 'user-1',
+						authUserId: 'user-1',
+						nickname: 'artist_1',
+						role: 'user',
+						avatarUrl: null,
+						name: 'artist_1',
+						email: 'artist_1@not-the-louvre.local',
+						emailVerified: true,
+						image: null,
+						createdAt: now,
+						updatedAt: now
+					}
+				},
+				{ repository, storage }
+			)
+		).rejects.toMatchObject({ code: 'INVALID_TITLE', status: 400 });
+		expect(uploads).toHaveLength(0);
 	});
 
 	it('publishes a forked artwork for a valid active parent and increments the parent fork count', async () => {
@@ -248,11 +435,34 @@ describe('artwork service', () => {
 		const { artworks, repository } = createRepository();
 		const { storage } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
-		const media = await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 });
+		const parentDocument = JSON.stringify({
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [[120, 120] as [number, number], [240, 240] as [number, number]],
+					size: 8
+				}
+			]
+		});
+		const childDocument = JSON.stringify({
+			...JSON.parse(parentDocument),
+			strokes: [
+				...JSON.parse(parentDocument).strokes,
+				{
+					color: '#c84f4f',
+					points: [
+						[320, 320],
+						[480, 420]
+					],
+					size: 10
+				}
+			]
+		});
 
 		await publishArtwork(
 			{
-				media,
+				drawingDocument: parentDocument,
 				title: 'Original artwork'
 			},
 			{
@@ -281,7 +491,7 @@ describe('artwork service', () => {
 
 		const fork = await publishArtwork(
 			{
-				media,
+				drawingDocument: childDocument,
 				parentArtworkId: 'artwork-parent',
 				title: 'Forked artwork'
 			},
@@ -310,10 +520,14 @@ describe('artwork service', () => {
 		);
 
 		expect(fork).toMatchObject({
+			drawingVersion: 1,
 			id: 'artwork-child',
 			parentId: 'artwork-parent',
 			forkCount: 0
 		});
+		expect(JSON.parse(decodeCompressedDrawingDocument(fork.drawingDocument!))).toEqual(
+			JSON.parse(childDocument)
+		);
 		expect(artworks.get('artwork-parent')).toMatchObject({
 			forkCount: 1,
 			id: 'artwork-parent'
@@ -324,12 +538,12 @@ describe('artwork service', () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { storage } = createStorage();
-		const media = await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 });
+		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
 
 		await expect(
 			publishArtwork(
 				{
-					media,
+					drawingDocument,
 					parentArtworkId: 'missing-parent',
 					title: 'Broken fork'
 				},
@@ -359,7 +573,121 @@ describe('artwork service', () => {
 		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
-	it('rejects non-AVIF media before touching storage', async () => {
+	it('publishes browser-exported WebP source media and stores canonical AVIF output', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage, uploads } = createStorage();
+		const media = await createWebpTestFile({ height: 768, width: 768 });
+		const now = new Date('2026-03-26T10:00:00.000Z');
+
+		const result = await publishArtwork(
+			{
+				media,
+				title: 'Browser export'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-webp',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		expect(result.id).toBe('artwork-webp');
+		expect(uploads).toHaveLength(1);
+		expect(uploads[0]?.file.type).toBe('image/avif');
+		expect(artworks.get('artwork-webp')?.mediaContentType).toBe('image/avif');
+		expect(await fileToBytes(uploads[0]!.file)).not.toEqual(await fileToBytes(media));
+	}, 30000);
+
+	it('publishes browser-exported JPEG source media and stores canonical AVIF output', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage, uploads } = createStorage();
+		const media = await createJpegTestFile({ height: 900, width: 900 });
+
+		await publishArtwork(
+			{
+				media,
+				title: 'JPEG browser export'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{ repository, storage }
+		);
+
+		expect(uploads).toHaveLength(1);
+		expect(uploads[0]?.file.type).toBe('image/avif');
+	});
+
+	it('publishes browser-exported PNG source media as the last fallback and stores canonical AVIF output', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage, uploads } = createStorage();
+		const media = await createPngTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			width: ARTWORK_MEDIA_WIDTH
+		});
+
+		await publishArtwork(
+			{
+				media,
+				title: 'PNG browser export'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{ repository, storage }
+		);
+
+		expect(uploads).toHaveLength(1);
+		expect(uploads[0]?.file.type).toBe('image/avif');
+	});
+
+	it('rejects unsupported source media before touching storage', async () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { storage } = createStorage();
@@ -367,7 +695,7 @@ describe('artwork service', () => {
 		await expect(
 			publishArtwork(
 				{
-					media: createPngFile(),
+					media: createUnsupportedImageFile(),
 					title: 'Wrong format'
 				},
 				{
@@ -390,6 +718,7 @@ describe('artwork service', () => {
 			)
 		).rejects.toMatchObject({
 			code: 'INVALID_MEDIA_FORMAT',
+			message: 'Artwork media must be AVIF, WebP, JPEG, or PNG',
 			status: 400
 		});
 
@@ -477,9 +806,9 @@ describe('artwork service', () => {
 		const { repository } = createRepository();
 		const { storage } = createStorage();
 		const jpegPayload = await createJpegTestFile({
-			height: 1024,
+			height: ARTWORK_MEDIA_HEIGHT,
 			name: 'artwork.avif',
-			width: 1024
+			width: ARTWORK_MEDIA_WIDTH
 		});
 		const disguisedFile = new File([await jpegPayload.arrayBuffer()], 'artwork.avif', {
 			type: 'image/avif'
@@ -521,7 +850,11 @@ describe('artwork service', () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { storage } = createStorage();
-		const media = await createAvifTestFile({ height: 768, name: 'artwork.avif', width: 1024 });
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH + 256
+		});
 
 		await expect(
 			publishArtwork(
@@ -555,57 +888,58 @@ describe('artwork service', () => {
 		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
-	it('rejects artwork media when canonical sanitized output exceeds the stored-media budget', async () => {
+	it('publishes complex artwork media within the stored-media budget after adaptive sanitization', async () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
-		const { storage } = createStorage();
+		const { storage, uploads } = createStorage();
 		const media = await createAvifTestFile({
-			height: 1024,
+			height: ARTWORK_MEDIA_HEIGHT,
 			name: 'artwork.avif',
 			pattern: 'noise',
 			quality: 5,
-			width: 1024
+			width: ARTWORK_MEDIA_WIDTH
 		});
 
 		expect(media.size).toBeLessThanOrEqual(ARTWORK_MEDIA_MAX_BYTES);
 
-		await expect(
-			publishArtwork(
-				{
-					media,
-					title: 'Too complex'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{ repository, storage }
-			)
-		).rejects.toMatchObject({
-			code: 'MEDIA_TOO_LARGE',
-			status: 400
-		});
+		const result = await publishArtwork(
+			{
+				media,
+				title: 'Too complex'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{ repository, storage }
+		);
 
-		expect(storage.upload).not.toHaveBeenCalled();
-	}, 15000);
+		expect(result.mediaSizeBytes).toBeLessThanOrEqual(ARTWORK_MEDIA_MAX_BYTES);
+		expect(uploads).toHaveLength(1);
+		expect(uploads[0]?.file.type).toBe('image/avif');
+	}, 30000);
 
 	it('cleans up uploaded media if record creation fails', async () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { deletes, storage } = createStorage();
-		const media = await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 });
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
 
 		vi.mocked(repository.createArtwork).mockRejectedValueOnce(new Error('db insert failed'));
 
@@ -653,7 +987,11 @@ describe('artwork service', () => {
 
 		await publishArtwork(
 			{
-				media: await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 }),
+				media: await createAvifTestFile({
+					height: ARTWORK_MEDIA_HEIGHT,
+					name: 'artwork.avif',
+					width: ARTWORK_MEDIA_WIDTH
+				}),
 				title: 'Original'
 			},
 			{
@@ -728,6 +1066,73 @@ describe('artwork service', () => {
 		});
 	});
 
+	it('rejects updated titles blocked by backend moderation', async () => {
+		const { publishArtwork, updateArtworkTitle } = await import('./service');
+		const { repository } = createRepository();
+		const { storage } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+
+		await publishArtwork(
+			{
+				media: await createAvifTestFile({
+					height: ARTWORK_MEDIA_HEIGHT,
+					name: 'artwork.avif',
+					width: ARTWORK_MEDIA_WIDTH
+				}),
+				title: 'Original'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		moderation.checkTextModeration.mockResolvedValue({
+			message: 'Choose a different artwork title.',
+			status: 'blocked'
+		});
+
+		await expect(
+			updateArtworkTitle(
+				{ artworkId: 'artwork-1', title: 'mierda' },
+				{
+					user: {
+						id: 'user-1',
+						authUserId: 'user-1',
+						nickname: 'artist_1',
+						role: 'user',
+						avatarUrl: null,
+						name: 'artist_1',
+						email: 'artist_1@not-the-louvre.local',
+						emailVerified: true,
+						image: null,
+						createdAt: now,
+						updatedAt: now
+					}
+				},
+				{ now: () => now, repository }
+			)
+		).rejects.toMatchObject({ code: 'INVALID_TITLE', status: 400 });
+	});
+
 	it('allows only the author to delete an artwork and removes stored media', async () => {
 		const { deleteArtwork, publishArtwork } = await import('./service');
 		const { repository } = createRepository();
@@ -736,7 +1141,11 @@ describe('artwork service', () => {
 
 		await publishArtwork(
 			{
-				media: await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 }),
+				media: await createAvifTestFile({
+					height: ARTWORK_MEDIA_HEIGHT,
+					name: 'artwork.avif',
+					width: ARTWORK_MEDIA_WIDTH
+				}),
 				title: 'Disposable'
 			},
 			{
@@ -817,7 +1226,11 @@ describe('artwork service', () => {
 		const { artworks, repository } = createRepository();
 		const { storage } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
-		const media = await createAvifTestFile({ height: 1024, name: 'artwork.avif', width: 1024 });
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
 
 		await publishArtwork(
 			{
@@ -913,9 +1326,9 @@ describe('artwork service', () => {
 		const sanitizeMedia = vi.fn(async (file: File) => ({
 			contentType: 'image/avif',
 			file,
-			height: 1024,
+			height: ARTWORK_MEDIA_HEIGHT,
 			sizeBytes: file.size,
-			width: 1024
+			width: ARTWORK_MEDIA_WIDTH
 		}));
 
 		for (let attempt = 0; attempt < ARTWORK_PUBLISH_RATE_LIMIT.maxAttempts; attempt += 1) {

@@ -7,6 +7,7 @@
 	"scripts": {
 		"dev": "bun run --filter @not-the-louvre/web dev",
 		"build": "bun run --filter @not-the-louvre/web build",
+		"model:transform:studio": "bun run --filter @not-the-louvre/web model:transform:studio",
 		"preview": "bun run --filter @not-the-louvre/web preview",
 		"prepare": "bun run --filter @not-the-louvre/web prepare",
 		"check": "bun run --filter @not-the-louvre/web check",
@@ -18,6 +19,7 @@
 		"test:e2e": "bun run --filter @not-the-louvre/web test:e2e",
 		"db:start": "sh -c '[ -f .env.supabase ] || cp .env.supabase.example .env.supabase; docker compose --env-file .env.supabase up -d'",
 		"db:stop": "sh -c '[ -f .env.supabase ] || cp .env.supabase.example .env.supabase; docker compose --env-file .env.supabase down'",
+		"db:reset": "sh -c '[ -f .env.supabase ] || cp .env.supabase.example .env.supabase; docker compose --env-file .env.supabase down -v --remove-orphans && docker compose --env-file .env.supabase up -d --wait && bun run --filter @not-the-louvre/web db:migrate'",
 		"db:push": "bun run --filter @not-the-louvre/web db:push",
 		"db:generate": "bun run --filter @not-the-louvre/web db:generate",
 		"db:migrate": "bun run --filter @not-the-louvre/web db:migrate",

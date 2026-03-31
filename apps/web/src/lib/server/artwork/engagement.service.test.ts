@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ArtworkFlowError } from './errors';
 import {
 	ARTWORK_COMMENT_MAX_LENGTH,
@@ -15,6 +15,14 @@ import type {
 	ArtworkVoteRecord
 } from './types';
 
+type ModerationCheckResult = { status: 'allowed' } | { message: string; status: 'blocked' };
+
+const moderation = vi.hoisted(() => ({
+	checkTextModeration: vi.fn<() => Promise<ModerationCheckResult>>(async () => ({
+		status: 'allowed'
+	}))
+}));
+
 vi.mock('./storage', () => ({
 	supabaseArtworkStorage: {
 		delete: vi.fn(async () => undefined),
@@ -25,6 +33,15 @@ vi.mock('./storage', () => ({
 vi.mock('./repository', () => ({
 	artworkRepository: {}
 }));
+
+vi.mock('$lib/server/moderation/service', () => ({
+	checkTextModeration: moderation.checkTextModeration
+}));
+
+beforeEach(() => {
+	moderation.checkTextModeration.mockReset();
+	moderation.checkTextModeration.mockResolvedValue({ status: 'allowed' });
+});
 
 type EngagementKind = 'comment' | 'vote';
 
@@ -60,7 +77,8 @@ const createArtworkRecord = (overrides: Partial<ArtworkWithSummary> = {}): Artwo
 	storageKey: 'artworks/author-1/artwork-1.avif',
 	title: 'Artwork',
 	updatedAt: new Date('2026-03-26T10:00:00.000Z'),
-	...overrides
+	...overrides,
+	isNsfw: overrides.isNsfw ?? false
 });
 
 const createUser = (id: string, role: 'admin' | 'moderator' | 'user' = 'user') => {
@@ -76,6 +94,7 @@ const createUser = (id: string, role: 'admin' | 'moderator' | 'user' = 'user') =
 		email: `${id}@not-the-louvre.local`,
 		emailVerified: true,
 		image: null,
+		isBanned: false,
 		createdAt: now,
 		updatedAt: now
 	};
@@ -336,6 +355,13 @@ const createRepository = () => {
 			artworks.set(id, next);
 			return next;
 		}),
+		updateArtworkModeration: vi.fn(async (id: string, input) => {
+			const artwork = artworks.get(id);
+			if (!artwork) return null;
+			const next = { ...artwork, ...input };
+			artworks.set(id, next);
+			return next;
+		}),
 		setCommentHiddenState: vi.fn(async (id: string, input) => {
 			const comment = comments.get(id);
 			if (!comment) return null;
@@ -410,6 +436,31 @@ describe('artwork engagement service', () => {
 				{ generateId: () => 'vote-1', repository }
 			)
 		).rejects.toMatchObject({ code: 'UNAUTHENTICATED', status: 401 });
+	});
+
+	it('rejects vote transitions for soft-banned users', async () => {
+		const { applyArtworkVote } = await import('./service');
+		const { artworks, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+
+		await expect(
+			applyArtworkVote(
+				{ artworkId: 'artwork-1', value: 'up' },
+				{ ipAddress: '127.0.0.1', user: createUser('user-1', 'user') },
+				{ generateId: () => 'vote-1', repository }
+			)
+		).resolves.toBeDefined();
+
+		await expect(
+			applyArtworkVote(
+				{ artworkId: 'artwork-1', value: 'up' },
+				{
+					ipAddress: '127.0.0.1',
+					user: { ...createUser('user-2', 'user'), isBanned: true }
+				},
+				{ generateId: () => 'vote-2', repository }
+			)
+		).rejects.toMatchObject({ code: 'BANNED_USER', status: 403 });
 	});
 
 	it('rejects invalid vote values at the service boundary', async () => {
@@ -493,6 +544,41 @@ describe('artwork engagement service', () => {
 				{ artworkId: 'artwork-1', body: 'x'.repeat(ARTWORK_COMMENT_MAX_LENGTH + 1) },
 				{ ipAddress: '127.0.0.1', user: createUser('user-1') },
 				{ generateId: () => 'comment-2', repository }
+			)
+		).rejects.toMatchObject({ code: 'INVALID_COMMENT', status: 400 });
+	});
+
+	it('rejects soft-banned users from creating comments', async () => {
+		const { createArtworkComment } = await import('./service');
+		const { artworks, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+
+		await expect(
+			createArtworkComment(
+				{ artworkId: 'artwork-1', body: 'Blocked by ban' },
+				{
+					ipAddress: '127.0.0.1',
+					user: { ...createUser('user-1'), isBanned: true }
+				},
+				{ generateId: () => 'comment-ban', repository }
+			)
+		).rejects.toMatchObject({ code: 'BANNED_USER', status: 403 });
+	});
+
+	it('rejects comments blocked by backend moderation before persistence', async () => {
+		const { createArtworkComment } = await import('./service');
+		const { artworks, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		moderation.checkTextModeration.mockResolvedValue({
+			message: 'This comment breaks the gallery rules.',
+			status: 'blocked'
+		});
+
+		await expect(
+			createArtworkComment(
+				{ artworkId: 'artwork-1', body: 'nude spam' },
+				{ ipAddress: '127.0.0.1', user: createUser('user-1') },
+				{ generateId: () => 'comment-3', repository }
 			)
 		).rejects.toMatchObject({ code: 'INVALID_COMMENT', status: 400 });
 	});
@@ -811,6 +897,37 @@ describe('artwork engagement service', () => {
 		expect(reports.get('report-unhide-1')).toMatchObject({
 			reviewedBy: 'moderator-1',
 			status: 'reviewed'
+		});
+	});
+
+	it('allows moderators to mark artworks as NSFW and clear the label without auto-unhiding', async () => {
+		const { moderateArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		const now = new Date('2026-03-26T17:15:00.000Z');
+
+		const marked = await moderateArtwork(
+			{ action: 'mark_nsfw', artworkId: 'artwork-1' } as never,
+			{ user: createUser('moderator-1', 'moderator') },
+			{ now: () => now, repository }
+		);
+
+		expect(marked).toMatchObject({
+			isHidden: true,
+			isNsfw: true,
+			nsfwSource: 'moderator'
+		});
+
+		const cleared = await moderateArtwork(
+			{ action: 'clear_nsfw', artworkId: 'artwork-1' } as never,
+			{ user: createUser('moderator-1', 'moderator') },
+			{ now: () => new Date('2026-03-26T17:20:00.000Z'), repository }
+		);
+
+		expect(cleared).toMatchObject({
+			isHidden: true,
+			isNsfw: false,
+			nsfwSource: null
 		});
 	});
 

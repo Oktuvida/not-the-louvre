@@ -3,6 +3,7 @@ export class ArtworkFlowError extends Error {
 		readonly status: number,
 		message: string,
 		readonly code:
+			| 'BANNED_USER'
 			| 'FORBIDDEN'
 			| 'DUPLICATE_REPORT'
 			| 'INVALID_COMMENT'
@@ -12,6 +13,7 @@ export class ArtworkFlowError extends Error {
 			| 'INVALID_MEDIA_DIMENSIONS'
 			| 'INVALID_LIMIT'
 			| 'INVALID_MEDIA_FORMAT'
+			| 'INVALID_POLICY_VERSION'
 			| 'INVALID_ROLE'
 			| 'INVALID_REPORT_TARGET'
 			| 'INVALID_REPORT_REASON'
@@ -19,6 +21,7 @@ export class ArtworkFlowError extends Error {
 			| 'INVALID_WINDOW'
 			| 'INVALID_TITLE'
 			| 'INVALID_VOTE'
+			| 'VALIDATION_ERROR'
 			| 'MEDIA_TOO_LARGE'
 			| 'NOT_FOUND'
 			| 'PUBLISH_FAILED'

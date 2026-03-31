@@ -27,6 +27,33 @@ test('publishes artwork through the minimal authenticated demo and renders the r
 	).toBeVisible();
 	await expect(page.getByText('Published artwork author: journey_artist')).toBeVisible();
 	await expect(page.getByText(`Artwork card title: ${deterministicArtwork.title}`)).toBeVisible();
+
+	const mediaUrlText = await page.getByText(/Published artwork media URL:/).textContent();
+	const mediaUrl = mediaUrlText?.split(': ').at(1)?.trim();
+	if (!mediaUrl) {
+		throw new Error('Published artwork media URL was not rendered');
+	}
+
+	const mediaResponse = await page.evaluate(async (url) => {
+		const response = await fetch(url);
+		const bytes = await response.arrayBuffer();
+
+		return {
+			byteLength: bytes.byteLength,
+			cacheControl: response.headers.get('cache-control'),
+			contentType: response.headers.get('content-type'),
+			ok: response.ok,
+			status: response.status
+		};
+	}, mediaUrl);
+
+	expect(mediaResponse).toMatchObject({
+		cacheControl: 'public, max-age=31536000, immutable',
+		contentType: 'image/avif',
+		ok: true,
+		status: 200
+	});
+	expect(mediaResponse.byteLength).toBeGreaterThan(0);
 });
 
 test('rejects a jpg payload disguised as .avif and keeps it out of the visible feed', async ({

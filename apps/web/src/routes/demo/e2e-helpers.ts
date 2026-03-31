@@ -1,7 +1,16 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { ARTWORK_MEDIA_MAX_BYTES } from '../../lib/server/artwork/config';
-import { createAvifTestFile, createJpegTestFile } from '../../lib/server/media/test-helpers';
+import {
+	ARTWORK_MEDIA_HEIGHT,
+	ARTWORK_MEDIA_MAX_BYTES,
+	ARTWORK_MEDIA_WIDTH
+} from '../../lib/server/artwork/config';
+import {
+	createAvifTestFile,
+	createJpegTestFile,
+	createMalformedAvifFile,
+	createWebpTestFile
+} from '../../lib/server/media/test-helpers';
 
 export const deterministicAuthUser = {
 	nickname: 'journey_artist',
@@ -28,6 +37,103 @@ export const resetDemoState = async (request: APIRequestContext) => {
 export const openNicknameAuthDemo = async (page: Page) => {
 	await page.goto('/demo/better-auth/login');
 	await expect(page.getByText('Authentication demo state: signed out')).toBeVisible();
+};
+
+export const openHomeAuthOverlay = async (page: Page) => {
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Come In' }).click();
+	await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+};
+
+export const readVisibleOneTimeKey = async (page: Page) => {
+	const recoveryKey = await page.locator('p.font-mono').textContent();
+	if (!recoveryKey) {
+		throw new Error('One-time recovery key was not rendered');
+	}
+
+	return recoveryKey.trim();
+};
+
+export const installAvatarExportHarness = async (page: Page) => {
+	await page.addInitScript(() => {
+		Object.defineProperty(window, '__ntlBypassClientContentFilters', {
+			configurable: true,
+			value: true,
+			writable: true
+		});
+
+		Object.defineProperty(window, '__avatarExportMode', {
+			configurable: true,
+			value: 'good',
+			writable: true
+		});
+	});
+};
+
+export const setAvatarExportMode = async (page: Page, mode: 'bad' | 'good' | 'unsupported') => {
+	await page.evaluate((nextMode) => {
+		(window as Window & { __avatarExportMode?: string }).__avatarExportMode = nextMode;
+	}, mode);
+};
+
+export const installDrawingExportHarness = async (page: Page) => {
+	const validWebp = await createWebpTestFile({
+		height: ARTWORK_MEDIA_HEIGHT,
+		name: 'drawing.webp',
+		width: ARTWORK_MEDIA_WIDTH
+	});
+	const invalidBytes = createMalformedAvifFile();
+
+	const payload = {
+		bad: Buffer.from(await invalidBytes.arrayBuffer()).toString('base64'),
+		webp: Buffer.from(await validWebp.arrayBuffer()).toString('base64')
+	};
+
+	await page.addInitScript((assets) => {
+		Object.defineProperty(window, '__ntlBypassClientContentFilters', {
+			configurable: true,
+			value: true,
+			writable: true
+		});
+
+		const decode = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+		const originalToBlob = HTMLCanvasElement.prototype.toBlob;
+
+		Object.defineProperty(window, '__drawingExportMode', {
+			configurable: true,
+			value: 'webp',
+			writable: true
+		});
+
+		HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+			const mode = (window as Window & { __drawingExportMode?: string }).__drawingExportMode;
+
+			if (type === 'image/webp') {
+				if (mode === 'unsupported') {
+					callback(null);
+					return;
+				}
+
+				if (mode === 'bad') {
+					callback(new Blob([decode(assets.bad)], { type }));
+					return;
+				}
+
+				if (mode === 'webp' && type === 'image/webp') {
+					callback(new Blob([decode(assets.webp)], { type }));
+					return;
+				}
+			}
+
+			originalToBlob.call(this, callback, type, quality);
+		};
+	}, payload);
+};
+
+export const setDrawingExportMode = async (page: Page, mode: 'bad' | 'unsupported' | 'webp') => {
+	await page.evaluate((nextMode) => {
+		(window as Window & { __drawingExportMode?: string }).__drawingExportMode = nextMode;
+	}, mode);
 };
 
 export const checkNicknameAvailability = async (page: Page, nickname: string) => {
@@ -83,9 +189,9 @@ export const recoverThroughNicknameDemo = async (
 
 export const createArtworkUpload = async () => {
 	const file = await createAvifTestFile({
-		height: 1024,
+		height: ARTWORK_MEDIA_HEIGHT,
 		name: 'journey-artwork.avif',
-		width: 1024
+		width: ARTWORK_MEDIA_WIDTH
 	});
 
 	return {
@@ -97,9 +203,9 @@ export const createArtworkUpload = async () => {
 
 export const createDisguisedJpegUpload = async () => {
 	const file = await createJpegTestFile({
-		height: 1024,
+		height: ARTWORK_MEDIA_HEIGHT,
 		name: 'renamed-artwork.avif',
-		width: 1024
+		width: ARTWORK_MEDIA_WIDTH
 	});
 
 	return {

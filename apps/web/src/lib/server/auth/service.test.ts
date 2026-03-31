@@ -177,6 +177,14 @@ const securityLogging = vi.hoisted(() => ({
 	logSecurityEvent: vi.fn()
 }));
 
+type ModerationCheckResult = { status: 'allowed' } | { message: string; status: 'blocked' };
+
+const moderation = vi.hoisted(() => ({
+	checkTextModeration: vi.fn<() => Promise<ModerationCheckResult>>(async () => ({
+		status: 'allowed'
+	}))
+}));
+
 vi.mock('drizzle-orm', () => ({
 	eq: (column: string, value: unknown) => ({ type: 'eq', column, value }),
 	and: (...conditions: unknown[]) => ({ type: 'and', conditions })
@@ -218,11 +226,17 @@ vi.mock('better-auth/crypto', () => ({
 
 vi.mock('$lib/server/security/logging', () => securityLogging);
 
+vi.mock('$lib/server/moderation/service', () => ({
+	checkTextModeration: moderation.checkTextModeration
+}));
+
 describe('auth service', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mocked.state.reset();
 		securityLogging.logSecurityEvent.mockReset();
+		moderation.checkTextModeration.mockReset();
+		moderation.checkTextModeration.mockResolvedValue({ status: 'allowed' });
 	});
 
 	it('issues a recovery key and default role on signup', async () => {
@@ -277,6 +291,23 @@ describe('auth service', () => {
 		).rejects.toMatchObject({
 			code: 'NICKNAME_TAKEN',
 			status: 409
+		});
+		expect(mocked.state.authApi.signUpEmail).not.toHaveBeenCalled();
+	});
+
+	it('rejects nicknames blocked by backend moderation before creating auth records', async () => {
+		moderation.checkTextModeration.mockResolvedValue({
+			message: 'Choose a different nickname.',
+			status: 'blocked'
+		});
+
+		const { signUpWithNickname } = await import('./service');
+
+		await expect(
+			signUpWithNickname({ nickname: 'cabron', password: 'password123' })
+		).rejects.toMatchObject({
+			code: 'INVALID_NICKNAME',
+			status: 400
 		});
 		expect(mocked.state.authApi.signUpEmail).not.toHaveBeenCalled();
 	});
