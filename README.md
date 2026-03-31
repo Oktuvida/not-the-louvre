@@ -19,22 +19,15 @@ It's a museum sim for people whose artistic peak was doodling in MS Paint.
 
 You open the app, sketch something mildly unhinged, hit publish, and wait for the public to either crown you the next genius or pelt your work with a perfectly justified tomato.
 
-### ✨ Features, allegedly
+## ✨ Why it looks cool (Features & Tech)
 
-- 🖌️ **A deeply serious drawing tool**: You get a brush, an eraser, and a few colors. That's it. No layers, no shapes, no bucket fill. If your vision depends on advanced tooling, perhaps your vision was weak.
-- 🍴 **Forking, or tasteful art vandalism**: See something beautiful? Fork it, keep the original as a locked background, and add the moustache it was clearly missing. The full ancestry stays visible, so credit and blame are both preserved.
-- 🎩 **Needlessly elegant 2.5D presentation**: Built with **Threlte**. The gallery glows, moves, and shows off like a millionaire's foyer. The artwork is still a flat little PNG. That mismatch is the whole point.
-- 🍅 **Public curation with produce**: Upvote what deserves applause, downvote what deserves a tomato. Yes, the tomato actually drops on screen. We believe in responsive feedback.
-- 🛡️ **Community-first moderation**: creators label sensitive work, viewers opt into 18+ reveals, and moderators can step in when a piece or profile crosses the line.
-
-## 🛠️ The stack behind the nonsense
-
-Because even a joke needs plumbing:
-- **Frontend:** SvelteKit.
-- **3D / Graphics:** Threlte + HTML5 Canvas 2D API.
-- **Backend / Database:** Supabase.
-- **Realtime:** Supabase Realtime.
-- **Moderation:** DB-backed text policies, creator-applied NSFW labels, and persisted 18+ reveal gating.
+- 🖌️ **A dazzling drawing tool**: You get a brush and a few colors. That's it. No layers, no shapes, no bucket fill. If your vision depends on advanced tooling, perhaps your vision was weak.
+- 🍴 **Forking**: See a piece that's almost perfect? Fork it, keep the original as a locked background, and add the moustache it was clearly missing. The full ancestry stays visible so credit and blame are preserved.
+- 🎩 **3D Navigation meets 2D Canvas (Threlte)**: We used Threlte so that navigating the app's routes feels like organically interacting with a 3D model of the studio. But when it's time to draw, we use the classic 2D Canvas API for maximum fluidity.
+- 🍅 **Realtime Social Loop**: Votes and comments update live without refreshing the page, thanks to Supabase Realtime.
+- 🧠 **Lossless JSON Drawing Documents**: To allow infinite forking without cumulative image degradation, the source of truth isn't a PNG. We store a versioned, compressed JSON document of brush strokes. When you fork, you clone the math, not the pixels.
+- 🛡️ **Moderation & The inevitable "TTP" Metric**: In any public multiplayer drawing app, the *Time To Penis (TTP)* inevitably trends to zero. To manage this, we built a real moderation system from day one: creators can label work as NSFW (hidden behind an 18+ filter), and admins have quick shortcuts to censor unacceptable chaos.
+- 📦 **Reproducible & Self-Hostable Infrastructure**
 
 ## 📦 Repository layout
 
