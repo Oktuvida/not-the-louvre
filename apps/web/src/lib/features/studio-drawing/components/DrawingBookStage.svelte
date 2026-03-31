@@ -407,9 +407,9 @@
 		justify-content: flex-start;
 		align-items: flex-end;
 		padding: 2rem;
-		padding-top: 10rem;
-		/* padding: clamp(16px, 1.5vw, 18px); */
-		gap: 2rem;
+		padding-top: 7.1rem;
+		padding-bottom: 1.25rem;
+		gap: 1rem;
 	}
 
 	/* --- Tagline below canvas --- */
@@ -462,6 +462,7 @@
 		text-align: center;
 		backface-visibility: hidden;
 		cursor: pointer;
+		transition: opacity 160ms ease;
 	}
 
 	.cover-front:disabled {
@@ -683,6 +684,11 @@
 		pointer-events: none;
 	}
 
+	.book-shell[data-state='opening'] .cover-front,
+	.book-shell[data-state='open'] .cover-front {
+		opacity: 0;
+	}
+
 	/* --- Responsive --- */
 
 	@media (max-width: 700px) {
@@ -700,6 +706,12 @@
 
 		.canvas-page {
 			padding: 1rem;
+		}
+
+		.cover-fields-area {
+			padding: 1rem;
+			padding-top: 4.35rem;
+			gap: 0.8rem;
 		}
 
 		.cover-invite {
