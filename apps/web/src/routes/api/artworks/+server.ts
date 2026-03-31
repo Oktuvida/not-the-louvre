@@ -46,6 +46,7 @@ export const POST: RequestHandler = async (event) => {
 };
 
 export const GET: RequestHandler = async (event) => {
+	const authorId = event.url.searchParams.get('authorId');
 	const sort = event.url.searchParams.get('sort') ?? 'recent';
 	const window = event.url.searchParams.get('window');
 	const cursor = event.url.searchParams.get('cursor');
@@ -53,10 +54,15 @@ export const GET: RequestHandler = async (event) => {
 	const limit = limitValue ? Number.parseInt(limitValue, 10) : undefined;
 
 	try {
-		const discovery = await listArtworkDiscovery(
-			{ cursor, limit, sort: sort as never, window },
-			{ user: event.locals.user }
-		);
+		const discoveryRequest = {
+			cursor,
+			limit,
+			sort: sort as never,
+			window,
+			...(authorId ? { authorId } : {})
+		};
+
+		const discovery = await listArtworkDiscovery(discoveryRequest, { user: event.locals.user });
 		return json(discovery);
 	} catch (error) {
 		return toErrorResponse(error);

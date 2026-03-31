@@ -291,6 +291,7 @@ export const listArtworkDiscovery = async (
 	const records =
 		sort === 'recent'
 			? await repository.listRecentArtworks({
+					authorId: input.authorId,
 					cursor: cursor?.sort === 'recent' ? cursor : null,
 					limit: limit + 1,
 					viewer

@@ -250,7 +250,13 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.select(buildBaseSelect(viewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(and(artworkVisibilityWhere(), recentCursorWhere(input.cursor) ?? undefined))
+			.where(
+				and(
+					artworkVisibilityWhere(),
+					input.authorId ? eq(artworks.authorId, input.authorId) : undefined,
+					recentCursorWhere(input.cursor) ?? undefined
+				)
+			)
 			.orderBy(desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
