@@ -1,1 +1,1 @@
-export { gsap } from 'gsap/dist/gsap.js';
+export { gsap } from 'gsap';
