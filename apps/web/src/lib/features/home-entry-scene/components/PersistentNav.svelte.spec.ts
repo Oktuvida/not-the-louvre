@@ -31,7 +31,7 @@ describe('PersistentNav', () => {
 		});
 
 		await expect.element(page.getByText('HELLO')).toBeVisible();
-		await expect.element(page.getByText(/Signed in as/)).toBeVisible();
+		await expect.element(page.getByText('artist_1')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Logout' })).toBeVisible();
 	});
 

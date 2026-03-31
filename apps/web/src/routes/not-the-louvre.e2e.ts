@@ -61,7 +61,8 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/');
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expect(page.getByText('HELLO')).toBeVisible();
+		await expect(page.getByText(deterministicAuthUser.nickname)).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
 		await page.getByRole('button', { name: 'Logout' }).click();
 
@@ -70,10 +71,8 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByPlaceholder('Enter your password').fill(deterministicAuthUser.password);
 		await page.getByRole('button', { name: 'Sign In' }).last().click();
 
-		await expect(page.getByText('Signed in as')).toBeVisible();
-		await expect(
-			page.getByText(new RegExp(`Signed in as\\s*${deterministicAuthUser.nickname}`))
-		).toBeVisible();
+		await expect(page.getByText('HELLO')).toBeVisible();
+		await expect(page.getByText(deterministicAuthUser.nickname)).toBeVisible();
 	});
 
 	test('home signup flow uses the backend recovery key and keeps the avatar onboarding step', async ({
@@ -97,13 +96,11 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expect(page.getByText('HELLO')).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
-		await expect(
-			page.getByText(new RegExp(`Signed in as\\s*${deterministicAuthUser.nickname}`))
-		).toBeVisible();
+		await expect(page.getByText(deterministicAuthUser.nickname)).toBeVisible();
 		await page.reload();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expect(page.getByText('HELLO')).toBeVisible();
 		await expect(page.getByText('Finish your avatar')).not.toBeVisible();
 	});
 
@@ -123,7 +120,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.reload();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
-		await expect(page.getByText('Signed in as')).not.toBeVisible();
+		await expect(page.getByText('HELLO')).not.toBeVisible();
 	});
 
 	test('avatar save failure stays in onboarding and retry can complete the flow', async ({
@@ -148,7 +145,8 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await setAvatarExportMode(page, 'good');
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expect(page.getByText('HELLO')).toBeVisible();
+		await expect(page.getByText(deterministicAuthUser.nickname)).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
 	});
 
@@ -164,7 +162,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/');
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expect(page.getByText('HELLO')).toBeVisible();
 		await page.getByRole('button', { name: 'Logout' }).click();
 
 		await openHomeAuthOverlay(page);
@@ -194,7 +192,7 @@ test.describe('Not the Louvre frontend port', () => {
 			.getByPlaceholder('Enter your password')
 			.fill(deterministicAuthUser.recoveredPassword);
 		await page.getByRole('button', { name: 'Sign In' }).last().click();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expect(page.getByText('HELLO')).toBeVisible();
 	});
 
 	test('existing authenticated sessions bootstrap directly into the signed-in home scene and can log out', async ({
@@ -210,17 +208,15 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByRole('button', { name: 'Start account' }).click();
 		await page.getByText('I Stored It').click();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-		await expect(page.getByText('Signed in as')).toBeVisible();
+		await expect(page.getByText('HELLO')).toBeVisible();
 
 		await page.goto('/');
-		await expect(page.getByText('Signed in as')).toBeVisible();
-		await expect(
-			page.getByText(new RegExp(`Signed in as\\s*${deterministicAuthUser.nickname}`))
-		).toBeVisible();
+		await expect(page.getByText('HELLO')).toBeVisible();
+		await expect(page.getByText(deterministicAuthUser.nickname)).toBeVisible();
 		await page.getByRole('button', { name: 'Logout' }).click();
 
 		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
-		await expect(page.getByText('Signed in as')).not.toBeVisible();
+		await expect(page.getByText('HELLO')).not.toBeVisible();
 	});
 
 	test('draw route publishes real artwork through the product flow', async ({ page }) => {
