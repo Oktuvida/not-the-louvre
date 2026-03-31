@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { gsap } from 'gsap';
+	import gsap from 'gsap';
 
 	let {
 		adultContentEnabled = false,

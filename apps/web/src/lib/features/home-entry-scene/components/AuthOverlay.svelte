@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { deserialize, enhance } from '$app/forms';
-	import { gsap } from 'gsap';
+	import gsap from 'gsap';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
