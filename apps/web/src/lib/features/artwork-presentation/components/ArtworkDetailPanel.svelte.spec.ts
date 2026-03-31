@@ -36,7 +36,10 @@ describe('ArtworkDetailPanel', () => {
 
 		await page.getByRole('button', { name: 'Fork' }).click();
 		expect(goto).toHaveBeenCalledWith('/draw?fork=artwork-1');
-		await expect.element(page.getByText('Forks: 2')).toBeVisible();
+		await expect.element(page.getByText('2 forks')).toBeVisible();
+		await expect.element(page.getByText('Artwork details')).not.toBeInTheDocument();
+		await expect.element(page.getByText('POWER SCORE')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Close' })).toBeVisible();
 	});
 
 	it('renders artwork detail as read-only for signed-out visitors', async () => {
@@ -47,13 +50,10 @@ describe('ArtworkDetailPanel', () => {
 			viewer: null
 		});
 
-		await expect.element(page.getByRole('button', { name: /Comment/ })).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Fork' })).not.toBeInTheDocument();
+		await expect.element(page.getByPlaceholder('Write a comment')).not.toBeInTheDocument();
 		await expect
-			.element(page.getByPlaceholder('Say something about this piece'))
-			.not.toBeInTheDocument();
-		await expect
-			.element(page.getByText('Sign in to vote, comment, or fork this piece.'))
+			.element(page.getByText('Sign in to vote, fork, or leave a comment.'))
 			.toBeVisible();
 	});
 
@@ -85,8 +85,8 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await page.getByPlaceholder('Say something about this piece').fill('Great work');
-		await page.getByRole('button', { name: /Comment/ }).click();
+		await page.getByPlaceholder('Write a comment').fill('Great work');
+		await page.getByRole('button', { name: 'Send comment' }).click();
 
 		expect(onArtworkChange).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -113,8 +113,8 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await page.getByPlaceholder('Say something about this piece').fill('blocked text');
-		await page.getByRole('button', { name: /Comment/ }).click();
+		await page.getByPlaceholder('Write a comment').fill('blocked text');
+		await page.getByRole('button', { name: 'Send comment' }).click();
 
 		await expect.element(page.getByText('This comment breaks the gallery rules.')).toBeVisible();
 		expect(fetchSpy).not.toHaveBeenCalled();
@@ -137,8 +137,8 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await page.getByPlaceholder('Say something about this piece').fill('retry later');
-		await page.getByRole('button', { name: /Comment/ }).click();
+		await page.getByPlaceholder('Write a comment').fill('retry later');
+		await page.getByRole('button', { name: 'Send comment' }).click();
 
 		await expect
 			.element(page.getByText('Comment safety check is unavailable right now. Please try again.'))
@@ -147,15 +147,10 @@ describe('ArtworkDetailPanel', () => {
 		expect(onArtworkChange).not.toHaveBeenCalled();
 	});
 
-	it('shows report actions for signed-in viewers and admin quick moderation controls', async () => {
+	it('shows compact moderation controls for admins inside the artwork action bar', async () => {
 		const onArtworkChange = vi.fn();
 		const fetchSpy = vi
 			.fn()
-			.mockResolvedValueOnce(
-				new Response(JSON.stringify({ report: { id: 'report-1', reason: 'spam' } }), {
-					status: 201
-				})
-			)
 			.mockResolvedValueOnce(
 				new Response(
 					JSON.stringify({ artwork: { id: 'artwork-1', isHidden: true, isNsfw: true } }),
@@ -170,13 +165,11 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'admin-1', role: 'admin' }
 		});
 
-		await page.getByRole('button', { name: 'Report artwork' }).click();
-		await page.getByRole('button', { name: 'Spam' }).click();
-		await expect.element(page.getByText('Report submitted.')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Report artwork' })).toBeVisible();
 
 		await page.getByRole('button', { name: 'Mark artwork NSFW' }).click();
 
-		expect(fetchSpy).toHaveBeenNthCalledWith(2, '/api/artworks/artwork-1/moderation', {
+		expect(fetchSpy).toHaveBeenNthCalledWith(1, '/api/artworks/artwork-1/moderation', {
 			body: JSON.stringify({ action: 'mark_nsfw' }),
 			headers: { 'content-type': 'application/json' },
 			method: 'PATCH'
