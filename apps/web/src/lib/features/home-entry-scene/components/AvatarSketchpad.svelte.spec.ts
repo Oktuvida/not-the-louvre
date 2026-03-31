@@ -28,13 +28,13 @@ describe('AvatarSketchpad', () => {
 			nickname: 'artist_1'
 		});
 
-		const firstSwatch = page.getByRole('button', { name: 'Select color #F4EBDD' });
-		const targetSwatch = page.getByRole('button', { name: 'Select color #2B2622' });
+		const defaultSwatch = page.getByRole('button', { name: 'Select color #2B2622' });
+		const targetSwatch = page.getByRole('button', { name: 'Select color #2F4B9A' });
 
-		await expect.element(firstSwatch).toHaveAttribute('aria-pressed', 'true');
+		await expect.element(defaultSwatch).toHaveAttribute('aria-pressed', 'true');
 		await targetSwatch.click();
 		await expect.element(targetSwatch).toHaveAttribute('aria-pressed', 'true');
-		await expect.element(firstSwatch).toHaveAttribute('aria-pressed', 'false');
+		await expect.element(defaultSwatch).toHaveAttribute('aria-pressed', 'false');
 	});
 
 	it('keeps the brush preview footprint stable while the dot size and color change', async () => {

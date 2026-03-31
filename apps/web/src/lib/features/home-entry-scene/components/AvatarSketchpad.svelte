@@ -38,6 +38,7 @@
 	];
 	const BRUSH_SIZES = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
 	const BRUSH_PREVIEW_SIZE = Math.max(...BRUSH_SIZES) + 6;
+	const DEFAULT_AVATAR_COLOR = '#2B2622';
 
 	const CANVAS_WIDTH = 340;
 	const CANVAS_HEIGHT = 340;
@@ -91,7 +92,7 @@
 	} = $props();
 
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
-	let activeColor = $state(palette[0]);
+	let activeColor = $state(DEFAULT_AVATAR_COLOR);
 	let baselineDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
 	let brushStep = $state(Math.floor((BRUSH_SIZES.length - 1) / 2));
 	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
