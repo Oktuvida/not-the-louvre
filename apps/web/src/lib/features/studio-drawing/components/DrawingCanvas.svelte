@@ -170,6 +170,7 @@
 
 	function cancelDrawing(event: PointerEvent) {
 		event.preventDefault();
+		stopDrawing();
 		finishDrawing(event);
 	}
 </script>
