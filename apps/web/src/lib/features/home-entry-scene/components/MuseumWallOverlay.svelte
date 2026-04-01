@@ -131,16 +131,14 @@
 					overlayRect.height
 			),
 			left: toPercent(
-				(measuredOpening.left - overlayRect.left + WALL_OPENING_OFFSETS_PX.left) /
-					overlayRect.width
+				(measuredOpening.left - overlayRect.left + WALL_OPENING_OFFSETS_PX.left) / overlayRect.width
 			),
 			right: toPercent(
 				(measuredOpening.right - overlayRect.left + WALL_OPENING_OFFSETS_PX.right) /
 					overlayRect.width
 			),
 			top: toPercent(
-				(measuredOpening.top - overlayRect.top + WALL_OPENING_OFFSETS_PX.top) /
-					overlayRect.height
+				(measuredOpening.top - overlayRect.top + WALL_OPENING_OFFSETS_PX.top) / overlayRect.height
 			)
 		};
 

@@ -623,7 +623,10 @@
 							>
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
-										<span class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase">Nickname</span>
+										<span
+											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											>Nickname</span
+										>
 										{#if nicknameError}
 											<p class="text-right text-xs text-[var(--color-danger)]">{nicknameError}</p>
 										{/if}
@@ -639,7 +642,10 @@
 
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
-										<span class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase">Password</span>
+										<span
+											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											>Password</span
+										>
 										{#if passwordError}
 											<p class="text-right text-xs text-[var(--color-danger)]">{passwordError}</p>
 										{/if}
@@ -653,7 +659,9 @@
 									/>
 								</label>
 
-								<div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+								<div
+									class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between"
+								>
 									<GameButton
 										type="button"
 										variant="ghost"
@@ -686,11 +694,16 @@
 							>
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
-										<span class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase">Nickname</span>
+										<span
+											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											>Nickname</span
+										>
 										{#if nicknameError}
 											<p class="text-right text-xs text-[var(--color-danger)]">{nicknameError}</p>
 										{:else if availabilityMessage}
-											<p class={`text-right text-xs ${availabilityState === 'taken' ? 'text-[var(--color-danger)]' : availabilityState === 'available' ? 'text-[var(--color-secondary)]' : 'text-[var(--color-muted)]'}`}>
+											<p
+												class={`text-right text-xs ${availabilityState === 'taken' ? 'text-[var(--color-danger)]' : availabilityState === 'available' ? 'text-[var(--color-secondary)]' : 'text-[var(--color-muted)]'}`}
+											>
 												{availabilityMessage}
 											</p>
 										{/if}
@@ -706,7 +719,10 @@
 
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
-										<span class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase">Password</span>
+										<span
+											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											>Password</span
+										>
 										{#if passwordError}
 											<p class="text-right text-xs text-[var(--color-danger)]">{passwordError}</p>
 										{/if}
@@ -720,8 +736,14 @@
 									/>
 								</label>
 
-								<div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
-									<p class="font-display text-xs tracking-[0.18em] text-[var(--color-muted)] uppercase">Step 1: claim your wall</p>
+								<div
+									class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between"
+								>
+									<p
+										class="font-display text-xs tracking-[0.18em] text-[var(--color-muted)] uppercase"
+									>
+										Step 1: claim your wall
+									</p>
 
 									<GameButton
 										type="button"
@@ -745,7 +767,10 @@
 							>
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
-										<span class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase">Nickname</span>
+										<span
+											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											>Nickname</span
+										>
 										{#if nicknameError}
 											<p class="text-right text-xs text-[var(--color-danger)]">{nicknameError}</p>
 										{/if}
@@ -760,7 +785,10 @@
 								</label>
 
 								<label class="block space-y-2">
-									<span class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase">Recovery Key</span>
+									<span
+										class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+										>Recovery Key</span
+									>
 									<input
 										bind:value={recoveryKey}
 										name="recoveryKey"
@@ -769,13 +797,20 @@
 										class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 									/>
 								</label>
-								{#if recoveryKeyError}<p class="text-sm text-[var(--color-danger)]">{recoveryKeyError}</p>{/if}
+								{#if recoveryKeyError}<p class="text-sm text-[var(--color-danger)]">
+										{recoveryKeyError}
+									</p>{/if}
 
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
-										<span class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase">New Password</span>
+										<span
+											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											>New Password</span
+										>
 										{#if newPasswordError}
-											<p class="text-right text-xs text-[var(--color-danger)]">{newPasswordError}</p>
+											<p class="text-right text-xs text-[var(--color-danger)]">
+												{newPasswordError}
+											</p>
 										{/if}
 									</div>
 									<input
@@ -787,7 +822,9 @@
 									/>
 								</label>
 
-								<div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+								<div
+									class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between"
+								>
 									<GameButton
 										type="button"
 										variant="ghost"
@@ -809,10 +846,18 @@
 								</div>
 							</form>
 						{:else if view === 'signup-success' || view === 'recover-success'}
-							<div class="space-y-4 rounded-[1.4rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper)] p-5">
-								<p class="font-display text-sm tracking-[0.18em] text-[var(--color-muted)] uppercase">One-time key</p>
+							<div
+								class="space-y-4 rounded-[1.4rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper)] p-5"
+							>
+								<p
+									class="font-display text-sm tracking-[0.18em] text-[var(--color-muted)] uppercase"
+								>
+									One-time key
+								</p>
 								<div class="relative">
-									<p class="rounded-[1rem] border-2 border-[var(--color-ink)] bg-[var(--color-ink)] px-4 py-4 pr-16 font-mono text-sm break-all text-[var(--color-paper-deep)] select-all">
+									<p
+										class="rounded-[1rem] border-2 border-[var(--color-ink)] bg-[var(--color-ink)] px-4 py-4 pr-16 font-mono text-sm break-all text-[var(--color-paper-deep)] select-all"
+									>
 										{oneTimeKey}
 									</p>
 									<button
