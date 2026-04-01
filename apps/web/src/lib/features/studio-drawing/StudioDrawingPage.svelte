@@ -503,7 +503,7 @@
 		{#if isMobileViewport}
 			<div class="studio-mobile-layout">
 				<div class="studio-mobile-canvas-shell">
-					<div class="studio-mobile-canvas-card">
+					<div class="studio-mobile-canvas-card" data-testid="studio-mobile-canvas-card">
 						<DrawingCanvas
 							bind:canvasRef
 							bind:drawingDocument
@@ -812,6 +812,7 @@
 
 	.studio-mobile-canvas-card {
 		position: relative;
+		aspect-ratio: 1 / 1;
 		overflow: visible;
 		border: 3px solid rgb(47 36 28 / 0.8);
 		border-radius: 1.4rem;
@@ -1154,6 +1155,7 @@
 		.studio-mobile-canvas-card {
 			padding: 0.8rem;
 			border-radius: 1.15rem;
+			aspect-ratio: 1 / 1;
 		}
 
 		.studio-mobile-canvas-card :global(canvas) {

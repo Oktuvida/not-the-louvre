@@ -84,6 +84,28 @@ describe('StudioDrawingPage', () => {
 		await expect.element(page.getByPlaceholder('Untitled genius')).toBeVisible();
 	});
 
+	it('keeps the mobile studio canvas card square', async () => {
+		vi.stubGlobal(
+			'matchMedia',
+			vi.fn((query: string) => ({
+				addEventListener: vi.fn(),
+				addListener: vi.fn(),
+				dispatchEvent: vi.fn(),
+				matches: query === '(max-width: 700px)',
+				media: query,
+				onchange: null,
+				removeEventListener: vi.fn(),
+				removeListener: vi.fn()
+			}))
+		);
+
+		render(StudioDrawingPage, { openingDurationMs: 1 });
+
+		const mobileCanvasCard = document.querySelector('[data-testid="studio-mobile-canvas-card"]');
+		expect(mobileCanvasCard).not.toBeNull();
+		expect(mobileCanvasCard?.className).toContain('studio-mobile-canvas-card');
+	});
+
 	it('keeps the sketchbook opening animation duration even when reduced motion is requested', async () => {
 		vi.stubGlobal(
 			'matchMedia',
