@@ -20,6 +20,21 @@ const createMockContext = () =>
 		strokeStyle: '#000000'
 	}) as unknown as CanvasRenderingContext2D;
 
+const createPointerEvent = (
+	type: string,
+	init: Partial<PointerEventInit> & { clientX?: number; clientY?: number; pointerId?: number }
+) =>
+	new PointerEvent(type, {
+		bubbles: true,
+		buttons: 1,
+		clientX: init.clientX ?? 0,
+		clientY: init.clientY ?? 0,
+		isPrimary: true,
+		pointerId: init.pointerId ?? 1,
+		pointerType: 'mouse',
+		...init
+	});
+
 describe('DrawingCanvas', () => {
 	beforeEach(() => {
 		vi.unstubAllGlobals();
@@ -82,6 +97,9 @@ describe('DrawingCanvas', () => {
 		if (!canvas) {
 			throw new Error('Expected drawing canvas to render');
 		}
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
 
 		vi.clearAllMocks();
 		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
@@ -96,13 +114,9 @@ describe('DrawingCanvas', () => {
 			toJSON: () => ({})
 		} as DOMRect);
 
-		canvas.dispatchEvent(
-			new MouseEvent('mousedown', { bubbles: true, buttons: 1, clientX: 24, clientY: 24 })
-		);
-		canvas.dispatchEvent(
-			new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientX: 80, clientY: 80 })
-		);
-		canvas.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 24, clientY: 24 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 80, clientY: 80 }));
+		canvas.dispatchEvent(createPointerEvent('pointerup', { buttons: 0, clientX: 80, clientY: 80 }));
 
 		expect(ctx.beginPath).toHaveBeenCalled();
 		expect(ctx.moveTo).toHaveBeenCalled();
@@ -124,6 +138,9 @@ describe('DrawingCanvas', () => {
 		if (!canvas) {
 			throw new Error('Expected drawing canvas to render');
 		}
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
 
 		vi.clearAllMocks();
 		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
@@ -138,18 +155,12 @@ describe('DrawingCanvas', () => {
 			toJSON: () => ({})
 		} as DOMRect);
 
-		canvas.dispatchEvent(
-			new MouseEvent('mousedown', { bubbles: true, buttons: 1, clientX: 24, clientY: 24 })
-		);
-		canvas.dispatchEvent(
-			new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientX: 80, clientY: 80 })
-		);
-		canvas.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true, buttons: 1 }));
-		canvas.dispatchEvent(
-			new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientX: 120, clientY: 120 })
-		);
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 24, clientY: 24 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 80, clientY: 80 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 900, clientY: 900 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 120, clientY: 120 }));
 
-		expect(ctx.lineTo).toHaveBeenCalledTimes(2);
+		expect(ctx.lineTo).toHaveBeenCalledTimes(3);
 		getContextSpy.mockRestore();
 	});
 
@@ -166,6 +177,9 @@ describe('DrawingCanvas', () => {
 		if (!canvas) {
 			throw new Error('Expected drawing canvas to render');
 		}
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
 
 		vi.clearAllMocks();
 		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
@@ -180,15 +194,11 @@ describe('DrawingCanvas', () => {
 			toJSON: () => ({})
 		} as DOMRect);
 
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 24, clientY: 24 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 80, clientY: 80 }));
+		window.dispatchEvent(createPointerEvent('pointerup', { buttons: 0, clientX: 80, clientY: 80 }));
 		canvas.dispatchEvent(
-			new MouseEvent('mousedown', { bubbles: true, buttons: 1, clientX: 24, clientY: 24 })
-		);
-		canvas.dispatchEvent(
-			new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientX: 80, clientY: 80 })
-		);
-		window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-		canvas.dispatchEvent(
-			new MouseEvent('mousemove', { bubbles: true, buttons: 0, clientX: 120, clientY: 120 })
+			createPointerEvent('pointermove', { buttons: 0, clientX: 120, clientY: 120 })
 		);
 
 		expect(ctx.lineTo).toHaveBeenCalledTimes(1);
@@ -232,6 +242,97 @@ describe('DrawingCanvas', () => {
 			expect(ctx.lineTo).toHaveBeenCalled();
 			expect(ctx.stroke).toHaveBeenCalled();
 		});
+
+		getContextSpy.mockRestore();
+	});
+
+	it('ignores invalid pointer starts without capturing the pointer or corrupting the next stroke', async () => {
+		const ctx = createMockContext();
+		const getContextSpy = vi
+			.spyOn(HTMLCanvasElement.prototype, 'getContext')
+			.mockImplementation(((contextId: string) =>
+				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
+
+		render(DrawingCanvas, { interactive: true });
+
+		const canvas = document.querySelector('canvas');
+		if (!canvas) {
+			throw new Error('Expected drawing canvas to render');
+		}
+
+		const setPointerCaptureSpy = vi
+			.spyOn(canvas, 'setPointerCapture')
+			.mockImplementation(() => undefined);
+		const releasePointerCaptureSpy = vi
+			.spyOn(canvas, 'releasePointerCapture')
+			.mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+
+		vi.clearAllMocks();
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 600,
+			height: 600,
+			left: 0,
+			right: 800,
+			top: 0,
+			width: 800,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		canvas.dispatchEvent(
+			new PointerEvent('pointerdown', {
+				bubbles: true,
+				clientX: -1,
+				clientY: 24,
+				pointerId: 4,
+				pointerType: 'mouse',
+				isPrimary: true,
+				buttons: 1
+			})
+		);
+
+		expect(setPointerCaptureSpy).not.toHaveBeenCalled();
+		expect(ctx.beginPath).not.toHaveBeenCalled();
+
+		canvas.dispatchEvent(
+			new PointerEvent('pointerdown', {
+				bubbles: true,
+				clientX: 24,
+				clientY: 24,
+				pointerId: 4,
+				pointerType: 'mouse',
+				isPrimary: true,
+				buttons: 1
+			})
+		);
+		canvas.dispatchEvent(
+			new PointerEvent('pointermove', {
+				bubbles: true,
+				clientX: 80,
+				clientY: 80,
+				pointerId: 4,
+				pointerType: 'mouse',
+				isPrimary: true,
+				buttons: 1
+			})
+		);
+		canvas.dispatchEvent(
+			new PointerEvent('pointerup', {
+				bubbles: true,
+				clientX: 80,
+				clientY: 80,
+				pointerId: 4,
+				pointerType: 'mouse',
+				isPrimary: true
+			})
+		);
+
+		expect(setPointerCaptureSpy).toHaveBeenCalledTimes(1);
+		expect(releasePointerCaptureSpy).toHaveBeenCalledTimes(1);
+		expect(ctx.beginPath).toHaveBeenCalledTimes(2);
+		expect(ctx.lineTo).toHaveBeenCalledTimes(1);
 
 		getContextSpy.mockRestore();
 	});

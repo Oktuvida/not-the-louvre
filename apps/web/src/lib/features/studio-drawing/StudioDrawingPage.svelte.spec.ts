@@ -28,6 +28,28 @@ const reducedMotionMediaQuery = {
 	removeListener: vi.fn()
 } satisfies MediaQueryList;
 
+const defaultDesktopMediaQuery = {
+	addEventListener: vi.fn(),
+	addListener: vi.fn(),
+	dispatchEvent: vi.fn(),
+	matches: false,
+	media: '(max-width: 700px)',
+	onchange: null,
+	removeEventListener: vi.fn(),
+	removeListener: vi.fn()
+} satisfies MediaQueryList;
+
+const createMediaQueryList = (query: string) => {
+	if (query === '(prefers-reduced-motion: reduce)') {
+		return reducedMotionMediaQuery;
+	}
+
+	return {
+		...defaultDesktopMediaQuery,
+		media: query
+	} satisfies MediaQueryList;
+};
+
 async function openSketchbook() {
 	await page.getByRole('button', { name: 'Open sketchbook' }).click();
 	await expect.element(page.getByPlaceholder('Untitled genius')).toBeVisible();
@@ -36,6 +58,10 @@ async function openSketchbook() {
 describe('StudioDrawingPage', () => {
 	beforeEach(() => {
 		vi.unstubAllGlobals();
+		vi.stubGlobal(
+			'matchMedia',
+			vi.fn((query: string) => createMediaQueryList(query))
+		);
 		window.localStorage.clear();
 	});
 
@@ -61,7 +87,7 @@ describe('StudioDrawingPage', () => {
 	it('keeps the sketchbook opening animation duration even when reduced motion is requested', async () => {
 		vi.stubGlobal(
 			'matchMedia',
-			vi.fn(() => reducedMotionMediaQuery)
+			vi.fn((query: string) => createMediaQueryList(query))
 		);
 
 		render(StudioDrawingPage, {

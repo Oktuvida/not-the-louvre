@@ -45,6 +45,10 @@
 		activePointerId = null;
 	};
 
+	const preventCanvasDrag = (event: DragEvent) => {
+		event.preventDefault();
+	};
+
 	const getPoint = (event: PointerEvent): DrawingPoint | null => {
 		if (!canvasRef) return null;
 
@@ -114,13 +118,15 @@
 	function startDrawing(event: PointerEvent) {
 		if (!interactive) return;
 		if (!canvasRef) return;
+		if (!event.isPrimary) return;
 
 		event.preventDefault();
-		canvasRef.setPointerCapture(event.pointerId);
-		activePointerId = event.pointerId;
 
 		const point = getPoint(event);
 		if (!point) return;
+
+		canvasRef.setPointerCapture(event.pointerId);
+		activePointerId = event.pointerId;
 
 		drawingDocument.strokes.push({
 			color: drawingTools.activeColor,
@@ -133,6 +139,7 @@
 
 	function draw(event: PointerEvent) {
 		if (!interactive) return;
+		if (!event.isPrimary) return;
 		if (activePointerId !== event.pointerId) return;
 
 		event.preventDefault();
@@ -149,7 +156,12 @@
 	}
 
 	function finishDrawing(event?: PointerEvent) {
-		if (canvasRef && event && canvasRef.hasPointerCapture(event.pointerId)) {
+		if (
+			canvasRef &&
+			event &&
+			activePointerId === event.pointerId &&
+			canvasRef.hasPointerCapture(event.pointerId)
+		) {
 			canvasRef.releasePointerCapture(event.pointerId);
 		}
 
@@ -158,7 +170,6 @@
 
 	function cancelDrawing(event: PointerEvent) {
 		event.preventDefault();
-			stopDrawing();
 		finishDrawing(event);
 	}
 </script>
@@ -171,8 +182,9 @@
 		class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
 		style="background: #fdfbf7; touch-action: none;"
 		aria-disabled={!interactive}
+		draggable="false"
+		ondragstart={preventCanvasDrag}
 		onpointerdown={startDrawing}
-		onpointerleave={cancelDrawing}
 		onpointermove={draw}
 		onpointerup={finishDrawing}
 		onpointercancel={cancelDrawing}
