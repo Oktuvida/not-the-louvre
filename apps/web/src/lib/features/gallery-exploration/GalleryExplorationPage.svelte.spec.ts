@@ -65,6 +65,19 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByText('Second Work')).toBeVisible();
 	});
 
+	it('includes the tightened mobile gallery header shell', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
+			emptyStateMessage: null,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame'
+		});
+
+		const header = document.querySelector('[data-testid="gallery-room-header"]');
+		expect(header).not.toBeNull();
+		expect(header?.className).toContain('px-3');
+	});
+
 	it('renders the hot wall as a coming-soon placeholder', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [
@@ -297,6 +310,9 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Create Art' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
+		expect(page.getByRole('button', { name: 'Refresh' })).toBeDefined();
+		const refreshButton = document.querySelector('[data-sticker-variant="secondary"]');
+		expect(refreshButton?.className).toContain('z-20');
 		await expect
 			.element(page.getByText('Publish a new piece from the studio and it will show up here.'))
 			.toBeVisible();
