@@ -22,7 +22,7 @@
 	const BRUSH_PREVIEW_SIZE = Math.max(...BRUSH_SIZES) + 6;
 	const DEFAULT_AVATAR_COLOR = drawingPalette[4] ?? drawingPalette[0] ?? '#1a1a1a';
 
-	const CANVAS_WIDTH = 520;
+	const CANVAS_WIDTH = 320;
 	const CANVAS_HEIGHT = 320;
 
 	type AvatarSaveResult =
