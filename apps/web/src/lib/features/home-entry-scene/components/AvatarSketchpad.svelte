@@ -7,11 +7,13 @@
 		saveDrawingDraft
 	} from '$lib/features/stroke-json/drafts';
 	import {
+		AVATAR_DRAWING_DIMENSIONS,
 		cloneDrawingDocument,
 		createEmptyDrawingDocument,
 		getDrawingPointWithinBounds,
 		serializeDrawingDocument,
-		type DrawingDocumentV1
+		type DrawingDocumentV1,
+		type DrawingPoint
 	} from '$lib/features/stroke-json/document';
 	import { renderDrawingStroke } from '$lib/features/stroke-json/canvas';
 	import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
@@ -22,8 +24,8 @@
 	const BRUSH_PREVIEW_SIZE = Math.max(...BRUSH_SIZES) + 6;
 	const DEFAULT_AVATAR_COLOR = drawingPalette[4] ?? drawingPalette[0] ?? '#1a1a1a';
 
-	const CANVAS_WIDTH = 320;
-	const CANVAS_HEIGHT = 320;
+	const CANVAS_WIDTH = AVATAR_DRAWING_DIMENSIONS.width;
+	const CANVAS_HEIGHT = AVATAR_DRAWING_DIMENSIONS.height;
 
 	type AvatarSaveResult =
 		| { success: true }
@@ -80,6 +82,7 @@
 	let baselineDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
 	let brushStep = $state(Math.floor((BRUSH_SIZES.length - 1) / 2));
 	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
+	let activePointerId = $state<number | null>(null);
 	let isDrawing = $state(false);
 	let isSaving = $state(false);
 	let saveError = $state('');
@@ -168,82 +171,64 @@
 		}
 	};
 
-	const getPoint = (event: MouseEvent | TouchEvent) => {
+	const getPoint = (event: PointerEvent): DrawingPoint | null => {
 		if (!canvasElement) return null;
 
 		const rect = canvasElement.getBoundingClientRect();
 		const scaleX = canvasElement.width / rect.width;
 		const scaleY = canvasElement.height / rect.height;
 
-		let clientX: number;
-		let clientY: number;
-
-		if ('touches' in event) {
-			const touch = event.touches[0] ?? event.changedTouches[0];
-			if (!touch) return null;
-			clientX = touch.clientX;
-			clientY = touch.clientY;
-		} else {
-			clientX = event.clientX;
-			clientY = event.clientY;
-		}
-
-		const point = getDrawingPointWithinBounds(
-			[(clientX - rect.left) * scaleX, (clientY - rect.top) * scaleY],
+		return getDrawingPointWithinBounds(
+			[(event.clientX - rect.left) * scaleX, (event.clientY - rect.top) * scaleY],
 			drawingDocument
 		);
-
-		if (!point) return null;
-
-		return {
-			x: point[0],
-			y: point[1]
-		};
 	};
 
-	const startStroke = (point: { x: number; y: number }) => {
+	const startStroke = (point: DrawingPoint) => {
 		drawingDocument.strokes.push({
 			color: activeColor,
-			points: [[point.x, point.y]],
+			points: [point],
 			size: brushSize
 		});
 		renderCurrentDocument();
 	};
 
-	const appendPoint = (point: { x: number; y: number }) => {
+	const appendPoint = (point: DrawingPoint) => {
 		const stroke = drawingDocument.strokes.at(-1);
 		if (!stroke) return;
 
 		const lastPoint = stroke.points.at(-1);
-		if (lastPoint && Math.hypot(point.x - lastPoint[0], point.y - lastPoint[1]) < 1.5) {
+		if (lastPoint && Math.hypot(point[0] - lastPoint[0], point[1] - lastPoint[1]) < 1.5) {
 			return;
 		}
 
-		stroke.points.push([point.x, point.y]);
+		stroke.points.push(point);
 		renderCurrentDocument();
 	};
 
-	const startDrawing = (event: MouseEvent | TouchEvent) => {
+	const startDrawing = (event: PointerEvent) => {
+		if (!canvasElement) return;
+		if (!event.isPrimary) return;
+
+		event.preventDefault();
+
 		const point = getPoint(event);
 		if (!point) return;
 
+		canvasElement.setPointerCapture(event.pointerId);
+		activePointerId = event.pointerId;
 		startStroke(point);
 		isDrawing = true;
 	};
 
-	const continueDrawingFromEntry = (event: MouseEvent) => {
-		if (!isDrawing || (event.buttons & 1) === 0) return;
-
-		const point = getPoint(event);
-		if (!point) return;
-
-		startStroke(point);
-	};
-
-	const draw = (event: MouseEvent | TouchEvent) => {
+	const draw = (event: PointerEvent) => {
 		if (!isDrawing || !canvasElement) return;
+		if (!event.isPrimary) return;
+		if (activePointerId !== event.pointerId) return;
 
-		if (event instanceof MouseEvent && (event.buttons & 1) === 0) {
+		event.preventDefault();
+
+		if ((event.buttons & 1) === 0) {
 			stopDrawing();
 			return;
 		}
@@ -256,6 +241,29 @@
 
 	const stopDrawing = () => {
 		isDrawing = false;
+		activePointerId = null;
+	};
+
+	const finishDrawing = (event?: PointerEvent) => {
+		if (
+			canvasElement &&
+			event &&
+			activePointerId === event.pointerId &&
+			canvasElement.hasPointerCapture(event.pointerId)
+		) {
+			canvasElement.releasePointerCapture(event.pointerId);
+		}
+
+		stopDrawing();
+	};
+
+	const cancelDrawing = (event: PointerEvent) => {
+		event.preventDefault();
+		finishDrawing(event);
+	};
+
+	const preventCanvasDrag = (event: DragEvent) => {
+		event.preventDefault();
 	};
 
 	const handleEnterGallery = async () => {
@@ -300,21 +308,6 @@
 		}
 	};
 
-	const handleTouchStart = (event: TouchEvent) => {
-		event.preventDefault();
-		startDrawing(event);
-	};
-
-	const handleTouchMove = (event: TouchEvent) => {
-		event.preventDefault();
-		draw(event);
-	};
-
-	const handleTouchEnd = (event: TouchEvent) => {
-		event.preventDefault();
-		stopDrawing();
-	};
-
 	onMount(() => {
 		baselineDocument = initialDrawingDocument
 			? cloneDrawingDocument(initialDrawingDocument)
@@ -327,22 +320,20 @@
 			drawingDocument = cloneDrawingDocument(baselineDocument);
 		}
 
-		const handleWindowMouseUp = () => {
+		const handleWindowPointerRelease = () => {
 			stopDrawing();
 		};
 
-		const handleWindowTouchEnd = () => {
-			stopDrawing();
-		};
-
-		window.addEventListener('mouseup', handleWindowMouseUp);
-		window.addEventListener('touchend', handleWindowTouchEnd);
+		window.addEventListener('pointerup', handleWindowPointerRelease);
+		window.addEventListener('pointercancel', handleWindowPointerRelease);
+		window.addEventListener('blur', handleWindowPointerRelease);
 
 		renderCurrentDocument();
 
 		return () => {
-			window.removeEventListener('mouseup', handleWindowMouseUp);
-			window.removeEventListener('touchend', handleWindowTouchEnd);
+			window.removeEventListener('pointerup', handleWindowPointerRelease);
+			window.removeEventListener('pointercancel', handleWindowPointerRelease);
+			window.removeEventListener('blur', handleWindowPointerRelease);
 		};
 	});
 
@@ -439,13 +430,12 @@
 						width={CANVAS_WIDTH}
 						height={CANVAS_HEIGHT}
 						class="relative z-[1] h-full w-full cursor-crosshair touch-none"
-						onmousedown={startDrawing}
-						onmouseenter={continueDrawingFromEntry}
-						onmousemove={draw}
-						onmouseup={stopDrawing}
-						ontouchstart={handleTouchStart}
-						ontouchmove={handleTouchMove}
-						ontouchend={handleTouchEnd}
+						draggable="false"
+						ondragstart={preventCanvasDrag}
+						onpointerdown={startDrawing}
+						onpointermove={draw}
+						onpointerup={finishDrawing}
+						onpointercancel={cancelDrawing}
 					></canvas>
 				</div>
 			</div>
