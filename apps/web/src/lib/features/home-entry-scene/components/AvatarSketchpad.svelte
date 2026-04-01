@@ -23,6 +23,7 @@
 	const BRUSH_SIZES = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
 	const BRUSH_PREVIEW_SIZE = Math.max(...BRUSH_SIZES) + 6;
 	const DEFAULT_AVATAR_COLOR = drawingPalette[4] ?? drawingPalette[0] ?? '#1a1a1a';
+	const AVATAR_CANVAS_BACKGROUND = '#ffffff';
 
 	const CANVAS_WIDTH = AVATAR_DRAWING_DIMENSIONS.width;
 	const CANVAS_HEIGHT = AVATAR_DRAWING_DIMENSIONS.height;
@@ -162,7 +163,7 @@
 		const context = canvasElement.getContext('2d');
 		if (!context) return;
 
-		context.fillStyle = drawingDocument.background;
+		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
 		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 		drawGhostSilhouette(context);
 
@@ -414,10 +415,11 @@
 
 		<div class="order-1 space-y-3 md:order-2">
 			<div
-				class="mx-auto aspect-[13/8] w-full max-w-[27rem] rounded-[1.25rem] border-2 border-[var(--color-ink)] bg-[var(--color-paper)] p-2 shadow-[6px_6px_0_rgb(47_36_28_/_0.14)] sm:p-2.5 md:aspect-square"
+				class="mx-auto aspect-square w-full max-w-[27rem] rounded-[1.25rem] border-2 border-[var(--color-ink)] bg-[var(--color-paper)] p-2 shadow-[6px_6px_0_rgb(47_36_28_/_0.14)] sm:p-2.5"
+				data-testid="avatar-sketchpad-frame"
 			>
 				<div
-					class="relative h-full w-full overflow-hidden rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)]"
+					class="relative h-full w-full overflow-hidden rounded-[1rem] border-2 border-[var(--color-accent)] bg-white"
 				>
 					<div
 						class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgb(255_255_255_/_0.55),transparent_48%)]"
