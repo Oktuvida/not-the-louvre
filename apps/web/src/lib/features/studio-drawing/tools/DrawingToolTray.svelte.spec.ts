@@ -28,4 +28,13 @@ describe('DrawingToolTray', () => {
 
 		await expect.element(page.getByRole('button', { name: 'Publishing...' })).toBeDisabled();
 	});
+
+	it('shows the full color palette directly on mobile', async () => {
+		render(DrawingToolTray, { mobile: true });
+
+		await expect.element(page.getByLabelText(`Select color #2176d9`)).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: /more colors/i }))
+			.not.toBeInTheDocument();
+	});
 });
