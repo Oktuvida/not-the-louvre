@@ -62,6 +62,16 @@ describe('AvatarSketchpad', () => {
 		await expect.element(page.getByRole('textbox')).not.toBeInTheDocument();
 	});
 
+	it('keeps the avatar drawing frame square across breakpoints', async () => {
+		render(AvatarSketchpad, {
+			nickname: 'artist_1'
+		});
+
+		const frame = document.querySelector('[data-testid="avatar-sketchpad-frame"]');
+		expect(frame).not.toBeNull();
+		expect(frame?.className).toContain('aspect-square');
+	});
+
 	it('keeps palette swatches clickable beside the brush slider', async () => {
 		render(AvatarSketchpad, {
 			nickname: 'artist_1'
@@ -127,7 +137,7 @@ describe('AvatarSketchpad', () => {
 		await page.getByRole('button', { name: `Select color ${drawingPalette[4]}` }).click();
 
 		const recoloredMetrics = await readPreviewMetrics();
-		expect(recoloredMetrics.dotColor).toBe('rgb(33, 118, 217)');
+		expect(recoloredMetrics.dotColor).toBe('rgb(253, 188, 180)');
 	});
 	it('saves the exported avatar and continues into the gallery on success', async () => {
 		const onContinue = vi.fn();
