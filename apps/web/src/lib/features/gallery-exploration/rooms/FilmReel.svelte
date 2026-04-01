@@ -14,10 +14,9 @@
 	} = $props();
 
 	let viewportEl: HTMLDivElement | undefined = $state();
+	let viewportWidth = $state(0);
+	let viewportResizeObserver: ResizeObserver | null = null;
 
-	const FRAME_SIZE = 256;
-	const FRAME_GAP = 14;
-	const FRAME_STEP = FRAME_SIZE + FRAME_GAP;
 	const BUFFER = 3;
 	const IDLE_DURATION_PER_FRAME = 5;
 
@@ -36,14 +35,32 @@
 	 */
 	let offset = $state(0);
 
+	const reelMetrics = $derived.by(() => {
+		const width = viewportWidth || 768;
+		const isNarrow = width < 640;
+		const frameSize = isNarrow ? Math.max(156, Math.min(200, Math.floor(width * 0.46))) : 256;
+		const frameGap = isNarrow ? 10 : 14;
+		const viewportHeight = frameSize + (isNarrow ? 20 : 24);
+		const highlightSize = frameSize + (isNarrow ? 16 : 24);
+
+		return {
+			frameGap,
+			frameSize,
+			frameStep: frameSize + frameGap,
+			highlightSize,
+			viewportHeight
+		};
+	});
+
 	const visibleSlots = $derived.by(() => {
-		if (!viewportEl || artworks.length === 0) return [];
+		if (!viewportEl || viewportWidth === 0 || artworks.length === 0) return [];
 
-		const vpWidth = viewportEl.offsetWidth;
+		const { frameSize, frameStep } = reelMetrics;
+		const vpWidth = viewportWidth;
 		const centerX = vpWidth / 2;
-		const totalSlots = Math.ceil(vpWidth / FRAME_STEP) + BUFFER * 2;
+		const totalSlots = Math.ceil(vpWidth / frameStep) + BUFFER * 2;
 
-		const firstSlotLogical = Math.floor(offset / FRAME_STEP) - BUFFER;
+		const firstSlotLogical = Math.floor(offset / frameStep) - BUFFER;
 		const slots: Array<{
 			artwork: Artwork;
 			key: number;
@@ -56,8 +73,8 @@
 			let artworkIndex = slotIndex % artworks.length;
 			if (artworkIndex < 0) artworkIndex += artworks.length;
 
-			const x = slotIndex * FRAME_STEP - offset;
-			const frameCenterX = x + FRAME_SIZE / 2;
+			const x = slotIndex * frameStep - offset;
+			const frameCenterX = x + frameSize / 2;
 			const distFromCenter = Math.abs(frameCenterX - centerX) / (vpWidth / 2);
 
 			slots.push({
@@ -72,6 +89,7 @@
 	});
 
 	const getSlotStyle = (slot: { x: number; distFromCenter: number }): string => {
+		const { frameSize } = reelMetrics;
 		const d = slot.distFromCenter;
 		const scale = 1 - d * 0.35;
 		const opacity = 1 - d * 0.85;
@@ -79,7 +97,7 @@
 
 		return (
 			`position:absolute;left:${slot.x.toFixed(1)}px;top:50%;` +
-			`width:${FRAME_SIZE}px;height:${FRAME_SIZE}px;` +
+			`width:${frameSize}px;height:${frameSize}px;` +
 			`transform:translateY(-50%) scale(${scale.toFixed(3)});` +
 			`opacity:${opacity.toFixed(3)};` +
 			`filter:blur(${blur.toFixed(1)}px);`
@@ -91,11 +109,12 @@
 
 	const startIdle = () => {
 		if (!browser || artworks.length === 0) return;
+		const { frameStep } = reelMetrics;
 
 		proxy.value = offset;
 
 		idleTween = gsap.to(proxy, {
-			value: `+=${artworks.length * FRAME_STEP}`,
+			value: `+=${artworks.length * frameStep}`,
 			duration: artworks.length * IDLE_DURATION_PER_FRAME,
 			ease: 'none',
 			repeat: -1,
@@ -114,23 +133,24 @@
 
 	export const spin = () => {
 		if (reelState === 'spinning' || artworks.length === 0 || !viewportEl) return;
+		const { frameSize, frameStep } = reelMetrics;
 
 		reelState = 'spinning';
 		stopIdle();
 
 		const randomIndex = Math.floor(Math.random() * artworks.length);
 
-		const vpWidth = viewportEl.offsetWidth;
+		const vpWidth = viewportWidth || viewportEl.offsetWidth;
 		const centerX = vpWidth / 2;
 
 		/* We want the chosen artwork centered:
 		 *   randomIndex * FRAME_STEP - targetOffset + FRAME_SIZE/2 = centerX
 		 * Plus at least 3 full cycles of travel for the visual spin effect. */
-		const fullCycles = 3 * artworks.length * FRAME_STEP;
-		const baseTarget = randomIndex * FRAME_STEP - centerX + FRAME_SIZE / 2;
+		const fullCycles = 3 * artworks.length * frameStep;
+		const baseTarget = randomIndex * frameStep - centerX + frameSize / 2;
 
 		const minTarget = offset + fullCycles;
-		const cycleLen = artworks.length * FRAME_STEP;
+		const cycleLen = artworks.length * frameStep;
 		const remainder = (baseTarget - minTarget) % cycleLen;
 		const adjustedRemainder = remainder < 0 ? remainder + cycleLen : remainder;
 		const targetOffset = minTarget + adjustedRemainder;
@@ -159,7 +179,24 @@
 	export const isSpinning = () => reelState === 'spinning';
 
 	$effect(() => {
-		if (!browser || artworks.length === 0 || !viewportEl) return;
+		if (!browser || !viewportEl) return;
+
+		viewportWidth = viewportEl.offsetWidth;
+		viewportResizeObserver?.disconnect();
+		viewportResizeObserver = new ResizeObserver(() => {
+			if (!viewportEl) return;
+			viewportWidth = viewportEl.offsetWidth;
+		});
+		viewportResizeObserver.observe(viewportEl);
+
+		return () => {
+			viewportResizeObserver?.disconnect();
+			viewportResizeObserver = null;
+		};
+	});
+
+	$effect(() => {
+		if (!browser || artworks.length === 0 || !viewportEl || viewportWidth === 0) return;
 
 		const timer = setTimeout(() => startIdle(), 100);
 
@@ -170,8 +207,13 @@
 	});
 </script>
 
-<div class="reel-container" data-testid="film-reel">
-	<div class="reel-viewport" bind:this={viewportEl} data-testid="film-reel-track">
+<div class="reel-container" data-reel-orientation="horizontal" data-testid="film-reel">
+	<div
+		class="reel-viewport"
+		bind:this={viewportEl}
+		data-testid="film-reel-track"
+		style={`--reel-highlight-size:${reelMetrics.highlightSize}px; --reel-viewport-height:${reelMetrics.viewportHeight}px;`}
+	>
 		{#each visibleSlots as slot (slot.key)}
 			{@const isSensitiveBlurred = slot.artwork.isNsfw && !adultContentEnabled}
 			<div class="reel-frame" style={getSlotStyle(slot)}>
@@ -206,7 +248,7 @@
 	.reel-viewport {
 		position: relative;
 		width: 100%;
-		height: 280px;
+		height: var(--reel-viewport-height, 280px);
 		overflow: hidden;
 		border-radius: 12px;
 	}
@@ -257,8 +299,8 @@
 		position: absolute;
 		top: 50%;
 		left: 50%;
-		width: 280px;
-		height: 280px;
+		width: var(--reel-highlight-size, 280px);
+		height: var(--reel-highlight-size, 280px);
 		transform: translate(-50%, -50%);
 		border-radius: 12px;
 		box-shadow:
