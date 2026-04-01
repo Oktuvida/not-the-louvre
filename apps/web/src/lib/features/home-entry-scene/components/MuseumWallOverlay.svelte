@@ -19,6 +19,12 @@
 	const FINAL_ZOOM_MULTIPLIER = 1.1;
 	const ENTER_DURATION = 2.08;
 	const RESET_DURATION = 1.13;
+	const WALL_OPENING_OFFSETS_PX = {
+		bottom: 0,
+		left: 0,
+		right: 0,
+		top: 0
+	} as const;
 	const GLASS_FOCUS_BOUNDS = {
 		left: 0.376,
 		top: 1.06,
@@ -46,13 +52,21 @@
 	let finalScale = $state(1);
 	let translateX = $state(0);
 	let translateY = $state(0);
-	let wallMaskUrl = $state('');
 	let wallPatternUrl = $state('');
+	let wallOpeningBounds = $state({
+		bottom: `${(museumWindowOpening.top + museumWindowOpening.height) * 100}%`,
+		left: `${museumWindowOpening.left * 100}%`,
+		right: `${(museumWindowOpening.left + museumWindowOpening.width) * 100}%`,
+		top: `${museumWindowOpening.top * 100}%`
+	});
 
 	let forwardTimeline: gsap.core.Timeline | null = null;
 	let reverseTimeline: gsap.core.Timeline | null = null;
 	let enterFallbackHandle: ReturnType<typeof setTimeout> | null = null;
 	let resetFallbackHandle: ReturnType<typeof setTimeout> | null = null;
+
+	const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
+	const toPercent = (value: number) => `${clampUnit(value) * 100}%`;
 
 	const isVisible = $derived(entryState !== 'inside');
 	const showCta = $derived(entryState === 'outside');
@@ -67,16 +81,6 @@
 			clearTimeout(resetFallbackHandle);
 			resetFallbackHandle = null;
 		}
-	};
-
-	const buildWallMask = (width: number, height: number, rect: DOMRect) => {
-		const svg = `
-			<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-				<path fill="black" fill-rule="evenodd" d="M0 0H${width}V${height}H0Z M${rect.left} ${rect.top}H${rect.right}V${rect.bottom}H${rect.left}Z"/>
-			</svg>
-		`;
-
-		return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 	};
 
 	const updateWillChange = (active: boolean) => {
@@ -103,10 +107,11 @@
 	};
 
 	const updateMeasurements = () => {
-		if (!frameElement || !openingElement || typeof window === 'undefined') {
+		if (!overlayElement || !frameElement || !openingElement || typeof window === 'undefined') {
 			return;
 		}
 
+		const overlayRect = overlayElement.getBoundingClientRect();
 		const measuredOpening = openingElement.getBoundingClientRect();
 		const focusRect = new DOMRect(
 			measuredOpening.left + measuredOpening.width * GLASS_FOCUS_BOUNDS.left,
@@ -115,12 +120,30 @@
 			measuredOpening.height * GLASS_FOCUS_BOUNDS.height
 		);
 
-		wallMaskUrl = buildWallMask(window.innerWidth, window.innerHeight, measuredOpening);
-
 		targetScale = Math.max(
 			(window.innerWidth + WINDOW_MARGIN * 2) / focusRect.width,
 			(window.innerHeight + WINDOW_MARGIN * 2) / focusRect.height
 		);
+
+		wallOpeningBounds = {
+			bottom: toPercent(
+				(measuredOpening.bottom - overlayRect.top + WALL_OPENING_OFFSETS_PX.bottom) /
+					overlayRect.height
+			),
+			left: toPercent(
+				(measuredOpening.left - overlayRect.left + WALL_OPENING_OFFSETS_PX.left) /
+					overlayRect.width
+			),
+			right: toPercent(
+				(measuredOpening.right - overlayRect.left + WALL_OPENING_OFFSETS_PX.right) /
+					overlayRect.width
+			),
+			top: toPercent(
+				(measuredOpening.top - overlayRect.top + WALL_OPENING_OFFSETS_PX.top) /
+					overlayRect.height
+			)
+		};
+
 		finalScale = targetScale * FINAL_ZOOM_MULTIPLIER;
 		translateX = window.innerWidth / 2 - (focusRect.left + focusRect.width / 2);
 		translateY = window.innerHeight / 2 - (focusRect.top + focusRect.height / 2);
@@ -366,12 +389,17 @@
 		class="pointer-events-none absolute inset-0 z-[20] overflow-hidden"
 	>
 		<div bind:this={wallSceneElement} class="absolute inset-0 origin-center">
-			<!-- Base wall texture masked around the window opening. -->
-			<div
-				bind:this={wallTextureElement}
-				class="absolute inset-0 bg-[#252018]"
-				style={`background-image:url('${wallPatternUrl}');background-size:512px 512px;background-repeat:repeat;mask-image:${wallMaskUrl};mask-size:100% 100%;mask-repeat:no-repeat;-webkit-mask-image:${wallMaskUrl};-webkit-mask-size:100% 100%;-webkit-mask-repeat:no-repeat;`}
-			></div>
+			<!-- Wall texture rebuilt as two L-shaped slabs instead of a fullscreen mask. -->
+			<div bind:this={wallTextureElement} class="absolute inset-0">
+				<div
+					class="absolute inset-0 bg-[#252018]"
+					style={`background-image:url('${wallPatternUrl}');background-size:512px 512px;background-repeat:repeat;clip-path:polygon(0% 0%,100% 0%,100% ${wallOpeningBounds.top},${wallOpeningBounds.left} ${wallOpeningBounds.top},${wallOpeningBounds.left} 100%,0% 100%);`}
+				></div>
+				<div
+					class="absolute inset-0 bg-[#252018]"
+					style={`background-image:url('${wallPatternUrl}');background-size:512px 512px;background-repeat:repeat;clip-path:polygon(100% 0%,100% 100%,0% 100%,0% ${wallOpeningBounds.bottom},${wallOpeningBounds.right} ${wallOpeningBounds.bottom},${wallOpeningBounds.right} 0%);`}
+				></div>
+			</div>
 			<!-- Warm top-right bloom that makes the wall feel sunlit. -->
 			<div
 				class="absolute inset-0 bg-[radial-gradient(circle_at_86%_12%,rgba(255,247,214,0.42)_0%,rgba(255,243,201,0.24)_18%,rgba(255,241,196,0.08)_36%,transparent_58%)]"
