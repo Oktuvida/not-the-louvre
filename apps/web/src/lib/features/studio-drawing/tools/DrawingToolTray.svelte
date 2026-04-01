@@ -56,11 +56,7 @@
 				</div>
 
 				{#if mobilePaletteExpanded && expandedPalette.length > 0}
-					<div
-						class="palette-popover"
-						role="dialog"
-						aria-label="Additional colors"
-					>
+					<div class="palette-popover" role="dialog" aria-label="Additional colors">
 						<div class="palette-popover-scroller">
 							<div class="palette-popover-strip">
 								{#each expandedPalette as color (color)}
@@ -83,13 +79,16 @@
 				type="button"
 				class="palette-expand-button"
 				aria-expanded={mobilePaletteExpanded}
-				aria-label={mobilePaletteExpanded ? 'Collapse additional colors' : 'Expand additional colors'}
+				aria-label={mobilePaletteExpanded
+					? 'Collapse additional colors'
+					: 'Expand additional colors'}
 				onclick={() => {
 					mobilePaletteExpanded = !mobilePaletteExpanded;
 				}}
 			>
 				<span class="palette-expand-label">
-					<span class="palette-expand-preview" style={`--swatch-color:${drawingTools.activeColor}`}></span>
+					<span class="palette-expand-preview" style={`--swatch-color:${drawingTools.activeColor}`}
+					></span>
 					{mobilePaletteExpanded ? 'Hide palette' : 'More colors'}
 				</span>
 				{#if mobilePaletteExpanded}
