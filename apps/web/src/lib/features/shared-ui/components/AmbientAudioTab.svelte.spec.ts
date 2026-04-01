@@ -34,4 +34,17 @@ describe('AmbientAudioTab', () => {
 		await expect.element(page.getByText('Quiet for now')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Enable ambient audio' })).toBeVisible();
 	});
+
+	it('renders a muted-state audio icon affordance', async () => {
+		render(AmbientAudioTab, {
+			currentTrackLabel: null,
+			enabled: false,
+			onToggle: () => {},
+			playbackUnavailable: false
+		});
+
+		const icon = document.querySelector('.ambient-tab-icon');
+		expect(icon).not.toBeNull();
+		expect(icon?.getAttribute('data-muted')).toBe('true');
+	});
 });
