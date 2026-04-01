@@ -201,7 +201,7 @@
 
 {#if artwork}
 	<div
-		class="fixed inset-0 z-40 flex items-center justify-center bg-black/65 px-4 py-8 backdrop-blur-sm"
+		class="fixed inset-0 z-40 flex items-center justify-center bg-black/65 px-3 py-3 backdrop-blur-sm md:px-4 md:py-8"
 		role="dialog"
 		aria-modal="true"
 		aria-label={`Artwork details for ${artwork.title}`}
@@ -223,18 +223,21 @@
 				}
 			}}
 		>
-			<StudioPanel tone="paper" className="relative px-6 py-6 md:px-8 md:py-8">
+			<StudioPanel
+				tone="paper"
+				className="relative max-h-[calc(100dvh-1.5rem)] overflow-y-auto px-4 py-4 md:max-h-[calc(100dvh-4rem)] md:px-8 md:py-8"
+			>
 				<div
-					class="grid max-h-[min(86vh,52rem)] gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(19rem,24rem)]"
+					class="grid min-h-0 gap-4 md:max-h-[min(86vh,52rem)] md:grid-cols-[minmax(0,1.1fr)_minmax(19rem,24rem)] md:gap-6"
 				>
 					<div class="flex min-h-0 flex-col gap-4">
 						<div class="relative">
 							{#if viewer}
-								<div class="absolute top-3 right-3 z-20">
+								<div class="absolute top-2 right-2 z-20 md:top-3 md:right-3">
 									<ArtworkSafetyActions {artwork} compact {viewer} onArtworkPatch={patchArtwork} />
 								</div>
 							{/if}
-							<div class="border-4 border-[#2d2420] bg-white p-4 shadow-lg">
+							<div class="border-4 border-[#2d2420] bg-white p-2.5 shadow-lg md:p-4">
 								<div class="relative">
 									<img
 										class={`aspect-square w-full object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
@@ -269,7 +272,7 @@
 							</div>
 							{#if artwork.rank && artwork.rank <= 3}
 								<div
-									class="absolute -top-4 -right-4 animate-[bob_1.8s_ease-in-out_infinite] text-6xl"
+									class="absolute -top-2 -right-2 animate-[bob_1.8s_ease-in-out_infinite] text-5xl md:-top-4 md:-right-4 md:text-6xl"
 								>
 									{{ 1: '🥇', 2: '🥈', 3: '🥉' }[artwork.rank as 1 | 2 | 3]}
 								</div>
@@ -318,10 +321,10 @@
 						</div>
 					</div>
 					<div
-						class="flex min-h-0 flex-col rounded-[1.75rem] border-3 border-[#2d2420] bg-[#fff9ef]/96 p-5 shadow-[0_16px_34px_rgba(45,36,32,0.18)]"
+						class="flex min-h-0 flex-col rounded-[1.5rem] border-3 border-[#2d2420] bg-[#fff9ef]/96 p-4 shadow-[0_16px_34px_rgba(45,36,32,0.18)] md:rounded-[1.75rem] md:p-5"
 					>
 						<h2
-							class="font-display text-3xl tracking-[0.08em] text-[var(--color-ink)] uppercase [text-shadow:2px_2px_0px_#e8b896] md:text-4xl"
+							class="font-display text-2xl leading-tight tracking-[0.06em] text-[var(--color-ink)] uppercase [text-shadow:2px_2px_0px_#e8b896] sm:text-3xl md:text-4xl"
 						>
 							{artwork.title}
 						</h2>
@@ -330,8 +333,8 @@
 								{forkAttribution}
 							</p>
 						{/if}
-						<div class="mt-3 flex items-center justify-between gap-3">
-							<div class="flex items-center gap-3">
+						<div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<div class="flex min-w-0 items-center gap-3">
 								{#if artwork.artistAvatar}
 									<WaxSealAvatar
 										alt={artwork.artist}
@@ -340,17 +343,19 @@
 										src={artwork.artistAvatar}
 									/>
 								{/if}
-								<p class="text-xl text-[var(--color-muted)] italic">by {artwork.artist}</p>
+								<p class="min-w-0 text-lg break-words text-[var(--color-muted)] italic sm:text-xl">
+									by {artwork.artist}
+								</p>
 							</div>
-							<p class="shrink-0 text-sm font-semibold tracking-[0.08em] text-[#6b625a]">
+							<p class="text-sm font-semibold tracking-[0.08em] text-[#6b625a] sm:shrink-0">
 								{artwork.forkCount ?? 0} forks
 							</p>
 						</div>
 						<div
-							class="mt-6 flex max-h-[24rem] min-h-0 flex-1 flex-col overflow-hidden rounded-[1.3rem] border-2 border-[#c9b69c] bg-[#f4ecdf]"
+							class="mt-5 flex max-h-[min(55dvh,30rem)] min-h-0 flex-1 flex-col overflow-hidden rounded-[1.3rem] border-2 border-[#c9b69c] bg-[#f4ecdf] md:mt-6 md:max-h-[24rem]"
 						>
 							{#if artwork.comments.length > 0}
-								<div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+								<div class="min-h-0 flex-1 overflow-y-auto px-3 py-3 md:px-4 md:py-4">
 									<div class="space-y-3">
 										{#each artwork.comments as comment (comment.id)}
 											<div
@@ -379,7 +384,7 @@
 										submitComment();
 									}}
 								>
-									<div class="flex items-center gap-2">
+									<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 										<input
 											bind:this={commentInput}
 											bind:value={commentBody}
@@ -389,7 +394,7 @@
 										/>
 										<button
 											type="submit"
-											class="shrink-0 rounded-full border-2 border-[#2d2420] bg-[#f4c430] px-4 py-2 text-xs font-black tracking-[0.16em] text-[#2d2420] uppercase transition hover:-translate-y-0.5 disabled:opacity-60"
+											class="rounded-full border-2 border-[#2d2420] bg-[#f4c430] px-4 py-2 text-xs font-black tracking-[0.16em] text-[#2d2420] uppercase transition hover:-translate-y-0.5 disabled:opacity-60 sm:shrink-0"
 											disabled={isSubmittingComment}
 											aria-label="Send comment"
 										>

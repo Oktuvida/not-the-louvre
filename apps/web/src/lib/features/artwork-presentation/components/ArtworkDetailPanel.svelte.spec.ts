@@ -79,6 +79,20 @@ describe('ArtworkDetailPanel', () => {
 			.toBeVisible();
 	});
 
+	it('uses a scrollable responsive dialog shell', async () => {
+		render(ArtworkDetailPanel, {
+			artwork,
+			viewer: null
+		});
+
+		const panel = [...document.querySelectorAll('div')].find(
+			(element) =>
+				element.className.includes('max-h-[calc(100dvh-1.5rem)]') &&
+				element.className.includes('overflow-y-auto')
+		);
+		expect(panel).not.toBeNull();
+	});
+
 	it('posts comments and syncs the artwork detail state', async () => {
 		const onArtworkChange = vi.fn();
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
