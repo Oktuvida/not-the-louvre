@@ -36,6 +36,7 @@
 
 	let commentBody = $state('');
 	let actionError = $state<string | null>(null);
+	let isAvatarPreviewOpen = $state(false);
 	let isUpdatingAdultContentPreference = $state(false);
 	let isSubmittingComment = $state(false);
 	let isSubmittingVote = $state(false);
@@ -62,6 +63,15 @@
 
 	const syncArtwork = (nextArtwork: Artwork) => {
 		onArtworkChange?.(nextArtwork);
+	};
+
+	const openAvatarPreview = () => {
+		if (!artwork?.artistAvatar) return;
+		isAvatarPreviewOpen = true;
+	};
+
+	const closeAvatarPreview = () => {
+		isAvatarPreviewOpen = false;
 	};
 
 	const patchArtwork = (patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>) => {
@@ -208,6 +218,11 @@
 		tabindex="-1"
 		onclick={onClose}
 		onkeydown={(event: KeyboardEvent) => {
+			if (event.key === 'Escape' && isAvatarPreviewOpen) {
+				closeAvatarPreview();
+				return;
+			}
+
 			if (event.key === 'Escape') {
 				onClose?.();
 			}
@@ -336,12 +351,20 @@
 						<div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 							<div class="flex min-w-0 items-center gap-3">
 								{#if artwork.artistAvatar}
-									<WaxSealAvatar
-										alt={artwork.artist}
-										seed={artwork.id}
-										size="md"
-										src={artwork.artistAvatar}
-									/>
+									<button
+										type="button"
+										class="cursor-zoom-in rounded-full transition outline-none hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-[#4ecdc4] focus-visible:ring-offset-2"
+										onclick={openAvatarPreview}
+										aria-label={`Expand avatar for ${artwork.artist}`}
+										data-testid="artist-avatar-trigger"
+									>
+										<WaxSealAvatar
+											alt={artwork.artist}
+											seed={artwork.id}
+											size="md"
+											src={artwork.artistAvatar}
+										/>
+									</button>
 								{/if}
 								<p class="min-w-0 text-lg break-words text-[var(--color-muted)] italic sm:text-xl">
 									by {artwork.artist}
@@ -407,6 +430,52 @@
 					</div>
 				</div>
 			</StudioPanel>
+
+			{#if isAvatarPreviewOpen && artwork.artistAvatar}
+				<div
+					class="absolute inset-0 z-30 flex items-center justify-center rounded-[1.75rem] bg-black/60 p-4 backdrop-blur-sm"
+					role="presentation"
+					onclick={closeAvatarPreview}
+				>
+					<div
+						class="flex w-[min(92vw,30rem)] flex-col items-center gap-6 rounded-[1.9rem] border-3 border-[#2d2420] bg-[#fff9ef] px-8 py-8 text-center shadow-[0_18px_40px_rgba(0,0,0,0.28)] md:w-[min(72vw,34rem)] md:px-10 md:py-10"
+						role="dialog"
+						aria-modal="true"
+						aria-label={`Expanded avatar for ${artwork.artist}`}
+						tabindex="-1"
+						onclick={(event: MouseEvent) => event.stopPropagation()}
+						onkeydown={(event: KeyboardEvent) => {
+							if (event.key === 'Escape') {
+								event.stopPropagation();
+								closeAvatarPreview();
+							}
+						}}
+					>
+						<div class="flex h-60 w-60 items-center justify-center md:h-72 md:w-72">
+							<div class="scale-[3.1] md:scale-[3.6]">
+								<WaxSealAvatar
+									alt={artwork.artist}
+									seed={artwork.id}
+									size="xl"
+									src={artwork.artistAvatar}
+								/>
+							</div>
+						</div>
+						<p
+							class="max-w-full text-lg font-semibold tracking-[0.06em] break-words text-[#5d4e37] md:text-xl"
+						>
+							{artwork.artist}
+						</p>
+						<button
+							type="button"
+							class="relative z-10 rounded-full border-2 border-[#2d2420] bg-[#fdfbf7] px-5 py-2.5 text-xs font-black tracking-[0.14em] text-[#2d2420] uppercase transition hover:-translate-y-0.5"
+							onclick={closeAvatarPreview}
+						>
+							Close
+						</button>
+					</div>
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}
