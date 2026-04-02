@@ -15,10 +15,10 @@ describe('AmbientAudioTab', () => {
 			playbackUnavailable: false
 		});
 
-		await expect.element(page.getByText('Ambience')).toBeVisible();
-		await expect.element(page.getByText('Gallery Rain')).toBeVisible();
+		const button = page.getByRole('button', { name: 'Mute ambient audio' });
+		await expect.element(button).toBeVisible();
 
-		await page.getByRole('button', { name: 'Mute ambient audio' }).click();
+		await button.click();
 
 		expect(onToggle).toHaveBeenCalledTimes(1);
 	});
@@ -31,8 +31,9 @@ describe('AmbientAudioTab', () => {
 			playbackUnavailable: true
 		});
 
-		await expect.element(page.getByText('Quiet for now')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Enable ambient audio' })).toBeVisible();
+		const icon = document.querySelector('.ambient-tab-icon');
+		expect(icon?.getAttribute('data-muted')).toBe('true');
 	});
 
 	it('renders a muted-state audio icon affordance', async () => {
