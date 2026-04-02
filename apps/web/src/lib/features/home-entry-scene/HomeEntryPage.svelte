@@ -186,7 +186,7 @@
 	/>
 	{#if entryState === 'inside' && user && !isExiting}
 		<div
-			class="pointer-events-auto absolute bottom-28 left-1/2 z-[25] flex -translate-x-1/2 flex-col items-center gap-4 transition-all duration-500"
+			class="pointer-events-auto absolute bottom-52 left-1/2 z-[25] flex -translate-x-1/2 flex-col items-center gap-4 transition-all duration-500 md:bottom-28"
 			class:translate-y-[120%]={isExiting}
 			class:opacity-0={isExiting}
 		>

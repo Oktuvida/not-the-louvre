@@ -64,6 +64,25 @@ describe('ArtworkDetailPanel', () => {
 			.toBeVisible();
 	});
 
+	it('opens an enlarged author avatar preview from the detail view', async () => {
+		render(ArtworkDetailPanel, {
+			artwork: {
+				...artwork,
+				artistAvatar: '/avatars/journey.png'
+			}
+		});
+
+		await page.getByRole('button', { name: 'Expand avatar for journey_artist' }).click();
+
+		await expect
+			.element(page.getByRole('dialog', { name: 'Expanded avatar for journey_artist' }))
+			.toBeVisible();
+		await page.getByRole('button', { name: 'Close' }).click();
+		await expect
+			.element(page.getByRole('dialog', { name: 'Expanded avatar for journey_artist' }))
+			.not.toBeInTheDocument();
+	});
+
 	it('renders artwork detail as read-only for signed-out visitors', async () => {
 		goto.mockReset();
 
@@ -77,6 +96,20 @@ describe('ArtworkDetailPanel', () => {
 		await expect
 			.element(page.getByText('Sign in to vote, fork, or leave a comment.'))
 			.toBeVisible();
+	});
+
+	it('uses a scrollable responsive dialog shell', async () => {
+		render(ArtworkDetailPanel, {
+			artwork,
+			viewer: null
+		});
+
+		const panel = [...document.querySelectorAll('div')].find(
+			(element) =>
+				element.className.includes('max-h-[calc(100dvh-1.5rem)]') &&
+				element.className.includes('overflow-y-auto')
+		);
+		expect(panel).not.toBeNull();
 	});
 
 	it('posts comments and syncs the artwork detail state', async () => {
