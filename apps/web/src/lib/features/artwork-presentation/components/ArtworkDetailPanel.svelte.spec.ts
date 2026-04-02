@@ -64,6 +64,25 @@ describe('ArtworkDetailPanel', () => {
 			.toBeVisible();
 	});
 
+	it('opens an enlarged author avatar preview from the detail view', async () => {
+		render(ArtworkDetailPanel, {
+			artwork: {
+				...artwork,
+				artistAvatar: '/avatars/journey.png'
+			}
+		});
+
+		await page.getByRole('button', { name: 'Expand avatar for journey_artist' }).click();
+
+		await expect
+			.element(page.getByRole('dialog', { name: 'Expanded avatar for journey_artist' }))
+			.toBeVisible();
+		await page.getByRole('button', { name: 'Close' }).click();
+		await expect
+			.element(page.getByRole('dialog', { name: 'Expanded avatar for journey_artist' }))
+			.not.toBeInTheDocument();
+	});
+
 	it('renders artwork detail as read-only for signed-out visitors', async () => {
 		goto.mockReset();
 
