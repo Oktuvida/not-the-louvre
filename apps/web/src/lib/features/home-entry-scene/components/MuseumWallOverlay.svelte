@@ -4,6 +4,8 @@
 	import { gsap } from '$lib/client/gsap';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import graffitiLogoUrl from '$lib/assets/logo-graffiti.svg';
+	import { applyMuseumWallWillChange } from '$lib/features/home-entry-scene/components/museum-wall-will-change';
+	import { waitForPageLayoutReady } from '$lib/features/home-entry-scene/components/page-layout-ready';
 	import MuseumWindowFrame from '$lib/features/home-entry-scene/components/MuseumWindowFrame.svelte';
 	import {
 		createMuseumWallPatternUrl,
@@ -64,6 +66,7 @@
 	let reverseTimeline: gsap.core.Timeline | null = null;
 	let enterFallbackHandle: ReturnType<typeof setTimeout> | null = null;
 	let resetFallbackHandle: ReturnType<typeof setTimeout> | null = null;
+	let rebuildPending = false;
 
 	const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
 	const toPercent = (value: number) => `${clampUnit(value) * 100}%`;
@@ -88,10 +91,10 @@
 			return;
 		}
 
-		overlayElement.style.willChange = active ? 'opacity' : '';
-		wallSceneElement.style.willChange = active ? 'transform' : '';
-		wallTextureElement.style.willChange = active ? 'opacity' : '';
-		frameVisualElement.style.willChange = active ? 'opacity, filter' : '';
+		applyMuseumWallWillChange(
+			{ frameVisualElement, overlayElement, wallSceneElement, wallTextureElement },
+			active
+		);
 	};
 
 	const resetWallStyles = () => {
@@ -304,13 +307,24 @@
 		reverseTimeline = createReverseTimeline();
 	};
 
+	const scheduleTimelineRebuild = async () => {
+		if (rebuildPending || typeof window === 'undefined' || typeof document === 'undefined') {
+			return;
+		}
+
+		rebuildPending = true;
+		await waitForPageLayoutReady({ document, window });
+		rebuildPending = false;
+		rebuildTimelines();
+	};
+
 	onMount(() => {
 		const handleResize = () => {
-			rebuildTimelines();
+			void scheduleTimelineRebuild();
 		};
 
 		wallPatternUrl = createMuseumWallPatternUrl();
-		rebuildTimelines();
+		void scheduleTimelineRebuild();
 
 		window.addEventListener('resize', handleResize);
 
@@ -324,7 +338,7 @@
 
 	$effect(() => {
 		if (authOverlayElement && !forwardTimeline && !reverseTimeline) {
-			rebuildTimelines();
+			void scheduleTimelineRebuild();
 		}
 	});
 
