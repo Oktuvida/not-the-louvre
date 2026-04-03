@@ -2,15 +2,43 @@ import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 
-const { goto, invalidateAll, replaceState, pageStore, setPageValue } = vi.hoisted(() => {
+const {
+	createRealtimeClient,
+	goto,
+	getBrowserRealtimeClient,
+	invalidateAll,
+	replaceState,
+	pageStore,
+	setPageValue
+} = vi.hoisted(() => {
 	let currentValue = {
 		state: {},
 		url: new URL('http://localhost/gallery')
 	};
 	const subscribers = new Set<(value: typeof currentValue) => void>();
 
+	const createRealtimeClient = (onSubscribe?: (callback?: (status: string) => void) => void) => {
+		const channel = {
+			on: vi.fn(() => channel),
+			subscribe: vi.fn((callback?: (status: string) => void) => {
+				onSubscribe?.(callback);
+				return channel;
+			})
+		};
+
+		return {
+			channel: vi.fn(() => channel),
+			removeChannel: vi.fn(),
+			realtime: {
+				setAuth: vi.fn(async () => {})
+			}
+		};
+	};
+
 	return {
+		createRealtimeClient,
 		goto: vi.fn(),
+		getBrowserRealtimeClient: vi.fn(() => createRealtimeClient()),
 		invalidateAll: vi.fn(async () => {}),
 		pageStore: {
 			subscribe(callback: (value: typeof currentValue) => void) {
@@ -59,6 +87,10 @@ vi.mock('$app/stores', () => ({
 	page: pageStore
 }));
 
+vi.mock('$lib/features/realtime/browser-client', () => ({
+	getBrowserRealtimeClient
+}));
+
 import GalleryExplorationPage from './GalleryExplorationPage.svelte';
 import { getGalleryRoom } from './model/rooms';
 
@@ -90,6 +122,8 @@ describe('GalleryExplorationPage', () => {
 	beforeEach(() => {
 		vi.unstubAllGlobals?.();
 		goto.mockReset();
+		getBrowserRealtimeClient.mockReset();
+		getBrowserRealtimeClient.mockImplementation(() => createRealtimeClient());
 		invalidateAll.mockReset();
 		replaceState.mockReset();
 		setPageValue('/gallery');
@@ -511,6 +545,48 @@ describe('GalleryExplorationPage', () => {
 				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
 			)
 			.toBeVisible();
+	});
+
+	it('keeps realtime subscription failures silent in artwork detail', async () => {
+		const fetchSpy = vi.fn(
+			async () => new Response(JSON.stringify({ token: 'realtime-token' }), { status: 200 })
+		);
+		const loadArtworkDetail = vi.fn(async () => ({
+			...baseArtwork,
+			forkCount: 0,
+			id: 'artwork-1',
+			title: 'Deterministic Gallery Study'
+		}));
+
+		vi.stubGlobal('fetch', fetchSpy);
+		getBrowserRealtimeClient.mockImplementation(() =>
+			createRealtimeClient((callback) => {
+				callback?.('CHANNEL_ERROR');
+			})
+		);
+
+		render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			realtimeConfig: { anonKey: 'anon-key', url: 'https://example.supabase.co' },
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
+		await expect
+			.element(
+				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
+			)
+			.toBeVisible();
+		await vi.waitFor(() => {
+			expect(fetchSpy).toHaveBeenCalledTimes(1);
+		});
+		await expect
+			.element(page.getByText('Realtime updates are temporarily unavailable.'))
+			.not.toBeInTheDocument();
 	});
 
 	it('opens artwork detail from a visible virtualized studio card without losing room context', async () => {

@@ -414,15 +414,7 @@
 						}
 					}
 				)
-				.subscribe((status) => {
-					if (!realtimeAttemptController.isCurrent(attempt.id)) {
-						return;
-					}
-
-					if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-						detailErrorMessage = 'Realtime updates are temporarily unavailable.';
-					}
-				});
+				.subscribe();
 
 			if (!realtimeAttemptController.isCurrent(attempt.id)) {
 				void supabase.removeChannel(channel);
