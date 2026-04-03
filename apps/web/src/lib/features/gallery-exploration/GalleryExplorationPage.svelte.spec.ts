@@ -224,7 +224,7 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hall-of-fame'
 		});
 
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
 
 		await screen.rerender({
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
@@ -234,7 +234,7 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-		await expect.element(page.getByText('#1 CHAMPION')).not.toBeInTheDocument();
+		await expect.element(page.getByTestId('podium-artwork-1')).not.toBeInTheDocument();
 	});
 
 	it('reseeds mystery from mystery data after navigating from your-studio', async () => {
@@ -285,7 +285,7 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hall-of-fame'
 		});
 
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
 
 		await screen.rerender({
 			artworks: [{ ...baseArtwork, id: 'mine-1', title: 'Only Mine' }],
@@ -327,7 +327,7 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hall-of-fame'
 		});
 
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
 
 		await screen.rerender({
 			artworks: [{ ...baseArtwork, id: 'mine-1', title: 'Only Mine' }],
@@ -893,8 +893,8 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hall-of-fame'
 		});
 
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
-		await expect.element(page.getByText('#2 RUNNER UP')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-2')).toBeVisible();
 	});
 
 	it('loads more ranked artworks in hall-of-fame when scrolling to sentinel', async () => {
@@ -929,7 +929,7 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		// Podium should be visible
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
 
 		// Ranked grid should show artworks 4-7
 		await expect.element(page.getByRole('button', { name: /Ranked 4/ })).toBeVisible();
@@ -976,7 +976,7 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hall-of-fame'
 		});
 
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: /Ranked 4/ })).toBeVisible();
 
 		// Trigger load-more
@@ -993,7 +993,7 @@ describe('GalleryExplorationPage', () => {
 		);
 
 		// Podium is still visible while loading
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
 		await expect.element(page.getByTestId('scroll-sentinel-skeleton')).toBeInTheDocument();
 
 		deferred.resolve({
@@ -1002,7 +1002,7 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByRole('button', { name: /Ranked 5/ })).toBeVisible();
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
 	});
 
 	it('shows end-of-list in hall-of-fame when all ranked artworks are loaded', async () => {
@@ -1022,7 +1022,7 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hall-of-fame'
 		});
 
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
 		await expect.element(page.getByTestId('scroll-sentinel-end')).toBeVisible();
 	});
 
@@ -1048,7 +1048,7 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hall-of-fame'
 		});
 
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
 
 		// Wait for ranked grid to render so the sentinel observer is set up
 		await expect.element(page.getByRole('button', { name: /Ranked 4/ })).toBeVisible();
