@@ -344,6 +344,188 @@ describe('GalleryExplorationPage', () => {
 		expect(loadMysteryRoom).not.toHaveBeenCalled();
 	});
 
+	it('reseeds mystery from mystery data after navigating from your-studio', async () => {
+		const screen = render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'studio-1', title: 'My Studio Piece' }],
+			discovery: {
+				pageInfo: { hasMore: true, nextCursor: 'studio-cursor-1' },
+				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null,
+			loadMysteryRoom: async () => await import('./rooms/MysteryRoom.svelte'),
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByText('My Studio Piece')).toBeVisible();
+
+		await screen.rerender({
+			artworks: [{ ...baseArtwork, id: 'mystery-1', title: 'Mystery Arrival' }],
+			discovery: {
+				pageInfo: { hasMore: true, nextCursor: 'mystery-cursor-1' },
+				request: { authorId: null, limit: 12, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null,
+			loadMysteryRoom: async () => await import('./rooms/MysteryRoom.svelte'),
+			room: getGalleryRoom('mystery'),
+			roomId: 'mystery'
+		});
+
+		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+		expect(document.querySelectorAll('img[alt="Mystery Arrival"]').length).toBeGreaterThan(0);
+		expect(document.querySelectorAll('img[alt="My Studio Piece"]').length).toBe(0);
+	});
+
+	it('reseeds your-studio from viewer-scoped data after navigating from hall-of-fame', async () => {
+		const screen = render(GalleryExplorationPage, {
+			artworks: [
+				{ ...baseArtwork, id: 'public-1', rank: 1, title: 'Public Champion' },
+				{ ...baseArtwork, id: 'public-2', rank: 2, title: 'Public Runner Up' },
+				{ ...baseArtwork, id: 'public-3', rank: 3, title: 'Public Bronze' },
+				{ ...baseArtwork, id: 'public-4', rank: 4, title: 'Public Ranked 4' }
+			],
+			discovery: {
+				pageInfo: { hasMore: false, nextCursor: null },
+				request: { authorId: null, limit: 12, sort: 'top', window: 'all' }
+			},
+			emptyStateMessage: null,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame'
+		});
+
+		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+
+		await screen.rerender({
+			artworks: [{ ...baseArtwork, id: 'mine-1', title: 'Only Mine' }],
+			discovery: {
+				pageInfo: { hasMore: false, nextCursor: null },
+				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Only Mine')).toBeVisible();
+		await expect.element(page.getByText('Public Champion')).not.toBeInTheDocument();
+		await expect.element(page.getByText('Public Ranked 4')).not.toBeInTheDocument();
+	});
+
+	it('does not leak continuation state into your-studio after navigating from hall-of-fame', async () => {
+		const loadMoreArtworks = vi.fn(async () => ({
+			artworks: [{ ...baseArtwork, id: 'mine-2', title: 'Loaded Mine 2' }],
+			pageInfo: { hasMore: false, nextCursor: null }
+		}));
+
+		const screen = render(GalleryExplorationPage, {
+			artworks: [
+				{ ...baseArtwork, id: 'public-1', rank: 1, title: 'Public Champion' },
+				{ ...baseArtwork, id: 'public-2', rank: 2, title: 'Public Runner Up' },
+				{ ...baseArtwork, id: 'public-3', rank: 3, title: 'Public Bronze' },
+				{ ...baseArtwork, id: 'public-4', rank: 4, title: 'Public Ranked 4' }
+			],
+			discovery: {
+				pageInfo: { hasMore: false, nextCursor: null },
+				request: { authorId: null, limit: 12, sort: 'top', window: 'all' }
+			},
+			emptyStateMessage: null,
+			loadMoreArtworks,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame'
+		});
+
+		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+
+		await screen.rerender({
+			artworks: [{ ...baseArtwork, id: 'mine-1', title: 'Only Mine' }],
+			discovery: {
+				pageInfo: { hasMore: true, nextCursor: 'studio-cursor-1' },
+				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null,
+			loadMoreArtworks,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Only Mine')).toBeVisible();
+		await expect.element(page.getByTestId('scroll-sentinel-end')).not.toBeInTheDocument();
+
+		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
+		if (loadMoreArtworks.mock.calls.length === 0) {
+			sentinel?.scrollIntoView({ behavior: 'instant', block: 'center' });
+		}
+
+		await vi.waitFor(
+			() => {
+				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+			},
+			{ timeout: 5000 }
+		);
+
+		expect(loadMoreArtworks).toHaveBeenCalledWith({
+			authorId: 'user-1',
+			cursor: 'studio-cursor-1',
+			limit: 24,
+			sort: 'recent',
+			window: null
+		});
+	});
+
+	it('keeps the current room buffer when same-room metadata changes do not change the seed identity', async () => {
+		const loadMoreArtworks = vi.fn(async () => ({
+			artworks: [{ ...baseArtwork, id: 'mine-2', title: 'Loaded Mine 2' }],
+			pageInfo: { hasMore: false, nextCursor: null }
+		}));
+
+		const screen = render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'mine-1', title: 'Only Mine', score: 10 }],
+			discovery: {
+				pageInfo: { hasMore: true, nextCursor: 'studio-cursor-1' },
+				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null,
+			loadMoreArtworks,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Only Mine')).toBeVisible();
+
+		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
+		if (loadMoreArtworks.mock.calls.length === 0) {
+			sentinel?.scrollIntoView({ behavior: 'instant', block: 'center' });
+		}
+
+		await vi.waitFor(
+			() => {
+				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+			},
+			{ timeout: 5000 }
+		);
+
+		await expect.element(page.getByText('Loaded Mine 2')).toBeVisible();
+
+		await screen.rerender({
+			artworks: [{ ...baseArtwork, id: 'mine-1', title: 'Only Mine', score: 999 }],
+			discovery: {
+				pageInfo: { hasMore: true, nextCursor: 'studio-cursor-1' },
+				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null,
+			loadMoreArtworks,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Loaded Mine 2')).toBeVisible();
+	});
+
 	it('keeps hall-of-fame podium hero artwork eager while deferring ranked cards', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [
@@ -906,6 +1088,7 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /Ranked 4/ })).toBeVisible();
 
 		// Trigger load-more
 		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');

@@ -40,8 +40,8 @@
 
 	let {
 		adultContentEnabled = false,
-		artworks,
-		discovery = { pageInfo: { hasMore: false, nextCursor: null }, request: null },
+		artworks: routeArtworks,
+		discovery: routeDiscovery = { pageInfo: { hasMore: false, nextCursor: null }, request: null },
 		emptyStateMessage = null,
 		loadHotWallRoom = () => import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte'),
 		loadMoreArtworks = async (request: {
@@ -164,6 +164,9 @@
 		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
 	} = $props();
 
+	let artworks = $state(routeArtworks);
+	let discovery = $state(routeDiscovery);
+
 	let adultContentPreferenceOverride = $state<boolean | null>(null);
 	let isSavingAdultContentPreference = $state(false);
 	let selectedArtwork = $state<Artwork | null>(null);
@@ -182,6 +185,11 @@
 		default: typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default;
 	} | null>(null);
 	const realtimeAttemptController = createRealtimeAttemptController();
+	const routeArtworkSeedSignature = $derived(routeArtworks.map((artwork) => artwork.id).join('|'));
+	const roomSessionKey = $derived.by(
+		() =>
+			`${roomId}::${routeDiscovery.request?.authorId ?? 'public'}::${routeDiscovery.request?.sort ?? 'none'}::${routeDiscovery.request?.limit ?? 0}::${routeDiscovery.request?.window ?? 'none'}::${routeDiscovery.pageInfo.hasMore ? 'more' : 'done'}::${routeDiscovery.pageInfo.nextCursor ?? 'null'}::${routeArtworkSeedSignature}`
+	);
 
 	const mysteryAccumulator = createBoundedPoolAccumulator({
 		capacity: 24,
@@ -191,8 +199,8 @@
 			}
 			return loadMoreArtworks({ ...discovery.request, cursor });
 		},
-		initialArtworks: artworks,
-		initialPageInfo: discovery.pageInfo,
+		initialArtworks: routeArtworks,
+		initialPageInfo: routeDiscovery.pageInfo,
 		pageSize: 12
 	});
 
@@ -229,8 +237,8 @@
 			}
 			return loadMoreArtworks({ ...discovery.request, cursor });
 		},
-		initialArtworks: artworks,
-		initialPageInfo: discovery.pageInfo
+		initialArtworks: routeArtworks,
+		initialPageInfo: routeDiscovery.pageInfo
 	});
 
 	// --- Hall-of-fame accumulator + column tracking ---
@@ -261,8 +269,18 @@
 			}
 			return loadMoreArtworks({ ...discovery.request, cursor });
 		},
-		initialArtworks: artworks.slice(3),
-		initialPageInfo: discovery.pageInfo
+		initialArtworks: routeArtworks.slice(3),
+		initialPageInfo: routeDiscovery.pageInfo
+	});
+
+	$effect(() => {
+		const sessionKey = roomSessionKey;
+		void sessionKey;
+		artworks = routeArtworks;
+		discovery = routeDiscovery;
+		studioAccumulator.reseed(routeArtworks, routeDiscovery.pageInfo);
+		fameAccumulator.reseed(routeArtworks.slice(3), routeDiscovery.pageInfo);
+		mysteryAccumulator.reseed(routeArtworks, routeDiscovery.pageInfo);
 	});
 
 	const roomComponentPromise = $derived.by<Promise<
@@ -954,7 +972,10 @@
 									error={fameAccumulator.error}
 									hasMore={fameAccumulator.hasMore}
 									isLoading={fameAccumulator.isLoading}
+									rootMargin="500px"
 									onRetry={() => fameAccumulator.retry()}
+									skeletonCount={4}
+									skeletonGridClassName="grid grid-cols-1 gap-12 py-6 md:grid-cols-2 lg:grid-cols-4"
 									onTrigger={() => fameAccumulator.loadMore()}
 								/>
 							</div>
@@ -1007,7 +1028,10 @@
 								error={studioAccumulator.error}
 								hasMore={studioAccumulator.hasMore}
 								isLoading={studioAccumulator.isLoading}
+								rootMargin="500px"
 								onRetry={() => studioAccumulator.retry()}
+								skeletonCount={3}
+								skeletonGridClassName="grid grid-cols-1 gap-15 py-6 md:grid-cols-2 lg:grid-cols-3"
 								onTrigger={() => studioAccumulator.loadMore()}
 							/>
 						</div>
