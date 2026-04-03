@@ -133,6 +133,62 @@ describe('MysteryRoom', () => {
 		expect(document.querySelectorAll('.nsfw-badge').length).toBeGreaterThan(0);
 	});
 
+	it('calls onRequestMore via idle cycle when hasMore is true', async () => {
+		// The idle animation completes one cycle through all artworks, then
+		// triggers onIdleCycleComplete → handleIdleCycleComplete → onRequestMore.
+		// With 2 artworks and IDLE_DURATION_PER_FRAME=5, one cycle = 10s.
+		// We use a tiny pool so the cycle finishes within the test timeout.
+		const artworksPool = [makeArtwork('ic-0', 'Idle Cycle 0'), makeArtwork('ic-1', 'Idle Cycle 1')];
+		const onRequestMore = vi.fn();
+		const onApplyEviction = vi.fn();
+
+		render(MysteryRoom, {
+			artworks: artworksPool,
+			hasMore: true,
+			onApplyEviction,
+			onRequestMore,
+			onSelect: vi.fn()
+		});
+
+		// Wait for the idle cycle to complete (2 artworks × 5s = 10s + buffer)
+		await vi.waitFor(
+			() => {
+				expect(onRequestMore).toHaveBeenCalledOnce();
+			},
+			{ timeout: 15000 }
+		);
+
+		// Eviction should also have been triggered before the load
+		expect(onApplyEviction).toHaveBeenCalled();
+	});
+
+	it('does not call onRequestMore when hasMore is false', async () => {
+		// With 2 artworks × 5s per frame, one idle cycle = 10s.
+		// When hasMore is false, handleIdleCycleComplete should NOT call onRequestMore.
+		const artworksPool = [makeArtwork('nm-0', 'No More 0'), makeArtwork('nm-1', 'No More 1')];
+		const onRequestMore = vi.fn();
+		const onApplyEviction = vi.fn();
+
+		render(MysteryRoom, {
+			artworks: artworksPool,
+			hasMore: false,
+			onApplyEviction,
+			onRequestMore,
+			onSelect: vi.fn()
+		});
+
+		// Wait for at least one idle cycle to complete (2 artworks × 5s = 10s + buffer).
+		// onApplyEviction is always called; onRequestMore should NOT be called.
+		await vi.waitFor(
+			() => {
+				expect(onApplyEviction).toHaveBeenCalled();
+			},
+			{ timeout: 15000 }
+		);
+
+		expect(onRequestMore).not.toHaveBeenCalled();
+	});
+
 	it('shows nsfw artworks unblurred when adult content is enabled', async () => {
 		const nsfwArtworks = [
 			{ ...makeArtwork('nsfw-1', 'Spicy Art'), isNsfw: true },
