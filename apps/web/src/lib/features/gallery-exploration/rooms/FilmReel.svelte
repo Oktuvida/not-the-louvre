@@ -20,7 +20,7 @@
 	let viewportResizeObserver: ResizeObserver | null = null;
 
 	const BUFFER = 3;
-	const IDLE_DURATION_PER_FRAME = 1;
+	const IDLE_DURATION_PER_FRAME = 4;
 
 	type ReelState = 'idle' | 'spinning' | 'stopped';
 	let reelState = $state<ReelState>('idle');
