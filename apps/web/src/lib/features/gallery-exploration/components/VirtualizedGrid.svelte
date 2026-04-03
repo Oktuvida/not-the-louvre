@@ -13,13 +13,7 @@
 
 <WindowVirtualizer data={rows}>
 	{#snippet children(row)}
-		<div
-			data-testid="virtualized-row"
-			class="virtualized-row"
-			style:--grid-gap={gap}
-			style:content-visibility="auto"
-			style:contain-intrinsic-size="auto 250px"
-		>
+		<div data-testid="virtualized-row" class="virtualized-row" style:--grid-gap={gap}>
 			{#each row as item (typeof item === 'object' && item !== null && 'id' in item ? (item as Record<string, unknown>).id : item)}
 				{@render renderCard(item)}
 			{/each}

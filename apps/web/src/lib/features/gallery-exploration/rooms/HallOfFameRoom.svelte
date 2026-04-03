@@ -27,19 +27,46 @@
 			color: '#f4c430',
 			height: 'h-76 md:h-[22rem]',
 			label: 'CHAMPION',
-			width: 'w-76 md:w-[22rem]'
+			width: 'w-76 md:w-[22rem]',
+			plaque: {
+				bg: 'linear-gradient(170deg, #e8d06e 0%, #d4b43a 30%, #c9a52e 60%, #b8942a 100%)',
+				border: '#a07a1a',
+				title: '#3a2200',
+				artist: '#5c3d10',
+				divider: 'rgba(160,122,26,0.45)',
+				score: '#6b4c14',
+				highlight: 'rgba(255,255,255,0.35)'
+			}
 		},
 		2: {
 			color: '#c0c0c0',
 			height: 'h-68 md:h-[19rem]',
 			label: 'RUNNER UP',
-			width: 'w-68 md:w-[19rem]'
+			width: 'w-68 md:w-[19rem]',
+			plaque: {
+				bg: 'linear-gradient(170deg, #d8d8d8 0%, #c0c0c0 30%, #a8a8a8 60%, #989898 100%)',
+				border: '#8a8a8a',
+				title: '#1a1a1a',
+				artist: '#3a3a3a',
+				divider: 'rgba(138,138,138,0.45)',
+				score: '#444444',
+				highlight: 'rgba(255,255,255,0.4)'
+			}
 		},
 		3: {
 			color: '#cd7f32',
 			height: 'h-60 md:h-[16rem]',
 			label: 'BRONZE STAR',
-			width: 'w-60 md:w-[16rem]'
+			width: 'w-60 md:w-[16rem]',
+			plaque: {
+				bg: 'linear-gradient(170deg, #d4944a 0%, #cd7f32 30%, #b8702a 60%, #a56224 100%)',
+				border: '#8a5518',
+				title: '#2d1400',
+				artist: '#4a2a0c',
+				divider: 'rgba(138,85,24,0.45)',
+				score: '#5c3610',
+				highlight: 'rgba(255,255,255,0.3)'
+			}
 		}
 	} as const;
 
@@ -58,7 +85,7 @@
 	}))();
 
 	const accumulator = createArtworkAccumulator({
-		columnCount: 4,
+		columnCount: 3,
 		fetchPage: async (cursor: string) => {
 			if (!loadMoreArtworks) {
 				throw new Error('loadMoreArtworks is not configured');
@@ -141,17 +168,55 @@
 						</div>
 					</button>
 
+					<!-- Plaque: wood backing + metal plate with corner screws -->
 					<div
-						class="rounded-[1.1rem] border-[3px] border-[#4d351c] bg-[linear-gradient(180deg,rgba(255,249,238,0.96),rgba(239,228,208,0.96))] px-4 py-3 text-center text-[#2d2420] shadow-[0_10px_18px_rgba(0,0,0,0.14),inset_0_1px_0_rgba(255,255,255,0.45)]"
+						class="rounded-md border border-[#3a2a18] bg-[linear-gradient(135deg,#5c3d1e_0%,#4a3018_50%,#3d2712_100%)] p-1.5 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
 						data-testid={`podium-plaque-${position}`}
 					>
-						<div class="text-[0.68rem] font-black tracking-[0.18em] text-[#8a6a42] uppercase">
-							#{position}
-							{meta.label}
-						</div>
-						<div class="mt-1 text-sm font-bold text-[#2d2420]">{artwork.artist}</div>
-						<div class="mt-1 text-xs font-semibold text-[#5f554b]">
-							⭐ {artwork.score}
+						<div
+							class="relative max-w-[16rem] min-w-[10rem] rounded-[2px] border px-5 py-3 text-center"
+							style={`background: ${meta.plaque.bg}; border-color: ${meta.plaque.border}; box-shadow: inset 0 1px 0 ${meta.plaque.highlight}, inset 0 -1px 0 rgba(0,0,0,0.2), inset 1px 0 0 ${meta.plaque.highlight}, inset -1px 0 0 rgba(0,0,0,0.1);`}
+						>
+							<!-- Corner screws -->
+							<div
+								class="absolute top-1.5 left-1.5 h-[5px] w-[5px] rounded-full"
+								style={`background: radial-gradient(circle at 35% 35%, ${meta.plaque.highlight}, ${meta.plaque.border}); box-shadow: inset 0 1px 1px rgba(0,0,0,0.3);`}
+							></div>
+							<div
+								class="absolute top-1.5 right-1.5 h-[5px] w-[5px] rounded-full"
+								style={`background: radial-gradient(circle at 35% 35%, ${meta.plaque.highlight}, ${meta.plaque.border}); box-shadow: inset 0 1px 1px rgba(0,0,0,0.3);`}
+							></div>
+							<div
+								class="absolute bottom-1.5 left-1.5 h-[5px] w-[5px] rounded-full"
+								style={`background: radial-gradient(circle at 35% 35%, ${meta.plaque.highlight}, ${meta.plaque.border}); box-shadow: inset 0 1px 1px rgba(0,0,0,0.3);`}
+							></div>
+							<div
+								class="absolute right-1.5 bottom-1.5 h-[5px] w-[5px] rounded-full"
+								style={`background: radial-gradient(circle at 35% 35%, ${meta.plaque.highlight}, ${meta.plaque.border}); box-shadow: inset 0 1px 1px rgba(0,0,0,0.3);`}
+							></div>
+
+							<div
+								class="font-display truncate text-sm font-bold tracking-[0.08em] uppercase"
+								style={`color: ${meta.plaque.title}; text-shadow: 0 1px 0 ${meta.plaque.highlight};`}
+							>
+								{artwork.title}
+							</div>
+							<div
+								class="mx-auto my-1.5 h-px w-3/4"
+								style={`background: ${meta.plaque.divider};`}
+							></div>
+							<div
+								class="truncate text-xs font-semibold tracking-wide italic"
+								style={`color: ${meta.plaque.artist}; text-shadow: 0 1px 0 ${meta.plaque.highlight};`}
+							>
+								{artwork.artist}
+							</div>
+							<div
+								class="mt-1.5 text-[0.65rem] font-black tracking-[0.14em] uppercase"
+								style={`color: ${meta.plaque.score}; text-shadow: 0 1px 0 ${meta.plaque.highlight};`}
+							>
+								⭐ {artwork.score}
+							</div>
 						</div>
 					</div>
 				</div>
@@ -176,8 +241,8 @@
 			isLoading={accumulator.isLoading}
 			rootMargin="500px"
 			onRetry={() => accumulator.retry()}
-			skeletonCount={4}
-			skeletonGridClassName="grid grid-cols-1 gap-12 py-6 md:grid-cols-2 lg:grid-cols-4"
+			skeletonCount={3}
+			skeletonGridClassName="grid grid-cols-1 gap-12 py-6 md:grid-cols-2 lg:grid-cols-3"
 			onTrigger={() => accumulator.loadMore()}
 		/>
 	</div>

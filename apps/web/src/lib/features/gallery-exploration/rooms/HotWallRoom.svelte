@@ -68,7 +68,7 @@
 			<div data-testid="hot-wall-lead" class="flex flex-col items-center gap-4">
 				<button
 					type="button"
-					class="group hover:shadow-3xl relative w-full max-w-2xl cursor-pointer overflow-hidden rounded-xl shadow-2xl transition duration-300 hover:-translate-y-1"
+					class="group hover:shadow-3xl relative mt-12 w-full max-w-md cursor-pointer overflow-hidden rounded-xl shadow-2xl transition duration-300 hover:-translate-y-1"
 					onclick={() => onSelect(leadArtwork)}
 				>
 					<div class="relative aspect-square w-full">
@@ -110,10 +110,7 @@
 			<div class="w-full">
 				<div class="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
 					{#each supportingArtworks as artwork (artwork.id)}
-						<div
-							data-testid={`hot-wall-card-${artwork.id}`}
-							style="content-visibility: auto; contain-intrinsic-size: auto 400px;"
-						>
+						<div data-testid={`hot-wall-card-${artwork.id}`}>
 							<PolaroidCard
 								{artwork}
 								testId={`hot-wall-polaroid-${artwork.id}`}

@@ -34,7 +34,7 @@ describe('VirtualizedGrid', () => {
 		expect(allCards.length).toBeGreaterThanOrEqual(6);
 	});
 
-	it('row wrappers have content-visibility auto and contain-intrinsic-size CSS', async () => {
+	it('row wrappers do not clip overflow so hover animations are visible', async () => {
 		const rows = [
 			[createArtwork('b1'), createArtwork('b2')],
 			[createArtwork('b3'), createArtwork('b4')]
@@ -50,8 +50,8 @@ describe('VirtualizedGrid', () => {
 		const firstRow = rowElements[0] as HTMLElement;
 		const style = getComputedStyle(firstRow);
 
-		expect(style.contentVisibility).toBe('auto');
-		expect(style.containIntrinsicSize).not.toBe('');
+		// content-visibility must NOT be 'auto' — it creates paint containment that clips hover scale animations
+		expect(style.contentVisibility).not.toBe('auto');
 	});
 
 	it('accepts a renderCard snippet and calls it for each artwork in each row', async () => {
