@@ -19,8 +19,11 @@
 		toGalleryArtwork,
 		toGalleryArtworkDetail
 	} from '$lib/features/gallery-exploration/gallery-adapter';
+	import { WindowVirtualizer } from 'virtua/svelte';
 	import GalleryRoomNav from '$lib/features/gallery-exploration/components/GalleryRoomNav.svelte';
-	import VirtualizedArtworkGrid from '$lib/features/gallery-exploration/components/VirtualizedArtworkGrid.svelte';
+	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
+	import { createArtworkAccumulator } from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
+	import { createBoundedPoolAccumulator } from '$lib/features/gallery-exploration/bounded-pool-accumulator.svelte';
 	import { createMuseumWallPatternUrl } from '$lib/features/home-entry-scene/canvas/museum-canvas';
 	import {
 		galleryRoomIds,
@@ -179,6 +182,88 @@
 		default: typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default;
 	} | null>(null);
 	const realtimeAttemptController = createRealtimeAttemptController();
+
+	const mysteryAccumulator = createBoundedPoolAccumulator({
+		capacity: 24,
+		fetchPage: async (cursor: string) => {
+			if (!discovery.request || !loadMoreArtworks) {
+				throw new Error('Gallery discovery is not configured');
+			}
+			return loadMoreArtworks({ ...discovery.request, cursor });
+		},
+		initialArtworks: artworks,
+		initialPageInfo: discovery.pageInfo,
+		pageSize: 12
+	});
+
+	const handleMysterySelect = (artwork: Artwork) => {
+		mysteryAccumulator.applyPendingEviction();
+		openArtwork(artwork);
+	};
+
+	// --- Your-studio accumulator + column tracking ---
+	let studioGridRef = $state<HTMLDivElement>();
+	let studioColumnCount = $state(3);
+
+	$effect(() => {
+		if (!studioGridRef) return;
+		const computeColumns = () => {
+			const w = studioGridRef!.offsetWidth;
+			if (w >= 1024) studioColumnCount = 3;
+			else if (w >= 768) studioColumnCount = 2;
+			else studioColumnCount = 1;
+		};
+		computeColumns();
+		const ro = new ResizeObserver(() => computeColumns());
+		ro.observe(studioGridRef);
+		return () => ro.disconnect();
+	});
+
+	const studioAccumulator = createArtworkAccumulator({
+		get columnCount() {
+			return studioColumnCount;
+		},
+		fetchPage: async (cursor: string) => {
+			if (!discovery.request || !loadMoreArtworks) {
+				throw new Error('Gallery discovery is not configured');
+			}
+			return loadMoreArtworks({ ...discovery.request, cursor });
+		},
+		initialArtworks: artworks,
+		initialPageInfo: discovery.pageInfo
+	});
+
+	// --- Hall-of-fame accumulator + column tracking ---
+	let fameGridRef = $state<HTMLDivElement>();
+	let fameColumnCount = $state(4);
+
+	$effect(() => {
+		if (!fameGridRef) return;
+		const computeColumns = () => {
+			const w = fameGridRef!.offsetWidth;
+			if (w >= 1024) fameColumnCount = 4;
+			else if (w >= 768) fameColumnCount = 2;
+			else fameColumnCount = 1;
+		};
+		computeColumns();
+		const ro = new ResizeObserver(() => computeColumns());
+		ro.observe(fameGridRef);
+		return () => ro.disconnect();
+	});
+
+	const fameAccumulator = createArtworkAccumulator({
+		get columnCount() {
+			return fameColumnCount;
+		},
+		fetchPage: async (cursor: string) => {
+			if (!discovery.request || !loadMoreArtworks) {
+				throw new Error('Gallery discovery is not configured');
+			}
+			return loadMoreArtworks({ ...discovery.request, cursor });
+		},
+		initialArtworks: artworks.slice(3),
+		initialPageInfo: discovery.pageInfo
+	});
 
 	const roomComponentPromise = $derived.by<Promise<
 		| {
@@ -725,8 +810,11 @@
 								mysteryRoomModule.default as typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default}
 							<MysteryRoom
 								adultContentEnabled={adultContentAllowed}
-								{artworks}
-								onSelect={openArtwork}
+								artworks={mysteryAccumulator.allArtworks}
+								hasMore={mysteryAccumulator.hasMore}
+								onApplyEviction={mysteryAccumulator.applyPendingEviction}
+								onRequestMore={mysteryAccumulator.loadMore}
+								onSelect={handleMysterySelect}
 							/>
 						{:else if roomComponentPromise}
 							{#await roomComponentPromise}
@@ -741,8 +829,11 @@
 									roomModule.default as typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default}
 								<MysteryRoom
 									adultContentEnabled={adultContentAllowed}
-									{artworks}
-									onSelect={openArtwork}
+									artworks={mysteryAccumulator.allArtworks}
+									hasMore={mysteryAccumulator.hasMore}
+									onApplyEviction={mysteryAccumulator.applyPendingEviction}
+									onRequestMore={mysteryAccumulator.loadMore}
+									onSelect={handleMysterySelect}
 								/>
 							{/await}
 						{/if}
@@ -840,16 +931,32 @@
 								{/each}
 							</div>
 
-							<div class="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-4">
-								{#each hallOfFameArtworks.slice(3) as artwork, index (artwork.id)}
-									<div style={`transform: translateY(${index % 2 === 0 ? '-6px' : '8px'});`}>
-										<PolaroidCard
-											{artwork}
-											testId={`ranked-polaroid-${artwork.id}`}
-											onclick={() => openArtwork(artwork)}
-										/>
-									</div>
-								{/each}
+							<div bind:this={fameGridRef} class="w-full">
+								<WindowVirtualizer data={fameAccumulator.rows}>
+									{#snippet children(row, rowIndex)}
+										<div class="grid grid-cols-1 gap-12 pb-12 md:grid-cols-2 lg:grid-cols-4">
+											{#each row as artwork, colIndex (artwork.id)}
+												<div
+													style={`transform: translateY(${(rowIndex * row.length + colIndex) % 2 === 0 ? '-6px' : '8px'});`}
+												>
+													<PolaroidCard
+														{artwork}
+														testId={`ranked-polaroid-${artwork.id}`}
+														onclick={() => openArtwork(artwork)}
+													/>
+												</div>
+											{/each}
+										</div>
+									{/snippet}
+								</WindowVirtualizer>
+								<ScrollSentinel
+									disabled={false}
+									error={fameAccumulator.error}
+									hasMore={fameAccumulator.hasMore}
+									isLoading={fameAccumulator.isLoading}
+									onRetry={() => fameAccumulator.retry()}
+									onTrigger={() => fameAccumulator.loadMore()}
+								/>
 							</div>
 						</div>
 					{:else if roomId === 'hot-wall'}
@@ -883,12 +990,27 @@
 							{/await}
 						{/if}
 					{:else if roomId === 'your-studio'}
-						<VirtualizedArtworkGrid
-							{artworks}
-							{discovery}
-							{loadMoreArtworks}
-							onSelect={openArtwork}
-						/>
+						<div bind:this={studioGridRef} class="w-full">
+							<WindowVirtualizer data={studioAccumulator.rows}>
+								{#snippet children(row)}
+									<div class="grid grid-cols-1 gap-15 pb-15 md:grid-cols-2 lg:grid-cols-3">
+										{#each row as artwork (artwork.id)}
+											<div data-testid={`virtualized-artwork-card-${artwork.id}`}>
+												<PolaroidCard {artwork} onclick={() => openArtwork(artwork)} />
+											</div>
+										{/each}
+									</div>
+								{/snippet}
+							</WindowVirtualizer>
+							<ScrollSentinel
+								disabled={false}
+								error={studioAccumulator.error}
+								hasMore={studioAccumulator.hasMore}
+								isLoading={studioAccumulator.isLoading}
+								onRetry={() => studioAccumulator.retry()}
+								onTrigger={() => studioAccumulator.loadMore()}
+							/>
+						</div>
 					{:else}
 						<div class="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
 							{#each artworks as artwork, index (artwork.id)}
