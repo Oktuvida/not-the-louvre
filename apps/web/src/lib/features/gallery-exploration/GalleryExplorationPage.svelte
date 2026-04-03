@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { ArrowLeft, Paintbrush, RefreshCw } from 'lucide-svelte';
 	import { browser } from '$app/environment';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
-	import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
+	import type { RealtimeChannel } from '@supabase/supabase-js';
 	import { gsap } from '$lib/client/gsap';
+	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
+	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import ArtworkCard from '$lib/features/artwork-presentation/components/ArtworkCard.svelte';
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
@@ -163,8 +165,9 @@
 	let selectedArtwork = $state<Artwork | null>(null);
 	let detailErrorMessage = $state<string | null>(null);
 	let cleanupRealtime: (() => void) | null = null;
-	let entryFadeOpacity = $state(0);
-	let showEntryFade = $state(false);
+	const enteredFromHome = browser ? $page.url?.searchParams?.get('from') === 'home' : false;
+	let entryFadeOpacity = $state(enteredFromHome ? 1 : 0);
+	let showEntryFade = $state(enteredFromHome);
 	let exitFadeOpacity = $state(0);
 	let showExitFade = $state(false);
 	let isExitingToHome = $state(false);
@@ -350,13 +353,7 @@
 		}
 
 		const { token } = (await tokenResponse.json()) as { token: string };
-		const supabase = createClient(realtimeConfig.url, realtimeConfig.anonKey, {
-			auth: {
-				autoRefreshToken: false,
-				detectSessionInUrl: false,
-				persistSession: false
-			}
-		});
+		const supabase = getBrowserRealtimeClient(realtimeConfig.url, realtimeConfig.anonKey);
 		await supabase.realtime.setAuth(token);
 
 		const isArtworkEvent = (payload: unknown) => {
@@ -408,7 +405,6 @@
 
 		cleanupRealtime = () => {
 			void supabase.removeChannel(channel);
-			void supabase.realtime.disconnect();
 		};
 	};
 
@@ -436,18 +432,14 @@
 		};
 	});
 
-	$effect(() => {
-		if (!browser) return;
+	onMount(() => {
+		if (!enteredFromHome) return;
 
-		const params = $page.url?.searchParams;
-		if (!params || params.get('from') !== 'home') return;
-
-		showEntryFade = true;
-		entryFadeOpacity = 1;
-
-		const cleanUrl = new URL($page.url!);
-		cleanUrl.searchParams.delete('from');
-		window.history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search);
+		if (roomId === 'hall-of-fame') {
+			replaceState(resolve('/gallery'), window.history.state);
+		} else {
+			replaceState(resolve('/gallery/[room]', { room: roomId }), window.history.state);
+		}
 
 		const fade = { opacity: 1 };
 		gsap.to(fade, {

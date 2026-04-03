@@ -2,19 +2,62 @@ import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 
-const { goto, invalidateAll } = vi.hoisted(() => ({
-	goto: vi.fn(),
-	invalidateAll: vi.fn(async () => {})
-}));
+const { goto, invalidateAll, replaceState, pageStore, setPageValue } = vi.hoisted(() => {
+	let currentValue = {
+		state: {},
+		url: new URL('http://localhost/gallery')
+	};
+	const subscribers = new Set<(value: typeof currentValue) => void>();
+
+	return {
+		goto: vi.fn(),
+		invalidateAll: vi.fn(async () => {}),
+		pageStore: {
+			subscribe(callback: (value: typeof currentValue) => void) {
+				subscribers.add(callback);
+				callback(currentValue);
+
+				return () => {
+					subscribers.delete(callback);
+				};
+			}
+		},
+		replaceState: vi.fn((url: string | URL, state: Record<string, unknown>) => {
+			currentValue = {
+				state,
+				url: url instanceof URL ? url : new URL(url, currentValue.url)
+			};
+
+			for (const subscriber of subscribers) {
+				subscriber(currentValue);
+			}
+		}),
+		setPageValue(url: string, state: Record<string, unknown> = {}) {
+			currentValue = {
+				state,
+				url: new URL(url, 'http://localhost')
+			};
+
+			for (const subscriber of subscribers) {
+				subscriber(currentValue);
+			}
+		}
+	};
+});
 
 vi.mock('$app/navigation', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$app/navigation')>();
 	return {
 		...actual,
 		goto,
-		invalidateAll
+		invalidateAll,
+		replaceState
 	};
 });
+
+vi.mock('$app/stores', () => ({
+	page: pageStore
+}));
 
 import GalleryExplorationPage from './GalleryExplorationPage.svelte';
 import { getGalleryRoom } from './model/rooms';
@@ -46,7 +89,27 @@ const createDeferred = <T>() => {
 describe('GalleryExplorationPage', () => {
 	beforeEach(() => {
 		vi.unstubAllGlobals?.();
+		goto.mockReset();
+		invalidateAll.mockReset();
+		replaceState.mockReset();
+		setPageValue('/gallery');
 		window.scrollTo(0, 0);
+	});
+
+	it('cleans the home return query param only once', async () => {
+		setPageValue('/gallery?from=home');
+
+		render(GalleryExplorationPage, {
+			artworks: [],
+			emptyStateMessage: 'No artworks have reached this gallery room yet.',
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame'
+		});
+
+		await expect
+			.element(page.getByText('No artworks have reached this gallery room yet.'))
+			.toBeVisible();
+		expect(replaceState).toHaveBeenCalledTimes(1);
 	});
 
 	it('renders real discovery artwork cards from route data', async () => {
