@@ -1,11 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { browser } from '$app/environment';
-	import {
-		createClient,
-		type RealtimeChannel,
-		type RealtimePostgresChangesPayload
-	} from '@supabase/supabase-js';
+	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
+	import { type RealtimeChannel, type RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 	import type { ActionData, PageData } from './$types';
 
 	type SubscriptionState = 'idle' | 'connecting' | 'subscribed' | 'errored' | 'closed';
@@ -136,13 +133,7 @@
 		}
 
 		const { token } = (await tokenResponse.json()) as { token: string };
-		const supabase = createClient(data.realtimeConfig.url, data.realtimeConfig.anonKey, {
-			auth: {
-				autoRefreshToken: false,
-				detectSessionInUrl: false,
-				persistSession: false
-			}
-		});
+		const supabase = getBrowserRealtimeClient(data.realtimeConfig.url, data.realtimeConfig.anonKey);
 		await supabase.realtime.setAuth(token);
 
 		const channel: RealtimeChannel = supabase
@@ -182,7 +173,6 @@
 
 		cleanupRealtime = () => {
 			void supabase.removeChannel(channel);
-			void supabase.realtime.disconnect();
 		};
 	};
 
