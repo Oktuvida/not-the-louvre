@@ -4,6 +4,8 @@ const WALL_TILE_WIDTH = 512;
 const WALL_TILE_HEIGHT = 512;
 let cachedMuseumWallPatternUrl: string | null = null;
 
+import { getFrequentReadCanvasContext } from '$lib/client/canvas-2d';
+
 type Rgb = [number, number, number];
 
 const WINDOW_COLORS = {
@@ -375,7 +377,7 @@ export function createMuseumWallPatternUrl() {
 	canvas.width = WALL_TILE_WIDTH;
 	canvas.height = WALL_TILE_HEIGHT;
 
-	const ctx = canvas.getContext('2d');
+	const ctx = getFrequentReadCanvasContext(canvas);
 	if (!ctx) {
 		return '';
 	}
@@ -1039,7 +1041,7 @@ export function createArtworkFrameUrl(
 	canvas.width = canvasW;
 	canvas.height = canvasH;
 
-	const ctx = canvas.getContext('2d');
+	const ctx = getFrequentReadCanvasContext(canvas);
 	if (!ctx) {
 		return { url: '', opening: { x: totalT, y: totalT, w: artworkWidth, h: artworkHeight } };
 	}
@@ -1341,7 +1343,7 @@ export function createStickerBackgroundUrl(
 	canvas.width = width;
 	canvas.height = height;
 
-	const ctx = canvas.getContext('2d');
+	const ctx = getFrequentReadCanvasContext(canvas);
 	if (!ctx) return '';
 
 	drawStickerBackground(ctx, width, height, options);
