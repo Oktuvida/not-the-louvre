@@ -189,4 +189,18 @@ describe('createArtworkAccumulator', () => {
 		expect(acc.allArtworks).toHaveLength(3);
 		expect(acc.hasMore).toBe(true);
 	});
+
+	it('reseed replaces the base artworks and pageInfo', async () => {
+		const acc = createArtworkAccumulator({
+			initialArtworks: [makeArtwork(1), makeArtwork(2)],
+			initialPageInfo: { hasMore: true, nextCursor: 'cursor-1' },
+			fetchPage: vi.fn()
+		});
+
+		acc.reseed([makeArtwork(10)], { hasMore: false, nextCursor: null });
+
+		expect(acc.allArtworks.map((artwork) => artwork.id)).toEqual(['artwork-10']);
+		expect(acc.hasMore).toBe(false);
+		expect(acc.error).toBeNull();
+	});
 });

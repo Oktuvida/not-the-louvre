@@ -163,4 +163,20 @@ describe('createBoundedPoolAccumulator', () => {
 
 		expect(pool.allArtworks).toHaveLength(13); // 12 + 1 new (artwork-13)
 	});
+
+	it('reseed replaces the pool contents and cursor state', () => {
+		const pool = createBoundedPoolAccumulator({
+			initialArtworks: Array.from({ length: 12 }, (_, i) => makeArtwork(i + 1)),
+			initialPageInfo: { hasMore: true, nextCursor: 'cursor-1' },
+			fetchPage: vi.fn(),
+			capacity: 36,
+			pageSize: 12
+		});
+
+		pool.reseed([makeArtwork(40), makeArtwork(41)], { hasMore: false, nextCursor: null });
+
+		expect(pool.allArtworks.map((artwork) => artwork.id)).toEqual(['artwork-40', 'artwork-41']);
+		expect(pool.hasMore).toBe(false);
+		expect(pool.hasPendingEviction).toBe(false);
+	});
 });

@@ -18,16 +18,22 @@ export interface ArtworkAccumulator {
 	readonly error: string | null;
 	loadMore(): Promise<void>;
 	retry(): Promise<void>;
+	reseed(
+		initialArtworks: Artwork[],
+		initialPageInfo: { hasMore: boolean; nextCursor: string | null }
+	): void;
 	reset(): void;
 }
 
 export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): ArtworkAccumulator {
+	let baseArtworks = $state<Artwork[]>([...options.initialArtworks]);
+	let basePageInfo = $state({ ...options.initialPageInfo });
 	let appendedArtworks = $state<Artwork[]>([]);
 	let pageInfo = $state({ ...options.initialPageInfo });
 	let isLoading = $state(false);
 	let error = $state<string | null>(null);
 
-	const allArtworks = $derived([...options.initialArtworks, ...appendedArtworks]);
+	const allArtworks = $derived([...baseArtworks, ...appendedArtworks]);
 
 	const columnCount = $derived(typeof options.columnCount === 'number' ? options.columnCount : 3);
 
@@ -69,7 +75,19 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 
 	function reset(): void {
 		appendedArtworks = [];
-		pageInfo = { ...options.initialPageInfo };
+		pageInfo = { ...basePageInfo };
+		isLoading = false;
+		error = null;
+	}
+
+	function reseed(
+		initialArtworks: Artwork[],
+		initialPageInfo: { hasMore: boolean; nextCursor: string | null }
+	): void {
+		baseArtworks = [...initialArtworks];
+		basePageInfo = { ...initialPageInfo };
+		appendedArtworks = [];
+		pageInfo = { ...initialPageInfo };
 		isLoading = false;
 		error = null;
 	}
@@ -92,6 +110,7 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 		},
 		loadMore,
 		retry,
+		reseed,
 		reset
 	};
 }
