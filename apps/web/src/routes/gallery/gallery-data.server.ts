@@ -24,10 +24,9 @@ type GalleryRoomData = {
 		request: {
 			authorId: string | null;
 			limit: number;
-			scalable: boolean;
 			sort: 'hot' | 'recent' | 'top';
 			window: 'all' | null;
-		} | null;
+		};
 	};
 	emptyStateMessage: string | null;
 	realtimeConfig: {
@@ -95,7 +94,6 @@ export const loadGalleryRoomData = async (
 			? discovery.items.filter((item) => item.author.id === user.id)
 			: discovery.items
 	).slice(0, discoveryRequest.limit);
-	const scalableRoom = roomId === 'your-studio' && Boolean(user);
 
 	return {
 		artworks: visibleItems.map((item, index) =>
@@ -103,15 +101,12 @@ export const loadGalleryRoomData = async (
 		),
 		discovery: {
 			pageInfo: discovery.pageInfo,
-			request: scalableRoom
-				? {
-						authorId: user?.id ?? null,
-						limit: discoveryRequest.limit,
-						scalable: true,
-						sort: discoveryRequest.sort,
-						window: discoveryRequest.window
-					}
-				: null
+			request: {
+				authorId: (roomId === 'your-studio' && user?.id) || null,
+				limit: discoveryRequest.limit,
+				sort: discoveryRequest.sort,
+				window: discoveryRequest.window
+			}
 		},
 		emptyStateMessage: visibleItems.length === 0 ? emptyStateMessageForRoom(roomId) : null,
 		realtimeConfig: {
