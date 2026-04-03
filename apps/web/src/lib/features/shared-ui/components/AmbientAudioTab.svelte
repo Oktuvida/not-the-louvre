@@ -12,6 +12,7 @@
 	} = $props();
 
 	const buttonLabel = $derived(enabled ? 'Mute ambient audio' : 'Enable ambient audio');
+	const isMuted = $derived(!enabled || playbackUnavailable);
 	const statusLabel = $derived(
 		playbackUnavailable ? 'Quiet for now' : (currentTrackLabel ?? 'Ambient loop')
 	);
@@ -27,6 +28,24 @@
 		aria-label={buttonLabel}
 		onclick={onToggle}
 	>
+		<span class="ambient-tab-icon" data-muted={isMuted ? 'true' : 'false'} aria-hidden="true">
+			<svg
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path d="M9 18V5l10 4" />
+				<path d="M19 9v8" />
+				<circle cx="6" cy="18" r="3" />
+				<circle cx="16" cy="17" r="3" />
+				{#if isMuted}
+					<path d="M4 4l16 16" />
+				{/if}
+			</svg>
+		</span>
 		<div class="ambient-tab-pin"></div>
 		<div class="ambient-tab-copy">
 			<span class="ambient-tab-kicker">Ambience</span>
@@ -101,6 +120,20 @@
 		box-shadow: 0 0.15rem 0.4rem rgba(58, 34, 19, 0.24);
 	}
 
+	.ambient-tab-icon {
+		display: none;
+		align-items: center;
+		justify-content: center;
+		width: 1.6rem;
+		height: 1.6rem;
+		flex: none;
+	}
+
+	.ambient-tab-icon svg {
+		width: 100%;
+		height: 100%;
+	}
+
 	.ambient-tab-copy {
 		display: flex;
 		flex: 1;
@@ -149,13 +182,28 @@
 		}
 
 		.ambient-tab {
-			min-width: 11rem;
-			max-width: calc(100vw - 1.6rem);
-			padding: 0.85rem 0.9rem 0.85rem 1rem;
+			min-width: 0;
+			width: 3.4rem;
+			height: 3.4rem;
+			max-width: none;
+			padding: 0;
+			justify-content: center;
+			border-radius: 999px;
+			transform: none;
 		}
 
-		.ambient-tab-title {
-			font-size: 0.92rem;
+		.ambient-tab:hover {
+			transform: translateY(-1px);
+		}
+
+		.ambient-tab-icon {
+			display: inline-flex;
+		}
+
+		.ambient-tab-pin,
+		.ambient-tab-copy,
+		.ambient-tab-pill {
+			display: none;
 		}
 	}
 </style>

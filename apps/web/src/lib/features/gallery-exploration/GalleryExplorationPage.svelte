@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { ArrowLeft, Paintbrush, RefreshCw } from 'lucide-svelte';
 	import { browser } from '$app/environment';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
-	import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
+	import type { RealtimeChannel } from '@supabase/supabase-js';
 	import { gsap } from '$lib/client/gsap';
+	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
+	import { createRealtimeAttemptController } from '$lib/features/realtime/attempt-controller';
+	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import ArtworkCard from '$lib/features/artwork-presentation/components/ArtworkCard.svelte';
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
@@ -163,8 +166,9 @@
 	let selectedArtwork = $state<Artwork | null>(null);
 	let detailErrorMessage = $state<string | null>(null);
 	let cleanupRealtime: (() => void) | null = null;
-	let entryFadeOpacity = $state(0);
-	let showEntryFade = $state(false);
+	const enteredFromHome = browser ? $page.url?.searchParams?.get('from') === 'home' : false;
+	let entryFadeOpacity = $state(enteredFromHome ? 1 : 0);
+	let showEntryFade = $state(enteredFromHome);
 	let exitFadeOpacity = $state(0);
 	let showExitFade = $state(false);
 	let isExitingToHome = $state(false);
@@ -174,6 +178,7 @@
 	let mysteryRoomModule = $state<{
 		default: typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default;
 	} | null>(null);
+	const realtimeAttemptController = createRealtimeAttemptController();
 
 	const roomComponentPromise = $derived.by<Promise<
 		| {
@@ -315,6 +320,7 @@
 	};
 
 	const stopRealtime = () => {
+		realtimeAttemptController.cancel();
 		cleanupRealtime?.();
 		cleanupRealtime = null;
 	};
@@ -336,80 +342,95 @@
 
 	const startRealtime = async (artworkId: string) => {
 		stopRealtime();
+		const attempt = realtimeAttemptController.begin();
 
 		if (!viewer || !realtimeConfig.url || !realtimeConfig.anonKey) {
 			return;
 		}
 
-		const tokenResponse = await fetch('/api/realtime/token', {
-			headers: { accept: 'application/json' }
-		});
+		try {
+			const tokenResponse = await fetch('/api/realtime/token', {
+				headers: { accept: 'application/json' },
+				signal: attempt.signal
+			});
 
-		if (!tokenResponse.ok) {
-			return;
-		}
-
-		const { token } = (await tokenResponse.json()) as { token: string };
-		const supabase = createClient(realtimeConfig.url, realtimeConfig.anonKey, {
-			auth: {
-				autoRefreshToken: false,
-				detectSessionInUrl: false,
-				persistSession: false
-			}
-		});
-		await supabase.realtime.setAuth(token);
-
-		const isArtworkEvent = (payload: unknown) => {
-			if (typeof payload !== 'object' || payload === null) {
-				return false;
+			if (!tokenResponse.ok) {
+				return;
 			}
 
-			const candidate = payload as {
-				new?: { artwork_id?: string };
-				old?: { artwork_id?: string };
+			const { token } = (await tokenResponse.json()) as { token: string };
+			if (!realtimeAttemptController.isCurrent(attempt.id)) {
+				return;
+			}
+
+			const supabase = getBrowserRealtimeClient(realtimeConfig.url, realtimeConfig.anonKey);
+			await supabase.realtime.setAuth(token);
+			if (!realtimeAttemptController.isCurrent(attempt.id)) {
+				return;
+			}
+
+			const isArtworkEvent = (payload: unknown) => {
+				if (typeof payload !== 'object' || payload === null) {
+					return false;
+				}
+
+				const candidate = payload as {
+					new?: { artwork_id?: string };
+					old?: { artwork_id?: string };
+				};
+
+				return candidate.new?.artwork_id === artworkId || candidate.old?.artwork_id === artworkId;
 			};
 
-			return candidate.new?.artwork_id === artworkId || candidate.old?.artwork_id === artworkId;
-		};
+			const refreshArtwork = () => {
+				void refreshSelectedArtwork(artworkId);
+			};
 
-		const refreshArtwork = () => {
-			void refreshSelectedArtwork(artworkId);
-		};
-
-		const channel: RealtimeChannel = supabase
-			.channel(`gallery-artwork:${artworkId}:${viewer.id}`)
-			.on(
-				'postgres_changes',
-				{
-					event: '*',
-					schema: 'app',
-					table: 'artwork_vote_realtime'
-				},
-				(payload) => {
-					if (isArtworkEvent(payload)) {
-						refreshArtwork();
+			const channel: RealtimeChannel = supabase
+				.channel(`gallery-artwork:${artworkId}:${viewer.id}`)
+				.on(
+					'postgres_changes',
+					{
+						event: '*',
+						schema: 'app',
+						table: 'artwork_vote_realtime'
+					},
+					(payload) => {
+						if (realtimeAttemptController.isCurrent(attempt.id) && isArtworkEvent(payload)) {
+							refreshArtwork();
+						}
 					}
-				}
-			)
-			.on(
-				'postgres_changes',
-				{
-					event: '*',
-					schema: 'app',
-					table: 'artwork_comment_realtime'
-				},
-				(payload) => {
-					if (isArtworkEvent(payload)) {
-						refreshArtwork();
+				)
+				.on(
+					'postgres_changes',
+					{
+						event: '*',
+						schema: 'app',
+						table: 'artwork_comment_realtime'
+					},
+					(payload) => {
+						if (realtimeAttemptController.isCurrent(attempt.id) && isArtworkEvent(payload)) {
+							refreshArtwork();
+						}
 					}
-				}
-			)
-			.subscribe();
+				)
+				.subscribe();
 
-		cleanupRealtime = () => {
-			void supabase.removeChannel(channel);
-			void supabase.realtime.disconnect();
-		};
+			if (!realtimeAttemptController.isCurrent(attempt.id)) {
+				void supabase.removeChannel(channel);
+				return;
+			}
+
+			cleanupRealtime = () => {
+				void supabase.removeChannel(channel);
+			};
+		} catch (error) {
+			if (error instanceof DOMException && error.name === 'AbortError') {
+				return;
+			}
+
+			throw error;
+		}
 	};
 
 	$effect(() => {
@@ -436,18 +457,14 @@
 		};
 	});
 
-	$effect(() => {
-		if (!browser) return;
+	onMount(() => {
+		if (!enteredFromHome) return;
 
-		const params = $page.url?.searchParams;
-		if (!params || params.get('from') !== 'home') return;
-
-		showEntryFade = true;
-		entryFadeOpacity = 1;
-
-		const cleanUrl = new URL($page.url!);
-		cleanUrl.searchParams.delete('from');
-		window.history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search);
+		if (roomId === 'hall-of-fame') {
+			replaceState(resolve('/gallery'), window.history.state);
+		} else {
+			replaceState(resolve('/gallery/[room]', { room: roomId }), window.history.state);
+		}
 
 		const fade = { opacity: 1 };
 		gsap.to(fade, {
@@ -484,7 +501,7 @@
 	const podiumMeta = {
 		1: {
 			color: '#f4c430',
-			height: 'h-80 md:h-[22rem]',
+			height: 'h-76 md:h-[22rem]',
 			label: 'CHAMPION',
 			width: 'w-76 md:w-[22rem]'
 		},
@@ -504,8 +521,8 @@
 
 	const hallOfFameArtworks = $derived(artworks);
 	const hallOfFamePodium = $derived([
-		{ artwork: hallOfFameArtworks[1], position: 2 as const },
 		{ artwork: hallOfFameArtworks[0], position: 1 as const },
+		{ artwork: hallOfFameArtworks[1], position: 2 as const },
 		{ artwork: hallOfFameArtworks[2], position: 3 as const }
 	]);
 	const hotWallLeadArtwork = $derived(artworks[0] ?? null);
@@ -572,8 +589,11 @@
 
 	<AmbientParticleOverlay className="z-[5] opacity-90" />
 
-	<div class="pointer-events-none sticky top-0 z-40 px-4 pt-4 md:px-8 md:pt-6">
-		<div class="pointer-events-auto absolute top-4 left-4 md:top-6 md:left-8">
+	<div
+		class="pointer-events-none sticky top-0 z-40 px-3 pt-3 md:px-8 md:pt-6"
+		data-testid="gallery-room-header"
+	>
+		<div class="pointer-events-auto absolute top-3 left-3 md:top-6 md:left-8">
 			<div onclickcapture={handleBackToHome}>
 				<GameLink href="/" variant="ghost" size="sm" className="w-fit -rotate-1 shadow-xl">
 					<ArrowLeft class="mr-1 h-5 w-5" />
@@ -583,39 +603,51 @@
 		</div>
 
 		<div
-			class="pointer-events-auto absolute top-4 right-4 flex flex-col items-end gap-3 md:top-6 md:right-8"
+			class="pointer-events-auto absolute top-3 right-3 z-20 flex flex-row items-start gap-2 md:top-6 md:right-8 md:max-w-none md:flex-col md:items-end md:gap-3"
 		>
 			{#if viewer}
-				<GameLink href="/draw" variant="primary" size="sm" className="w-fit rotate-1 shadow-xl">
-					<Paintbrush class="mr-1 h-5 w-5" />
-					<span class="font-semibold">Create Art</span>
+				<GameLink
+					href="/draw"
+					variant="primary"
+					size="sm"
+					className="h-11 min-w-11 rotate-1 px-0 shadow-xl md:h-auto md:min-w-0 md:px-[var(--sticker-padding-x)]"
+					contentClassName="px-0 md:px-[calc(var(--sticker-padding-x)-2px)]"
+				>
+					<Paintbrush class="h-5 w-5 md:mr-1" />
+					<span class="sr-only">Create Art</span>
+					<div aria-hidden="true" class="hidden font-semibold md:inline-flex">Create Art</div>
 				</GameLink>
 				<GameButton
 					variant="secondary"
 					size="sm"
-					className="w-fit rotate-1 shadow-xl"
+					className="relative z-20 !h-11 !min-w-11 rotate-1 !px-0 shadow-xl md:!h-auto md:!min-w-0 md:!px-[var(--sticker-padding-x)]"
 					disabled={isRefreshingGallery}
 					onclick={refreshGallery}
 				>
-					<RefreshCw class={`mr-1 h-5 w-5 ${isRefreshingGallery ? 'animate-spin' : ''}`} />
-					<span class="font-semibold">{isRefreshingGallery ? 'Refreshing' : 'Refresh'}</span>
+					<RefreshCw class={`h-5 w-5 md:mr-1 ${isRefreshingGallery ? 'animate-spin' : ''}`} />
+					<span class="sr-only">{isRefreshingGallery ? 'Refreshing' : 'Refresh'}</span>
+					<div aria-hidden="true" class="hidden font-semibold md:inline-flex">
+						{isRefreshingGallery ? 'Refreshing' : 'Refresh'}
+					</div>
 				</GameButton>
 			{/if}
 		</div>
 
-		<div class="pointer-events-auto mx-auto w-fit pt-1">
+		<div class="pointer-events-auto mx-auto max-w-full px-12 pt-15 md:w-fit md:px-0 md:pt-1">
 			<GalleryRoomNav {roomId} {viewer} />
 		</div>
 	</div>
 
-	<div class="relative z-10 mx-auto flex max-w-7xl flex-col gap-8 px-8 py-8">
+	<div
+		class="relative z-10 mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8"
+	>
 		{#key roomId}
 			<div
 				class="relative overflow-visible"
 				in:fly={{ x: slideDirection * 300, duration: slideDirection === 0 ? 0 : 300 }}
 			>
 				{#if roomId === 'your-studio'}
-					<div class="mb-6 flex justify-start" data-testid="your-studio-room-note-flow">
+					<div class="mb-4 flex justify-start md:mb-6" data-testid="your-studio-room-note-flow">
 						<PostItNote
 							attachment={room.postItAttachment}
 							className={roomNoteClassNames[roomId]}
@@ -627,7 +659,8 @@
 					</div>
 				{:else}
 					<div
-						class="pointer-events-none absolute top-5 -left-16 z-[25] rotate-[-20deg] md:-left-16"
+						class="pointer-events-none mb-4 flex justify-center md:absolute md:top-5 md:-left-16 md:z-[25] md:mb-0 md:rotate-[-20deg] md:justify-start"
+						data-testid="gallery-room-note"
 					>
 						<PostItNote
 							attachment={room.postItAttachment}
@@ -642,7 +675,7 @@
 
 				{#if hasSensitiveArtwork}
 					<div
-						class="pointer-events-none mb-6 flex rotate-14 justify-end lg:absolute lg:top-20 lg:right-[-2.5rem] lg:z-[26] lg:mb-0 xl:right-[-17.5rem]"
+						class="pointer-events-none mb-4 flex justify-center md:mb-6 md:rotate-14 md:justify-end lg:absolute lg:top-20 lg:right-[-2.5rem] lg:z-[26] lg:mb-0 xl:right-[-17.5rem]"
 					>
 						<PostItNote
 							attachment="tape"
@@ -670,7 +703,7 @@
 					</div>
 				{/if}
 
-				<div class="space-y-6">
+				<div class="space-y-5 md:space-y-6">
 					{#if detailErrorMessage}
 						<div class="rounded-xl border-4 border-[#2d2420] bg-[#f7d8c7] p-5 text-[#7a2e1c]">
 							{detailErrorMessage}
@@ -698,7 +731,7 @@
 						{:else if roomComponentPromise}
 							{#await roomComponentPromise}
 								<div
-									class="min-h-[400px] rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
+									class="min-h-[320px] rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-6 text-center shadow-md md:min-h-[400px] md:p-10"
 									data-testid="gallery-room-loading"
 								>
 									<p class="font-display text-2xl text-[#2d2420]">Loading room...</p>

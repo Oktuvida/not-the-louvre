@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { getFrequentReadCanvasContext } from '$lib/client/canvas-2d';
 	import {
 		drawStickerBackground,
 		type StickerVariant
@@ -52,7 +53,7 @@
 		canvasEl.style.width = `${w}px`;
 		canvasEl.style.height = `${h}px`;
 
-		const ctx = canvasEl.getContext('2d');
+		const ctx = getFrequentReadCanvasContext(canvasEl);
 		if (!ctx) return;
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
