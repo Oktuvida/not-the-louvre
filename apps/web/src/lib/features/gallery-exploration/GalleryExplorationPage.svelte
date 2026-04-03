@@ -7,6 +7,7 @@
 	import type { RealtimeChannel } from '@supabase/supabase-js';
 	import { gsap } from '$lib/client/gsap';
 	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
+	import { createRealtimeAttemptController } from '$lib/features/realtime/attempt-controller';
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import ArtworkCard from '$lib/features/artwork-presentation/components/ArtworkCard.svelte';
@@ -177,6 +178,7 @@
 	let mysteryRoomModule = $state<{
 		default: typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default;
 	} | null>(null);
+	const realtimeAttemptController = createRealtimeAttemptController();
 
 	const roomComponentPromise = $derived.by<Promise<
 		| {
@@ -318,6 +320,7 @@
 	};
 
 	const stopRealtime = () => {
+		realtimeAttemptController.cancel();
 		cleanupRealtime?.();
 		cleanupRealtime = null;
 	};
@@ -339,73 +342,103 @@
 
 	const startRealtime = async (artworkId: string) => {
 		stopRealtime();
+		const attempt = realtimeAttemptController.begin();
 
 		if (!viewer || !realtimeConfig.url || !realtimeConfig.anonKey) {
 			return;
 		}
 
-		const tokenResponse = await fetch('/api/realtime/token', {
-			headers: { accept: 'application/json' }
-		});
+		try {
+			const tokenResponse = await fetch('/api/realtime/token', {
+				headers: { accept: 'application/json' },
+				signal: attempt.signal
+			});
 
-		if (!tokenResponse.ok) {
-			return;
-		}
-
-		const { token } = (await tokenResponse.json()) as { token: string };
-		const supabase = getBrowserRealtimeClient(realtimeConfig.url, realtimeConfig.anonKey);
-		await supabase.realtime.setAuth(token);
-
-		const isArtworkEvent = (payload: unknown) => {
-			if (typeof payload !== 'object' || payload === null) {
-				return false;
+			if (!tokenResponse.ok) {
+				return;
 			}
 
-			const candidate = payload as {
-				new?: { artwork_id?: string };
-				old?: { artwork_id?: string };
+			const { token } = (await tokenResponse.json()) as { token: string };
+			if (!realtimeAttemptController.isCurrent(attempt.id)) {
+				return;
+			}
+
+			const supabase = getBrowserRealtimeClient(realtimeConfig.url, realtimeConfig.anonKey);
+			await supabase.realtime.setAuth(token);
+			if (!realtimeAttemptController.isCurrent(attempt.id)) {
+				return;
+			}
+
+			const isArtworkEvent = (payload: unknown) => {
+				if (typeof payload !== 'object' || payload === null) {
+					return false;
+				}
+
+				const candidate = payload as {
+					new?: { artwork_id?: string };
+					old?: { artwork_id?: string };
+				};
+
+				return candidate.new?.artwork_id === artworkId || candidate.old?.artwork_id === artworkId;
 			};
 
-			return candidate.new?.artwork_id === artworkId || candidate.old?.artwork_id === artworkId;
-		};
+			const refreshArtwork = () => {
+				void refreshSelectedArtwork(artworkId);
+			};
 
-		const refreshArtwork = () => {
-			void refreshSelectedArtwork(artworkId);
-		};
-
-		const channel: RealtimeChannel = supabase
-			.channel(`gallery-artwork:${artworkId}:${viewer.id}`)
-			.on(
-				'postgres_changes',
-				{
-					event: '*',
-					schema: 'app',
-					table: 'artwork_vote_realtime'
-				},
-				(payload) => {
-					if (isArtworkEvent(payload)) {
-						refreshArtwork();
+			const channel: RealtimeChannel = supabase
+				.channel(`gallery-artwork:${artworkId}:${viewer.id}`)
+				.on(
+					'postgres_changes',
+					{
+						event: '*',
+						schema: 'app',
+						table: 'artwork_vote_realtime'
+					},
+					(payload) => {
+						if (realtimeAttemptController.isCurrent(attempt.id) && isArtworkEvent(payload)) {
+							refreshArtwork();
+						}
 					}
-				}
-			)
-			.on(
-				'postgres_changes',
-				{
-					event: '*',
-					schema: 'app',
-					table: 'artwork_comment_realtime'
-				},
-				(payload) => {
-					if (isArtworkEvent(payload)) {
-						refreshArtwork();
+				)
+				.on(
+					'postgres_changes',
+					{
+						event: '*',
+						schema: 'app',
+						table: 'artwork_comment_realtime'
+					},
+					(payload) => {
+						if (realtimeAttemptController.isCurrent(attempt.id) && isArtworkEvent(payload)) {
+							refreshArtwork();
+						}
 					}
-				}
-			)
-			.subscribe();
+				)
+				.subscribe((status) => {
+					if (!realtimeAttemptController.isCurrent(attempt.id)) {
+						return;
+					}
 
-		cleanupRealtime = () => {
-			void supabase.removeChannel(channel);
-		};
+					if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+						detailErrorMessage = 'Realtime updates are temporarily unavailable.';
+					}
+				});
+
+			if (!realtimeAttemptController.isCurrent(attempt.id)) {
+				void supabase.removeChannel(channel);
+				return;
+			}
+
+			cleanupRealtime = () => {
+				void supabase.removeChannel(channel);
+			};
+		} catch (error) {
+			if (error instanceof DOMException && error.name === 'AbortError') {
+				return;
+			}
+
+			throw error;
+		}
 	};
 
 	$effect(() => {
