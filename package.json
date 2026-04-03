@@ -23,6 +23,7 @@
 		"db:push": "bun run --filter @not-the-louvre/web db:push",
 		"db:generate": "bun run --filter @not-the-louvre/web db:generate",
 		"db:migrate": "bun run --filter @not-the-louvre/web db:migrate",
+		"db:seed": "bun run --filter @not-the-louvre/web db:seed",
 		"db:studio": "bun run --filter @not-the-louvre/web db:studio",
 		"auth:schema": "bun run --filter @not-the-louvre/web auth:schema"
 	}
