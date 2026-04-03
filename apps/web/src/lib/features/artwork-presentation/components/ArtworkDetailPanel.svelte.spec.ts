@@ -140,6 +140,13 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
+		expect(document.querySelector('input[placeholder="Write a comment"]')?.id).toBe(
+			'artwork-comment-body'
+		);
+		expect(
+			document.querySelector('input[placeholder="Write a comment"]')?.getAttribute('name')
+		).toBe('commentBody');
+
 		await page.getByPlaceholder('Write a comment').fill('Great work');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 

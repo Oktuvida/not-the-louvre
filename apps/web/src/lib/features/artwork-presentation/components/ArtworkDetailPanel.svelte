@@ -411,6 +411,8 @@
 										<input
 											bind:this={commentInput}
 											bind:value={commentBody}
+											id="artwork-comment-body"
+											name="commentBody"
 											type="text"
 											placeholder="Write a comment"
 											class="min-w-0 flex-1 rounded-full border-2 border-[#c8af95] bg-white px-4 py-2.5 text-sm transition outline-none focus:border-[#4ecdc4]"
