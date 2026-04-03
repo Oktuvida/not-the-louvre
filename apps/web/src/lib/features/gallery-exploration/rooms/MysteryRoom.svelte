@@ -1,31 +1,61 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import { createStreamingAccumulator } from '../streaming-accumulator.svelte';
 	import FilmReel from './FilmReel.svelte';
 
 	let {
 		adultContentEnabled = false,
 		artworks,
-		hasMore = false,
-		onApplyEviction,
-		onRequestMore,
+		pageInfo,
+		loadMoreArtworks,
+		fetchRandomArtwork,
 		onSelect
 	}: {
 		adultContentEnabled?: boolean;
 		artworks: Artwork[];
-		hasMore?: boolean;
-		onApplyEviction?: () => void;
-		onRequestMore?: () => void;
+		pageInfo: { hasMore: boolean; nextCursor: string | null };
+		loadMoreArtworks?: (request: { cursor: string }) => Promise<{
+			artworks: Artwork[];
+			pageInfo: { hasMore: boolean; nextCursor: string | null };
+		}>;
+		fetchRandomArtwork?: () => Promise<Artwork>;
 		onSelect?: (artwork: Artwork) => void;
 	} = $props();
+
+	// Snapshot initial values to avoid reactive re-seeding
+	const { initialArtworks, initialPageInfo } = (() => ({
+		initialArtworks: $state.snapshot(artworks),
+		initialPageInfo: $state.snapshot(pageInfo)
+	}))();
+
+	const accumulator = createStreamingAccumulator({
+		initialArtworks,
+		initialPageInfo,
+		fetchPage: async (cursor: string) => {
+			if (!loadMoreArtworks) {
+				return { artworks: [], pageInfo: { hasMore: false, nextCursor: null } };
+			}
+			return loadMoreArtworks({ cursor });
+		}
+	});
 
 	let filmReel: ReturnType<typeof FilmReel> | undefined = $state();
 	let isSpinning = $state(false);
 
-	const handleSpin = () => {
-		if (isSpinning) return;
+	const LOAD_MORE_THRESHOLD = 0.8;
+
+	const handleSpin = async () => {
+		if (isSpinning || !fetchRandomArtwork) return;
 		isSpinning = true;
-		filmReel?.spin();
+
+		try {
+			const artwork = await fetchRandomArtwork();
+			filmReel?.spinToArtwork(artwork);
+		} catch {
+			// Spin failed — re-enable the button and keep idle
+			isSpinning = false;
+		}
 	};
 
 	const handleLand = (artwork: Artwork) => {
@@ -37,12 +67,18 @@
 		}, 500);
 	};
 
+	const handleIdleProgress = (fraction: number) => {
+		accumulator.setProgress(fraction);
+
+		if (fraction >= LOAD_MORE_THRESHOLD && accumulator.hasMore && !accumulator.isLoading) {
+			accumulator.loadMore();
+		}
+	};
+
 	const handleIdleCycleComplete = () => {
-		// Apply any pending eviction from previous loads first,
-		// then request the next page so the pool stays bounded.
-		onApplyEviction?.();
-		if (hasMore) {
-			onRequestMore?.();
+		// Cycle completed — load more if available
+		if (accumulator.hasMore && !accumulator.isLoading) {
+			accumulator.loadMore();
 		}
 	};
 </script>
@@ -54,8 +90,9 @@
 	<FilmReel
 		bind:this={filmReel}
 		{adultContentEnabled}
-		{artworks}
+		artworks={accumulator.allArtworks}
 		onLand={handleLand}
+		onIdleProgress={handleIdleProgress}
 		onIdleCycleComplete={handleIdleCycleComplete}
 	/>
 

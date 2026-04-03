@@ -4,46 +4,38 @@
 	import { goto, invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
-	import type { RealtimeChannel } from '@supabase/supabase-js';
 	import { gsap } from '$lib/client/gsap';
 	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
-	import { createRealtimeAttemptController } from '$lib/features/realtime/attempt-controller';
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
-	import ArtworkCard from '$lib/features/artwork-presentation/components/ArtworkCard.svelte';
-	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
 	import ArtworkDetailPanel from '$lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
 	import {
 		toGalleryArtwork,
 		toGalleryArtworkDetail
 	} from '$lib/features/gallery-exploration/gallery-adapter';
-	import { WindowVirtualizer } from 'virtua/svelte';
 	import GalleryRoomNav from '$lib/features/gallery-exploration/components/GalleryRoomNav.svelte';
-	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
-	import { createArtworkAccumulator } from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
-	import { createBoundedPoolAccumulator } from '$lib/features/gallery-exploration/bounded-pool-accumulator.svelte';
 	import { createMuseumWallPatternUrl } from '$lib/features/home-entry-scene/canvas/museum-canvas';
 	import {
 		galleryRoomIds,
 		type GalleryRoomConfig,
 		type GalleryRoomId
 	} from '$lib/features/gallery-exploration/model/rooms';
+	import { createRealtimeSubscription } from '$lib/features/gallery-exploration/use-realtime-subscription.svelte';
 	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
-	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
-	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
-	import WaxSealMedal from '$lib/features/shared-ui/components/WaxSealMedal.svelte';
+	import HallOfFameRoom from '$lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
+	import HotWallRoom from '$lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
+	import MysteryRoom from '$lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
+	import YourStudioRoom from '$lib/features/gallery-exploration/rooms/YourStudioRoom.svelte';
 
 	let {
 		adultContentEnabled = false,
 		artworks: routeArtworks,
 		discovery: routeDiscovery = { pageInfo: { hasMore: false, nextCursor: null }, request: null },
 		emptyStateMessage = null,
-		loadHotWallRoom = () => import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte'),
 		loadMoreArtworks = async (request: {
 			authorId: string | null;
 			cursor: string;
@@ -123,7 +115,21 @@
 				}))
 			};
 		},
-		loadMysteryRoom = () => import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte'),
+		fetchRandomArtwork = async () => {
+			const response = await fetch('/api/artworks/random', {
+				headers: { accept: 'application/json' }
+			});
+
+			if (!response.ok) {
+				throw new Error('Could not fetch a random artwork');
+			}
+
+			const payload = (await response.json()) as {
+				artwork: Parameters<typeof toGalleryArtwork>[0];
+			};
+
+			return toGalleryArtwork(payload.artwork);
+		},
 		room,
 		roomId,
 		realtimeConfig = { anonKey: null, url: null },
@@ -141,9 +147,7 @@
 			} | null;
 		};
 		emptyStateMessage?: string | null;
-		loadHotWallRoom?: () => Promise<{
-			default: typeof import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte').default;
-		}>;
+		fetchRandomArtwork?: () => Promise<Artwork>;
 		loadMoreArtworks?: (request: {
 			authorId: string | null;
 			cursor: string;
@@ -155,28 +159,24 @@
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
 		loadArtworkDetail?: (artworkId: string) => Promise<Artwork>;
-		loadMysteryRoom?: () => Promise<{
-			default: typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default;
-		}>;
 		realtimeConfig?: { anonKey: string | null; url: string | null };
 		room: GalleryRoomConfig;
 		roomId: GalleryRoomId;
 		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
 	} = $props();
 
-	const { initialRouteArtworks, initialRouteDiscovery } = (() => ({
-		initialRouteArtworks: $state.snapshot(routeArtworks),
-		initialRouteDiscovery: $state.snapshot(routeDiscovery)
+	const { initialViewer, initialRealtimeConfig, initialArtworks } = (() => ({
+		initialViewer: $state.snapshot(viewer),
+		initialRealtimeConfig: $state.snapshot(realtimeConfig),
+		initialArtworks: $state.snapshot(routeArtworks)
 	}))();
 
-	let artworks = $state(initialRouteArtworks);
-	let discovery = $state(initialRouteDiscovery);
+	let artworks = $state(initialArtworks);
 
 	let adultContentPreferenceOverride = $state<boolean | null>(null);
 	let isSavingAdultContentPreference = $state(false);
 	let selectedArtwork = $state<Artwork | null>(null);
 	let detailErrorMessage = $state<string | null>(null);
-	let cleanupRealtime: (() => void) | null = null;
 	const enteredFromHome = browser ? $page.url?.searchParams?.get('from') === 'home' : false;
 	let entryFadeOpacity = $state(enteredFromHome ? 1 : 0);
 	let showEntryFade = $state(enteredFromHome);
@@ -186,116 +186,6 @@
 	let isRefreshingGallery = $state(false);
 	let previousRoomIndex = $state(-1);
 	let museumWallPatternUrl = $state('');
-	let mysteryRoomModule = $state<{
-		default: typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default;
-	} | null>(null);
-	const realtimeAttemptController = createRealtimeAttemptController();
-	const routeArtworkSeedSignature = $derived(routeArtworks.map((artwork) => artwork.id).join('|'));
-	const roomSessionKey = $derived.by(
-		() =>
-			`${roomId}::${routeDiscovery.request?.authorId ?? 'public'}::${routeDiscovery.request?.sort ?? 'none'}::${routeDiscovery.request?.limit ?? 0}::${routeDiscovery.request?.window ?? 'none'}::${routeDiscovery.pageInfo.hasMore ? 'more' : 'done'}::${routeDiscovery.pageInfo.nextCursor ?? 'null'}::${routeArtworkSeedSignature}`
-	);
-
-	const mysteryAccumulator = createBoundedPoolAccumulator({
-		capacity: 24,
-		fetchPage: async (cursor: string) => {
-			if (!discovery.request || !loadMoreArtworks) {
-				throw new Error('Gallery discovery is not configured');
-			}
-			return loadMoreArtworks({ ...discovery.request, cursor });
-		},
-		initialArtworks: initialRouteArtworks,
-		initialPageInfo: initialRouteDiscovery.pageInfo,
-		pageSize: 12
-	});
-
-	const handleMysterySelect = (artwork: Artwork) => {
-		mysteryAccumulator.applyPendingEviction();
-		openArtwork(artwork);
-	};
-
-	// --- Your-studio accumulator + column tracking ---
-	let studioGridRef = $state<HTMLDivElement>();
-	let studioColumnCount = $state(3);
-
-	$effect(() => {
-		if (!studioGridRef) return;
-		const computeColumns = () => {
-			const w = studioGridRef!.offsetWidth;
-			if (w >= 1024) studioColumnCount = 3;
-			else if (w >= 768) studioColumnCount = 2;
-			else studioColumnCount = 1;
-		};
-		computeColumns();
-		const ro = new ResizeObserver(() => computeColumns());
-		ro.observe(studioGridRef);
-		return () => ro.disconnect();
-	});
-
-	const studioAccumulator = createArtworkAccumulator({
-		get columnCount() {
-			return studioColumnCount;
-		},
-		fetchPage: async (cursor: string) => {
-			if (!discovery.request || !loadMoreArtworks) {
-				throw new Error('Gallery discovery is not configured');
-			}
-			return loadMoreArtworks({ ...discovery.request, cursor });
-		},
-		initialArtworks: initialRouteArtworks,
-		initialPageInfo: initialRouteDiscovery.pageInfo
-	});
-
-	// --- Hall-of-fame accumulator + column tracking ---
-	let fameGridRef = $state<HTMLDivElement>();
-	let fameColumnCount = $state(4);
-
-	$effect(() => {
-		if (!fameGridRef) return;
-		const computeColumns = () => {
-			const w = fameGridRef!.offsetWidth;
-			if (w >= 1024) fameColumnCount = 4;
-			else if (w >= 768) fameColumnCount = 2;
-			else fameColumnCount = 1;
-		};
-		computeColumns();
-		const ro = new ResizeObserver(() => computeColumns());
-		ro.observe(fameGridRef);
-		return () => ro.disconnect();
-	});
-
-	const fameAccumulator = createArtworkAccumulator({
-		get columnCount() {
-			return fameColumnCount;
-		},
-		fetchPage: async (cursor: string) => {
-			if (!discovery.request || !loadMoreArtworks) {
-				throw new Error('Gallery discovery is not configured');
-			}
-			return loadMoreArtworks({ ...discovery.request, cursor });
-		},
-		initialArtworks: initialRouteArtworks.slice(3),
-		initialPageInfo: initialRouteDiscovery.pageInfo
-	});
-
-	$effect(() => {
-		const sessionKey = roomSessionKey;
-		void sessionKey;
-		artworks = routeArtworks;
-		discovery = routeDiscovery;
-		studioAccumulator.reseed(routeArtworks, routeDiscovery.pageInfo);
-		fameAccumulator.reseed(routeArtworks.slice(3), routeDiscovery.pageInfo);
-		mysteryAccumulator.reseed(routeArtworks, routeDiscovery.pageInfo);
-	});
-
-	const roomComponentPromise = $derived.by<Promise<
-		| {
-				default: typeof import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte').default;
-		  }
-		| {
-				default: typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default;
-		  }
-	> | null>(() => resolveRoomComponentPromise(roomId));
 
 	const selectedArtworkId = $derived(selectedArtwork?.id ?? null);
 	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
@@ -308,35 +198,21 @@
 		return currentRoomIndex > previousRoomIndex ? 1 : currentRoomIndex < previousRoomIndex ? -1 : 0;
 	});
 
-	const updateAdultContentPreference = async (enabled: boolean) => {
-		if (!viewer || isSavingAdultContentPreference) {
-			detailErrorMessage = 'Sign in to manage 18+ artwork visibility.';
-			return;
-		}
+	// --- Reseed artworks from route data on navigation ---
+	$effect(() => {
+		artworks = routeArtworks;
+	});
 
-		isSavingAdultContentPreference = true;
-		detailErrorMessage = null;
+	// --- Room-scoped loadMoreArtworks that binds discovery request context ---
+	const roomLoadMoreArtworks = $derived.by(() => {
+		const request = routeDiscovery.request;
+		if (!request) return undefined;
+		return async (params: { cursor: string }) => {
+			return loadMoreArtworks({ ...request, cursor: params.cursor });
+		};
+	});
 
-		try {
-			const response = await fetch('/api/viewer/content-preferences', {
-				body: JSON.stringify({ adultContentEnabled: enabled }),
-				headers: { 'content-type': 'application/json' },
-				method: 'PATCH'
-			});
-
-			if (!response.ok) {
-				throw new Error('18+ artwork preference could not be updated.');
-			}
-
-			adultContentPreferenceOverride = enabled;
-		} catch (error) {
-			detailErrorMessage =
-				error instanceof Error ? error.message : '18+ artwork preference could not be updated.';
-		} finally {
-			isSavingAdultContentPreference = false;
-		}
-	};
-
+	// --- Detail panel ---
 	const openArtwork = async (artwork: Artwork) => {
 		detailErrorMessage = null;
 		try {
@@ -382,6 +258,89 @@
 		);
 	};
 
+	const updateAdultContentPreference = async (enabled: boolean) => {
+		if (!viewer || isSavingAdultContentPreference) {
+			detailErrorMessage = 'Sign in to manage 18+ artwork visibility.';
+			return;
+		}
+
+		isSavingAdultContentPreference = true;
+		detailErrorMessage = null;
+
+		try {
+			const response = await fetch('/api/viewer/content-preferences', {
+				body: JSON.stringify({ adultContentEnabled: enabled }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			});
+
+			if (!response.ok) {
+				throw new Error('18+ artwork preference could not be updated.');
+			}
+
+			adultContentPreferenceOverride = enabled;
+		} catch (error) {
+			detailErrorMessage =
+				error instanceof Error ? error.message : '18+ artwork preference could not be updated.';
+		} finally {
+			isSavingAdultContentPreference = false;
+		}
+	};
+
+	// --- Realtime subscription ---
+	const realtime =
+		browser && initialViewer && initialRealtimeConfig.url && initialRealtimeConfig.anonKey
+			? createRealtimeSubscription({
+					getRealtimeClient: () =>
+						getBrowserRealtimeClient(initialRealtimeConfig.url!, initialRealtimeConfig.anonKey!),
+					fetchToken: async () => {
+						const response = await fetch('/api/realtime/token', {
+							headers: { accept: 'application/json' }
+						});
+						if (!response.ok) return null;
+						const { token } = (await response.json()) as { token: string };
+						return token;
+					},
+					viewerId: initialViewer.id,
+					onRefresh: (artworkId: string) => {
+						void refreshSelectedArtwork(artworkId);
+					}
+				})
+			: null;
+
+	const refreshSelectedArtwork = async (artworkId: string) => {
+		try {
+			const refreshedArtwork = await loadArtworkDetail(artworkId);
+			if (selectedArtwork?.id === artworkId) {
+				detailErrorMessage = null;
+				syncArtwork(refreshedArtwork);
+			}
+		} catch (error) {
+			if (selectedArtwork?.id === artworkId) {
+				detailErrorMessage =
+					error instanceof Error ? error.message : 'Artwork details could not be loaded';
+			}
+		}
+	};
+
+	$effect(() => {
+		const artworkId = selectedArtworkId;
+
+		if (!browser || !realtime) return;
+
+		if (!artworkId) {
+			realtime.stop();
+			return;
+		}
+
+		void realtime.start(artworkId);
+
+		return () => {
+			realtime.stop();
+		};
+	});
+
+	// --- Transitions ---
 	const handleBackToHome = (event: MouseEvent) => {
 		if (!viewer) {
 			return;
@@ -427,144 +386,13 @@
 		}
 	};
 
-	const stopRealtime = () => {
-		realtimeAttemptController.cancel();
-		cleanupRealtime?.();
-		cleanupRealtime = null;
-	};
-
-	const refreshSelectedArtwork = async (artworkId: string) => {
-		try {
-			const refreshedArtwork = await loadArtworkDetail(artworkId);
-			if (selectedArtwork?.id === artworkId) {
-				detailErrorMessage = null;
-				syncArtwork(refreshedArtwork);
-			}
-		} catch (error) {
-			if (selectedArtwork?.id === artworkId) {
-				detailErrorMessage =
-					error instanceof Error ? error.message : 'Artwork details could not be loaded';
-			}
-		}
-	};
-
-	const startRealtime = async (artworkId: string) => {
-		stopRealtime();
-		const attempt = realtimeAttemptController.begin();
-
-		if (!viewer || !realtimeConfig.url || !realtimeConfig.anonKey) {
-			return;
-		}
-
-		try {
-			const tokenResponse = await fetch('/api/realtime/token', {
-				headers: { accept: 'application/json' },
-				signal: attempt.signal
-			});
-
-			if (!tokenResponse.ok) {
-				return;
-			}
-
-			const { token } = (await tokenResponse.json()) as { token: string };
-			if (!realtimeAttemptController.isCurrent(attempt.id)) {
-				return;
-			}
-
-			const supabase = getBrowserRealtimeClient(realtimeConfig.url, realtimeConfig.anonKey);
-			await supabase.realtime.setAuth(token);
-			if (!realtimeAttemptController.isCurrent(attempt.id)) {
-				return;
-			}
-
-			const isArtworkEvent = (payload: unknown) => {
-				if (typeof payload !== 'object' || payload === null) {
-					return false;
-				}
-
-				const candidate = payload as {
-					new?: { artwork_id?: string };
-					old?: { artwork_id?: string };
-				};
-
-				return candidate.new?.artwork_id === artworkId || candidate.old?.artwork_id === artworkId;
-			};
-
-			const refreshArtwork = () => {
-				void refreshSelectedArtwork(artworkId);
-			};
-
-			const channel: RealtimeChannel = supabase
-				.channel(`gallery-artwork:${artworkId}:${viewer.id}`)
-				.on(
-					'postgres_changes',
-					{
-						event: '*',
-						schema: 'app',
-						table: 'artwork_vote_realtime'
-					},
-					(payload) => {
-						if (realtimeAttemptController.isCurrent(attempt.id) && isArtworkEvent(payload)) {
-							refreshArtwork();
-						}
-					}
-				)
-				.on(
-					'postgres_changes',
-					{
-						event: '*',
-						schema: 'app',
-						table: 'artwork_comment_realtime'
-					},
-					(payload) => {
-						if (realtimeAttemptController.isCurrent(attempt.id) && isArtworkEvent(payload)) {
-							refreshArtwork();
-						}
-					}
-				)
-				.subscribe();
-
-			if (!realtimeAttemptController.isCurrent(attempt.id)) {
-				void supabase.removeChannel(channel);
-				return;
-			}
-
-			cleanupRealtime = () => {
-				void supabase.removeChannel(channel);
-			};
-		} catch (error) {
-			if (error instanceof DOMException && error.name === 'AbortError') {
-				return;
-			}
-
-			throw error;
-		}
-	};
-
+	// --- Museum wall pattern ---
 	$effect(() => {
 		if (!browser || museumWallPatternUrl) return;
 		museumWallPatternUrl = createMuseumWallPatternUrl();
 	});
 
-	$effect(() => {
-		const artworkId = selectedArtworkId;
-
-		if (!browser) {
-			return;
-		}
-
-		if (!artworkId || !viewer) {
-			stopRealtime();
-			return;
-		}
-
-		void startRealtime(artworkId);
-
-		return () => {
-			stopRealtime();
-		};
-	});
-
+	// --- Clean home return query param ---
 	onMount(() => {
 		if (!enteredFromHome) return;
 
@@ -589,6 +417,7 @@
 		});
 	});
 
+	// --- Track previous room index for slide direction ---
 	$effect(() => {
 		const idx = currentRoomIndex;
 		return () => {
@@ -596,62 +425,7 @@
 		};
 	});
 
-	$effect(() => {
-		if (roomId !== 'mystery' || mysteryRoomModule) {
-			return;
-		}
-
-		void loadMysteryRoom().then((module) => {
-			mysteryRoomModule = module;
-		});
-	});
-
-	const podiumMeta = {
-		1: {
-			color: '#f4c430',
-			height: 'h-76 md:h-[22rem]',
-			label: 'CHAMPION',
-			width: 'w-76 md:w-[22rem]'
-		},
-		2: {
-			color: '#c0c0c0',
-			height: 'h-68 md:h-[19rem]',
-			label: 'RUNNER UP',
-			width: 'w-68 md:w-[19rem]'
-		},
-		3: {
-			color: '#cd7f32',
-			height: 'h-60 md:h-[16rem]',
-			label: 'BRONZE STAR',
-			width: 'w-60 md:w-[16rem]'
-		}
-	} as const;
-
-	const hallOfFameArtworks = $derived(artworks);
-	const hallOfFamePodium = $derived([
-		{ artwork: hallOfFameArtworks[0], position: 1 as const },
-		{ artwork: hallOfFameArtworks[1], position: 2 as const },
-		{ artwork: hallOfFameArtworks[2], position: 3 as const }
-	]);
-	const hotWallLeadArtwork = $derived(artworks[0] ?? null);
-	const hotWallRisers = $derived(artworks.slice(1));
-	const hotWallGridArtworks = $derived(hotWallRisers.slice(3));
-
-	const frameForArtwork = (artworkId: string, podiumPosition?: 1 | 2 | 3) =>
-		resolveArtworkFrame({ artworkId, podiumPosition });
-
-	const resolveRoomComponentPromise = (targetRoomId: GalleryRoomId) => {
-		if (targetRoomId === 'hot-wall') {
-			return loadHotWallRoom();
-		}
-
-		if (targetRoomId === 'mystery') {
-			return loadMysteryRoom();
-		}
-
-		return null;
-	};
-
+	// --- Empty state ---
 	const roomNoteClassNames: Record<GalleryRoomId, string> = {
 		'hall-of-fame': '',
 		'hot-wall': '',
@@ -827,233 +601,38 @@
 								{emptyStateSupportMessage}
 							</p>
 						</div>
-					{:else if roomId === 'mystery' && artworks.length > 0}
-						{#if mysteryRoomModule}
-							{@const MysteryRoom =
-								mysteryRoomModule.default as typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default}
-							<MysteryRoom
-								adultContentEnabled={adultContentAllowed}
-								artworks={mysteryAccumulator.allArtworks}
-								hasMore={mysteryAccumulator.hasMore}
-								onApplyEviction={mysteryAccumulator.applyPendingEviction}
-								onRequestMore={mysteryAccumulator.loadMore}
-								onSelect={handleMysterySelect}
-							/>
-						{:else if roomComponentPromise}
-							{#await roomComponentPromise}
-								<div
-									class="min-h-[320px] rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-6 text-center shadow-md md:min-h-[400px] md:p-10"
-									data-testid="gallery-room-loading"
-								>
-									<p class="font-display text-2xl text-[#2d2420]">Loading room...</p>
-								</div>
-							{:then roomModule}
-								{@const MysteryRoom =
-									roomModule.default as typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte').default}
-								<MysteryRoom
-									adultContentEnabled={adultContentAllowed}
-									artworks={mysteryAccumulator.allArtworks}
-									hasMore={mysteryAccumulator.hasMore}
-									onApplyEviction={mysteryAccumulator.applyPendingEviction}
-									onRequestMore={mysteryAccumulator.loadMore}
-									onSelect={handleMysterySelect}
-								/>
-							{/await}
-						{/if}
 					{:else if roomId === 'hall-of-fame'}
-						<div class="space-y-12">
-							<div
-								class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end lg:gap-10"
-							>
-								{#each hallOfFamePodium as entry (`podium-${entry.position}-${entry.artwork?.id ?? 'empty'}`)}
-									{@const artwork = entry.artwork}
-									{#if artwork}
-										{@const position = entry.position}
-										{@const meta = podiumMeta[position]}
-										{@const frame = frameForArtwork(artwork.id, position)}
-										<div class="relative flex flex-col items-center gap-5">
-											<div class="relative mb-5 flex flex-col items-center gap-3">
-												<WaxSealMedal
-													{position}
-													size={position === 1 ? 'large' : position === 2 ? 'medium' : 'small'}
-												/>
-												<div
-													class="font-display rounded-full border-[3px] border-[#2d2420] bg-[#f8f2e8]/92 px-5 py-1.5 text-xs font-black tracking-[0.16em] text-[#2d2420] shadow-lg"
-													style={`background:${meta.color}`}
-												>
-													{meta.label}
-												</div>
-											</div>
-
-											<button
-												type="button"
-												class={`relative ${meta.width} ${meta.height} cursor-pointer`}
-												data-testid={`podium-artwork-${position}`}
-												onclick={() => openArtwork(artwork)}
-											>
-												<div
-													class="h-full transition duration-200 hover:-translate-y-2 hover:scale-105"
-												>
-													<ArtworkFrame
-														{frame}
-														className="h-full w-full"
-														openingClass="h-full"
-														testId={`podium-frame-${position}`}
-													>
-														<div class="relative h-full w-full">
-															<img
-																src={artwork.imageUrl}
-																alt={artwork.title}
-																loading={position === 1 ? 'eager' : 'lazy'}
-																decoding={position === 1 ? 'sync' : 'async'}
-																class={`h-full w-full object-cover transition duration-200 ${artwork.isNsfw && !adultContentAllowed ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
-															/>
-															{#if artwork.isNsfw && !adultContentAllowed}
-																<div
-																	class="absolute inset-0 flex flex-col items-center justify-center border-2 border-dashed border-[#2d2420] bg-[rgba(45,36,32,0.72)] text-[#fdfbf7]"
-																>
-																	<span
-																		class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
-																		>18+</span
-																	>
-																	<p class="mt-3 text-sm font-bold uppercase">Sensitive artwork</p>
-																</div>
-															{/if}
-														</div>
-													</ArtworkFrame>
-													{#if artwork.artistAvatar}
-														<div class="absolute -right-4 -bottom-4">
-															<WaxSealAvatar
-																alt={artwork.artist}
-																seed={artwork.id}
-																size="lg"
-																src={artwork.artistAvatar}
-															/>
-														</div>
-													{/if}
-												</div>
-											</button>
-
-											<div
-												class="rounded-[1.1rem] border-[3px] border-[#4d351c] bg-[linear-gradient(180deg,rgba(255,249,238,0.96),rgba(239,228,208,0.96))] px-4 py-3 text-center text-[#2d2420] shadow-[0_10px_18px_rgba(0,0,0,0.14),inset_0_1px_0_rgba(255,255,255,0.45)]"
-												data-testid={`podium-plaque-${position}`}
-											>
-												<div
-													class="text-[0.68rem] font-black tracking-[0.18em] text-[#8a6a42] uppercase"
-												>
-													#{position}
-													{meta.label}
-												</div>
-												<div class="mt-1 text-sm font-bold text-[#2d2420]">{artwork.artist}</div>
-												<div class="mt-1 text-xs font-semibold text-[#5f554b]">
-													⭐ {artwork.score}
-												</div>
-											</div>
-										</div>
-									{/if}
-								{/each}
-							</div>
-
-							<div bind:this={fameGridRef} class="w-full">
-								<WindowVirtualizer data={fameAccumulator.rows}>
-									{#snippet children(row, rowIndex)}
-										<div class="grid grid-cols-1 gap-12 pb-12 md:grid-cols-2 lg:grid-cols-4">
-											{#each row as artwork, colIndex (artwork.id)}
-												<div
-													style={`transform: translateY(${(rowIndex * row.length + colIndex) % 2 === 0 ? '-6px' : '8px'});`}
-												>
-													<PolaroidCard
-														{artwork}
-														testId={`ranked-polaroid-${artwork.id}`}
-														onclick={() => openArtwork(artwork)}
-													/>
-												</div>
-											{/each}
-										</div>
-									{/snippet}
-								</WindowVirtualizer>
-								<ScrollSentinel
-									disabled={false}
-									error={fameAccumulator.error}
-									hasMore={fameAccumulator.hasMore}
-									isLoading={fameAccumulator.isLoading}
-									rootMargin="500px"
-									onRetry={() => fameAccumulator.retry()}
-									skeletonCount={4}
-									skeletonGridClassName="grid grid-cols-1 gap-12 py-6 md:grid-cols-2 lg:grid-cols-4"
-									onTrigger={() => fameAccumulator.loadMore()}
-								/>
-							</div>
-						</div>
+						<HallOfFameRoom
+							artworks={routeArtworks}
+							pageInfo={routeDiscovery.pageInfo}
+							adultContentEnabled={adultContentAllowed}
+							loadMoreArtworks={roomLoadMoreArtworks}
+							onSelect={openArtwork}
+						/>
 					{:else if roomId === 'hot-wall'}
-						{#if roomComponentPromise}
-							{#await roomComponentPromise}
-								<div
-									class="flex min-h-[28rem] items-center justify-center px-6 py-12"
-									data-testid="gallery-room-loading"
-								>
-									<PostItNote
-										attachment="pin"
-										className="max-w-sm"
-										color="#f4aacb"
-										label="The Hot Wall"
-										seedKey="hot-wall-coming-soon"
-										text="Proximamente."
-									/>
-								</div>
-							{:then roomModule}
-								{@const HotWallRoom =
-									roomModule.default as typeof import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte').default}
-								<HotWallRoom
-									adultContentEnabled={adultContentAllowed}
-									gridArtworks={hotWallGridArtworks}
-									leadArtwork={hotWallLeadArtwork}
-									{viewer}
-									onArtworkPatch={patchArtwork}
-									onSelect={openArtwork}
-									risers={hotWallRisers}
-								/>
-							{/await}
-						{/if}
+						<HotWallRoom
+							artworks={routeArtworks}
+							pageInfo={routeDiscovery.pageInfo}
+							adultContentEnabled={adultContentAllowed}
+							loadMoreArtworks={roomLoadMoreArtworks}
+							onSelect={openArtwork}
+						/>
+					{:else if roomId === 'mystery' && routeArtworks.length > 0}
+						<MysteryRoom
+							artworks={routeArtworks}
+							pageInfo={routeDiscovery.pageInfo}
+							adultContentEnabled={adultContentAllowed}
+							loadMoreArtworks={roomLoadMoreArtworks}
+							{fetchRandomArtwork}
+							onSelect={openArtwork}
+						/>
 					{:else if roomId === 'your-studio'}
-						<div bind:this={studioGridRef} class="w-full">
-							<WindowVirtualizer data={studioAccumulator.rows}>
-								{#snippet children(row)}
-									<div class="grid grid-cols-1 gap-15 pb-15 md:grid-cols-2 lg:grid-cols-3">
-										{#each row as artwork (artwork.id)}
-											<div data-testid={`virtualized-artwork-card-${artwork.id}`}>
-												<PolaroidCard {artwork} onclick={() => openArtwork(artwork)} />
-											</div>
-										{/each}
-									</div>
-								{/snippet}
-							</WindowVirtualizer>
-							<ScrollSentinel
-								disabled={false}
-								error={studioAccumulator.error}
-								hasMore={studioAccumulator.hasMore}
-								isLoading={studioAccumulator.isLoading}
-								rootMargin="500px"
-								onRetry={() => studioAccumulator.retry()}
-								skeletonCount={3}
-								skeletonGridClassName="grid grid-cols-1 gap-15 py-6 md:grid-cols-2 lg:grid-cols-3"
-								onTrigger={() => studioAccumulator.loadMore()}
-							/>
-						</div>
-					{:else}
-						<div class="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
-							{#each artworks as artwork, index (artwork.id)}
-								<ArtworkCard
-									adultContentEnabled={adultContentAllowed}
-									{artwork}
-									{index}
-									frameTestId={`gallery-frame-${artwork.id}`}
-									{viewer}
-									onArtworkPatch={(patch) => patchArtwork(artwork.id, patch)}
-									onclick={() => openArtwork(artwork)}
-								/>
-							{/each}
-						</div>
+						<YourStudioRoom
+							artworks={routeArtworks}
+							pageInfo={routeDiscovery.pageInfo}
+							loadMoreArtworks={roomLoadMoreArtworks}
+							onSelect={openArtwork}
+						/>
 					{/if}
 				</div>
 			</div>

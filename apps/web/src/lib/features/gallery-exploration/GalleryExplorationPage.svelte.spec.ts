@@ -178,7 +178,7 @@ describe('GalleryExplorationPage', () => {
 		expect(header?.className).toContain('px-3');
 	});
 
-	it('renders the hot wall as a coming-soon placeholder', async () => {
+	it('renders the hot wall with a lead artwork and supporting grid', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', title: 'Lead Heat' },
@@ -190,32 +190,13 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hot-wall'
 		});
 
-		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
+		await expect.element(page.getByTestId('hot-wall-room')).toBeVisible();
+		await expect.element(page.getByTestId('hot-wall-lead')).toBeVisible();
+		await expect.element(page.getByText('Hottest right now')).toBeVisible();
+		await expect.element(page.getByText('Lead Heat')).toBeVisible();
 	});
 
-	it('shows a stable fallback while the hot wall room module loads on demand', async () => {
-		const deferredRoom =
-			createDeferred<
-				Awaited<typeof import('$lib/features/gallery-exploration/rooms/HotWallRoom.svelte')>
-			>();
-
-		render(GalleryExplorationPage, {
-			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Lead Heat' }],
-			emptyStateMessage: null,
-			loadHotWallRoom: () => deferredRoom.promise,
-			room: getGalleryRoom('hot-wall'),
-			roomId: 'hot-wall'
-		});
-
-		await expect.element(page.getByTestId('gallery-room-loading')).toBeVisible();
-		await expect.element(page.getByText('Loading room...')).not.toBeInTheDocument();
-
-		deferredRoom.resolve(await import('./rooms/HotWallRoom.svelte'));
-
-		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
-	});
-
-	it('ignores the generic empty state when rendering the hot wall room', async () => {
+	it('renders the hot wall own empty state instead of a generic empty state', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [],
 			emptyStateMessage: 'Nothing is heating up on the wall right now.',
@@ -223,21 +204,22 @@ describe('GalleryExplorationPage', () => {
 			roomId: 'hot-wall'
 		});
 
-		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
+		await expect.element(page.getByTestId('hot-wall-empty')).toBeVisible();
+		await expect.element(page.getByText('Nothing heating up right now')).toBeVisible();
 		await expect
 			.element(page.getByText('Nothing is heating up on the wall right now.'))
 			.not.toBeInTheDocument();
 	});
 
-	it('loads room-specific UI when the visitor switches into the mystery room', async () => {
-		const deferredRoom =
-			createDeferred<
-				Awaited<typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte')>
-			>();
+	it('renders the mystery room directly when switching from another room', async () => {
 		const screen = render(GalleryExplorationPage, {
-			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
+			artworks: [
+				{ ...baseArtwork, id: 'public-1', rank: 1, title: 'Champion' },
+				{ ...baseArtwork, id: 'public-2', rank: 2, title: 'Runner Up' },
+				{ ...baseArtwork, id: 'public-3', rank: 3, title: 'Bronze Star' },
+				{ ...baseArtwork, id: 'public-4', rank: 4, title: 'Gallery Favorite' }
+			],
 			emptyStateMessage: null,
-			loadMysteryRoom: () => deferredRoom.promise,
 			room: getGalleryRoom('hall-of-fame'),
 			roomId: 'hall-of-fame'
 		});
@@ -247,101 +229,12 @@ describe('GalleryExplorationPage', () => {
 		await screen.rerender({
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
 			emptyStateMessage: null,
-			loadMysteryRoom: () => deferredRoom.promise,
 			room: getGalleryRoom('mystery'),
 			roomId: 'mystery'
 		});
 
-		await expect.element(page.getByTestId('gallery-room-loading')).toBeVisible();
+		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 		await expect.element(page.getByText('#1 CHAMPION')).not.toBeInTheDocument();
-
-		deferredRoom.resolve(await import('./rooms/MysteryRoom.svelte'));
-
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-	});
-
-	it('does not keep the previous room mounted while the next room loads', async () => {
-		const deferredRoom =
-			createDeferred<
-				Awaited<typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte')>
-			>();
-		const screen = render(GalleryExplorationPage, {
-			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
-			emptyStateMessage: null,
-			loadMysteryRoom: () => deferredRoom.promise,
-			room: getGalleryRoom('hall-of-fame'),
-			roomId: 'hall-of-fame'
-		});
-
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
-
-		await screen.rerender({
-			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
-			emptyStateMessage: null,
-			loadMysteryRoom: () => deferredRoom.promise,
-			room: getGalleryRoom('mystery'),
-			roomId: 'mystery'
-		});
-
-		await expect.element(page.getByTestId('gallery-room-loading')).toBeVisible();
-		await expect.element(page.getByText('#1 CHAMPION')).not.toBeInTheDocument();
-
-		deferredRoom.resolve(await import('./rooms/MysteryRoom.svelte'));
-
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-	});
-
-	it('does not flash the mystery loading state after the room module has already loaded once', async () => {
-		const deferredRoom =
-			createDeferred<
-				Awaited<typeof import('$lib/features/gallery-exploration/rooms/MysteryRoom.svelte')>
-			>();
-		const loadMysteryRoom = vi.fn(() => deferredRoom.promise);
-		const screen = render(GalleryExplorationPage, {
-			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
-			emptyStateMessage: null,
-			loadMysteryRoom,
-			room: getGalleryRoom('hall-of-fame'),
-			roomId: 'hall-of-fame'
-		});
-
-		await screen.rerender({
-			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
-			emptyStateMessage: null,
-			loadMysteryRoom,
-			room: getGalleryRoom('mystery'),
-			roomId: 'mystery'
-		});
-
-		await expect.element(page.getByTestId('gallery-room-loading')).toBeVisible();
-
-		deferredRoom.resolve(await import('./rooms/MysteryRoom.svelte'));
-
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-
-		await screen.rerender({
-			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
-			emptyStateMessage: null,
-			loadMysteryRoom,
-			room: getGalleryRoom('hall-of-fame'),
-			roomId: 'hall-of-fame'
-		});
-
-		await expect.element(page.getByText('#1 CHAMPION')).toBeVisible();
-
-		await screen.rerender({
-			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Mystery Pick' }],
-			emptyStateMessage: null,
-			loadMysteryRoom,
-			room: getGalleryRoom('mystery'),
-			roomId: 'mystery'
-		});
-
-		loadMysteryRoom.mockClear();
-
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-		await expect.element(page.getByTestId('gallery-room-loading')).not.toBeInTheDocument();
-		expect(loadMysteryRoom).not.toHaveBeenCalled();
 	});
 
 	it('reseeds mystery from mystery data after navigating from your-studio', async () => {
@@ -352,7 +245,6 @@ describe('GalleryExplorationPage', () => {
 				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
 			},
 			emptyStateMessage: null,
-			loadMysteryRoom: async () => await import('./rooms/MysteryRoom.svelte'),
 			room: getGalleryRoom('your-studio'),
 			roomId: 'your-studio',
 			viewer: { id: 'user-1', role: 'user' }
@@ -367,7 +259,6 @@ describe('GalleryExplorationPage', () => {
 				request: { authorId: null, limit: 12, sort: 'recent', window: null }
 			},
 			emptyStateMessage: null,
-			loadMysteryRoom: async () => await import('./rooms/MysteryRoom.svelte'),
 			room: getGalleryRoom('mystery'),
 			roomId: 'mystery'
 		});
@@ -784,12 +675,12 @@ describe('GalleryExplorationPage', () => {
 		const loadArtworkDetail = vi.fn(async () => ({
 			...baseArtwork,
 			forkCount: 0,
-			id: 'artwork-18',
-			title: 'Artwork 18'
+			id: 'artwork-3',
+			title: 'Artwork 3'
 		}));
 
 		render(GalleryExplorationPage, {
-			artworks: Array.from({ length: 24 }, (_, index) => ({
+			artworks: Array.from({ length: 6 }, (_, index) => ({
 				...baseArtwork,
 				id: `artwork-${index + 1}`,
 				title: `Artwork ${index + 1}`
@@ -805,16 +696,14 @@ describe('GalleryExplorationPage', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		window.scrollTo(0, 1200);
-		window.dispatchEvent(new Event('scroll'));
-
-		await page.getByRole('button', { name: /Artwork 18/ }).click();
+		await expect.element(page.getByRole('button', { name: /Artwork 3/ })).toBeVisible();
+		await page.getByRole('button', { name: /Artwork 3/ }).click();
 
 		await expect
-			.element(page.getByRole('dialog', { name: 'Artwork details for Artwork 18' }))
+			.element(page.getByRole('dialog', { name: 'Artwork details for Artwork 3' }))
 			.toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
-		expect(loadArtworkDetail).toHaveBeenCalledWith('artwork-18');
+		expect(loadArtworkDetail).toHaveBeenCalledWith('artwork-3');
 	});
 
 	it('shows end-of-list indicator in your-studio when all artworks are loaded', async () => {
@@ -1246,8 +1135,8 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('passes continuation props to the mystery room so it can request more artworks', async () => {
-		// With 2 artworks × 5s per frame, one idle cycle = 10s.
-		// After cycle completes, handleIdleCycleComplete fires onRequestMore → loadMoreArtworks.
+		// MysteryRoom owns its StreamingAccumulator and calls loadMore internally
+		// during idle progress. The parent binds discovery request context via roomLoadMoreArtworks.
 		const mysteryArtworks = [
 			{ ...baseArtwork, id: 'mystery-0', title: 'Mystery Art 0' },
 			{ ...baseArtwork, id: 'mystery-1', title: 'Mystery Art 1' }
@@ -1276,7 +1165,7 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
-		// Wait for the idle cycle to complete and trigger loadMoreArtworks
+		// Wait for the idle cycle to trigger loadMoreArtworks via the room's StreamingAccumulator
 		await vi.waitFor(
 			() => {
 				expect(loadMoreArtworks).toHaveBeenCalledOnce();
@@ -1293,33 +1182,23 @@ describe('GalleryExplorationPage', () => {
 		});
 	});
 
-	it('defers mystery pool eviction until reel lands (onSelect fires)', async () => {
-		// Start with 36 artworks (at capacity)
-		const mysteryArtworks = Array.from({ length: 36 }, (_, i) => ({
-			...baseArtwork,
-			id: `mystery-${i}`,
-			title: `Mystery Art ${i}`
-		}));
-
-		const nextPageArtworks = Array.from({ length: 12 }, (_, i) => ({
-			...baseArtwork,
-			id: `mystery-next-${i}`,
-			title: `Mystery Next ${i}`
-		}));
-
-		const loadMoreArtworks = vi.fn(async () => ({
-			artworks: nextPageArtworks,
-			pageInfo: { hasMore: true, nextCursor: 'mystery-cursor-2' }
-		}));
+	it('opens artwork detail when the mystery reel spin lands', async () => {
+		const landedArtwork = { ...baseArtwork, id: 'mystery-landed', title: 'Landed Artwork' };
+		const fetchRandomArtwork = vi.fn(async () => landedArtwork);
+		const loadArtworkDetail = vi.fn(async () => landedArtwork);
 
 		render(GalleryExplorationPage, {
-			artworks: mysteryArtworks,
+			artworks: [
+				{ ...baseArtwork, id: 'mystery-0', title: 'Mystery Art 0' },
+				{ ...baseArtwork, id: 'mystery-1', title: 'Mystery Art 1' }
+			],
 			discovery: {
-				pageInfo: { hasMore: true, nextCursor: 'mystery-cursor-1' },
+				pageInfo: { hasMore: false, nextCursor: null },
 				request: { authorId: null, limit: 12, sort: 'recent', window: null }
 			},
 			emptyStateMessage: null,
-			loadMoreArtworks,
+			fetchRandomArtwork,
+			loadArtworkDetail,
 			room: getGalleryRoom('mystery'),
 			roomId: 'mystery'
 		});
@@ -1327,38 +1206,31 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
 		const spinButton = page.getByRole('button', { name: /spin/i });
-
-		// Spin twice to trigger low-water mark (36 - 2 = 34 < LOW_WATER_MARK(12)? No — 34 > 12)
-		// LOW_WATER_MARK in MysteryRoom is 12: artworks.length - spinCount < 12
-		// With 36 artworks, we need 25 spins to trigger. That's too many.
-		// Instead, directly trigger loadMore through the accumulator by spinning enough with fewer initial artworks.
-		// Re-approach: just verify that after loadMore returns, the artworks are still available to the reel
-		// and that after a spin completes (landing), the pool is trimmed.
-
-		// The existing test at line 922 verifies load-more wiring.
-		// This test focuses on: after load-more has been called and pool exceeds capacity,
-		// the reel still has all 48 artworks available (eviction is deferred).
-		// After a spin completes, eviction trims back to capacity.
-
-		// We can verify by checking the reel still shows content after the flow.
-		// Spin once to complete the flow
 		await spinButton.click();
+
 		await vi.waitFor(
 			() => {
-				expect(spinButton).not.toBeDisabled();
+				expect(fetchRandomArtwork).toHaveBeenCalledOnce();
 			},
 			{ timeout: 6000 }
 		);
 
-		// The film reel should still be visible and functional
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-		expect(page.getByRole('button', { name: /spin/i })).not.toBeDisabled();
+		// After landing, onSelect fires which calls loadArtworkDetail
+		await vi.waitFor(
+			() => {
+				expect(loadArtworkDetail).toHaveBeenCalledWith('mystery-landed');
+			},
+			{ timeout: 6000 }
+		);
+
+		await expect
+			.element(page.getByRole('dialog', { name: 'Artwork details for Landed Artwork' }))
+			.toBeVisible();
 	});
 
 	it('continues cycling the reel after full catalog traversal (hasMore becomes false)', async () => {
-		// With 2 artworks × 5s per frame, one idle cycle = 10s.
-		// After cycle completes, loadMoreArtworks is called and returns hasMore: false.
-		// The reel should continue to be functional (spinning still works).
+		// MysteryRoom's StreamingAccumulator calls loadMore during idle progress.
+		// After catalog exhaustion (hasMore: false), the reel remains functional.
 		const mysteryArtworks = [
 			{ ...baseArtwork, id: 'mystery-0', title: 'Mystery Art 0' },
 			{ ...baseArtwork, id: 'mystery-1', title: 'Mystery Art 1' }
@@ -1387,7 +1259,7 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
-		// Wait for the idle cycle to trigger loadMoreArtworks
+		// Wait for the idle cycle to trigger loadMoreArtworks via StreamingAccumulator
 		await vi.waitFor(
 			() => {
 				expect(loadMoreArtworks).toHaveBeenCalledOnce();
@@ -1395,39 +1267,12 @@ describe('GalleryExplorationPage', () => {
 			{ timeout: 15000 }
 		);
 
-		// After catalog exhausted, reel should still be functional — can spin
+		// After catalog exhausted, reel should still be functional
 		const spinButton = page.getByRole('button', { name: /spin/i });
-		await spinButton.click();
-		await vi.waitFor(
-			() => {
-				expect(spinButton).not.toBeDisabled();
-			},
-			{ timeout: 6000 }
-		);
-
-		// No additional fetch should have been made (hasMore was false after first load)
+		await expect.element(spinButton).toBeVisible();
+		// No additional fetch should have been made (hasMore was false)
 		expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
 		// Reel is still visible and interactive
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-	});
-
-	it.skip('uses polaroids for the hot wall secondary grid artworks', async () => {
-		render(GalleryExplorationPage, {
-			artworks: [
-				{ ...baseArtwork, id: 'artwork-1', title: 'Lead Heat' },
-				{ ...baseArtwork, id: 'artwork-2', title: 'Second Spark' },
-				{ ...baseArtwork, id: 'artwork-3', title: 'Third Spark' },
-				{ ...baseArtwork, id: 'artwork-4', title: 'Fourth Spark' },
-				{ ...baseArtwork, id: 'artwork-5', title: 'Fifth Spark' }
-			],
-			emptyStateMessage: null,
-			room: getGalleryRoom('hot-wall'),
-			roomId: 'hot-wall',
-			viewer: { id: 'user-1', role: 'user' }
-		});
-
-		await expect.element(page.getByTestId('hot-wall-frame-artwork-1')).toBeVisible();
-		await expect.element(page.getByTestId('hot-wall-polaroid-artwork-5')).toBeVisible();
-		await expect.element(page.getByTestId('hot-wall-riser-artwork-5')).not.toBeInTheDocument();
 	});
 });
