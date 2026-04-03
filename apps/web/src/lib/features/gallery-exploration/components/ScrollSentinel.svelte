@@ -8,6 +8,7 @@
 		error: string | null;
 		rootMargin?: string;
 		skeletonCount?: number;
+		skeletonGridClassName?: string;
 	}
 
 	let {
@@ -17,8 +18,9 @@
 		hasMore,
 		isLoading,
 		error,
-		rootMargin = '200px',
-		skeletonCount = 3
+		rootMargin = '400px',
+		skeletonCount = 3,
+		skeletonGridClassName = 'grid grid-cols-1 gap-6 py-6 md:grid-cols-2 lg:grid-cols-3'
 	}: Props = $props();
 
 	let sentinelRef: HTMLDivElement | undefined = $state();
@@ -46,10 +48,7 @@
 </script>
 
 {#if isLoading}
-	<div
-		data-testid="scroll-sentinel-skeleton"
-		class="grid grid-cols-1 gap-6 py-6 md:grid-cols-2 lg:grid-cols-3"
-	>
+	<div data-testid="scroll-sentinel-skeleton" class={skeletonGridClassName}>
 		{#each Array.from({ length: skeletonCount }, (_, i) => i) as i (i)}
 			<div data-testid="skeleton-card-{i}" class="animate-pulse">
 				<div class="rounded-sm bg-stone-200 p-3 shadow">

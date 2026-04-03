@@ -83,6 +83,25 @@ describe('ScrollSentinel', () => {
 			expect(skeletons.length).toBe(3);
 		});
 
+		it('supports room-specific loading geometry and earlier trigger margins', async () => {
+			render(ScrollSentinel, {
+				onTrigger: vi.fn(),
+				hasMore: true,
+				isLoading: true,
+				error: null,
+				rootMargin: '500px',
+				skeletonCount: 4,
+				skeletonGridClassName: 'grid grid-cols-1 gap-12 py-6 md:grid-cols-2 lg:grid-cols-4'
+			});
+
+			const skeleton = document.querySelector('[data-testid="scroll-sentinel-skeleton"]');
+			expect(skeleton?.className).toContain('lg:grid-cols-4');
+			expect(skeleton?.className).toContain('gap-12');
+
+			const skeletons = document.querySelectorAll('[data-testid^="skeleton-card-"]');
+			expect(skeletons.length).toBe(4);
+		});
+
 		it('does not render skeletons when isLoading is false', async () => {
 			render(ScrollSentinel, {
 				onTrigger: vi.fn(),
