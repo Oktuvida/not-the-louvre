@@ -6,10 +6,12 @@
 	let {
 		adultContentEnabled = false,
 		artworks,
+		onIdleCycleComplete,
 		onLand
 	}: {
 		adultContentEnabled?: boolean;
 		artworks: Artwork[];
+		onIdleCycleComplete?: () => void;
 		onLand: (artwork: Artwork) => void;
 	} = $props();
 
@@ -18,7 +20,7 @@
 	let viewportResizeObserver: ResizeObserver | null = null;
 
 	const BUFFER = 3;
-	const IDLE_DURATION_PER_FRAME = 5;
+	const IDLE_DURATION_PER_FRAME = 1;
 
 	type ReelState = 'idle' | 'spinning' | 'stopped';
 	let reelState = $state<ReelState>('idle');
@@ -117,9 +119,16 @@
 			value: `+=${artworks.length * frameStep}`,
 			duration: artworks.length * IDLE_DURATION_PER_FRAME,
 			ease: 'none',
-			repeat: -1,
+			repeat: 0,
 			onUpdate() {
 				offset = proxy.value;
+			},
+			onComplete() {
+				offset = proxy.value;
+				onIdleCycleComplete?.();
+				// Restart idle with whatever artworks are current now.
+				// The parent may have swapped the pool in the callback above.
+				startIdle();
 			}
 		});
 	};
@@ -173,7 +182,7 @@
 
 	export const resetToIdle = () => {
 		reelState = 'idle';
-		startIdle();
+		// The $effect watching reelState + artworks.length will start the idle tween.
 	};
 
 	export const isSpinning = () => reelState === 'spinning';
@@ -197,6 +206,12 @@
 
 	$effect(() => {
 		if (!browser || artworks.length === 0 || !viewportEl || viewportWidth === 0) return;
+
+		// Only start idle scrolling when the reel is in the idle state.
+		// startIdle() self-chains: at the end of each cycle it fires
+		// onIdleCycleComplete (so the parent can swap the pool) then
+		// restarts with the current artworks.
+		if (reelState !== 'idle') return;
 
 		const timer = setTimeout(() => startIdle(), 100);
 

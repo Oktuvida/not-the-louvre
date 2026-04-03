@@ -6,10 +6,16 @@
 	let {
 		adultContentEnabled = false,
 		artworks,
+		hasMore = false,
+		onApplyEviction,
+		onRequestMore,
 		onSelect
 	}: {
 		adultContentEnabled?: boolean;
 		artworks: Artwork[];
+		hasMore?: boolean;
+		onApplyEviction?: () => void;
+		onRequestMore?: () => void;
 		onSelect?: (artwork: Artwork) => void;
 	} = $props();
 
@@ -24,10 +30,20 @@
 
 	const handleLand = (artwork: Artwork) => {
 		isSpinning = false;
+
 		onSelect?.(artwork);
 		setTimeout(() => {
 			filmReel?.resetToIdle();
 		}, 500);
+	};
+
+	const handleIdleCycleComplete = () => {
+		// Apply any pending eviction from previous loads first,
+		// then request the next page so the pool stays bounded.
+		onApplyEviction?.();
+		if (hasMore) {
+			onRequestMore?.();
+		}
 	};
 </script>
 
@@ -35,7 +51,13 @@
 	class="relative flex min-h-[320px] flex-col items-center justify-center gap-8 px-2 py-6 pt-28 md:min-h-[400px] md:gap-16 md:px-0 md:py-8 md:pt-55"
 	data-testid="mystery-room"
 >
-	<FilmReel bind:this={filmReel} {adultContentEnabled} {artworks} onLand={handleLand} />
+	<FilmReel
+		bind:this={filmReel}
+		{adultContentEnabled}
+		{artworks}
+		onLand={handleLand}
+		onIdleCycleComplete={handleIdleCycleComplete}
+	/>
 
 	<GameButton
 		type="button"
