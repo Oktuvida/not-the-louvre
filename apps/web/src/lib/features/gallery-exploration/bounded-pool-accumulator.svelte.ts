@@ -19,6 +19,10 @@ export interface BoundedPoolAccumulator {
 	readonly hasPendingEviction: boolean;
 	loadMore(): Promise<void>;
 	retry(): Promise<void>;
+	reseed(
+		initialArtworks: Artwork[],
+		initialPageInfo: { hasMore: boolean; nextCursor: string | null }
+	): void;
 	applyPendingEviction(): void;
 }
 
@@ -62,6 +66,17 @@ export function createBoundedPoolAccumulator(
 		await loadMore();
 	}
 
+	function reseed(
+		initialArtworks: Artwork[],
+		initialPageInfo: { hasMore: boolean; nextCursor: string | null }
+	): void {
+		poolArtworks = [...initialArtworks];
+		pageInfo = { ...initialPageInfo };
+		isLoading = false;
+		error = null;
+		hasPendingEviction = false;
+	}
+
 	function applyPendingEviction(): void {
 		if (!hasPendingEviction) return;
 
@@ -89,6 +104,7 @@ export function createBoundedPoolAccumulator(
 		},
 		loadMore,
 		retry,
+		reseed,
 		applyPendingEviction
 	};
 }
