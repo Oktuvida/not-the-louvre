@@ -76,8 +76,10 @@ This change will:
   selection.
 - Update `FilmReel` with a `spinToArtwork(artwork)` method and an
   `onIdleProgress` callback for prefetching.
-- Make Hot Wall a functioning room using the same `VirtualizedGrid` +
-  `ScrollSentinel` + `ArtworkAccumulator` pattern as the other grid rooms.
+- Make Hot Wall a functioning room using its specialized layout (lead artwork
+  + supporting wall) as defined in `2026-03-30-hot-wall-design.md`, backed
+  by the same `ArtworkAccumulator` + `ScrollSentinel` + `GalleryImage`
+  infrastructure as the other rooms.
 
 This change will not:
 
@@ -94,7 +96,12 @@ This change will not:
 
 ### Component Decomposition
 
-The 1088-line `GalleryExplorationPage.svelte` is split into focused modules:
+The 1088-line `GalleryExplorationPage.svelte` is split into focused modules.
+Note: `rooms/MysteryRoom.svelte` (79 lines), `rooms/FilmReel.svelte`
+(328 lines), and `rooms/HotWallRoom.svelte` (58 lines, placeholder) already
+exist. This decomposition refactors them to own their accumulators and
+moves room-specific logic out of the monolith into these files.
+`HallOfFameRoom.svelte` and `YourStudioRoom.svelte` are new files.
 
 ```
 GalleryExplorationPage.svelte (~200 lines)
@@ -109,7 +116,8 @@ GalleryExplorationPage.svelte (~200 lines)
 │   │
 │   ├── HotWallRoom.svelte
 │   │   owns ArtworkAccumulator (sort: "hot")
-│   │   renders VirtualizedGrid + ScrollSentinel
+│   │   renders LeadArtwork + supporting wall (see prior hot-wall spec)
+│   │   uses GalleryImage + ScrollSentinel + content-visibility
 │   │
 │   ├── MysteryRoom.svelte
 │   │   owns StreamingAccumulator (sort: "recent", unbounded)
@@ -143,6 +151,55 @@ GalleryExplorationPage.svelte (~200 lines)
 4. **Testable in isolation.** Each room can be unit-tested with a mock
    accumulator. No need to set up all four rooms to test one.
 
+## Accumulator Seeding from Server Load
+
+Each room component receives its initial data from the SSR server load
+(`gallery-data.server.ts` → `loadGalleryRoomData`). The server returns:
+
+- `artworks` — the initial page of artworks for the room.
+- `discovery.pageInfo` — `{ hasMore, nextCursor }` for cursor-based
+  pagination.
+- `discovery.request` — `{ sort, limit, authorId, window }` for subsequent
+  client-side fetches.
+
+### Seeding Flow
+
+1. `GalleryExplorationPage` receives `data` from the SvelteKit page load.
+2. It passes `data.artworks`, `data.discovery.pageInfo`, and
+   `data.discovery.request` as props to the active room component.
+3. Each room component creates its accumulator and calls `reseed()` in an
+   `$effect` that runs when the props change (e.g., on room navigation):
+
+   ```typescript
+   // Inside HallOfFameRoom.svelte (conceptual)
+   const accumulator = createArtworkAccumulator({ sort, limit, authorId });
+
+   $effect(() => {
+     accumulator.reseed(artworks, pageInfo);
+   });
+   ```
+
+4. `reseed()` replaces the accumulator's internal state with the server-
+   provided artworks and resets the cursor to `pageInfo.nextCursor`.
+5. Subsequent `loadMore()` calls use the cursor and `discovery.request`
+   params to fetch the next page via `GET /api/artworks`.
+
+This pattern is identical for all rooms. The only difference is which
+accumulator type is created:
+
+- **Fame, Hot Wall, Studio**: `ArtworkAccumulator` (append-only, row grouping).
+- **Mystery**: `StreamingAccumulator` (append-only, flat list, progress
+  tracking).
+
+The server load also returns `realtimeConfig`, `emptyStateMessage`, `room`,
+`roomId`, `adultContentEnabled`, and `viewer`. These are not accumulator-
+related and are handled by the parent `GalleryExplorationPage`:
+- `realtimeConfig` → passed to `useRealtimeSubscription`.
+- `emptyStateMessage` → rendered by the room component when the accumulator
+  is empty.
+- `adultContentEnabled`, `viewer` → passed through to card components for
+  NSFW gating and author-specific UI.
+
 ## Image Loading Pipeline
 
 ### Current Flow (per image)
@@ -156,10 +213,14 @@ GalleryExplorationPage.svelte (~200 lines)
 
 ### Proposed Flow (per image)
 
-1. Virtua renders row → card wrapper has `content-visibility: auto` →
-   overscan cards skip paint.
-2. `contain-intrinsic-size: auto 380px` on card wrapper → stable height
-   estimate for the virtualizer.
+1. Virtua renders row → row wrapper div has `content-visibility: auto` →
+   overscan rows skip paint (including all cards within the row).
+2. `contain-intrinsic-size: auto <calculated>` on card wrapper → stable
+   height estimate for the virtualizer. The value is derived from the
+   PolaroidCard's rendered height at the current column width (image +
+   padding + label). The `auto` keyword allows the browser to remember
+   the actual rendered height after first paint, so the initial estimate
+   only matters for the first render pass.
 3. `<img width="768" height="768" loading="lazy" decoding="async">` →
    reserved space, zero CLS.
 4. Card enters viewport → browser paints card → starts image fetch →
@@ -254,6 +315,12 @@ ORDER BY random()
 LIMIT 1
 ```
 
+At current scale (hundreds to low thousands of artworks), `ORDER BY random()`
+is fast. If the table grows to hundreds of thousands of rows, this can be
+replaced with `TABLESAMPLE SYSTEM` or an offset-based random selection.
+The endpoint interface remains the same regardless of the underlying
+sampling strategy.
+
 The endpoint respects NSFW filtering based on the viewer's content
 preferences.
 
@@ -283,24 +350,45 @@ preferences.
 
 ### Hall of Fame
 
-- Server load: `sort: "top"`, limit 12.
+- Server load: `sort: "top"`, limit 12 (unchanged from current).
 - Top 3 → Podium (special layout, always visible above the grid).
 - Remaining → `ArtworkAccumulator` → rows → `VirtualizedGrid`.
 - `ScrollSentinel` at bottom triggers `loadMore()`.
-- Cursor pagination: 24 items per page after initial load.
+- Cursor pagination: the client uses a fixed page size of 24 for subsequent
+  fetches via `GET /api/artworks`, regardless of the initial server load
+  limit. The initial limit is intentionally smaller to keep the SSR payload
+  fast.
 - Column count: 1 mobile / 2 tablet / 4 desktop.
 
 ### Hot Wall
 
-- Server load: `sort: "hot"`, limit 24.
-- All → `ArtworkAccumulator` → rows → `VirtualizedGrid`.
+The Hot Wall has a prior design spec (`2026-03-30-hot-wall-design.md`) that
+defines a specialized layout: a lead artwork with stronger prominence and
+remaining artworks in a supporting wall layout. This spec preserves that
+design intent. The Hot Wall does **not** use a generic `VirtualizedGrid`.
+Instead, it renders its own specialized layout (lead + risers + supporting
+grid) as specified in the prior spec, while still benefiting from the
+scaling infrastructure introduced here:
+
+- Server load: `sort: "hot"`, limit 12 (current server default).
+  This implementation will update the server load to `limit: 24` for
+  `hot-wall` to provide enough initial artworks for the lead + supporting
+  wall layout.
+- All → `ArtworkAccumulator`.
+- Lead artwork: first item in the hot-ranked set, rendered at larger
+  prominence.
+- Remaining artworks: supporting wall layout (risers + grid).
 - `ScrollSentinel` at bottom triggers `loadMore()`.
 - Cursor pagination: 24 items per page.
-- Column count: 1 mobile / 2 tablet / 3 desktop.
+- Images use `GalleryImage` (width/height/lazy/async) same as other rooms.
+- `content-visibility: auto` applied to supporting grid rows.
+- Column count for supporting grid: 1 mobile / 2 tablet / 3 desktop.
 
 ### Mystery Room
 
-- Server load: `sort: "recent"`, limit 24.
+- Server load: `sort: "recent"`, limit 12 (current server default).
+  This implementation will update the server load to `limit: 24` for the
+  Mystery Room to provide a larger initial pool for idle scrolling.
 - All → `StreamingAccumulator` (append-only, no cap).
 - `FilmReel` idle scrolls through all loaded artworks.
 - At ~80% through pool → prefetch next 24.
@@ -321,8 +409,8 @@ preferences.
 
 | Component | Used By | Responsibility |
 |-----------|---------|----------------|
-| `VirtualizedGrid` | Fame, Hot Wall, Studio | WindowVirtualizer + row layout + content-visibility + responsive columns |
-| `GalleryImage` | PolaroidCard, FilmReel | img wrapper: width/height 768, loading=lazy, decoding=async |
+| `VirtualizedGrid` | Fame, Studio | WindowVirtualizer + row layout + content-visibility + responsive columns |
+| `GalleryImage` | PolaroidCard, FilmReel, HotWall | img wrapper: width/height 768, loading=lazy, decoding=async |
 | `ScrollSentinel` | Fame, Hot Wall, Studio | Intersection Observer for infinite scroll (already exists) |
 | `ArtworkAccumulator` | Fame, Hot Wall, Studio | Append-only paginated store with row grouping (already exists) |
 | `StreamingAccumulator` | Mystery | Append-only flat list, progress tracking, no eviction (new) |
