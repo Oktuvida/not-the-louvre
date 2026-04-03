@@ -426,6 +426,7 @@ export type ArtworkReadRepository = {
 		id: string,
 		viewer?: ArtworkVisibilityActor
 	): Promise<Pick<ArtworkRecord, 'id' | 'mediaContentType' | 'storageKey'> | null>;
+	findRandomArtwork(viewer?: ArtworkVisibilityActor): Promise<ArtworkReadRecord | null>;
 	listArtworkCommentsByArtworkId(
 		artworkId: string,
 		viewer?: ArtworkVisibilityActor

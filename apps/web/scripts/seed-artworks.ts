@@ -39,7 +39,7 @@ const SEED_AUTHORS = [
 	}
 ];
 
-const ARTWORK_COUNT = 200;
+const ARTWORK_COUNT = 14;
 const SPREAD_DAYS = 7;
 const now = Date.now();
 

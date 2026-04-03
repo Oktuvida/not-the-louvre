@@ -46,7 +46,7 @@ describe('gallery room route', () => {
 		} as never)) as { roomId: string; discovery: Record<string, unknown> };
 
 		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
-			{ cursor: null, limit: 12, sort: 'hot', window: null },
+			{ cursor: null, limit: 24, sort: 'hot', window: null },
 			{ user: undefined }
 		);
 		expect(result).toMatchObject({ roomId: 'hot-wall' });
@@ -54,7 +54,7 @@ describe('gallery room route', () => {
 			pageInfo: { hasMore: false, nextCursor: null },
 			request: {
 				authorId: null,
-				limit: 12,
+				limit: 24,
 				sort: 'hot',
 				window: null
 			}
@@ -69,7 +69,7 @@ describe('gallery room route', () => {
 		} as never)) as { roomId: string; discovery: Record<string, unknown> };
 
 		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
-			{ cursor: null, limit: 12, sort: 'recent', window: null },
+			{ cursor: null, limit: 24, sort: 'recent', window: null },
 			{ user: undefined }
 		);
 		expect(result).toMatchObject({ roomId: 'mystery' });
@@ -77,7 +77,7 @@ describe('gallery room route', () => {
 			pageInfo: { hasMore: false, nextCursor: null },
 			request: {
 				authorId: null,
-				limit: 12,
+				limit: 24,
 				sort: 'recent',
 				window: null
 			}

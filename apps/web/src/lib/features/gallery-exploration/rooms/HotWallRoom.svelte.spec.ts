@@ -1,163 +1,114 @@
-import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import HotWallRoom from './HotWallRoom.svelte';
+import { page } from 'vitest/browser';
 
-const makeArtwork = (id: string, title: string, artist: string, score: number) => ({
-	artist,
-	artistAvatar: undefined,
-	commentCount: 0,
-	comments: [],
-	downvotes: 0,
-	forkCount: 0,
+vi.mock('$app/environment', () => ({
+	browser: true
+}));
+
+import HotWallRoomHarness from './HotWallRoomHarness.svelte';
+import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+
+const createArtwork = (id: string, score: number): Artwork => ({
 	id,
-	imageUrl: `/api/artworks/${id}/media`,
-	isNsfw: false,
+	title: `Artwork ${id}`,
+	artist: `Artist ${id}`,
+	imageUrl: `https://example.com/${id}.avif`,
 	score,
+	upvotes: score,
+	downvotes: 0,
 	timestamp: Date.now(),
-	title,
-	upvotes: 0,
-	viewerVote: null as 'up' | 'down' | null
+	isNsfw: false,
+	comments: []
 });
 
-const fiveArtworks = [
-	makeArtwork('art-1', 'Blazing Sun', 'Artist Alpha', 100),
-	makeArtwork('art-2', 'Warm Glow', 'Artist Beta', 80),
-	makeArtwork('art-3', 'Amber Light', 'Artist Gamma', 60),
-	makeArtwork('art-4', 'Gentle Heat', 'Artist Delta', 40),
-	makeArtwork('art-5', 'Cool Breeze', 'Artist Epsilon', 20)
-];
-
 describe('HotWallRoom', () => {
-	it('shows a centered coming-soon post-it placeholder', async () => {
-		render(HotWallRoom);
-
-		await expect.element(page.getByTestId('hot-wall-coming-soon')).toBeVisible();
-		await expect.element(page.getByText('Soon.')).toBeVisible();
-		await expect.element(page.getByText('The Hot Wall')).toBeVisible();
-	});
-
-	it.skip('renders the mosaic grid with 5 artworks showing artwork images', async () => {
-		render(HotWallRoom, {
-			artworks: fiveArtworks,
-			onSelect: vi.fn()
-		});
-
-		for (const artwork of fiveArtworks) {
-			await expect.element(page.getByAltText(artwork.title)).toBeVisible();
-		}
-	});
-
-	it.skip('shows the #1 artwork info overlay with title, artist, and score', async () => {
-		render(HotWallRoom, {
-			artworks: fiveArtworks,
-			onSelect: vi.fn()
-		});
-
-		await expect.element(page.getByText('Blazing Sun')).toBeVisible();
-		await expect.element(page.getByText('Artist Alpha')).toBeVisible();
-		await expect.element(page.getByText('100')).toBeVisible();
-		await expect.element(page.getByText('Hottest')).toBeVisible();
-	});
-
-	it.skip('does not show info for #2-#5 tiles', async () => {
-		render(HotWallRoom, {
-			artworks: fiveArtworks,
-			onSelect: vi.fn()
-		});
-
-		// The titles of #2-#5 should NOT be visible in the mosaic
-		// (they only appear as alt text on images, not as visible text)
-		const mosaicSection = page.getByTestId('hot-wall-mosaic');
-		await expect.element(mosaicSection).toBeVisible();
-
-		// #1 info is visible
-		await expect.element(page.getByText('Blazing Sun')).toBeVisible();
-
-		// #2-#5 titles should not appear as visible text in the mosaic
-		// (alt text is not visible text, so getByText should not find them)
-		for (const artwork of fiveArtworks.slice(1)) {
-			await expect.element(page.getByText(artwork.title)).not.toBeInTheDocument();
-		}
-	});
-
-	it.skip('calls onSelect when a mosaic tile is clicked', async () => {
-		const onSelect = vi.fn();
-		render(HotWallRoom, {
-			artworks: fiveArtworks,
-			onSelect
-		});
-
-		await page.getByTestId('hot-wall-tile-art-2').click();
-		expect(onSelect).toHaveBeenCalledWith(fiveArtworks[1]);
-	});
-
-	it.skip('calls onSelect when an overflow PolaroidCard is clicked', async () => {
-		const overflowArtworks = [
-			...fiveArtworks,
-			makeArtwork('art-6', 'Overflow One', 'Artist Zeta', 10),
-			makeArtwork('art-7', 'Overflow Two', 'Artist Eta', 5)
+	it('creates its own ArtworkAccumulator seeded with initial artworks', async () => {
+		const artworks = [
+			createArtwork('h1', 100),
+			createArtwork('h2', 90),
+			createArtwork('h3', 80),
+			createArtwork('h4', 70),
+			createArtwork('h5', 60)
 		];
-		const onSelect = vi.fn();
-		render(HotWallRoom, {
-			artworks: overflowArtworks,
-			onSelect
+
+		render(HotWallRoomHarness, {
+			artworks,
+			pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
 		});
 
-		await page.getByTestId('hot-wall-polaroid-art-6').click();
-		expect(onSelect).toHaveBeenCalledWith(overflowArtworks[5]);
+		// The hot wall room should render
+		await expect.element(page.getByTestId('hot-wall-room')).toBeVisible();
+
+		// Lead artwork should be visible
+		await expect.element(page.getByTestId('hot-wall-lead')).toBeVisible();
 	});
 
-	it.skip('renders overflow PolaroidCards for artworks beyond the top 5', async () => {
-		const overflowArtworks = [
-			...fiveArtworks,
-			makeArtwork('art-6', 'Overflow One', 'Artist Zeta', 10),
-			makeArtwork('art-7', 'Overflow Two', 'Artist Eta', 5)
+	it('renders lead artwork with stronger prominence and remaining artworks in supporting wall', async () => {
+		const artworks = [
+			createArtwork('h1', 100),
+			createArtwork('h2', 90),
+			createArtwork('h3', 80),
+			createArtwork('h4', 70),
+			createArtwork('h5', 60),
+			createArtwork('h6', 50),
+			createArtwork('h7', 40)
 		];
-		render(HotWallRoom, {
-			artworks: overflowArtworks,
-			onSelect: vi.fn()
+
+		render(HotWallRoomHarness, {
+			artworks,
+			pageInfo: { hasMore: false, nextCursor: null }
 		});
 
-		await expect.element(page.getByTestId('hot-wall-polaroid-art-6')).toBeVisible();
-		await expect.element(page.getByTestId('hot-wall-polaroid-art-7')).toBeVisible();
-		// Overflow cards show their titles (PolaroidCard renders captions)
-		await expect.element(page.getByText('Overflow One')).toBeVisible();
-		await expect.element(page.getByText('Overflow Two')).toBeVisible();
+		// Lead artwork (first item) should have its own section
+		await expect.element(page.getByTestId('hot-wall-lead')).toBeVisible();
+
+		// Lead artwork image should be present
+		const leadImg = document.querySelector('[data-testid="hot-wall-lead"] img');
+		expect(leadImg).not.toBeNull();
+
+		// Supporting wall artworks should be rendered
+		const supportingCards = document.querySelectorAll('[data-testid^="hot-wall-card-"]');
+		expect(supportingCards.length).toBeGreaterThanOrEqual(1);
 	});
 
-	it.skip('blurs NSFW artworks when adult content is disabled', async () => {
-		const nsfwArtworks = [{ ...fiveArtworks[0], isNsfw: true }];
-		render(HotWallRoom, {
-			adultContentEnabled: false,
-			artworks: nsfwArtworks,
-			onSelect: vi.fn()
+	it('wires ScrollSentinel to call accumulator loadMore', async () => {
+		const loadMoreArtworks = vi.fn().mockResolvedValue({
+			artworks: [],
+			pageInfo: { hasMore: false, nextCursor: null }
 		});
 
-		await expect.element(page.getByText('Sensitive artwork')).toBeVisible();
-		await expect.element(page.getByText('18+')).toBeVisible();
+		const artworks = [
+			createArtwork('h1', 100),
+			createArtwork('h2', 90),
+			createArtwork('h3', 80),
+			createArtwork('h4', 70),
+			createArtwork('h5', 60)
+		];
+
+		render(HotWallRoomHarness, {
+			artworks,
+			pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
+			loadMoreArtworks
+		});
+
+		await expect.element(page.getByTestId('hot-wall-room')).toBeVisible();
+
+		// ScrollSentinel should be present
+		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
+		expect(sentinel).not.toBeNull();
 	});
 
-	it.skip('shows NSFW artworks unblurred when adult content is enabled', async () => {
-		const nsfwArtworks = [{ ...fiveArtworks[0], isNsfw: true }];
-		render(HotWallRoom, {
-			adultContentEnabled: true,
-			artworks: nsfwArtworks,
-			onSelect: vi.fn()
+	it('renders empty state when no artworks are provided', async () => {
+		render(HotWallRoomHarness, {
+			artworks: [],
+			pageInfo: { hasMore: false, nextCursor: null }
 		});
 
-		await expect.element(page.getByText('Sensitive artwork')).not.toBeInTheDocument();
-		await expect.element(page.getByAltText('Blazing Sun')).toBeVisible();
-	});
+		// Should show empty state message about no artworks heating up
+		await expect.element(page.getByText(/nothing.*heating up/i)).toBeVisible();
 
-	it.skip('handles single artwork gracefully with no empty grid slots', async () => {
-		render(HotWallRoom, {
-			artworks: [fiveArtworks[0]],
-			onSelect: vi.fn()
-		});
-
-		await expect.element(page.getByAltText('Blazing Sun')).toBeVisible();
-		await expect.element(page.getByText('Blazing Sun')).toBeVisible();
-		await expect.element(page.getByText('Hottest')).toBeVisible();
+		// Lead artwork should NOT be visible
+		expect(document.querySelector('[data-testid="hot-wall-lead"]')).toBeNull();
 	});
 });

@@ -473,3 +473,20 @@ export const getArtworkMedia = async (
 
 	return media;
 };
+
+export const getRandomArtwork = async (
+	contextAndDependencies: ReadContextAndDependencies = {},
+	dependencies: ReadServiceDependencies = {}
+): Promise<ArtworkFeedCard> => {
+	const { repository } = getDependencies({
+		repository: contextAndDependencies.repository ?? dependencies.repository
+	});
+	const viewer = toViewer(contextAndDependencies);
+	const record = await repository.findRandomArtwork(viewer);
+
+	if (!record) {
+		throw new ArtworkFlowError(404, 'No artworks available', 'NOT_FOUND');
+	}
+
+	return toFeedCard(record);
+};

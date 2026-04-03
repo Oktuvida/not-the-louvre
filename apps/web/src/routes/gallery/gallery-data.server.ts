@@ -47,7 +47,7 @@ const roomDiscoveryRequest = (roomId: GalleryRoomId, user?: ProductUser) => {
 	}
 
 	if (roomId === 'hot-wall') {
-		return { cursor: null, limit: 12, sort: 'hot' as const, window: null };
+		return { cursor: null, limit: SCALABLE_GALLERY_PAGE_SIZE, sort: 'hot' as const, window: null };
 	}
 
 	if (roomId === 'your-studio' && user) {
@@ -60,7 +60,7 @@ const roomDiscoveryRequest = (roomId: GalleryRoomId, user?: ProductUser) => {
 		};
 	}
 
-	return { cursor: null, limit: 12, sort: 'recent' as const, window: null };
+	return { cursor: null, limit: SCALABLE_GALLERY_PAGE_SIZE, sort: 'recent' as const, window: null };
 };
 
 const emptyStateMessageForRoom = (roomId: GalleryRoomId) =>
