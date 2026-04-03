@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Paintbrush } from 'lucide-svelte';
 	import { browser } from '$app/environment';
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
 	import { gsap } from '$lib/client/gsap';
@@ -60,9 +60,7 @@
 
 	/** Clean the ?from= param from the URL without triggering navigation. */
 	if (browser && isReturning) {
-		const cleanUrl = new URL($page.url!);
-		cleanUrl.searchParams.delete('from');
-		window.history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search);
+		replaceState(resolve('/'), window.history.state);
 	}
 
 	$effect(() => {
