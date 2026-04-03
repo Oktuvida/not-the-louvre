@@ -164,8 +164,13 @@
 		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
 	} = $props();
 
-	let artworks = $state(routeArtworks);
-	let discovery = $state(routeDiscovery);
+	const { initialRouteArtworks, initialRouteDiscovery } = (() => ({
+		initialRouteArtworks: $state.snapshot(routeArtworks),
+		initialRouteDiscovery: $state.snapshot(routeDiscovery)
+	}))();
+
+	let artworks = $state(initialRouteArtworks);
+	let discovery = $state(initialRouteDiscovery);
 
 	let adultContentPreferenceOverride = $state<boolean | null>(null);
 	let isSavingAdultContentPreference = $state(false);
@@ -199,8 +204,8 @@
 			}
 			return loadMoreArtworks({ ...discovery.request, cursor });
 		},
-		initialArtworks: routeArtworks,
-		initialPageInfo: routeDiscovery.pageInfo,
+		initialArtworks: initialRouteArtworks,
+		initialPageInfo: initialRouteDiscovery.pageInfo,
 		pageSize: 12
 	});
 
@@ -237,8 +242,8 @@
 			}
 			return loadMoreArtworks({ ...discovery.request, cursor });
 		},
-		initialArtworks: routeArtworks,
-		initialPageInfo: routeDiscovery.pageInfo
+		initialArtworks: initialRouteArtworks,
+		initialPageInfo: initialRouteDiscovery.pageInfo
 	});
 
 	// --- Hall-of-fame accumulator + column tracking ---
@@ -269,8 +274,8 @@
 			}
 			return loadMoreArtworks({ ...discovery.request, cursor });
 		},
-		initialArtworks: routeArtworks.slice(3),
-		initialPageInfo: routeDiscovery.pageInfo
+		initialArtworks: initialRouteArtworks.slice(3),
+		initialPageInfo: initialRouteDiscovery.pageInfo
 	});
 
 	$effect(() => {
