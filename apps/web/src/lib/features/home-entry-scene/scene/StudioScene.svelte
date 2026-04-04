@@ -1,10 +1,13 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { untrack } from 'svelte';
 	import { gsap } from '$lib/client/gsap';
 	import { Canvas, T } from '@threlte/core';
-	import { GLTF, OrbitControls, useDraco } from '@threlte/extras';
+	import { GLTF, OrbitControls } from '@threlte/extras';
 	import type { Group, Object3D, OrthographicCamera } from 'three';
 	import type { HomeSceneArtworkSlot } from '$lib/features/home-entry-scene/state/home-entry.svelte';
+	import { studioCanvasShadowMap } from '$lib/features/home-entry-scene/scene/studio-renderer-config';
+	import { getStudioDracoLoader } from '$lib/features/home-entry-scene/scene/studio-draco-loader';
 	import SceneTextureBindings from '$lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
 	import StudioLoadingFallback from '$lib/features/shared-3d-world/components/StudioLoadingFallback.svelte';
 	import type { EntryFlowState } from '$lib/features/home-entry-scene/state/entry-state.svelte';
@@ -101,7 +104,7 @@
 		rotationX: initialCamera.rotationX,
 		rotationY: initialCamera.rotationY
 	};
-	const studioDracoLoader = useDraco();
+	const studioDracoLoader = browser ? getStudioDracoLoader() : undefined;
 
 	const syncStudioMotion = () => {
 		cameraX = studioMotion.cameraX;
@@ -333,7 +336,7 @@
 	{#if !loaded}
 		<StudioLoadingFallback />
 	{/if}
-	<Canvas dpr={1.5} shadows>
+	<Canvas dpr={1.5} shadows={studioCanvasShadowMap}>
 		<T.OrthographicCamera
 			bind:ref={studioCamera}
 			makeDefault

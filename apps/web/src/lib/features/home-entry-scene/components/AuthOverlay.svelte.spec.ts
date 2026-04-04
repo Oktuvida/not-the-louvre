@@ -123,6 +123,114 @@ describe('AuthOverlay', () => {
 		await expect.element(page.getByText('That nickname is already taken')).toBeVisible();
 	});
 
+	it('uses semantic autocomplete tokens for sign-in fields', () => {
+		render(AuthOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'auth-login',
+			form: undefined
+		});
+
+		expect(document.querySelector('input[name="nickname"]')?.getAttribute('autocomplete')).toBe(
+			'section-login username'
+		);
+		expect(document.querySelector('input[name="password"]')?.getAttribute('autocomplete')).toBe(
+			'section-login current-password'
+		);
+	});
+
+	it('uses semantic autocomplete tokens for sign-up fields', () => {
+		render(AuthOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'auth-signup',
+			form: undefined
+		});
+
+		expect(document.querySelector('input[name="nickname"]')?.getAttribute('autocomplete')).toBe(
+			'section-signup username'
+		);
+		expect(document.querySelector('input[name="password"]')?.getAttribute('autocomplete')).toBe(
+			'section-signup new-password'
+		);
+	});
+
+	it('uses semantic autocomplete tokens for recovery fields', () => {
+		render(AuthOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'auth-recovery',
+			form: undefined
+		});
+
+		expect(document.querySelector('input[name="nickname"]')?.getAttribute('autocomplete')).toBe(
+			'section-recovery username'
+		);
+		expect(document.querySelector('input[name="recoveryKey"]')?.getAttribute('autocomplete')).toBe(
+			'off'
+		);
+		expect(document.querySelector('input[name="newPassword"]')?.getAttribute('autocomplete')).toBe(
+			'section-recovery new-password'
+		);
+	});
+
+	it('keeps auth inputs non-interactive until the page layout is fully ready', async () => {
+		const readyStateDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'readyState');
+		const fontsDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'fonts');
+		let loadListener: EventListenerOrEventListenerObject | undefined;
+
+		Object.defineProperty(document, 'readyState', {
+			configurable: true,
+			get: () => 'interactive'
+		});
+		Object.defineProperty(document, 'fonts', {
+			configurable: true,
+			value: { ready: Promise.resolve() }
+		});
+
+		const addEventListenerSpy = vi.spyOn(window, 'addEventListener').mockImplementation(((
+			type: string,
+			listener: EventListenerOrEventListenerObject
+		) => {
+			if (type === 'load') {
+				loadListener = listener;
+			}
+		}) as typeof window.addEventListener);
+
+		render(AuthOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'auth-login',
+			form: undefined
+		});
+
+		expect(
+			document.querySelector('[data-testid="auth-overlay"]')?.getAttribute('aria-hidden')
+		).toBe('true');
+
+		if (!loadListener) {
+			throw new Error('Expected the auth overlay to wait for the load event');
+		}
+
+		if (typeof loadListener === 'function') {
+			loadListener(new Event('load'));
+		} else {
+			loadListener.handleEvent(new Event('load'));
+		}
+
+		await vi.waitFor(() => {
+			expect(
+				document.querySelector('[data-testid="auth-overlay"]')?.getAttribute('aria-hidden')
+			).toBe('false');
+		});
+
+		addEventListenerSpy.mockRestore();
+
+		if (readyStateDescriptor) {
+			Object.defineProperty(document, 'readyState', readyStateDescriptor);
+		}
+
+		if (fontsDescriptor) {
+			Object.defineProperty(document, 'fonts', fontsDescriptor);
+		}
+	});
+
 	it('submits signup only once after successful validation', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const requestSubmit = vi.fn();
