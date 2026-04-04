@@ -24,20 +24,8 @@
 <style>
 	.virtualized-row {
 		display: grid;
-		grid-template-columns: repeat(1, 1fr);
+		grid-template-columns: repeat(auto-fill, minmax(var(--grid-min-col, 280px), 1fr));
 		gap: var(--grid-gap, 3rem);
 		padding-bottom: var(--grid-gap, 3rem);
-	}
-
-	@media (min-width: 768px) {
-		.virtualized-row {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-
-	@media (min-width: 1024px) {
-		.virtualized-row {
-			grid-template-columns: repeat(3, 1fr);
-		}
 	}
 </style>
