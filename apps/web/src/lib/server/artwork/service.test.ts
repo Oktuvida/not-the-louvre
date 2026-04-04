@@ -5,7 +5,11 @@ import {
 	ARTWORK_MEDIA_WIDTH,
 	ARTWORK_PUBLISH_RATE_LIMIT
 } from './config';
-import { createEmptyDrawingDocument } from '$lib/features/stroke-json/document';
+import {
+	createEmptyDrawingDocument,
+	parseDrawingDocument,
+	serializeEditableDrawingDocument
+} from '$lib/features/stroke-json/document';
 import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import { ArtworkFlowError } from './errors';
 import {
@@ -324,15 +328,15 @@ describe('artwork service', () => {
 		);
 
 		expect(result.storageKey).toBe('artworks/user-1/artwork-1.avif');
-		expect(result.drawingVersion).toBe(1);
+		expect(result.drawingVersion).toBe(2);
 		expect(result.drawingDocument).toBeTruthy();
 		expect(uploads).toHaveLength(1);
 		expect(uploads[0]?.file.type).toBe('image/avif');
-		expect(JSON.parse(decodeCompressedDrawingDocument(result.drawingDocument!))).toEqual(
-			JSON.parse(drawingDocument)
+		expect(decodeCompressedDrawingDocument(result.drawingDocument!)).toBe(
+			serializeEditableDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
 		expect(artworks.get('artwork-1')).toMatchObject({
-			drawingVersion: 1,
+			drawingVersion: 2,
 			title: 'Vector First'
 		});
 	});
@@ -520,13 +524,13 @@ describe('artwork service', () => {
 		);
 
 		expect(fork).toMatchObject({
-			drawingVersion: 1,
+			drawingVersion: 2,
 			id: 'artwork-child',
 			parentId: 'artwork-parent',
 			forkCount: 0
 		});
-		expect(JSON.parse(decodeCompressedDrawingDocument(fork.drawingDocument!))).toEqual(
-			JSON.parse(childDocument)
+		expect(decodeCompressedDrawingDocument(fork.drawingDocument!)).toBe(
+			serializeEditableDrawingDocument(parseDrawingDocument(childDocument))
 		);
 		expect(artworks.get('artwork-parent')).toMatchObject({
 			forkCount: 1,

@@ -11,7 +11,10 @@ import { ArtworkFlowError } from './errors';
 import { artworkRepository } from './repository';
 import { supabaseArtworkStorage } from './storage';
 import { checkTextModeration } from '$lib/server/moderation/service';
-import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+import {
+	DRAWING_DOCUMENT_V2_VERSION,
+	parseVersionedDrawingDocument
+} from '$lib/features/stroke-json/document';
 import { encodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import type {
 	ArtworkActorContext,
@@ -422,7 +425,7 @@ export const publishArtwork = async (
 
 	const providedDrawingDocument = input.drawingDocument?.trim() ?? '';
 	if (providedDrawingDocument) {
-		const parsedDocument = parseDrawingDocument(providedDrawingDocument);
+		const parsedDocument = parseVersionedDrawingDocument(providedDrawingDocument);
 		if (parsedDocument.kind !== 'artwork') {
 			throw new ArtworkFlowError(
 				400,
@@ -433,7 +436,7 @@ export const publishArtwork = async (
 
 		media = await renderDrawingDocumentMedia(parsedDocument);
 		drawingDocument = encodeCompressedDrawingDocument(parsedDocument);
-		drawingVersion = parsedDocument.version;
+		drawingVersion = DRAWING_DOCUMENT_V2_VERSION;
 	} else if (input.media instanceof File) {
 		media = await sanitizeMedia(input.media);
 	} else {
