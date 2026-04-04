@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
 	createEmptyDrawingDocument,
+	normalizeDrawingDocumentToEditableV2,
 	serializeDrawingDocument
 } from '$lib/features/stroke-json/document';
 import { buildDrawingDraftKey } from '$lib/features/stroke-json/drafts';
@@ -115,7 +116,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('discards the authenticated avatar draft when the editor is closed without saving', async () => {
-		const savedDocument = {
+		const savedDocument = normalizeDrawingDocumentToEditableV2({
 			...createEmptyDrawingDocument('avatar'),
 			strokes: [
 				{
@@ -124,8 +125,8 @@ describe('PersistentNav', () => {
 					size: 10
 				}
 			]
-		};
-		const draftDocument = {
+		});
+		const draftDocument = normalizeDrawingDocumentToEditableV2({
 			...createEmptyDrawingDocument('avatar'),
 			strokes: [
 				{
@@ -134,7 +135,7 @@ describe('PersistentNav', () => {
 					size: 12
 				}
 			]
-		};
+		});
 		const user = {
 			authUserId: 'auth-user-1',
 			email: 'artist_1@not-the-louvre.local',

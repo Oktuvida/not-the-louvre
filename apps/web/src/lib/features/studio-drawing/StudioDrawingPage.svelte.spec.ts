@@ -1,7 +1,10 @@
 import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { createEmptyDrawingDocument } from '$lib/features/stroke-json/document';
+import {
+	createEmptyDrawingDocument,
+	normalizeDrawingDocumentToEditableV2
+} from '$lib/features/stroke-json/document';
 
 const { goto } = vi.hoisted(() => ({ goto: vi.fn() }));
 
@@ -152,7 +155,9 @@ describe('StudioDrawingPage', () => {
 
 		const { unmount } = render(StudioDrawingPage, {
 			forkParent: {
-				drawingDocument: createEmptyDrawingDocument('artwork'),
+				drawingDocument: normalizeDrawingDocumentToEditableV2(
+					createEmptyDrawingDocument('artwork')
+				),
 				id: 'artwork-parent',
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
@@ -321,7 +326,9 @@ describe('StudioDrawingPage', () => {
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
 			forkParent: {
-				drawingDocument: createEmptyDrawingDocument('artwork'),
+				drawingDocument: normalizeDrawingDocumentToEditableV2(
+					createEmptyDrawingDocument('artwork')
+				),
 				id: 'artwork-parent',
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
@@ -372,7 +379,9 @@ describe('StudioDrawingPage', () => {
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
 			forkParent: {
-				drawingDocument: createEmptyDrawingDocument('artwork'),
+				drawingDocument: normalizeDrawingDocumentToEditableV2(
+					createEmptyDrawingDocument('artwork')
+				),
 				id: 'artwork-parent',
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
@@ -410,7 +419,9 @@ describe('StudioDrawingPage', () => {
 	it('auto-opens the sketchbook for a fork once the parent artwork preload is ready', async () => {
 		render(StudioDrawingPage, {
 			forkParent: {
-				drawingDocument: createEmptyDrawingDocument('artwork'),
+				drawingDocument: normalizeDrawingDocumentToEditableV2(
+					createEmptyDrawingDocument('artwork')
+				),
 				id: 'artwork-parent',
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'

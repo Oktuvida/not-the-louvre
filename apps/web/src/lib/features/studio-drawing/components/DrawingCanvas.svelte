@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import {
-		cloneDrawingDocument,
-		createEmptyDrawingDocument,
+		cloneDrawingDocumentV2,
+		createEmptyDrawingDocumentV2,
 		getDrawingPointWithinBounds,
-		type DrawingDocumentV1,
+		type DrawingDocumentV2,
 		type DrawingPoint
 	} from '$lib/features/stroke-json/document';
 	import { renderDrawingDocumentToCanvas } from '$lib/features/stroke-json/canvas';
@@ -12,7 +12,7 @@
 
 	let {
 		canvasRef = $bindable<HTMLCanvasElement | null>(null),
-		drawingDocument = $bindable<DrawingDocumentV1>(createEmptyDrawingDocument('artwork')),
+		drawingDocument = $bindable<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork')),
 		clearVersion = 0,
 		initialDrawingDocument = null,
 		interactive = true,
@@ -21,16 +21,16 @@
 		statusTone = 'idle'
 	}: {
 		canvasRef?: HTMLCanvasElement | null;
-		drawingDocument?: DrawingDocumentV1;
+		drawingDocument?: DrawingDocumentV2;
 		clearVersion?: number;
-		initialDrawingDocument?: DrawingDocumentV1 | null;
+		initialDrawingDocument?: DrawingDocumentV2 | null;
 		interactive?: boolean;
 		onInitialImageSettled?: () => void;
 		statusMessage?: string;
 		statusTone?: 'error' | 'success' | 'idle';
 	} = $props();
 
-	let baselineDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('artwork'));
+	let baselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
 	let activePointerId = $state<number | null>(null);
 	let isDrawing = $state(false);
 	let lastAppliedClearVersion = $state<number | null>(null);
@@ -63,7 +63,7 @@
 	};
 
 	const appendPoint = (point: DrawingPoint) => {
-		const stroke = drawingDocument.strokes.at(-1);
+		const stroke = drawingDocument.tail.at(-1);
 		if (!stroke) return;
 
 		const lastPoint = stroke.points.at(-1);
@@ -77,11 +77,11 @@
 
 	$effect(() => {
 		const nextBaseline = initialDrawingDocument
-			? cloneDrawingDocument(initialDrawingDocument)
-			: createEmptyDrawingDocument('artwork');
+			? cloneDrawingDocumentV2(initialDrawingDocument)
+			: createEmptyDrawingDocumentV2('artwork');
 
 		baselineDocument = nextBaseline;
-		drawingDocument = cloneDrawingDocument(nextBaseline);
+		drawingDocument = cloneDrawingDocumentV2(nextBaseline);
 		onInitialImageSettled?.();
 	});
 
@@ -108,7 +108,7 @@
 		if (clearVersion === lastAppliedClearVersion) return;
 
 		lastAppliedClearVersion = clearVersion;
-		drawingDocument = cloneDrawingDocument(baselineDocument);
+		drawingDocument = cloneDrawingDocumentV2(baselineDocument);
 	});
 
 	$effect(() => {
@@ -128,7 +128,7 @@
 		canvasRef.setPointerCapture(event.pointerId);
 		activePointerId = event.pointerId;
 
-		drawingDocument.strokes.push({
+		drawingDocument.tail.push({
 			color: drawingTools.activeColor,
 			points: [point],
 			size: drawingTools.brushSize

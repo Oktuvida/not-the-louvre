@@ -16,11 +16,17 @@
 		saveDrawingDraft
 	} from '$lib/features/stroke-json/drafts';
 	import {
-		cloneDrawingDocument,
+		DRAWING_DOCUMENT_VERSION,
+		DrawingDocumentSchema,
+		cloneDrawingDocumentV2,
 		createEmptyDrawingDocument,
+		createEmptyDrawingDocumentV2,
+		getRenderableDrawingStrokes,
+		normalizeDrawingDocumentToEditableV2,
 		serializeDrawingDocument,
-		type DrawingDocumentV1
+		type DrawingDocumentV2
 	} from '$lib/features/stroke-json/document';
+	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/publish';
 	import type {
 		DrawForkParent,
 		DrawPageUser,
@@ -58,7 +64,11 @@
 			}
 
 			return {
-				drawingDocument: parsed.drawingDocument ?? null,
+				drawingDocument: parsed.drawingDocument
+					? normalizeDrawingDocumentToEditableV2(
+							DrawingDocumentSchema.parse(parsed.drawingDocument)
+						)
+					: null,
 				id: parsed.id,
 				isNsfw: parsed.isNsfw,
 				mediaUrl: parsed.mediaUrl,
@@ -81,7 +91,7 @@
 
 	let {
 		checkTextContent = defaultCheckTextContent,
-		createArtworkPayload = async (documentState: DrawingDocumentV1) => {
+		createArtworkPayload = async (documentState: DrawingDocumentV2) => {
 			const mode =
 				typeof window === 'undefined'
 					? 'good'
@@ -99,7 +109,7 @@
 				return serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
 			}
 
-			if (mode === 'webp' && documentState.strokes.length === 0) {
+			if (mode === 'webp' && getRenderableDrawingStrokes(documentState).length === 0) {
 				return serializeDrawingDocument({
 					...createEmptyDrawingDocument('artwork'),
 					strokes: [
@@ -116,7 +126,7 @@
 				});
 			}
 
-			return serializeDrawingDocument(documentState);
+			return serializeDrawingDocument(prepareDrawingDocumentForPublish(documentState));
 		},
 		forkParent = null,
 		openingDurationMs = 950,
@@ -153,7 +163,7 @@
 		user
 	}: {
 		checkTextContent?: TextContentChecker;
-		createArtworkPayload?: (documentState: DrawingDocumentV1) => Promise<string | null>;
+		createArtworkPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		forkParent?: DrawForkParent | null;
 		openingDurationMs?: number;
 		publishDrawing?: (
@@ -167,7 +177,7 @@
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
 	let clearVersion = $state(0);
 	let currentForkParent = $state<DrawForkParent | null>(null);
-	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('artwork'));
+	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
 	let forkPreloadSettled = $state(true);
 	let isPublishing = $state(false);
 	let isMobileViewport = $state(false);
@@ -187,8 +197,8 @@
 	const EXIT_FADE_DURATION_S = 0.5;
 	const initialDrawingDocument = $derived(
 		currentForkParent?.drawingDocument
-			? cloneDrawingDocument(currentForkParent.drawingDocument)
-			: createEmptyDrawingDocument('artwork')
+			? cloneDrawingDocumentV2(currentForkParent.drawingDocument)
+			: createEmptyDrawingDocumentV2('artwork')
 	);
 	const forkContextStorageKey = $derived(getForkContextStorageKey(user));
 	const draftKey = $derived(
@@ -270,21 +280,29 @@
 					userKey: user.id ?? user.nickname
 				})
 			: null;
+		const resolvedLegacyDraftKey = user
+			? buildDrawingDraftKey({
+					schemaVersion: DRAWING_DOCUMENT_VERSION,
+					scope: resolvedForkParent?.id ?? 'new',
+					surface: 'artwork',
+					userKey: user.id ?? user.nickname
+				})
+			: null;
 
 		if (!resolvedDraftKey) {
 			drawingDocument = resolvedForkParent?.drawingDocument
-				? cloneDrawingDocument(resolvedForkParent.drawingDocument)
-				: createEmptyDrawingDocument('artwork');
+				? cloneDrawingDocumentV2(resolvedForkParent.drawingDocument)
+				: createEmptyDrawingDocumentV2('artwork');
 			return;
 		}
 
-		const draft = loadDrawingDraft(resolvedDraftKey);
+		const draft = loadDrawingDraft(resolvedDraftKey, resolvedLegacyDraftKey);
 		drawingDocument =
 			draft?.kind === 'artwork'
 				? draft
 				: resolvedForkParent?.drawingDocument
-					? cloneDrawingDocument(resolvedForkParent.drawingDocument)
-					: createEmptyDrawingDocument('artwork');
+					? cloneDrawingDocumentV2(resolvedForkParent.drawingDocument)
+					: createEmptyDrawingDocumentV2('artwork');
 
 		return () => {
 			mobileMediaQuery.removeEventListener('change', handleViewportChange);
@@ -303,7 +321,7 @@
 
 	const clearCanvas = () => {
 		if (!studioUnlocked) return;
-		drawingDocument = cloneDrawingDocument(initialDrawingDocument);
+		drawingDocument = cloneDrawingDocumentV2(initialDrawingDocument);
 		clearVersion += 1;
 		publishedArtwork = null;
 		statusMessage = '';
@@ -322,7 +340,7 @@
 		}
 
 		currentForkParent = null;
-		drawingDocument = createEmptyDrawingDocument('artwork');
+		drawingDocument = createEmptyDrawingDocumentV2('artwork');
 		clearVersion += 1;
 		artworkTitle = '';
 		isArtworkNsfw = false;
@@ -435,7 +453,7 @@
 				publishedArtwork = result.artwork;
 				statusMessage = `Artwork published as ${result.artwork.title}`;
 				statusTone = 'success';
-				drawingDocument = cloneDrawingDocument(initialDrawingDocument);
+				drawingDocument = cloneDrawingDocumentV2(initialDrawingDocument);
 				clearVersion += 1;
 				artworkTitle = '';
 				isArtworkNsfw = false;
