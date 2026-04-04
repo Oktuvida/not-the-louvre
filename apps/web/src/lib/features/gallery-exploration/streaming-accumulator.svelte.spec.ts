@@ -173,4 +173,27 @@ describe('createStreamingAccumulator', () => {
 		expect(acc.allArtworks).toHaveLength(2);
 		expect(acc.hasMore).toBe(false);
 	});
+
+	it('syncs seed artwork metadata without dropping the streamed pool', async () => {
+		const acc = createStreamingAccumulator({
+			initialArtworks: [makeArtwork(1)],
+			initialPageInfo: { hasMore: true, nextCursor: 'cursor-1' },
+			fetchPage: vi.fn().mockResolvedValueOnce({
+				artworks: [makeArtwork(2)],
+				pageInfo: { hasMore: false, nextCursor: null }
+			})
+		});
+
+		await acc.loadMore();
+		acc.syncSeedArtworks([{ ...makeArtwork(1), commentCount: 5, score: 77, upvotes: 77 }]);
+
+		expect(acc.allArtworks).toHaveLength(2);
+		expect(acc.allArtworks[0]).toMatchObject({
+			commentCount: 5,
+			score: 77,
+			upvotes: 77,
+			id: 'artwork-1'
+		});
+		expect(acc.allArtworks[1].id).toBe('artwork-2');
+	});
 });

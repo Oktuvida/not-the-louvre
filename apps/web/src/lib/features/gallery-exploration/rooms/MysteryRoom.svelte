@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import { untrack } from 'svelte';
 	import { createStreamingAccumulator } from '../streaming-accumulator.svelte';
 	import FilmReel from './FilmReel.svelte';
 
@@ -38,6 +39,24 @@
 			}
 			return loadMoreArtworks({ cursor });
 		}
+	});
+
+	const seedIdentity = (items: Artwork[]) => items.map((artwork) => artwork.id).join(',');
+	let lastSeedIdentity = seedIdentity(initialArtworks);
+
+	$effect(() => {
+		const identity = seedIdentity(artworks);
+		if (identity !== lastSeedIdentity) {
+			lastSeedIdentity = identity;
+			untrack(() => {
+				accumulator.reseed(artworks, pageInfo);
+			});
+			return;
+		}
+
+		untrack(() => {
+			accumulator.syncSeedArtworks(artworks);
+		});
 	});
 
 	let filmReel: ReturnType<typeof FilmReel> | undefined = $state();

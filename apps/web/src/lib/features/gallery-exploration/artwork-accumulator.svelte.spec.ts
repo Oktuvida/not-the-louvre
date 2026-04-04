@@ -203,4 +203,27 @@ describe('createArtworkAccumulator', () => {
 		expect(acc.hasMore).toBe(false);
 		expect(acc.error).toBeNull();
 	});
+
+	it('syncs seed artwork metadata without dropping appended artworks', async () => {
+		const acc = createArtworkAccumulator({
+			initialArtworks: [makeArtwork(1)],
+			initialPageInfo: { hasMore: true, nextCursor: 'cursor-1' },
+			fetchPage: vi.fn().mockResolvedValueOnce({
+				artworks: [makeArtwork(2)],
+				pageInfo: { hasMore: false, nextCursor: null }
+			})
+		});
+
+		await acc.loadMore();
+		acc.syncSeedArtworks([{ ...makeArtwork(1), commentCount: 7, score: 99, upvotes: 99 }]);
+
+		expect(acc.allArtworks).toHaveLength(2);
+		expect(acc.allArtworks[0]).toMatchObject({
+			commentCount: 7,
+			score: 99,
+			upvotes: 99,
+			id: 'artwork-1'
+		});
+		expect(acc.allArtworks[1].id).toBe('artwork-2');
+	});
 });

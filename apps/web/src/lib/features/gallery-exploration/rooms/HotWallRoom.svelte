@@ -4,6 +4,7 @@
 	import GalleryImage from '$lib/features/gallery-exploration/components/GalleryImage.svelte';
 	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
+	import { untrack } from 'svelte';
 
 	interface Props {
 		artworks: Artwork[];
@@ -49,8 +50,15 @@
 		const identity = seedIdentity(artworks);
 		if (identity !== lastSeedIdentity) {
 			lastSeedIdentity = identity;
-			accumulator.reseed(artworks, pageInfo);
+			untrack(() => {
+				accumulator.reseed(artworks, pageInfo);
+			});
+			return;
 		}
+
+		untrack(() => {
+			accumulator.syncSeedArtworks(artworks);
+		});
 	});
 
 	const leadArtwork = $derived(accumulator.allArtworks[0] ?? null);

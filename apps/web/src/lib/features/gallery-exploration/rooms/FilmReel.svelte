@@ -27,6 +27,7 @@
 	type ReelState = 'idle' | 'spinning' | 'stopped';
 	let reelState = $state<ReelState>('idle');
 	let idleTween: gsap.core.Tween | null = null;
+	let idleRestartTimer: ReturnType<typeof setTimeout> | null = null;
 
 	/*
 	 * Virtual-window approach for efficient circular scrolling.
@@ -111,6 +112,22 @@
 	/* Proxy object that GSAP tweens — we read .value in onUpdate */
 	const proxy = { value: 0 };
 
+	const stopIdleRestart = () => {
+		if (idleRestartTimer !== null) {
+			clearTimeout(idleRestartTimer);
+			idleRestartTimer = null;
+		}
+	};
+
+	const scheduleIdleRestart = (delayMs = 0) => {
+		stopIdleRestart();
+		idleRestartTimer = setTimeout(() => {
+			idleRestartTimer = null;
+			if (reelState !== 'idle') return;
+			startIdle();
+		}, delayMs);
+	};
+
 	const startIdle = () => {
 		if (!browser || artworks.length === 0) return;
 		const { frameStep } = reelMetrics;
@@ -134,15 +151,17 @@
 			},
 			onComplete() {
 				offset = proxy.value;
+				idleTween = null;
 				onIdleCycleComplete?.();
-				// Restart idle with whatever artworks are current now.
-				// The parent may have swapped the pool in the callback above.
-				startIdle();
+				// Restart idle asynchronously with whatever artworks are current now.
+				// This avoids re-entrant recursion under immediate-complete test mocks.
+				scheduleIdleRestart();
 			}
 		});
 	};
 
 	const stopIdle = () => {
+		stopIdleRestart();
 		if (idleTween) {
 			idleTween.kill();
 			idleTween = null;
@@ -263,15 +282,14 @@
 		if (!browser || artworks.length === 0 || !viewportEl || viewportWidth === 0) return;
 
 		// Only start idle scrolling when the reel is in the idle state.
-		// startIdle() self-chains: at the end of each cycle it fires
+		// Idle restarts are scheduled at the end of each cycle after it fires
 		// onIdleCycleComplete (so the parent can swap the pool) then
 		// restarts with the current artworks.
 		if (reelState !== 'idle') return;
 
-		const timer = setTimeout(() => startIdle(), 100);
+		scheduleIdleRestart(100);
 
 		return () => {
-			clearTimeout(timer);
 			stopIdle();
 		};
 	});

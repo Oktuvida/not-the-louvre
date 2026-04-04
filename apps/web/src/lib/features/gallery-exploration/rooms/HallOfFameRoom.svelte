@@ -8,6 +8,7 @@
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import WaxSealMedal from '$lib/features/shared-ui/components/WaxSealMedal.svelte';
+	import { untrack } from 'svelte';
 
 	interface Props {
 		artworks: Artwork[];
@@ -103,8 +104,15 @@
 		const identity = seedIdentity(artworks);
 		if (identity !== lastSeedIdentity) {
 			lastSeedIdentity = identity;
-			accumulator.reseed(artworks.slice(3), pageInfo);
+			untrack(() => {
+				accumulator.reseed(artworks.slice(3), pageInfo);
+			});
+			return;
 		}
+
+		untrack(() => {
+			accumulator.syncSeedArtworks(artworks.slice(3));
+		});
 	});
 </script>
 

@@ -18,6 +18,7 @@ export interface StreamingAccumulator {
 	loadMore(): Promise<void>;
 	retry(): Promise<void>;
 	reseed(artworks: Artwork[], pageInfo: { hasMore: boolean; nextCursor: string | null }): void;
+	syncSeedArtworks(artworks: Artwork[]): void;
 	setProgress(value: number): void;
 }
 
@@ -68,6 +69,15 @@ export function createStreamingAccumulator(
 		progress = 0;
 	}
 
+	function syncSeedArtworks(artworks: Artwork[]): void {
+		const nextArtworksById = Object.fromEntries(
+			artworks.map((artwork) => [artwork.id, artwork])
+		) as Record<string, Artwork>;
+		poolArtworks = poolArtworks.map(
+			(existingArtwork) => nextArtworksById[existingArtwork.id] ?? existingArtwork
+		);
+	}
+
 	function setProgress(value: number): void {
 		progress = Math.max(0, Math.min(1, value));
 	}
@@ -91,6 +101,7 @@ export function createStreamingAccumulator(
 		loadMore,
 		retry,
 		reseed,
+		syncSeedArtworks,
 		setProgress
 	};
 }

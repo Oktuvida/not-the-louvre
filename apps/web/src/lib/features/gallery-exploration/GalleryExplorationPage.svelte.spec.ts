@@ -11,17 +11,31 @@ const {
 	pageStore,
 	setPageValue
 } = vi.hoisted(() => {
+	type RealtimeClientOptions = {
+		onChannelEvent?: (table: string | undefined, handler: (payload: unknown) => void) => void;
+		onSubscribe?: (callback?: (status: string) => void) => void;
+	};
+
 	let currentValue = {
 		state: {},
 		url: new URL('http://localhost/gallery')
 	};
 	const subscribers = new Set<(value: typeof currentValue) => void>();
 
-	const createRealtimeClient = (onSubscribe?: (callback?: (status: string) => void) => void) => {
+	const createRealtimeClient = (
+		options: RealtimeClientOptions | ((callback?: (status: string) => void) => void) = {}
+	) => {
+		const normalizedOptions = typeof options === 'function' ? { onSubscribe: options } : options;
+
 		const channel = {
-			on: vi.fn(() => channel),
+			on: vi.fn(
+				(_event: string, filter: { table?: string }, handler: (payload: unknown) => void) => {
+					normalizedOptions.onChannelEvent?.(filter.table, handler);
+					return channel;
+				}
+			),
 			subscribe: vi.fn((callback?: (status: string) => void) => {
-				onSubscribe?.(callback);
+				normalizedOptions.onSubscribe?.(callback);
 				return channel;
 			})
 		};
@@ -402,7 +416,7 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByText('Loaded Mine 2')).toBeVisible();
 
 		await screen.rerender({
-			artworks: [{ ...baseArtwork, id: 'mine-1', title: 'Only Mine', score: 999 }],
+			artworks: [{ ...baseArtwork, commentCount: 7, id: 'mine-1', title: 'Only Mine', score: 999 }],
 			discovery: {
 				pageInfo: { hasMore: true, nextCursor: 'studio-cursor-1' },
 				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
@@ -415,6 +429,8 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByText('Loaded Mine 2')).toBeVisible();
+		await expect.element(page.getByText('⭐ 999')).toBeVisible();
+		await expect.element(page.getByText('💬 7')).toBeVisible();
 	});
 
 	it('keeps hall-of-fame podium hero artwork eager while deferring ranked cards', async () => {
@@ -669,6 +685,85 @@ describe('GalleryExplorationPage', () => {
 		await expect
 			.element(page.getByText('Realtime updates are temporarily unavailable.'))
 			.not.toBeInTheDocument();
+	});
+
+	it('propagates realtime detail refreshes back into the visible room card metadata', async () => {
+		let voteRefreshHandler: ((payload: unknown) => void) | undefined;
+		const fetchSpy = vi.fn(
+			async () => new Response(JSON.stringify({ token: 'realtime-token' }), { status: 200 })
+		);
+		const loadArtworkDetail = vi
+			.fn<(...args: [string]) => Promise<Artwork>>()
+			.mockResolvedValueOnce({
+				...baseArtwork,
+				commentCount: 0,
+				forkCount: 0,
+				id: 'artwork-1',
+				score: 0,
+				title: 'Deterministic Gallery Study',
+				upvotes: 0
+			})
+			.mockResolvedValueOnce({
+				...baseArtwork,
+				commentCount: 1,
+				comments: [
+					{ author: 'guest_artist', id: 'comment-1', text: 'Realtime hello', timestamp: 1 }
+				],
+				forkCount: 0,
+				id: 'artwork-1',
+				score: 1,
+				title: 'Deterministic Gallery Study',
+				upvotes: 1
+			});
+
+		vi.stubGlobal('fetch', fetchSpy);
+		getBrowserRealtimeClient.mockImplementation(() =>
+			createRealtimeClient({
+				onChannelEvent: (table, handler) => {
+					if (table === 'artwork_vote_realtime') {
+						voteRefreshHandler = handler;
+					}
+				}
+			})
+		);
+
+		render(GalleryExplorationPage, {
+			artworks: [
+				{
+					...baseArtwork,
+					commentCount: 0,
+					id: 'artwork-1',
+					score: 0,
+					title: 'Deterministic Gallery Study'
+				}
+			],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			realtimeConfig: { anonKey: 'anon-key', url: 'https://example.supabase.co' },
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
+		await expect
+			.element(
+				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
+			)
+			.toBeVisible();
+		await expect.element(page.getByText('⭐ 0')).toBeVisible();
+		await expect.element(page.getByText('💬 0')).toBeVisible();
+
+		voteRefreshHandler?.({ new: { artwork_id: 'artwork-1' } });
+
+		await vi.waitFor(() => {
+			expect(loadArtworkDetail).toHaveBeenCalledTimes(2);
+		});
+
+		await expect.element(page.getByRole('button', { name: /👍\s*1/ })).toBeVisible();
+		await expect.element(page.getByText('⭐ 1')).toBeVisible();
+		await expect.element(page.getByText('💬 1')).toBeVisible();
+		await expect.element(page.getByText('Realtime hello')).toBeVisible();
 	});
 
 	it('opens artwork detail from a visible virtualized studio card without losing room context', async () => {
