@@ -603,7 +603,7 @@
 						</div>
 					{:else if roomId === 'hall-of-fame'}
 						<HallOfFameRoom
-							artworks={routeArtworks}
+							{artworks}
 							pageInfo={routeDiscovery.pageInfo}
 							adultContentEnabled={adultContentAllowed}
 							loadMoreArtworks={roomLoadMoreArtworks}
@@ -611,15 +611,15 @@
 						/>
 					{:else if roomId === 'hot-wall'}
 						<HotWallRoom
-							artworks={routeArtworks}
+							{artworks}
 							pageInfo={routeDiscovery.pageInfo}
 							adultContentEnabled={adultContentAllowed}
 							loadMoreArtworks={roomLoadMoreArtworks}
 							onSelect={openArtwork}
 						/>
-					{:else if roomId === 'mystery' && routeArtworks.length > 0}
+					{:else if roomId === 'mystery' && artworks.length > 0}
 						<MysteryRoom
-							artworks={routeArtworks}
+							{artworks}
 							pageInfo={routeDiscovery.pageInfo}
 							adultContentEnabled={adultContentAllowed}
 							loadMoreArtworks={roomLoadMoreArtworks}
@@ -628,7 +628,7 @@
 						/>
 					{:else if roomId === 'your-studio'}
 						<YourStudioRoom
-							artworks={routeArtworks}
+							{artworks}
 							pageInfo={routeDiscovery.pageInfo}
 							loadMoreArtworks={roomLoadMoreArtworks}
 							onSelect={openArtwork}

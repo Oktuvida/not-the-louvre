@@ -22,6 +22,7 @@ export interface ArtworkAccumulator {
 		initialArtworks: Artwork[],
 		initialPageInfo: { hasMore: boolean; nextCursor: string | null }
 	): void;
+	syncSeedArtworks(initialArtworks: Artwork[]): void;
 	reset(): void;
 }
 
@@ -92,6 +93,15 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 		error = null;
 	}
 
+	function syncSeedArtworks(initialArtworks: Artwork[]): void {
+		const nextArtworksById = Object.fromEntries(
+			initialArtworks.map((artwork) => [artwork.id, artwork])
+		) as Record<string, Artwork>;
+		baseArtworks = baseArtworks.map(
+			(existingArtwork) => nextArtworksById[existingArtwork.id] ?? existingArtwork
+		);
+	}
+
 	return {
 		get allArtworks() {
 			return allArtworks;
@@ -111,6 +121,7 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 		loadMore,
 		retry,
 		reseed,
+		syncSeedArtworks,
 		reset
 	};
 }
