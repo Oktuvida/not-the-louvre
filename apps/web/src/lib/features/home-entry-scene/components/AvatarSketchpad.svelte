@@ -8,13 +8,17 @@
 	} from '$lib/features/stroke-json/drafts';
 	import {
 		AVATAR_DRAWING_DIMENSIONS,
-		cloneDrawingDocument,
+		DRAWING_DOCUMENT_VERSION,
+		cloneDrawingDocumentV2,
 		createEmptyDrawingDocument,
+		createEmptyDrawingDocumentV2,
 		getDrawingPointWithinBounds,
+		getRenderableDrawingStrokes,
 		serializeDrawingDocument,
-		type DrawingDocumentV1,
+		type DrawingDocumentV2,
 		type DrawingPoint
 	} from '$lib/features/stroke-json/document';
+	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/publish';
 	import { renderDrawingStroke } from '$lib/features/stroke-json/canvas';
 	import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
@@ -38,7 +42,7 @@
 
 	let {
 		clearMode = 'initial',
-		createAvatarPayload = async (documentState: DrawingDocumentV1) => {
+		createAvatarPayload = async (documentState: DrawingDocumentV2) => {
 			const mode =
 				typeof window === 'undefined'
 					? 'good'
@@ -56,7 +60,7 @@
 				return serializeDrawingDocument(createEmptyDrawingDocument('artwork'));
 			}
 
-			return serializeDrawingDocument(documentState);
+			return serializeDrawingDocument(prepareDrawingDocumentForPublish(documentState));
 		},
 		draftUserKey = null,
 		initialDrawingDocument = null,
@@ -69,9 +73,9 @@
 		submitLabel = 'Enter the gallery'
 	}: {
 		clearMode?: 'blank' | 'initial';
-		createAvatarPayload?: (documentState: DrawingDocumentV1) => Promise<string | null>;
+		createAvatarPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		draftUserKey?: string | null;
-		initialDrawingDocument?: DrawingDocumentV1 | null;
+		initialDrawingDocument?: DrawingDocumentV2 | null;
 		nickname: string;
 		onContinue?: () => void;
 		saveAvatar?: (drawingDocument: string) => Promise<AvatarSaveResult>;
@@ -80,9 +84,9 @@
 
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
 	let activeColor = $state(DEFAULT_AVATAR_COLOR);
-	let baselineDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
+	let baselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
 	let brushStep = $state(Math.floor((BRUSH_SIZES.length - 1) / 2));
-	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
+	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
 	let activePointerId = $state<number | null>(null);
 	let isDrawing = $state(false);
 	let isSaving = $state(false);
@@ -91,12 +95,22 @@
 	const brushSize = $derived(BRUSH_SIZES[brushStep] ?? BRUSH_SIZES[BRUSH_SIZES.length - 1]);
 	const brushPreviewDiameter = $derived(Math.max(4, brushSize + 2));
 	const clearDocument = $derived(
-		clearMode === 'blank' ? createEmptyDrawingDocument('avatar') : baselineDocument
+		clearMode === 'blank' ? createEmptyDrawingDocumentV2('avatar') : baselineDocument
 	);
 	const draftKey = $derived(
 		draftUserKey
 			? buildDrawingDraftKey({
 					schemaVersion: drawingDocument.version,
+					scope: 'profile',
+					surface: 'avatar',
+					userKey: draftUserKey
+				})
+			: null
+	);
+	const legacyDraftKey = $derived(
+		draftUserKey
+			? buildDrawingDraftKey({
+					schemaVersion: DRAWING_DOCUMENT_VERSION,
 					scope: 'profile',
 					surface: 'avatar',
 					userKey: draftUserKey
@@ -167,7 +181,7 @@
 		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 		drawGhostSilhouette(context);
 
-		for (const stroke of drawingDocument.strokes) {
+		for (const stroke of getRenderableDrawingStrokes(drawingDocument)) {
 			renderDrawingStroke(context, stroke);
 		}
 	};
@@ -186,7 +200,7 @@
 	};
 
 	const startStroke = (point: DrawingPoint) => {
-		drawingDocument.strokes.push({
+		drawingDocument.tail.push({
 			color: activeColor,
 			points: [point],
 			size: brushSize
@@ -195,7 +209,7 @@
 	};
 
 	const appendPoint = (point: DrawingPoint) => {
-		const stroke = drawingDocument.strokes.at(-1);
+		const stroke = drawingDocument.tail.at(-1);
 		if (!stroke) return;
 
 		const lastPoint = stroke.points.at(-1);
@@ -311,14 +325,14 @@
 
 	onMount(() => {
 		baselineDocument = initialDrawingDocument
-			? cloneDrawingDocument(initialDrawingDocument)
-			: createEmptyDrawingDocument('avatar');
+			? cloneDrawingDocumentV2(initialDrawingDocument)
+			: createEmptyDrawingDocumentV2('avatar');
 
 		if (draftKey) {
-			const draft = loadDrawingDraft(draftKey);
-			drawingDocument = draft?.kind === 'avatar' ? draft : cloneDrawingDocument(baselineDocument);
+			const draft = loadDrawingDraft(draftKey, legacyDraftKey);
+			drawingDocument = draft?.kind === 'avatar' ? draft : cloneDrawingDocumentV2(baselineDocument);
 		} else {
-			drawingDocument = cloneDrawingDocument(baselineDocument);
+			drawingDocument = cloneDrawingDocumentV2(baselineDocument);
 		}
 
 		const handleWindowPointerRelease = () => {
@@ -451,7 +465,7 @@
 						className="w-full sm:w-auto"
 						onclick={() => {
 							saveError = '';
-							drawingDocument = cloneDrawingDocument(clearDocument);
+							drawingDocument = cloneDrawingDocumentV2(clearDocument);
 						}}
 						disabled={isSaving}
 					>

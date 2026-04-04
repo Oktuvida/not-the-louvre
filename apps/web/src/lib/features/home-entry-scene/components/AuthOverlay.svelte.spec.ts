@@ -388,7 +388,12 @@ describe('AuthOverlay', () => {
 		await vi.waitFor(() => {
 			expect(onAvatarSaved).toHaveBeenCalledWith(
 				expect.objectContaining({
-					avatarDrawingDocument: expect.objectContaining({ kind: 'avatar', version: 1 }),
+					avatarDrawingDocument: expect.objectContaining({
+						base: [],
+						kind: 'avatar',
+						tail: [],
+						version: 2
+					}),
 					avatarOnboardingCompletedAt: expect.any(Date),
 					avatarUrl: '/api/users/product-user-1/avatar?v=1711713600000'
 				})

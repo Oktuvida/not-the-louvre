@@ -6,7 +6,7 @@
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
 	} from '$lib/client/content-filter';
-	import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+	import { parseEditableDrawingDocumentV2 } from '$lib/features/stroke-json/document';
 	import { NICKNAME_PATTERN, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '$lib/auth/config';
 	import type {
 		HomeAuthActionData,
@@ -52,7 +52,7 @@
 		form?: HomeAuthActionForm;
 		onAvatarDismiss?: () => void;
 		onAvatarSaved?: (payload: {
-			avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV1 | null;
+			avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
 			avatarOnboardingCompletedAt: Date;
 			avatarUrl: string;
 		}) => void;
@@ -422,7 +422,7 @@
 
 			dispatchAvatarFaviconUpdate(authenticatedUser.id);
 			onAvatarSaved?.({
-				avatarDrawingDocument: parseDrawingDocument(drawingDocument),
+				avatarDrawingDocument: parseEditableDrawingDocumentV2(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
 				avatarUrl: data.avatarUrl
 			});

@@ -1,7 +1,10 @@
 import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { createEmptyDrawingDocument } from '$lib/features/stroke-json/document';
+import {
+	createEmptyDrawingDocument,
+	normalizeDrawingDocumentToEditableV2
+} from '$lib/features/stroke-json/document';
 import DrawingCanvas from './DrawingCanvas.svelte';
 
 const createMockContext = () =>
@@ -217,7 +220,7 @@ describe('DrawingCanvas', () => {
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 
 		render(DrawingCanvas, {
-			initialDrawingDocument: {
+			initialDrawingDocument: normalizeDrawingDocumentToEditableV2({
 				...createEmptyDrawingDocument('artwork'),
 				strokes: [
 					{
@@ -226,7 +229,7 @@ describe('DrawingCanvas', () => {
 						size: 8
 					}
 				]
-			}
+			})
 		});
 
 		const canvas = document.querySelector('canvas');

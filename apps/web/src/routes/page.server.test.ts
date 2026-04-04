@@ -11,7 +11,9 @@ import {
 type HomeActionEvent = Parameters<Actions['signUp']>[0];
 
 const mocked = vi.hoisted(() => ({
+	findUserById: vi.fn(),
 	getIp: vi.fn(() => '127.0.0.1'),
+	getViewerContentPreferences: vi.fn(),
 	getNicknameAvailability: vi.fn(),
 	listArtworkDiscovery: vi.fn(),
 	recoverAccount: vi.fn(),
@@ -37,6 +39,16 @@ vi.mock('$lib/server/auth', () => ({
 
 vi.mock('$lib/server/artwork/read.service', () => ({
 	listArtworkDiscovery: mocked.listArtworkDiscovery
+}));
+
+vi.mock('$lib/server/moderation/service', () => ({
+	getViewerContentPreferences: mocked.getViewerContentPreferences
+}));
+
+vi.mock('$lib/server/user/repository', () => ({
+	userRepository: {
+		findUserById: mocked.findUserById
+	}
 }));
 
 vi.mock('$lib/server/user/avatar.service', () => ({
@@ -84,13 +96,22 @@ describe('home route auth contract', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mocked.getIp.mockClear();
+		mocked.getViewerContentPreferences.mockReset();
 		mocked.getNicknameAvailability.mockReset();
 		mocked.listArtworkDiscovery.mockReset();
+		mocked.findUserById.mockReset();
 		mocked.recoverAccount.mockReset();
 		mocked.uploadAvatar.mockReset();
 		mocked.signInWithNickname.mockReset();
 		mocked.signOutCurrentSession.mockReset();
 		mocked.signUpWithNickname.mockReset();
+		mocked.getViewerContentPreferences.mockResolvedValue({
+			adultContentConsentedAt: null,
+			adultContentEnabled: false,
+			adultContentRevokedAt: null,
+			ambientAudioEnabled: null
+		});
+		mocked.findUserById.mockResolvedValue(null);
 		mocked.listArtworkDiscovery.mockResolvedValue({
 			items: [
 				{

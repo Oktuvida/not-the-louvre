@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+import { parseEditableDrawingDocumentV2 } from '$lib/features/stroke-json/document';
 import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
@@ -122,7 +122,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			user: {
 				...locals.user,
 				avatarDrawingDocument: avatarUserRecord?.avatarDocument
-					? parseDrawingDocument(decodeCompressedDrawingDocument(avatarUserRecord.avatarDocument))
+					? parseEditableDrawingDocumentV2(
+							decodeCompressedDrawingDocument(avatarUserRecord.avatarDocument)
+						)
 					: null,
 				avatarUrl: resolveUserAvatarUrl(
 					locals.user.id,

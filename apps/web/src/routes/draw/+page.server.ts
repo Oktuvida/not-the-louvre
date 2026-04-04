@@ -2,7 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
-import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+import { parseEditableDrawingDocumentV2 } from '$lib/features/stroke-json/document';
 import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { getArtworkDetail } from '$lib/server/artwork/read.service';
@@ -45,7 +45,7 @@ export const load: PageServerLoad = async (event) => {
 	const forkParent = forkArtworkId
 		? await getArtworkDetail(forkArtworkId, { user: event.locals.user }).then((artwork) => ({
 				drawingDocument: artwork.drawingDocument
-					? parseDrawingDocument(decodeCompressedDrawingDocument(artwork.drawingDocument))
+					? parseEditableDrawingDocumentV2(decodeCompressedDrawingDocument(artwork.drawingDocument))
 					: null,
 				id: artwork.id,
 				isNsfw: artwork.isNsfw,

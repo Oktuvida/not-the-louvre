@@ -1,4 +1,8 @@
-import { parseDrawingDocument, serializeDrawingDocument, type DrawingDocumentV1 } from './document';
+import {
+	parseEditableDrawingDocumentV2,
+	serializeEditableDrawingDocument,
+	type DrawingDocumentV2
+} from './document';
 
 type DraftKeyInput = {
 	schemaVersion: number;
@@ -15,26 +19,43 @@ const getStorage = () => {
 export const buildDrawingDraftKey = ({ schemaVersion, scope, surface, userKey }: DraftKeyInput) =>
 	`drawing-draft:v${schemaVersion}:${surface}:${userKey}:${scope}`;
 
-export const loadDrawingDraft = (key: string): DrawingDocumentV1 | null => {
+export const loadDrawingDraft = (
+	key: string,
+	legacyKey?: string | null
+): DrawingDocumentV2 | null => {
 	const storage = getStorage();
 	if (!storage) return null;
 
-	const raw = storage.getItem(key);
+	const raw = storage.getItem(key) ?? (legacyKey ? storage.getItem(legacyKey) : null);
 	if (!raw) return null;
 
 	try {
-		return parseDrawingDocument(raw);
+		const document = parseEditableDrawingDocumentV2(raw);
+
+		if (legacyKey && storage.getItem(key) === null && storage.getItem(legacyKey) !== null) {
+			try {
+				storage.setItem(key, serializeEditableDrawingDocument(document));
+				storage.removeItem(legacyKey);
+			} catch {
+				// Keep the converted document in memory even if draft migration cannot be persisted.
+			}
+		}
+
+		return document;
 	} catch {
 		storage.removeItem(key);
+		if (legacyKey) {
+			storage.removeItem(legacyKey);
+		}
 		return null;
 	}
 };
 
-export const saveDrawingDraft = (key: string, document: DrawingDocumentV1) => {
+export const saveDrawingDraft = (key: string, document: DrawingDocumentV2) => {
 	const storage = getStorage();
 	if (!storage) return;
 
-	storage.setItem(key, serializeDrawingDocument(document));
+	storage.setItem(key, serializeEditableDrawingDocument(document));
 };
 
 export const clearDrawingDraft = (key: string) => {

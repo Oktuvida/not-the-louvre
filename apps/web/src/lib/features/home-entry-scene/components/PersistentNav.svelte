@@ -8,8 +8,8 @@
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
 	import { buildDrawingDraftKey, clearDrawingDraft } from '$lib/features/stroke-json/drafts';
 	import {
-		createEmptyDrawingDocument,
-		parseDrawingDocument
+		createEmptyDrawingDocumentV2,
+		parseEditableDrawingDocumentV2
 	} from '$lib/features/stroke-json/document';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
@@ -20,7 +20,7 @@
 	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
 
 	type AvatarSavedPayload = {
-		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV1 | null;
+		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
 		avatarOnboardingCompletedAt: Date;
 		avatarUrl: string;
 	};
@@ -53,7 +53,7 @@
 		user
 			? buildDrawingDraftKey({
 					schemaVersion:
-						user.avatarDrawingDocument?.version ?? createEmptyDrawingDocument('avatar').version,
+						user.avatarDrawingDocument?.version ?? createEmptyDrawingDocumentV2('avatar').version,
 					scope: 'profile',
 					surface: 'avatar',
 					userKey: user.id
@@ -134,7 +134,7 @@
 
 			dispatchAvatarFaviconUpdate(user.id);
 			onAvatarSaved?.({
-				avatarDrawingDocument: parseDrawingDocument(drawingDocument),
+				avatarDrawingDocument: parseEditableDrawingDocumentV2(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
 				avatarUrl: data.avatarUrl
 			});

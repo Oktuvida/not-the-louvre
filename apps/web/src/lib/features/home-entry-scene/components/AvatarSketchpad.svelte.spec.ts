@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
 	createEmptyDrawingDocument,
+	normalizeDrawingDocumentToEditableV2,
 	serializeDrawingDocument
 } from '$lib/features/stroke-json/document';
 import { buildDrawingDraftKey } from '$lib/features/stroke-json/drafts';
@@ -188,12 +189,14 @@ describe('AvatarSketchpad', () => {
 
 		await enterGalleryButton().click();
 
-		expect(saveAvatar).toHaveBeenCalledWith(serializeDrawingDocument(draftDocument));
+		expect(saveAvatar).toHaveBeenCalledWith(
+			serializeDrawingDocument(normalizeDrawingDocumentToEditableV2(draftDocument))
+		);
 		window.localStorage.clear();
 	});
 
 	it('publishes the stored avatar drawing document when reopening the editor', async () => {
-		const storedDocument = {
+		const storedDocument = normalizeDrawingDocumentToEditableV2({
 			...createEmptyDrawingDocument('avatar'),
 			strokes: [
 				{
@@ -202,7 +205,7 @@ describe('AvatarSketchpad', () => {
 					size: 10
 				}
 			]
-		};
+		});
 		const saveAvatar = vi.fn(async () => ({ success: true as const }));
 
 		render(AvatarSketchpad, {
@@ -217,7 +220,7 @@ describe('AvatarSketchpad', () => {
 	});
 
 	it('clears to a blank avatar when configured for the authenticated editor flow', async () => {
-		const storedDocument = {
+		const storedDocument = normalizeDrawingDocumentToEditableV2({
 			...createEmptyDrawingDocument('avatar'),
 			strokes: [
 				{
@@ -226,7 +229,7 @@ describe('AvatarSketchpad', () => {
 					size: 10
 				}
 			]
-		};
+		});
 		const saveAvatar = vi.fn(async () => ({ success: true as const }));
 
 		render(AvatarSketchpad, {
@@ -240,7 +243,9 @@ describe('AvatarSketchpad', () => {
 		await enterGalleryButton().click();
 
 		expect(saveAvatar).toHaveBeenCalledWith(
-			serializeDrawingDocument(createEmptyDrawingDocument('avatar'))
+			serializeDrawingDocument(
+				normalizeDrawingDocumentToEditableV2(createEmptyDrawingDocument('avatar'))
+			)
 		);
 	});
 
@@ -408,8 +413,9 @@ describe('AvatarSketchpad', () => {
 
 		expect(setPointerCaptureSpy).toHaveBeenCalledTimes(1);
 		expect(releasePointerCaptureSpy).toHaveBeenCalledTimes(1);
-		expect(savedDocument.strokes).toHaveLength(1);
-		expect(savedDocument.strokes[0]?.points).toHaveLength(2);
+		expect(savedDocument.version).toBe(2);
+		expect(savedDocument.tail).toHaveLength(1);
+		expect(savedDocument.tail[0]?.points).toHaveLength(2);
 
 		getContextSpy.mockRestore();
 	});

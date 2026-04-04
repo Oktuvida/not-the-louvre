@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocked = vi.hoisted(() => ({
+	getViewerContentPreferences: vi.fn(),
 	listArtworkDiscovery: vi.fn()
 }));
 
 vi.mock('$lib/server/artwork/read.service', () => ({
 	listArtworkDiscovery: mocked.listArtworkDiscovery
+}));
+
+vi.mock('$lib/server/moderation/service', () => ({
+	getViewerContentPreferences: mocked.getViewerContentPreferences
 }));
 
 const makeDiscoveryPage = (
@@ -20,7 +25,14 @@ const makeDiscoveryPage = (
 describe('gallery room route', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		mocked.getViewerContentPreferences.mockReset();
 		mocked.listArtworkDiscovery.mockReset();
+		mocked.getViewerContentPreferences.mockResolvedValue({
+			adultContentConsentedAt: null,
+			adultContentEnabled: false,
+			adultContentRevokedAt: null,
+			ambientAudioEnabled: null
+		});
 		mocked.listArtworkDiscovery.mockResolvedValue(
 			makeDiscoveryPage([
 				{
