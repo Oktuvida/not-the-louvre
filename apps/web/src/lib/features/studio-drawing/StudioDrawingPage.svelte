@@ -435,6 +435,11 @@
 				publishedArtwork = result.artwork;
 				statusMessage = `Artwork published as ${result.artwork.title}`;
 				statusTone = 'success';
+				drawingDocument = cloneDrawingDocument(initialDrawingDocument);
+				clearVersion += 1;
+				artworkTitle = '';
+				isArtworkNsfw = false;
+				titleError = '';
 				return;
 			}
 
