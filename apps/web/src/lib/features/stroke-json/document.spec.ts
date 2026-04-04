@@ -1,20 +1,41 @@
 import { describe, expect, it } from 'vitest';
 import {
+	compactDrawingDocumentLosslessly,
+	compactDrawingDocumentLosslesslyWithReport,
+	getRasterCoveragePixelIndices,
+	resolveSafeRasterGuardPreset
+} from './compaction';
+import {
 	ARTWORK_DRAWING_DIMENSIONS,
 	AVATAR_DRAWING_DIMENSIONS,
+	DEFAULT_DRAWING_DOCUMENT_LIMITS,
 	assertDrawingDocumentWithinLimits,
 	clampDrawingPoint,
 	createEmptyDrawingDocument,
+	createEmptyDrawingDocumentV2,
 	getDrawingPointWithinBounds,
+	normalizeDrawingDocumentToEditableV2,
+	normalizeDrawingDocumentToV2,
+	parseEditableDrawingDocumentV2,
 	parseDrawingDocument,
-	serializeDrawingDocument
+	parseDrawingDocumentV2,
+	parseVersionedDrawingDocument,
+	serializeDrawingDocument,
+	serializeCanonicalDrawingDocument,
+	serializeEditableDrawingDocument
 } from './document';
-import { compressDrawingDocument, decompressDrawingDocument } from './storage';
+import {
+	compressDrawingDocument,
+	decodeCompressedDrawingDocument,
+	decompressDrawingDocument,
+	encodeCompressedDrawingDocument
+} from './storage';
 
 describe('stroke-json drawing document', () => {
 	it('accepts canonical artwork and avatar documents', () => {
 		const artwork = createEmptyDrawingDocument('artwork');
 		const avatar = createEmptyDrawingDocument('avatar');
+		const artworkV2 = createEmptyDrawingDocumentV2('artwork');
 
 		expect(artwork).toMatchObject({
 			background: '#fdfbf7',
@@ -27,6 +48,15 @@ describe('stroke-json drawing document', () => {
 			height: AVATAR_DRAWING_DIMENSIONS.height,
 			kind: 'avatar',
 			width: AVATAR_DRAWING_DIMENSIONS.width
+		});
+		expect(artworkV2).toMatchObject({
+			background: '#fdfbf7',
+			base: [],
+			height: ARTWORK_DRAWING_DIMENSIONS.height,
+			kind: 'artwork',
+			tail: [],
+			version: 2,
+			width: ARTWORK_DRAWING_DIMENSIONS.width
 		});
 	});
 
@@ -43,7 +73,7 @@ describe('stroke-json drawing document', () => {
 		expect(() => parseDrawingDocument(invalidDocument)).toThrow(/768/);
 	});
 
-	it('round-trips compressed documents without changing the payload', () => {
+	it('compresses documents into editable V2 payloads for persistence without default compaction', () => {
 		const document = {
 			...createEmptyDrawingDocument('artwork'),
 			strokes: [
@@ -59,12 +89,243 @@ describe('stroke-json drawing document', () => {
 			]
 		};
 
-		const serialized = serializeDrawingDocument(document);
+		const expected = normalizeDrawingDocumentToEditableV2(document);
 		const compressed = compressDrawingDocument(document);
 		const decompressed = decompressDrawingDocument(compressed);
 
-		expect(decompressed).toBe(serialized);
-		expect(parseDrawingDocument(decompressed)).toEqual(document);
+		expect(decompressed).toBe(serializeEditableDrawingDocument(expected));
+		expect(parseEditableDrawingDocumentV2(decompressed)).toEqual(expected);
+	});
+
+	it('encodes base64 compressed documents as editable V2 payloads', () => {
+		const document = {
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [
+						[16, 18] as [number, number],
+						[32, 48] as [number, number],
+						[64, 96] as [number, number]
+					],
+					size: 6
+				}
+			]
+		};
+
+		const expected = normalizeDrawingDocumentToEditableV2(document);
+		const encoded = encodeCompressedDrawingDocument(document);
+		const decoded = decodeCompressedDrawingDocument(encoded);
+
+		expect(decoded).toBe(serializeEditableDrawingDocument(expected));
+		expect(parseEditableDrawingDocumentV2(decoded)).toEqual(expected);
+	});
+
+	it('keeps storage uncompact by default and still allows explicit compaction overrides', () => {
+		const baseStrokePoints = Array.from(
+			{ length: 41 },
+			(_, index) => [20 + index * 7, index % 2 === 0 ? 118 : 122] as [number, number]
+		);
+		const document = {
+			...createEmptyDrawingDocument('avatar'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: baseStrokePoints,
+					size: 4
+				},
+				{
+					color: '#c84f4f',
+					points: [[120, 120] as [number, number], [220, 120] as [number, number]],
+					size: 20
+				}
+			]
+		};
+		const dimensions = { height: document.height, width: document.width };
+		const veryConservativePreset = resolveSafeRasterGuardPreset('veryConservative', dimensions);
+		const editable = normalizeDrawingDocumentToEditableV2(document);
+		const canonical = compactDrawingDocumentLosslessly(editable);
+		const veryConservative = compactDrawingDocumentLosslesslyWithReport(editable, {
+			maxStrokeCoveragePixels: veryConservativePreset.maxStrokeCoveragePixels
+		}).document;
+
+		expect(veryConservativePreset.maxStrokeCoveragePixels).not.toBeNull();
+		expect(getRasterCoveragePixelIndices(editable.tail[0]!, dimensions).length).toBeGreaterThan(
+			veryConservativePreset.maxStrokeCoveragePixels!
+		);
+		expect(canonical.base).toHaveLength(3);
+		expect(veryConservative.base).toEqual(editable.tail);
+
+		const defaultDecoded = decompressDrawingDocument(compressDrawingDocument(document));
+		const veryConservativeOverrideDecoded = decompressDrawingDocument(
+			compressDrawingDocument(document, DEFAULT_DRAWING_DOCUMENT_LIMITS, {
+				rasterGuardPresetId: 'veryConservative'
+			})
+		);
+
+		expect(parseEditableDrawingDocumentV2(defaultDecoded)).toEqual(editable);
+		expect(parseDrawingDocumentV2(veryConservativeOverrideDecoded)).toEqual(veryConservative);
+		expect(parseDrawingDocumentV2(defaultDecoded)).toEqual(normalizeDrawingDocumentToV2(editable));
+	});
+
+	it('parses legacy V1 payloads into editable V2 by placing legacy strokes in tail', () => {
+		const serialized = serializeDrawingDocument({
+			...createEmptyDrawingDocument('avatar'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [
+						[20, 20],
+						[26, 24],
+						[32, 20]
+					],
+					size: 5
+				}
+			]
+		});
+
+		expect(parseEditableDrawingDocumentV2(serialized)).toEqual({
+			background: '#f5f0e1',
+			base: [],
+			height: AVATAR_DRAWING_DIMENSIONS.height,
+			kind: 'avatar',
+			tail: [
+				{
+					color: '#2d2420',
+					points: [
+						[20, 20],
+						[26, 24],
+						[32, 20]
+					],
+					size: 5
+				}
+			],
+			version: 2,
+			width: AVATAR_DRAWING_DIMENSIONS.width
+		});
+	});
+
+	it('accepts V2 documents and exposes both flat and versioned views', () => {
+		const serialized = JSON.stringify({
+			background: '#fdfbf7',
+			base: [
+				{
+					color: '#2d2420',
+					points: [[10, 12] as [number, number], [24, 32] as [number, number]],
+					size: 5
+				}
+			],
+			height: ARTWORK_DRAWING_DIMENSIONS.height,
+			kind: 'artwork',
+			tail: [
+				{
+					color: '#c84f4f',
+					points: [[30, 30] as [number, number], [48, 48] as [number, number]],
+					size: 7
+				}
+			],
+			version: 2,
+			width: ARTWORK_DRAWING_DIMENSIONS.width
+		});
+
+		expect(parseVersionedDrawingDocument(serialized)).toEqual({
+			background: '#fdfbf7',
+			base: [
+				{
+					color: '#2d2420',
+					points: [
+						[10, 12],
+						[24, 32]
+					],
+					size: 5
+				}
+			],
+			height: ARTWORK_DRAWING_DIMENSIONS.height,
+			kind: 'artwork',
+			tail: [
+				{
+					color: '#c84f4f',
+					points: [
+						[30, 30],
+						[48, 48]
+					],
+					size: 7
+				}
+			],
+			version: 2,
+			width: ARTWORK_DRAWING_DIMENSIONS.width
+		});
+
+		expect(parseDrawingDocument(serialized)).toEqual({
+			background: '#fdfbf7',
+			height: ARTWORK_DRAWING_DIMENSIONS.height,
+			kind: 'artwork',
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [
+						[10, 12],
+						[24, 32]
+					],
+					size: 5
+				},
+				{
+					color: '#c84f4f',
+					points: [
+						[30, 30],
+						[48, 48]
+					],
+					size: 7
+				}
+			],
+			version: 1,
+			width: ARTWORK_DRAWING_DIMENSIONS.width
+		});
+
+		expect(parseDrawingDocumentV2(serialized)).toEqual({
+			background: '#fdfbf7',
+			base: [
+				{
+					color: '#2d2420',
+					points: [
+						[10, 12],
+						[24, 32]
+					],
+					size: 5
+				}
+			],
+			height: ARTWORK_DRAWING_DIMENSIONS.height,
+			kind: 'artwork',
+			tail: [
+				{
+					color: '#c84f4f',
+					points: [
+						[30, 30],
+						[48, 48]
+					],
+					size: 7
+				}
+			],
+			version: 2,
+			width: ARTWORK_DRAWING_DIMENSIONS.width
+		});
+	});
+
+	it('canonical serialization always emits minified V2 json with stable field ordering', () => {
+		const document = {
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [[10, 12] as [number, number], [24, 32] as [number, number]],
+					size: 5
+				}
+			]
+		};
+
+		expect(serializeCanonicalDrawingDocument(document)).toBe(
+			'{"version":2,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","base":[{"color":"#2d2420","size":5,"points":[[10,12],[24,32]]}],"tail":[]}'
+		);
 	});
 
 	it('rejects documents that exceed aggregate point limits', () => {

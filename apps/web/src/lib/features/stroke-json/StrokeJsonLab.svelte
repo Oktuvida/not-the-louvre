@@ -1,37 +1,62 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { gzipSync } from 'fflate';
+	import { renderDrawingDocumentToCanvas } from './canvas';
+	import {
+		compactDrawingDocumentLosslesslyWithReport,
+		DEFAULT_SAFE_RASTER_GUARD_PRESET_ID,
+		resolveSafeRasterGuardPreset,
+		SAFE_RASTER_GUARD_PRESETS,
+		type SafeRasterGuardPresetId
+	} from './compaction';
+	import {
+		PROD_LIKE_PHASE1_HIGH_QUALITY,
+		PROD_LIKE_PHASE1_SIMPLIFY_TOLERANCE,
+		PROD_LIKE_PHASE2_ENGINE_ID,
+		PROD_LIKE_PIPELINE_ITERATION_COUNT,
+		runProdLikePipeline,
+		type ProdLikePipelineIterationResult
+	} from './prod-like-pipeline';
 	import {
 		ARTWORK_DRAWING_DIMENSIONS,
 		AVATAR_DRAWING_DIMENSIONS,
 		countDrawingPoints,
-		createEmptyDrawingDocument,
+		createEmptyDrawingDocumentV2,
 		getDrawingPointWithinBounds,
-		parseDrawingDocument,
-		serializeDrawingDocument,
-		type DrawingDocumentV1,
+		getRenderableDrawingStrokes,
+		parseDrawingDocumentV2,
+		serializeCanonicalDrawingDocument,
+		type DrawingDocumentV2,
 		type DrawingKind,
-		type DrawingPoint,
-		type DrawingStroke
+		type DrawingPoint
 	} from './document';
 	import {
 		runBitmapCloneExperiment,
 		runJsonCloneExperiment,
 		type CanvasExportMeasurement
 	} from './experiments';
+	import { decodeCompressedDrawingDocument } from './storage';
 
 	const palette = ['#2d2420', '#d4956c', '#8b9d91', '#c84f4f', '#6b8e7f', '#f4c430', '#fdfbf7'];
 	const brushSizes = [2, 4, 6, 10, 14, 18];
 	const cloneIterations = 20;
+	const textEncoder = new TextEncoder();
+
+	type ProdLikePipelineIterationSummary = Omit<ProdLikePipelineIterationResult, 'document'> & {
+		diffPixels: number | null;
+	};
 
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
 	let activeColor = $state(palette[0]);
 	let brushSize = $state(brushSizes[2]);
 	let drawingKind = $state<DrawingKind>('artwork');
-	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('artwork'));
-	let activeStrokeIndex = $state<number | null>(null);
+	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
+	let activeTailStrokeIndex = $state<number | null>(null);
 	let isDrawing = $state(false);
 	let isRunningBitmapClone = $state(false);
 	let isRunningJsonClone = $state(false);
+	let isRunningRasterOracle = $state(false);
+	let isRunningProdLikePipeline = $state(false);
 	let jsonRawBytes = $state(0);
 	let jsonGzipBytes = $state(0);
 	let originalExportBytes = $state(0);
@@ -45,58 +70,72 @@
 	let bitmapClonePreviewUrl = $state('');
 	let jsonClonePreviewUrl = $state('');
 	let originalPreviewUrl = $state('');
+	let selectedRasterGuardPresetId = $state<SafeRasterGuardPresetId>(
+		DEFAULT_SAFE_RASTER_GUARD_PRESET_ID
+	);
+	let rasterOraclePreviewUrl = $state('');
+	let rasterOracleError = $state<string | null>(null);
+	let rasterOracleSelectedPresetLabel = $state<string | null>(null);
+	let rasterOracleMaxStrokeArea = $state<number | null>(null);
+	let rasterOracleGuardedStrokeCount = $state<number | null>(null);
+	let rasterOracleFinalDiffPixels = $state<number | null>(null);
+	let rasterOracleFinalRawBytes = $state<number | null>(null);
+	let rasterOracleFinalGzipBytes = $state<number | null>(null);
+	let rasterOracleFinalStrokeCount = $state<number | null>(null);
+	let rasterOracleFinalPointCount = $state<number | null>(null);
+	let prodLikePreviewUrl = $state('');
+	let prodLikePipelineError = $state<string | null>(null);
+	let prodLikeFinalDiffPixels = $state<number | null>(null);
+	let prodLikeFinalRawBytes = $state<number | null>(null);
+	let prodLikeFinalGzipBytes = $state<number | null>(null);
+	let prodLikeTotalDurationMs = $state<number | null>(null);
+	let prodLikeFinalDurationMs = $state<number | null>(null);
+	let prodLikeFinalStrokeCount = $state<number | null>(null);
+	let prodLikeFinalPointCount = $state<number | null>(null);
+	let compressedDrawingPayload = $state('');
+	let compressedDrawingLoadError = $state<string | null>(null);
+	let isLoadingCompressedPayload = $state(false);
+	let prodLikePipelineIterations = $state<ProdLikePipelineIterationSummary[]>([]);
 
 	const currentDimensions = $derived(
 		drawingKind === 'artwork' ? ARTWORK_DRAWING_DIMENSIONS : AVATAR_DRAWING_DIMENSIONS
 	);
-	const strokeCount = $derived(drawingDocument.strokes.length);
+	const strokeCount = $derived(getRenderableDrawingStrokes(drawingDocument).length);
+	const baseStrokeCount = $derived(drawingDocument.base.length);
+	const tailStrokeCount = $derived(drawingDocument.tail.length);
 	const totalPointCount = $derived(countDrawingPoints(drawingDocument));
+	const rasterGuardPresetOptions = Object.entries(SAFE_RASTER_GUARD_PRESETS).map(
+		([id, preset]) => ({
+			id: id as SafeRasterGuardPresetId,
+			label: preset.label
+		})
+	);
+	const selectedRasterGuardPreset = $derived(
+		resolveSafeRasterGuardPreset(selectedRasterGuardPresetId, currentDimensions)
+	);
+	const prodLikePipelineButtonLabel = `Run ${PROD_LIKE_PIPELINE_ITERATION_COUNT}x prod-like pipeline`;
 
-	const createWorkingCanvas = (documentState: DrawingDocumentV1) => {
+	const formatRasterGuardMaxArea = (value: number | null) =>
+		value === null ? 'Unlimited' : `${value} px`;
+
+	const createWorkingCanvas = (documentState: DrawingDocumentV2) => {
 		const canvas = window.document.createElement('canvas');
 		canvas.width = documentState.width;
 		canvas.height = documentState.height;
 		return canvas;
 	};
 
-	const renderStroke = (context: CanvasRenderingContext2D, stroke: DrawingStroke) => {
-		context.strokeStyle = stroke.color;
-		context.fillStyle = stroke.color;
-		context.lineWidth = stroke.size;
-		context.lineCap = 'round';
-		context.lineJoin = 'round';
-
-		if (stroke.points.length === 1) {
-			const [x, y] = stroke.points[0];
-			context.beginPath();
-			context.arc(x, y, Math.max(1, stroke.size / 2), 0, Math.PI * 2);
-			context.fill();
-			return;
-		}
-
-		context.beginPath();
-		context.moveTo(stroke.points[0][0], stroke.points[0][1]);
-		for (const [x, y] of stroke.points.slice(1)) {
-			context.lineTo(x, y);
-		}
-		context.stroke();
-	};
-
-	const renderDocumentToCanvas = (canvas: HTMLCanvasElement, documentState: DrawingDocumentV1) => {
-		const context = canvas.getContext('2d');
-		if (!context) return;
-
-		context.fillStyle = documentState.background;
-		context.fillRect(0, 0, canvas.width, canvas.height);
-
-		for (const stroke of documentState.strokes) {
-			renderStroke(context, stroke);
-		}
-	};
-
 	const renderCurrentDocument = () => {
 		if (!canvasRef) return;
-		renderDocumentToCanvas(canvasRef, drawingDocument);
+		renderDrawingDocumentToCanvas(canvasRef, drawingDocument);
+	};
+
+	const buildRenderedCanvas = (documentState: DrawingDocumentV2) => {
+		const nextCanvas = window.document.createElement('canvas');
+		nextCanvas.width = documentState.width;
+		nextCanvas.height = documentState.height;
+		renderDrawingDocumentToCanvas(nextCanvas, documentState);
+		return nextCanvas;
 	};
 
 	const toWebpBlob = (canvas: HTMLCanvasElement) =>
@@ -134,6 +173,7 @@
 	};
 
 	const toGzipByteLength = (value: string) => gzipSync(new TextEncoder().encode(value)).byteLength;
+	const toRawByteLength = (value: string) => textEncoder.encode(value).byteLength;
 
 	const snapshotCanvas = (canvas: HTMLCanvasElement) => canvas.toDataURL('image/png');
 
@@ -190,18 +230,19 @@
 	};
 
 	const startStroke = (point: DrawingPoint) => {
-		drawingDocument.strokes.push({
+		resetExperimentResults();
+		drawingDocument.tail.push({
 			color: activeColor,
 			points: [point],
 			size: brushSize
 		});
-		activeStrokeIndex = drawingDocument.strokes.length - 1;
+		activeTailStrokeIndex = drawingDocument.tail.length - 1;
 		renderCurrentDocument();
 	};
 
 	const appendPointToActiveStroke = (point: DrawingPoint) => {
-		if (activeStrokeIndex === null) return;
-		const stroke = drawingDocument.strokes[activeStrokeIndex];
+		if (activeTailStrokeIndex === null) return;
+		const stroke = drawingDocument.tail[activeTailStrokeIndex];
 		if (!stroke) return;
 
 		const lastPoint = stroke.points.at(-1);
@@ -217,14 +258,40 @@
 		if (!canvasRef) return;
 		const baselineCanvas = buildRenderedCanvas(drawingDocument);
 
-		const serialized = serializeDrawingDocument(drawingDocument);
-		jsonRawBytes = new TextEncoder().encode(serialized).byteLength;
+		const serialized = serializeCanonicalDrawingDocument(drawingDocument);
+		jsonRawBytes = toRawByteLength(serialized);
 		jsonGzipBytes = toGzipByteLength(serialized);
 
 		const exportMeasurement = await measureCanvasExport(baselineCanvas);
 		originalExportBytes = exportMeasurement.bytes;
 		originalExportFormat = exportMeasurement.format;
 		originalPreviewUrl = snapshotCanvas(baselineCanvas);
+	};
+
+	const resetProdLikePipelineResults = () => {
+		prodLikePreviewUrl = '';
+		prodLikePipelineError = null;
+		prodLikeFinalDiffPixels = null;
+		prodLikeFinalRawBytes = null;
+		prodLikeFinalGzipBytes = null;
+		prodLikeTotalDurationMs = null;
+		prodLikeFinalDurationMs = null;
+		prodLikeFinalStrokeCount = null;
+		prodLikeFinalPointCount = null;
+		prodLikePipelineIterations = [];
+	};
+
+	const resetRasterOracleResults = () => {
+		rasterOraclePreviewUrl = '';
+		rasterOracleError = null;
+		rasterOracleSelectedPresetLabel = null;
+		rasterOracleMaxStrokeArea = null;
+		rasterOracleGuardedStrokeCount = null;
+		rasterOracleFinalDiffPixels = null;
+		rasterOracleFinalRawBytes = null;
+		rasterOracleFinalGzipBytes = null;
+		rasterOracleFinalStrokeCount = null;
+		rasterOracleFinalPointCount = null;
 	};
 
 	const resetExperimentResults = () => {
@@ -236,12 +303,42 @@
 		bitmapCloneFormat = null;
 		jsonCloneBytes = null;
 		jsonCloneFormat = null;
+		resetRasterOracleResults();
+		resetProdLikePipelineResults();
+	};
+
+	const loadCompressedDocument = async () => {
+		if (isLoadingCompressedPayload) return;
+
+		isLoadingCompressedPayload = true;
+		compressedDrawingLoadError = null;
+
+		try {
+			const decodedDocument = parseDrawingDocumentV2(
+				decodeCompressedDrawingDocument(compressedDrawingPayload)
+			);
+
+			drawingKind = decodedDocument.kind;
+			drawingDocument = decodedDocument;
+			activeTailStrokeIndex = null;
+			isDrawing = false;
+			resetExperimentResults();
+
+			await tick();
+			renderCurrentDocument();
+			await refreshMetrics();
+		} catch (error) {
+			compressedDrawingLoadError =
+				error instanceof Error ? error.message : 'Failed to load the compressed drawing payload';
+		} finally {
+			isLoadingCompressedPayload = false;
+		}
 	};
 
 	const resetDocument = async (kind: DrawingKind) => {
 		drawingKind = kind;
-		drawingDocument = createEmptyDrawingDocument(kind);
-		activeStrokeIndex = null;
+		drawingDocument = createEmptyDrawingDocumentV2(kind);
+		activeTailStrokeIndex = null;
 		isDrawing = false;
 		resetExperimentResults();
 		queueMicrotask(() => {
@@ -264,11 +361,11 @@
 		if (!isDrawing) return;
 		const point = getScaledPoint(event);
 		if (!point) {
-			activeStrokeIndex = null;
+			activeTailStrokeIndex = null;
 			return;
 		}
 
-		if (activeStrokeIndex === null) {
+		if (activeTailStrokeIndex === null) {
 			startStroke(point);
 			return;
 		}
@@ -282,16 +379,8 @@
 		}
 
 		isDrawing = false;
-		activeStrokeIndex = null;
+		activeTailStrokeIndex = null;
 		await refreshMetrics();
-	};
-
-	const buildRenderedCanvas = (documentState: DrawingDocumentV1) => {
-		const nextCanvas = window.document.createElement('canvas');
-		nextCanvas.width = documentState.width;
-		nextCanvas.height = documentState.height;
-		renderDocumentToCanvas(nextCanvas, documentState);
-		return nextCanvas;
 	};
 
 	const runBitmapClone = async () => {
@@ -348,8 +437,8 @@
 				countPixelDiff,
 				document: drawingDocument,
 				measureCanvasExport,
-				parseDocument: parseDrawingDocument,
-				serializeDocument: serializeDrawingDocument,
+				parseDocument: parseDrawingDocumentV2,
+				serializeDocument: serializeCanonicalDrawingDocument,
 				snapshotCanvas
 			});
 
@@ -359,6 +448,77 @@
 			jsonCloneFormat = result.format;
 		} finally {
 			isRunningJsonClone = false;
+		}
+	};
+
+	const runExactRasterOracle = async () => {
+		if (isRunningRasterOracle) return;
+
+		isRunningRasterOracle = true;
+		resetRasterOracleResults();
+
+		try {
+			const baselineCanvas = buildRenderedCanvas(drawingDocument);
+			const result = compactDrawingDocumentLosslesslyWithReport(drawingDocument, {
+				maxStrokeCoveragePixels: selectedRasterGuardPreset.maxStrokeCoveragePixels
+			});
+			const finalCanvas = buildRenderedCanvas(result.document);
+			const serialized = serializeCanonicalDrawingDocument(result.document);
+
+			rasterOraclePreviewUrl = snapshotCanvas(finalCanvas);
+			rasterOracleSelectedPresetLabel = selectedRasterGuardPreset.label;
+			rasterOracleMaxStrokeArea = result.stats.maxStrokeCoveragePixels;
+			rasterOracleGuardedStrokeCount = result.stats.skippedPartialCompactionStrokeCount;
+			rasterOracleFinalDiffPixels = countPixelDiff(baselineCanvas, finalCanvas);
+			rasterOracleFinalRawBytes = toRawByteLength(serialized);
+			rasterOracleFinalGzipBytes = toGzipByteLength(serialized);
+			rasterOracleFinalStrokeCount = getRenderableDrawingStrokes(result.document).length;
+			rasterOracleFinalPointCount = countDrawingPoints(result.document);
+		} catch (error) {
+			rasterOracleError =
+				error instanceof Error ? error.message : 'Failed to run the exact raster oracle';
+		} finally {
+			isRunningRasterOracle = false;
+		}
+	};
+
+	const runProdLikePipelineExperiment = async () => {
+		if (isRunningProdLikePipeline) return;
+
+		isRunningProdLikePipeline = true;
+		resetProdLikePipelineResults();
+
+		try {
+			const baselineCanvas = buildRenderedCanvas(drawingDocument);
+			const result = await runProdLikePipeline(drawingDocument, {
+				phase2MaxStrokeCoveragePixels: selectedRasterGuardPreset.maxStrokeCoveragePixels
+			});
+			const finalIteration = result.iterations.at(-1);
+			const finalCanvas = buildRenderedCanvas(result.finalDocument);
+
+			prodLikePreviewUrl = snapshotCanvas(finalCanvas);
+			prodLikeFinalDiffPixels = countPixelDiff(baselineCanvas, finalCanvas);
+			prodLikeTotalDurationMs = result.totalDurationMs;
+			prodLikeFinalRawBytes = finalIteration?.rawBytes ?? null;
+			prodLikeFinalGzipBytes = finalIteration?.gzipBytes ?? null;
+			prodLikeFinalDurationMs = finalIteration?.durationMs ?? null;
+			prodLikeFinalStrokeCount = finalIteration?.strokeCount ?? null;
+			prodLikeFinalPointCount = finalIteration?.pointCount ?? null;
+
+			prodLikePipelineIterations = result.iterations.map((iteration) => ({
+				diffPixels: countPixelDiff(baselineCanvas, buildRenderedCanvas(iteration.document)),
+				durationMs: iteration.durationMs,
+				gzipBytes: iteration.gzipBytes,
+				passNumber: iteration.passNumber,
+				pointCount: iteration.pointCount,
+				rawBytes: iteration.rawBytes,
+				strokeCount: iteration.strokeCount
+			}));
+		} catch (error) {
+			prodLikePipelineError =
+				error instanceof Error ? error.message : 'Failed to run the prod-like pipeline';
+		} finally {
+			isRunningProdLikePipeline = false;
 		}
 	};
 
@@ -385,8 +545,9 @@
 		<p class="eyebrow">Research demo</p>
 		<h1>Stroke JSON Lab</h1>
 		<p class="lede">
-			Compare the current bitmap reload loop against a compact stroke document that replays without
-			quality loss.
+			Compare bitmap cloning, canonical V2 replay, the exact raster oracle, and the chained
+			prod-like pipeline on the same drawing surface before wiring the new format into product
+			flows.
 		</p>
 	</div>
 
@@ -469,13 +630,79 @@
 				<button type="button" onclick={() => void runJsonClone()} disabled={isRunningJsonClone}>
 					{isRunningJsonClone ? 'Running JSON clone...' : 'Run 20x JSON clone'}
 				</button>
+				<button
+					type="button"
+					onclick={() => void runExactRasterOracle()}
+					disabled={isRunningRasterOracle}
+				>
+					{isRunningRasterOracle ? 'Running exact raster oracle...' : 'Run exact raster oracle'}
+				</button>
+				<button
+					type="button"
+					onclick={() => void runProdLikePipelineExperiment()}
+					disabled={isRunningProdLikePipeline}
+				>
+					{isRunningProdLikePipeline
+						? 'Running prod-like pipeline...'
+						: prodLikePipelineButtonLabel}
+				</button>
+			</div>
+
+			<div class="comparison-controls">
+				<label>
+					<span class="label">Raster guard preset</span>
+					<select aria-label="Raster guard preset" bind:value={selectedRasterGuardPresetId}>
+						{#each rasterGuardPresetOptions as option (option.id)}
+							<option value={option.id}>{option.label}</option>
+						{/each}
+					</select>
+				</label>
+				<p class="comparison-note">
+					Safe presets only. Current max stroke area: {formatRasterGuardMaxArea(
+						selectedRasterGuardPreset.maxStrokeCoveragePixels
+					)}.
+				</p>
+			</div>
+
+			<div class="comparison-controls">
+				<label class="payload-field">
+					<span class="label">Compressed drawing payload</span>
+					<textarea
+						bind:value={compressedDrawingPayload}
+						rows="5"
+						spellcheck="false"
+						placeholder="Paste a base64 gzip payload from drawingDocument or avatarDocument"
+					></textarea>
+				</label>
+				<button
+					type="button"
+					onclick={() => void loadCompressedDocument()}
+					disabled={isLoadingCompressedPayload}
+				>
+					{isLoadingCompressedPayload ? 'Loading compressed payload...' : 'Load compressed payload'}
+				</button>
+				{#if compressedDrawingLoadError}
+					<p class="load-error" role="alert">{compressedDrawingLoadError}</p>
+				{/if}
 			</div>
 		</div>
 
 		<div class="metrics-panel">
 			<div class="metrics-card">
-				<p class="label">Metrics</p>
+				<p class="label">Working V2 document</p>
 				<dl>
+					<div>
+						<dt>Document version:</dt>
+						<dd data-testid="document-version">{drawingDocument.version}</dd>
+					</div>
+					<div>
+						<dt>Base strokes:</dt>
+						<dd data-testid="base-stroke-count">{baseStrokeCount}</dd>
+					</div>
+					<div>
+						<dt>Tail strokes:</dt>
+						<dd data-testid="tail-stroke-count">{tailStrokeCount}</dd>
+					</div>
 					<div>
 						<dt>Stroke count:</dt>
 						<dd data-testid="stroke-count">{strokeCount}</dd>
@@ -532,6 +759,170 @@
 					</div>
 				</dl>
 			</div>
+
+			<div class="metrics-card">
+				<p class="label">Exact raster oracle</p>
+				<p class="comparison-note">
+					Runs the exact lossless compactor with a safe raster-area preset. Large strokes can skip
+					partial compaction without changing the oracle itself; fully hidden strokes can still be
+					dropped.
+				</p>
+				{#if rasterOracleError}
+					<p class="load-error" role="alert">{rasterOracleError}</p>
+				{/if}
+				<dl>
+					<div>
+						<dt>Selected preset:</dt>
+						<dd data-testid="raster-oracle-selected-preset">
+							{rasterOracleSelectedPresetLabel ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Max stroke area (px):</dt>
+						<dd data-testid="raster-oracle-max-stroke-area">
+							{rasterOracleMaxStrokeArea === null && rasterOracleSelectedPresetLabel
+								? 'Unlimited'
+								: (rasterOracleMaxStrokeArea ?? 'Pending')}
+						</dd>
+					</div>
+					<div>
+						<dt>Guarded strokes:</dt>
+						<dd data-testid="raster-oracle-guarded-stroke-count">
+							{rasterOracleGuardedStrokeCount ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Final diff pixels:</dt>
+						<dd data-testid="raster-oracle-final-diff-pixels">
+							{rasterOracleFinalDiffPixels ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Final raw bytes:</dt>
+						<dd data-testid="raster-oracle-final-raw-bytes">
+							{rasterOracleFinalRawBytes ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Final gzip bytes:</dt>
+						<dd data-testid="raster-oracle-final-gzip-bytes">
+							{rasterOracleFinalGzipBytes ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Final strokes:</dt>
+						<dd data-testid="raster-oracle-final-stroke-count">
+							{rasterOracleFinalStrokeCount ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Final points:</dt>
+						<dd data-testid="raster-oracle-final-point-count">
+							{rasterOracleFinalPointCount ?? 'Pending'}
+						</dd>
+					</div>
+				</dl>
+			</div>
+
+			<div class="metrics-card">
+				<p class="label">Prod-like pipeline</p>
+				<p class="comparison-note">
+					Runs {PROD_LIKE_PIPELINE_ITERATION_COUNT} chained passes of `simplify-js` at tolerance
+					{PROD_LIKE_PHASE1_SIMPLIFY_TOLERANCE} with high quality
+					{PROD_LIKE_PHASE1_HIGH_QUALITY ? ' on' : ' off'}, then `{PROD_LIKE_PHASE2_ENGINE_ID}`.
+					Each pass is compared back to the original baseline drawing. Phase 2 shares the current
+					raster guard preset.
+				</p>
+				{#if prodLikePipelineError}
+					<p class="load-error" role="alert">{prodLikePipelineError}</p>
+				{/if}
+				<dl>
+					<div>
+						<dt>Phase 2 max stroke area (px):</dt>
+						<dd data-testid="prod-like-phase2-max-stroke-area">
+							{selectedRasterGuardPreset.maxStrokeCoveragePixels === null
+								? 'Unlimited'
+								: selectedRasterGuardPreset.maxStrokeCoveragePixels}
+						</dd>
+					</div>
+					<div>
+						<dt>Final diff pixels:</dt>
+						<dd data-testid="prod-like-final-diff-pixels">
+							{prodLikeFinalDiffPixels ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Final raw bytes:</dt>
+						<dd data-testid="prod-like-final-raw-bytes">
+							{prodLikeFinalRawBytes ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Final gzip bytes:</dt>
+						<dd data-testid="prod-like-final-gzip-bytes">
+							{prodLikeFinalGzipBytes ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Total runtime (ms):</dt>
+						<dd data-testid="prod-like-total-duration-ms">
+							{prodLikeTotalDurationMs ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Final-pass runtime (ms):</dt>
+						<dd data-testid="prod-like-final-duration-ms">
+							{prodLikeFinalDurationMs ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Final strokes:</dt>
+						<dd data-testid="prod-like-final-stroke-count">
+							{prodLikeFinalStrokeCount ?? 'Pending'}
+						</dd>
+					</div>
+					<div>
+						<dt>Final points:</dt>
+						<dd data-testid="prod-like-final-point-count">
+							{prodLikeFinalPointCount ?? 'Pending'}
+						</dd>
+					</div>
+				</dl>
+				{#if prodLikePipelineIterations.length > 0}
+					<div class="comparison-scroll">
+						<table class="comparison-table">
+							<thead>
+								<tr>
+									<th scope="col">Pass</th>
+									<th scope="col">Time (ms)</th>
+									<th scope="col">Strokes</th>
+									<th scope="col">Points</th>
+									<th scope="col">Raw bytes</th>
+									<th scope="col">Gzip bytes</th>
+									<th scope="col">Diff pixels</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each prodLikePipelineIterations as iteration (iteration.passNumber)}
+									<tr data-testid="prod-like-iteration-row">
+										<th scope="row">{iteration.passNumber}</th>
+										<td>{iteration.durationMs}</td>
+										<td>{iteration.strokeCount}</td>
+										<td>{iteration.pointCount}</td>
+										<td>{iteration.rawBytes}</td>
+										<td>{iteration.gzipBytes}</td>
+										<td>{iteration.diffPixels ?? 'Pending'}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{:else}
+					<p class="metrics-placeholder">
+						Run the prod-like pipeline to inspect all chained passes.
+					</p>
+				{/if}
+			</div>
 		</div>
 	</div>
 
@@ -560,6 +951,24 @@
 				<img src={jsonClonePreviewUrl} alt="Final JSON clone preview" />
 			{:else}
 				<p class="placeholder">Run the JSON clone experiment.</p>
+			{/if}
+		</article>
+
+		<article>
+			<h2>Raster oracle preview</h2>
+			{#if rasterOraclePreviewUrl}
+				<img src={rasterOraclePreviewUrl} alt="Raster oracle preview" />
+			{:else}
+				<p class="placeholder">Run the exact raster oracle.</p>
+			{/if}
+		</article>
+
+		<article>
+			<h2>Prod-like pipeline preview</h2>
+			{#if prodLikePreviewUrl}
+				<img src={prodLikePreviewUrl} alt="Prod-like pipeline preview" />
+			{:else}
+				<p class="placeholder">Run the prod-like pipeline analysis.</p>
 			{/if}
 		</article>
 	</div>
@@ -638,6 +1047,7 @@
 	.panel-header,
 	.header-actions,
 	.experiment-actions,
+	.comparison-controls,
 	.palette {
 		display: flex;
 		gap: 0.75rem;
@@ -655,6 +1065,7 @@
 
 	.segmented button,
 	.experiment-actions button,
+	.comparison-controls button,
 	.clear-button,
 	select {
 		border: 0;
@@ -724,10 +1135,53 @@
 		margin-top: 1rem;
 	}
 
+	.comparison-controls {
+		justify-content: flex-start;
+		margin-top: 0.9rem;
+	}
+
+	.payload-field {
+		width: min(100%, 34rem);
+	}
+
+	.payload-field textarea {
+		width: 100%;
+		min-height: 8rem;
+		padding: 0.9rem 1rem;
+		border: 1px solid rgb(36 26 20 / 0.14);
+		border-radius: 1rem;
+		background: rgb(255 255 255 / 0.78);
+		font: inherit;
+		line-height: 1.45;
+		color: var(--ink);
+		resize: vertical;
+	}
+
+	.load-error {
+		margin: 0;
+		padding: 0.85rem 1rem;
+		border-radius: 1rem;
+		background: rgb(200 79 79 / 0.12);
+		color: #7b2424;
+		font-size: 0.94rem;
+		line-height: 1.45;
+	}
+
 	.experiment-actions button {
 		background: linear-gradient(180deg, #6f492f, #4f3424);
 		color: #fff7eb;
 		box-shadow: 0 12px 20px rgb(79 52 36 / 0.14);
+	}
+
+	.comparison-controls button {
+		background: linear-gradient(180deg, #8b5e3c, #6f492f);
+		color: #fff7eb;
+		box-shadow: 0 12px 20px rgb(79 52 36 / 0.12);
+	}
+
+	.comparison-controls label {
+		display: grid;
+		gap: 0.35rem;
 	}
 
 	.experiment-actions button:disabled,
@@ -742,6 +1196,13 @@
 
 	.metrics-card {
 		padding: 1rem 1.1rem;
+	}
+
+	.comparison-note {
+		margin: 0.55rem 0 0;
+		font-size: 0.92rem;
+		line-height: 1.5;
+		color: rgb(36 26 20 / 0.68);
 	}
 
 	dl {
@@ -766,10 +1227,45 @@
 		font-weight: 700;
 	}
 
+	.comparison-scroll {
+		margin-top: 0.85rem;
+		overflow-x: auto;
+	}
+
+	.comparison-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.92rem;
+	}
+
+	.comparison-table th,
+	.comparison-table td {
+		padding: 0.7rem 0.5rem;
+		border-bottom: 1px solid rgb(36 26 20 / 0.08);
+		text-align: left;
+		white-space: nowrap;
+	}
+
+	.comparison-table thead th {
+		font-size: 0.78rem;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: rgb(36 26 20 / 0.56);
+	}
+
+	.metrics-placeholder {
+		margin: 0.8rem 0 0;
+		padding: 0.9rem 1rem;
+		border: 1px solid rgb(36 26 20 / 0.08);
+		border-radius: 0.9rem;
+		background: rgb(255 255 255 / 0.5);
+		color: rgb(36 26 20 / 0.58);
+	}
+
 	.preview-grid {
 		display: grid;
 		gap: 1rem;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
 		margin-top: 1.4rem;
 	}
 

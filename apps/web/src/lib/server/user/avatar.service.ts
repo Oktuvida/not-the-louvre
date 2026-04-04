@@ -1,5 +1,8 @@
 import { AVATAR_STORAGE_KEY_PREFIX } from './config';
-import { parseDrawingDocument } from '$lib/features/stroke-json/document';
+import {
+	DRAWING_DOCUMENT_V2_VERSION,
+	parseVersionedDrawingDocument
+} from '$lib/features/stroke-json/document';
 import { encodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import {
@@ -28,7 +31,7 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 		async uploadAvatar(user: CanonicalUser | null, drawingDocument: string): Promise<UserRecord> {
 			const activeUser = assertActiveUser(user);
 
-			const parsedDocument = parseDrawingDocument(drawingDocument);
+			const parsedDocument = parseVersionedDrawingDocument(drawingDocument);
 			if (parsedDocument.kind !== 'avatar') {
 				throw new ArtworkFlowError(
 					400,
@@ -47,7 +50,7 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 			const updatedUser = repository.updateUserAvatar
 				? await repository.updateUserAvatar(activeUser.id, {
 						avatarDocument: encodedDocument,
-						avatarDocumentVersion: parsedDocument.version,
+						avatarDocumentVersion: DRAWING_DOCUMENT_V2_VERSION,
 						avatarOnboardingCompletedAt: completedAt,
 						avatarUrl: storageKey,
 						updatedAt: completedAt

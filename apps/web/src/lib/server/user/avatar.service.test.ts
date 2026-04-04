@@ -5,8 +5,10 @@ import type { ArtworkStorage } from '$lib/server/artwork/types';
 import type { CanonicalUser } from '$lib/server/auth/types';
 import {
 	createEmptyDrawingDocument,
+	serializeCanonicalDrawingDocument,
 	serializeDrawingDocument
 } from '$lib/features/stroke-json/document';
+import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
 
 const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
 	avatarDocument: null,
@@ -127,7 +129,10 @@ describe('avatar upload', () => {
 
 		expect(storage.upload).toHaveBeenCalledWith('avatars/user-1.avif', expect.any(File));
 		expect(result.avatarDocument).toBeTruthy();
-		expect(result.avatarDocumentVersion).toBe(1);
+		expect(result.avatarDocumentVersion).toBe(2);
+		expect(decodeCompressedDrawingDocument(result.avatarDocument!)).toBe(
+			serializeCanonicalDrawingDocument(createEmptyDrawingDocument('avatar'))
+		);
 		expect(result.avatarUrl).toBe('avatars/user-1.avif');
 	});
 
