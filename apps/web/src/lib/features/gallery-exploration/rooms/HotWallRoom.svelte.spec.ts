@@ -99,6 +99,40 @@ describe('HotWallRoom', () => {
 		expect(sentinel).not.toBeNull();
 	});
 
+	it('reseeds accumulator when artworks prop changes so refreshed data is shown', async () => {
+		const artworks = [createArtwork('h1', 100), createArtwork('h2', 90), createArtwork('h3', 80)];
+
+		const screen = render(HotWallRoomHarness, {
+			artworks,
+			pageInfo: { hasMore: false, nextCursor: null }
+		});
+
+		await expect.element(page.getByTestId('hot-wall-room')).toBeVisible();
+		await expect.element(page.getByTestId('hot-wall-lead')).toBeVisible();
+
+		// Simulate refresh: completely new set of artworks
+		const refreshedArtworks = [
+			createArtwork('h4', 200),
+			createArtwork('h5', 150),
+			createArtwork('h1', 100)
+		];
+
+		await screen.rerender({
+			artworks: refreshedArtworks,
+			pageInfo: { hasMore: false, nextCursor: null }
+		});
+
+		// The new lead artwork should be h4
+		const leadImg = document.querySelector('[data-testid="hot-wall-lead"] img');
+		expect(leadImg).not.toBeNull();
+		expect(leadImg?.getAttribute('alt')).toBe('Artwork h4');
+
+		// h5 should appear in the supporting wall
+		const supportingCards = document.querySelectorAll('[data-testid^="hot-wall-card-"]');
+		const cardIds = Array.from(supportingCards).map((el) => el.getAttribute('data-testid'));
+		expect(cardIds).toContain('hot-wall-card-h5');
+	});
+
 	it('renders empty state when no artworks are provided', async () => {
 		render(HotWallRoomHarness, {
 			artworks: [],

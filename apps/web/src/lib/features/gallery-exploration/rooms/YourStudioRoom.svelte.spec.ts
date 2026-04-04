@@ -93,6 +93,35 @@ describe('YourStudioRoom', () => {
 		expect(sentinel).not.toBeNull();
 	});
 
+	it('reseeds accumulator when artworks prop changes so refreshed data is shown', async () => {
+		const artworks = [createArtwork('s1', 50), createArtwork('s2', 40), createArtwork('s3', 30)];
+
+		const screen = render(YourStudioRoomHarness, {
+			artworks,
+			pageInfo: { hasMore: false, nextCursor: null }
+		});
+
+		await expect.element(page.getByTestId('virtualized-artwork-card-s1')).toBeVisible();
+
+		// Simulate refresh: user published a new artwork, order changed
+		const refreshedArtworks = [
+			createArtwork('s4', 60),
+			createArtwork('s1', 50),
+			createArtwork('s2', 40)
+		];
+
+		await screen.rerender({
+			artworks: refreshedArtworks,
+			pageInfo: { hasMore: false, nextCursor: null }
+		});
+
+		// New artwork s4 should be visible
+		await expect.element(page.getByTestId('virtualized-artwork-card-s4')).toBeVisible();
+
+		// Old artwork s3 should no longer be in the grid
+		expect(document.querySelector('[data-testid="virtualized-artwork-card-s3"]')).toBeNull();
+	});
+
 	it('releases state on unmount', async () => {
 		const artworks = [createArtwork('s1', 50)];
 
