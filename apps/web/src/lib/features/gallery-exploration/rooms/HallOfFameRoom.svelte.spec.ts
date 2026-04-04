@@ -105,6 +105,47 @@ describe('HallOfFameRoom', () => {
 		expect(sentinel).not.toBeNull();
 	});
 
+	it('reseeds accumulator when artworks prop changes so displaced items remain visible', async () => {
+		const artworks = [
+			createArtwork('a1', 100, 1),
+			createArtwork('a2', 90, 2),
+			createArtwork('a3', 80, 3),
+			createArtwork('a4', 70),
+			createArtwork('a5', 60),
+			createArtwork('a6', 50)
+		];
+
+		const screen = render(HallOfFameRoomHarness, {
+			artworks,
+			pageInfo: { hasMore: false, nextCursor: null }
+		});
+
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
+
+		// Simulate refresh: a3 dropped out of top 3, new order is a1, a2, a4, a5, a3, a6
+		const refreshedArtworks = [
+			createArtwork('a1', 100, 1),
+			createArtwork('a2', 90, 2),
+			createArtwork('a4', 75, 3),
+			createArtwork('a5', 60),
+			createArtwork('a3', 55),
+			createArtwork('a6', 50)
+		];
+
+		await screen.rerender({
+			artworks: refreshedArtworks,
+			pageInfo: { hasMore: false, nextCursor: null }
+		});
+
+		// Podium should show the new top 3
+		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
+
+		// a3 should still be visible in the grid (positions 4+), not disappeared
+		const gridCards = document.querySelectorAll('[data-testid^="ranked-polaroid-"]');
+		const gridIds = Array.from(gridCards).map((el) => el.getAttribute('data-testid'));
+		expect(gridIds).toContain('ranked-polaroid-a3');
+	});
+
 	it('releases accumulator state on unmount (no lingering DOM)', async () => {
 		const artworks = [
 			createArtwork('a1', 100, 1),

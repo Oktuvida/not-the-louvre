@@ -42,6 +42,17 @@
 		initialPageInfo
 	});
 
+	const seedIdentity = (items: Artwork[]) => items.map((a) => a.id).join(',');
+	let lastSeedIdentity = seedIdentity(initialArtworks);
+
+	$effect(() => {
+		const identity = seedIdentity(artworks);
+		if (identity !== lastSeedIdentity) {
+			lastSeedIdentity = identity;
+			accumulator.reseed(artworks, pageInfo);
+		}
+	});
+
 	const leadArtwork = $derived(accumulator.allArtworks[0] ?? null);
 	const supportingArtworks = $derived(accumulator.allArtworks.slice(1));
 </script>

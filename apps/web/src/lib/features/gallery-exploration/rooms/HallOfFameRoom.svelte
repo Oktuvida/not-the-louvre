@@ -95,6 +95,17 @@
 		initialArtworks: initialArtworks.slice(3),
 		initialPageInfo
 	});
+
+	const seedIdentity = (items: Artwork[]) => items.map((a) => a.id).join(',');
+	let lastSeedIdentity = seedIdentity(initialArtworks);
+
+	$effect(() => {
+		const identity = seedIdentity(artworks);
+		if (identity !== lastSeedIdentity) {
+			lastSeedIdentity = identity;
+			accumulator.reseed(artworks.slice(3), pageInfo);
+		}
+	});
 </script>
 
 <div class="space-y-12">
