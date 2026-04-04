@@ -23,7 +23,7 @@
 	}))();
 
 	const accumulator = createArtworkAccumulator({
-		columnCount: 3,
+		columnCount: 6,
 		fetchPage: async (cursor: string) => {
 			if (!loadMoreArtworks) {
 				throw new Error('loadMoreArtworks is not configured');
@@ -51,7 +51,7 @@
 		rootMargin="500px"
 		onRetry={() => accumulator.retry()}
 		skeletonCount={3}
-		skeletonGridClassName="grid grid-cols-1 gap-15 py-6 md:grid-cols-2 lg:grid-cols-3"
+		skeletonGridClassName="grid gap-15 py-6"
 		onTrigger={() => accumulator.loadMore()}
 	/>
 </div>

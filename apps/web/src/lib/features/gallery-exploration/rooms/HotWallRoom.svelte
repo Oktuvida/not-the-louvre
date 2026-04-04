@@ -31,7 +31,7 @@
 	}))();
 
 	const accumulator = createArtworkAccumulator({
-		columnCount: 3,
+		columnCount: 6,
 		fetchPage: async (cursor: string) => {
 			if (!loadMoreArtworks) {
 				throw new Error('loadMoreArtworks is not configured');
@@ -108,7 +108,10 @@
 		<!-- Supporting wall: remaining artworks in a grid -->
 		{#if supportingArtworks.length > 0}
 			<div class="w-full">
-				<div class="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
+				<div
+					class="grid gap-12"
+					style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr))"
+				>
 					{#each supportingArtworks as artwork (artwork.id)}
 						<div data-testid={`hot-wall-card-${artwork.id}`}>
 							<PolaroidCard
@@ -131,7 +134,7 @@
 			rootMargin="500px"
 			onRetry={() => accumulator.retry()}
 			skeletonCount={3}
-			skeletonGridClassName="grid grid-cols-1 gap-12 py-6 md:grid-cols-2 lg:grid-cols-3"
+			skeletonGridClassName="grid gap-12 py-6"
 			onTrigger={() => accumulator.loadMore()}
 		/>
 	</div>
