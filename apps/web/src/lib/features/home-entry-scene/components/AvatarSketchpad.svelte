@@ -2,9 +2,8 @@
 	import { onMount } from 'svelte';
 	import {
 		buildDrawingDraftKey,
-		clearDrawingDraft,
-		loadDrawingDraft,
-		saveDrawingDraft
+		createDrawingDraftSession,
+		type IndexedDbDrawingDraftStore
 	} from '$lib/features/stroke-json/drafts';
 	import {
 		AVATAR_DRAWING_DIMENSIONS,
@@ -37,6 +36,7 @@
 
 	const CANVAS_WIDTH = AVATAR_DRAWING_DIMENSIONS.width;
 	const CANVAS_HEIGHT = AVATAR_DRAWING_DIMENSIONS.height;
+	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
 	type AvatarSaveResult =
 		| { success: true }
@@ -69,6 +69,7 @@
 			return prepareDrawingDocumentForPublish(documentState);
 		},
 		draftUserKey = null,
+		draftStore,
 		initialDrawingDocument = null,
 		nickname,
 		onContinue,
@@ -81,6 +82,7 @@
 		clearMode?: 'blank' | 'initial';
 		createAvatarPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		draftUserKey?: string | null;
+		draftStore?: IndexedDbDrawingDraftStore;
 		initialDrawingDocument?: DrawingDocumentV2 | null;
 		nickname: string;
 		onContinue?: () => void;
@@ -97,6 +99,7 @@
 	let activePointerId = $state<number | null>(null);
 	let isDrawing = $state(false);
 	let isSaving = $state(false);
+	let draftStatusMessage = $state('');
 	let saveError = $state('');
 	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
 	let committedCacheCanvas: HTMLCanvasElement | null = null;
@@ -127,6 +130,58 @@
 				})
 			: null
 	);
+
+	const createDraftSession = (
+		resolvedDraftKey: string | null,
+		resolvedLegacyDraftKey: string | null
+	) =>
+		resolvedDraftKey
+			? createDrawingDraftSession({
+					draftKey: resolvedDraftKey,
+					legacyKey: resolvedLegacyDraftKey,
+					store: draftStore
+				})
+			: null;
+
+	const clearUnsavedDraftWarning = () => {
+		draftStatusMessage = '';
+	};
+
+	const markUnsavedDraftWarning = () => {
+		draftStatusMessage = UNSAVED_DRAFT_MESSAGE;
+	};
+
+	const resetDraftSession = async (seedDocument: DrawingDocumentV2) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) {
+			return;
+		}
+
+		try {
+			await draftSession.clear();
+			await draftSession.hydrate({ seedDocument });
+			clearUnsavedDraftWarning();
+		} catch {
+			markUnsavedDraftWarning();
+		}
+	};
+
+	const persistCommittedStroke = async (
+		previousDocument: DrawingDocumentV2,
+		stroke: DrawingStroke
+	) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) {
+			return;
+		}
+
+		try {
+			await draftSession.appendCommittedStroke(previousDocument, stroke);
+			clearUnsavedDraftWarning();
+		} catch {
+			markUnsavedDraftWarning();
+		}
+	};
 
 	const drawGhostSilhouette = (ctx: CanvasRenderingContext2D) => {
 		ctx.save();
@@ -293,7 +348,15 @@
 	const commitActiveStroke = () => {
 		if (!activeStroke) return;
 
-		drawingDocument = appendCommittedStroke(drawingDocument, activeStroke);
+		const previousDocument = cloneDrawingDocumentV2(drawingDocument);
+		const committedStroke = {
+			color: activeStroke.color,
+			points: activeStroke.points.map((point) => [point[0], point[1]] as [number, number]),
+			size: activeStroke.size
+		};
+
+		drawingDocument = appendCommittedStroke(previousDocument, committedStroke);
+		void persistCommittedStroke(previousDocument, committedStroke);
 		activeStroke = null;
 		committedCacheDirty = true;
 		renderCurrentDocument();
@@ -350,6 +413,12 @@
 
 		if (responsiveDrawing) {
 			commitActiveStroke();
+		} else if (isDrawing) {
+			const previousDocument = cloneDrawingDocumentV2(drawingDocument);
+			const committedStroke = previousDocument.tail.pop();
+			if (committedStroke) {
+				void persistCommittedStroke(previousDocument, committedStroke);
+			}
 		}
 
 		stopDrawing();
@@ -396,9 +465,8 @@
 				return;
 			}
 
-			if (draftKey) {
-				clearDrawingDraft(draftKey);
-			}
+			const draftSession = createDraftSession(draftKey, legacyDraftKey);
+			void draftSession?.clear();
 
 			onContinue?.();
 		} finally {
@@ -412,15 +480,26 @@
 		baselineDocument = initialDrawingDocument
 			? cloneDrawingDocumentV2(initialDrawingDocument)
 			: createEmptyDrawingDocumentV2('avatar');
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
 
-		if (draftKey) {
-			void loadDrawingDraft(draftKey, legacyDraftKey).then((draft) => {
-				if (draftLoadCancelled) return;
+		if (draftSession) {
+			void draftSession
+				.hydrate({ seedDocument: baselineDocument })
+				.then((draft) => {
+					if (draftLoadCancelled) return;
 
-				drawingDocument =
-					draft?.kind === 'avatar' ? draft : cloneDrawingDocumentV2(baselineDocument);
-				committedCacheDirty = true;
-			});
+					drawingDocument =
+						draft?.kind === 'avatar' ? draft : cloneDrawingDocumentV2(baselineDocument);
+					committedCacheDirty = true;
+					clearUnsavedDraftWarning();
+				})
+				.catch(() => {
+					if (draftLoadCancelled) return;
+
+					drawingDocument = cloneDrawingDocumentV2(baselineDocument);
+					committedCacheDirty = true;
+					markUnsavedDraftWarning();
+				});
 		} else {
 			drawingDocument = cloneDrawingDocumentV2(baselineDocument);
 			committedCacheDirty = true;
@@ -445,11 +524,6 @@
 	});
 
 	$effect(() => {
-		if (!draftKey) return;
-		saveDrawingDraft(draftKey, drawingDocument);
-	});
-
-	$effect(() => {
 		renderCurrentDocument();
 	});
 </script>
@@ -464,6 +538,14 @@
 			class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
 		>
 			{saveError}
+		</div>
+	{/if}
+
+	{#if draftStatusMessage}
+		<div
+			class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
+		>
+			{draftStatusMessage}
 		</div>
 	{/if}
 
@@ -560,6 +642,7 @@
 							saveError = '';
 							activeStroke = null;
 							drawingDocument = cloneDrawingDocumentV2(clearDocument);
+							void resetDraftSession(clearDocument);
 							committedCacheDirty = true;
 						}}
 						disabled={isSaving}

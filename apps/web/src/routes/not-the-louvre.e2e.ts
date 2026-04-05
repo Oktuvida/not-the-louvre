@@ -136,12 +136,193 @@ const readDrawingDraftEntries = async (
 	page: import('@playwright/test').Page,
 	surface: 'artwork' | 'avatar'
 ) =>
+	page.evaluate(async (targetSurface) => {
+		const openDatabase = () =>
+			new Promise<IDBDatabase>((resolve, reject) => {
+				const request = indexedDB.open('drawing-drafts');
+				request.onsuccess = () => resolve(request.result);
+				request.onerror = () =>
+					reject(request.error ?? new Error('Failed to open drawing drafts database'));
+			});
+
+		const waitForRequest = <T>(request: IDBRequest<T>) =>
+			new Promise<T>((resolve, reject) => {
+				request.onsuccess = () => resolve(request.result);
+				request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
+			});
+
+		const waitForTransaction = (transaction: IDBTransaction) =>
+			new Promise<void>((resolve, reject) => {
+				transaction.oncomplete = () => resolve();
+				transaction.onabort = () =>
+					reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
+				transaction.onerror = () =>
+					reject(transaction.error ?? new Error('IndexedDB transaction failed'));
+			});
+
+		const database = await openDatabase();
+
+		try {
+			const snapshotTransaction = database.transaction(['snapshots'], 'readonly');
+			const snapshotRecords = (await waitForRequest(
+				snapshotTransaction.objectStore('snapshots').getAll()
+			)) as Array<{ document: Record<string, unknown>; draftKey: string }>;
+			await waitForTransaction(snapshotTransaction);
+
+			const entries: Array<{ key: string; value: string }> = [];
+
+			for (const snapshotRecord of snapshotRecords
+				.filter((record) => record.draftKey.includes(`:${targetSurface}:`))
+				.sort((left, right) => left.draftKey.localeCompare(right.draftKey))) {
+				const journalTransaction = database.transaction(['journal'], 'readonly');
+				const journalIndex = journalTransaction.objectStore('journal').index('by-draft-sequence');
+				const range = IDBKeyRange.bound(
+					[snapshotRecord.draftKey, 0],
+					[snapshotRecord.draftKey, Number.MAX_SAFE_INTEGER]
+				);
+				const journalRecords = (await waitForRequest(journalIndex.getAll(range))) as Array<{
+					stroke: Record<string, unknown>;
+				}>;
+				await waitForTransaction(journalTransaction);
+
+				const hydratedDocument = JSON.parse(JSON.stringify(snapshotRecord.document)) as {
+					tail?: Array<Record<string, unknown>>;
+				};
+				if (Array.isArray(hydratedDocument.tail)) {
+					for (const journalRecord of journalRecords) {
+						hydratedDocument.tail.push(journalRecord.stroke);
+					}
+				}
+
+				entries.push({
+					key: snapshotRecord.draftKey,
+					value: JSON.stringify(hydratedDocument)
+				});
+			}
+
+			return entries;
+		} finally {
+			database.close();
+		}
+	}, surface);
+
+const readLegacyDrawingDraftEntries = async (
+	page: import('@playwright/test').Page,
+	surface: 'artwork' | 'avatar'
+) =>
 	page.evaluate((targetSurface) => {
 		return Object.keys(window.localStorage)
 			.filter((key) => key.startsWith('drawing-draft:') && key.includes(`:${targetSurface}:`))
 			.sort()
 			.map((key) => ({ key, value: window.localStorage.getItem(key) }));
 	}, surface);
+
+const writeIndexedDbDrawingDraftEntry = async (
+	page: import('@playwright/test').Page,
+	input: { key: string; value: string }
+) =>
+	page.evaluate(async ({ key, value }) => {
+		const openDatabase = () =>
+			new Promise<IDBDatabase>((resolve, reject) => {
+				const request = indexedDB.open('drawing-drafts');
+				request.onsuccess = () => resolve(request.result);
+				request.onerror = () =>
+					reject(request.error ?? new Error('Failed to open drawing drafts database'));
+			});
+
+		const waitForRequest = <T>(request: IDBRequest<T>) =>
+			new Promise<T>((resolve, reject) => {
+				request.onsuccess = () => resolve(request.result);
+				request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
+			});
+
+		const waitForTransaction = (transaction: IDBTransaction) =>
+			new Promise<void>((resolve, reject) => {
+				transaction.oncomplete = () => resolve();
+				transaction.onabort = () =>
+					reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
+				transaction.onerror = () =>
+					reject(transaction.error ?? new Error('IndexedDB transaction failed'));
+			});
+
+		const database = await openDatabase();
+
+		try {
+			const parsedDocument = JSON.parse(value) as DrawingDocumentV2;
+			const transaction = database.transaction(['snapshots', 'journal'], 'readwrite');
+			transaction.objectStore('snapshots').put({
+				draftKey: key,
+				document: parsedDocument,
+				updatedAt: Date.now()
+			});
+
+			const journalStore = transaction.objectStore('journal');
+			const journalIndex = journalStore.index('by-draft-sequence');
+			const range = IDBKeyRange.bound([key, 0], [key, Number.MAX_SAFE_INTEGER]);
+			const journalRecords = (await waitForRequest(journalIndex.getAll(range))) as Array<{
+				entryId?: number;
+			}>;
+			for (const journalRecord of journalRecords) {
+				if (typeof journalRecord.entryId === 'number') {
+					journalStore.delete(journalRecord.entryId);
+				}
+			}
+
+			await waitForTransaction(transaction);
+		} finally {
+			database.close();
+		}
+	}, input);
+
+const clearIndexedDbDrawingDraftEntry = async (
+	page: import('@playwright/test').Page,
+	draftKey: string
+) =>
+	page.evaluate(async (key) => {
+		const openDatabase = () =>
+			new Promise<IDBDatabase>((resolve, reject) => {
+				const request = indexedDB.open('drawing-drafts');
+				request.onsuccess = () => resolve(request.result);
+				request.onerror = () =>
+					reject(request.error ?? new Error('Failed to open drawing drafts database'));
+			});
+
+		const waitForRequest = <T>(request: IDBRequest<T>) =>
+			new Promise<T>((resolve, reject) => {
+				request.onsuccess = () => resolve(request.result);
+				request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
+			});
+
+		const waitForTransaction = (transaction: IDBTransaction) =>
+			new Promise<void>((resolve, reject) => {
+				transaction.oncomplete = () => resolve();
+				transaction.onabort = () =>
+					reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
+				transaction.onerror = () =>
+					reject(transaction.error ?? new Error('IndexedDB transaction failed'));
+			});
+
+		const database = await openDatabase();
+
+		try {
+			const transaction = database.transaction(['snapshots', 'journal'], 'readwrite');
+			transaction.objectStore('snapshots').delete(key);
+			const journalStore = transaction.objectStore('journal');
+			const journalIndex = journalStore.index('by-draft-sequence');
+			const range = IDBKeyRange.bound([key, 0], [key, Number.MAX_SAFE_INTEGER]);
+			const journalRecords = (await waitForRequest(journalIndex.getAll(range))) as Array<{
+				entryId?: number;
+			}>;
+			for (const journalRecord of journalRecords) {
+				if (typeof journalRecord.entryId === 'number') {
+					journalStore.delete(journalRecord.entryId);
+				}
+			}
+			await waitForTransaction(transaction);
+		} finally {
+			database.close();
+		}
+	}, draftKey);
 
 const drawSingleDenseStroke = async (
 	page: import('@playwright/test').Page,
@@ -417,13 +598,15 @@ test.describe('Not the Louvre frontend port', () => {
 		const avatarDraftEntries = await readDrawingDraftEntries(page, 'avatar');
 		expect(avatarDraftEntries).toHaveLength(1);
 		expect(avatarDraftEntries[0]?.key).toMatch(/^drawing-draft:v2:avatar:/);
-		expect(avatarDraftEntries.some(({ key }) => key.startsWith('drawing-draft:v1:avatar:'))).toBe(
-			false
-		);
+		expect(
+			(await readLegacyDrawingDraftEntries(page, 'avatar')).some(({ key }) =>
+				key.startsWith('drawing-draft:v1:avatar:')
+			)
+		).toBe(false);
 
 		const avatarDraftRaw = avatarDraftEntries[0]?.value;
 		if (!avatarDraftRaw) {
-			throw new Error('Expected the avatar draft to be persisted in localStorage');
+			throw new Error('Expected the avatar draft to be persisted in IndexedDB');
 		}
 
 		const avatarStoredDraft = expectEditableV2Draft(avatarDraftRaw, {
@@ -433,12 +616,10 @@ test.describe('Not the Louvre frontend port', () => {
 		expect(countDrawingPoints(avatarStoredDraft)).toBeGreaterThan(0);
 
 		const seededAvatarDraftRaw = serializeDrawingDocument(seededAvatarDraft);
-		await page.evaluate(
-			({ key, value }) => {
-				window.localStorage.setItem(key, value);
-			},
-			{ key: avatarDraftEntries[0]!.key, value: seededAvatarDraftRaw }
-		);
+		await writeIndexedDbDrawingDraftEntry(page, {
+			key: avatarDraftEntries[0]!.key,
+			value: seededAvatarDraftRaw
+		});
 		await page.reload();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 
@@ -454,6 +635,8 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
+		expect(await readDrawingDraftEntries(page, 'avatar')).toHaveLength(0);
+		expect(await readLegacyDrawingDraftEntries(page, 'avatar')).toHaveLength(0);
 
 		const avatarRequests = await readCapturedDrawingRequests(page);
 		expect(avatarRequests).toHaveLength(1);
@@ -511,12 +694,10 @@ test.describe('Not the Louvre frontend port', () => {
 			throw new Error('Expected the avatar flow to persist a draft key');
 		}
 
-		await page.evaluate(
-			({ key, value }) => {
-				window.localStorage.setItem(key, value);
-			},
-			{ key: avatarDraftKey, value: seededAvatarDraftRaw }
-		);
+		await writeIndexedDbDrawingDraftEntry(page, {
+			key: avatarDraftKey,
+			value: seededAvatarDraftRaw
+		});
 		await page.reload();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 
@@ -702,13 +883,15 @@ test.describe('Not the Louvre frontend port', () => {
 		const artworkDraftEntries = await readDrawingDraftEntries(page, 'artwork');
 		expect(artworkDraftEntries).toHaveLength(1);
 		expect(artworkDraftEntries[0]?.key).toMatch(/^drawing-draft:v2:artwork:/);
-		expect(artworkDraftEntries.some(({ key }) => key.startsWith('drawing-draft:v1:artwork:'))).toBe(
-			false
-		);
+		expect(
+			(await readLegacyDrawingDraftEntries(page, 'artwork')).some(({ key }) =>
+				key.startsWith('drawing-draft:v1:artwork:')
+			)
+		).toBe(false);
 
 		const artworkDraftRaw = artworkDraftEntries[0]?.value;
 		if (!artworkDraftRaw) {
-			throw new Error('Expected the artwork draft to be persisted in localStorage');
+			throw new Error('Expected the artwork draft to be persisted in IndexedDB');
 		}
 
 		const storedArtworkDraft = expectEditableV2Draft(artworkDraftRaw, {
@@ -718,12 +901,10 @@ test.describe('Not the Louvre frontend port', () => {
 		expect(countDrawingPoints(storedArtworkDraft)).toBeGreaterThan(0);
 
 		const seededArtworkDraftRaw = serializeDrawingDocument(seededArtworkDraft);
-		await page.evaluate(
-			({ key, value }) => {
-				window.localStorage.setItem(key, value);
-			},
-			{ key: artworkDraftEntries[0]!.key, value: seededArtworkDraftRaw }
-		);
+		await writeIndexedDbDrawingDraftEntry(page, {
+			key: artworkDraftEntries[0]!.key,
+			value: seededArtworkDraftRaw
+		});
 		await page.reload();
 		await openDrawSketchbook(page);
 
@@ -740,6 +921,8 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByPlaceholder('Untitled genius').fill('Compacted Studio Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+		expect(await readDrawingDraftEntries(page, 'artwork')).toHaveLength(0);
+		expect(await readLegacyDrawingDraftEntries(page, 'artwork')).toHaveLength(0);
 
 		const artworkRequests = await readCapturedDrawingRequests(page);
 		expect(artworkRequests).toHaveLength(1);
@@ -810,12 +993,10 @@ test.describe('Not the Louvre frontend port', () => {
 			throw new Error('Expected the fork route to persist an artwork draft key');
 		}
 
-		await page.evaluate(
-			({ key, value }) => {
-				window.localStorage.setItem(key, value);
-			},
-			{ key: artworkDraftKey, value: seededArtworkDraftRaw }
-		);
+		await writeIndexedDbDrawingDraftEntry(page, {
+			key: artworkDraftKey,
+			value: seededArtworkDraftRaw
+		});
 		await page.reload();
 		await expect(page).toHaveURL(new RegExp(`/draw\\?fork=${forkArtworkId}`));
 		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
@@ -1129,6 +1310,10 @@ test.describe('Not the Louvre frontend port', () => {
 			throw new Error('Expected the fork draft key to include a user key segment');
 		}
 
+		await clearIndexedDbDrawingDraftEntry(
+			page,
+			`drawing-draft:v2:artwork:${forkDraftUserKey}:${forkArtworkId}`
+		);
 		await page.evaluate(
 			({ forkArtworkId: targetForkArtworkId, rawDraft, userKey }) => {
 				window.localStorage.removeItem(
@@ -1198,7 +1383,7 @@ test.describe('Not the Louvre frontend port', () => {
 			key.endsWith(`:${forkArtworkId}`)
 		)?.value;
 		if (!artworkDraftRaw) {
-			throw new Error('Expected the fork draft to be persisted in localStorage');
+			throw new Error('Expected the fork draft to be persisted in IndexedDB');
 		}
 
 		const parsedArtworkDraft = parseVersionedDrawingDocument(artworkDraftRaw);

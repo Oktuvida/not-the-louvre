@@ -28,6 +28,7 @@
 		initialDrawingDocument = null,
 		interactive = true,
 		onDocumentChange,
+		onStrokeCommitted,
 		onInitialImageSettled,
 		statusMessage = '',
 		statusTone = 'idle'
@@ -38,6 +39,11 @@
 		initialDrawingDocument?: DrawingDocumentV2 | null;
 		interactive?: boolean;
 		onDocumentChange?: (document: DrawingDocumentV2) => void;
+		onStrokeCommitted?: (input: {
+			nextDocument: DrawingDocumentV2;
+			previousDocument: DrawingDocumentV2;
+			stroke: DrawingStroke;
+		}) => void | Promise<void>;
 		onInitialImageSettled?: () => void;
 		statusMessage?: string;
 		statusTone?: 'error' | 'success' | 'idle';
@@ -52,6 +58,24 @@
 	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
 	let committedCacheCanvas: HTMLCanvasElement | null = null;
 	let committedCacheDirty = true;
+
+	const cloneStroke = (stroke: DrawingStroke): DrawingStroke => ({
+		color: stroke.color,
+		points: stroke.points.map((point) => [point[0], point[1]] as [number, number]),
+		size: stroke.size
+	});
+
+	const emitStrokeCommitted = (
+		previousDocument: DrawingDocumentV2,
+		nextDocument: DrawingDocumentV2,
+		stroke: DrawingStroke
+	) => {
+		void onStrokeCommitted?.({
+			nextDocument: cloneDrawingDocumentV2(nextDocument),
+			previousDocument: cloneDrawingDocumentV2(previousDocument),
+			stroke: cloneStroke(stroke)
+		});
+	};
 
 	const commitDrawingDocument = (nextDocument: DrawingDocumentV2) => {
 		drawingDocument = nextDocument;
@@ -147,9 +171,12 @@
 	const commitActiveStroke = () => {
 		if (!activeStroke) return;
 
-		const nextDocument = appendCommittedStroke(drawingDocument, activeStroke);
+		const previousDocument = cloneDrawingDocumentV2(drawingDocument);
+		const committedStroke = cloneStroke(activeStroke);
+		const nextDocument = appendCommittedStroke(previousDocument, committedStroke);
 		activeStroke = null;
 		commitDrawingDocument(nextDocument);
+		emitStrokeCommitted(previousDocument, nextDocument, committedStroke);
 		renderCurrentDocument();
 	};
 
@@ -286,6 +313,12 @@
 
 		if (responsiveDrawing) {
 			commitActiveStroke();
+		} else if (isDrawing) {
+			const previousDocument = cloneDrawingDocumentV2(drawingDocument);
+			const committedStroke = previousDocument.tail.pop();
+			if (committedStroke) {
+				emitStrokeCommitted(previousDocument, drawingDocument, committedStroke);
+			}
 		}
 
 		stopDrawing();

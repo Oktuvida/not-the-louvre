@@ -1,14 +1,68 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
+	DRAWING_DOCUMENT_V2_VERSION,
 	createEmptyDrawingDocument,
 	normalizeDrawingDocumentToEditableV2,
 	serializeDrawingDocument
 } from '$lib/features/stroke-json/document';
-import { buildDrawingDraftKey } from '$lib/features/stroke-json/drafts';
+import {
+	buildDrawingDraftKey,
+	createIndexedDbDrawingDraftStore
+} from '$lib/features/stroke-json/drafts';
 import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
 import AvatarSketchpad from './AvatarSketchpad.svelte';
+
+const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
+
+const DRAWING_DRAFTS_DB_NAME = 'drawing-drafts';
+const DRAWING_DRAFTS_JOURNAL_STORE = 'journal';
+const DRAWING_DRAFTS_SNAPSHOT_STORE = 'snapshots';
+
+const resetDrawingDraftDatabase = async () =>
+	await new Promise<void>((resolve, reject) => {
+		const request = indexedDB.open(DRAWING_DRAFTS_DB_NAME);
+		request.onupgradeneeded = () => {
+			const database = request.result;
+			if (!database.objectStoreNames.contains(DRAWING_DRAFTS_SNAPSHOT_STORE)) {
+				database.createObjectStore(DRAWING_DRAFTS_SNAPSHOT_STORE, { keyPath: 'draftKey' });
+			}
+			if (!database.objectStoreNames.contains(DRAWING_DRAFTS_JOURNAL_STORE)) {
+				const journalStore = database.createObjectStore(DRAWING_DRAFTS_JOURNAL_STORE, {
+					autoIncrement: true,
+					keyPath: 'entryId'
+				});
+				journalStore.createIndex('by-draft-sequence', ['draftKey', 'sequence'], {
+					unique: true
+				});
+			}
+		};
+		request.onsuccess = () => {
+			const database = request.result;
+			const transaction = database.transaction(
+				[DRAWING_DRAFTS_SNAPSHOT_STORE, DRAWING_DRAFTS_JOURNAL_STORE],
+				'readwrite'
+			);
+			transaction.objectStore(DRAWING_DRAFTS_SNAPSHOT_STORE).clear();
+			transaction.objectStore(DRAWING_DRAFTS_JOURNAL_STORE).clear();
+			transaction.oncomplete = () => {
+				database.close();
+				resolve();
+			};
+			transaction.onerror = () =>
+				reject(transaction.error ?? new Error('Failed to reset drawing drafts DB'));
+			transaction.onabort = () =>
+				reject(transaction.error ?? new Error('Drawing drafts DB reset was aborted'));
+		};
+		request.onerror = () => reject(request.error ?? new Error('Failed to open drawing drafts DB'));
+	});
+
+const readPersistedDrawingDraft = async (draftKey: string) =>
+	await createIndexedDbDrawingDraftStore().hydrate(draftKey);
+
+const readPersistedJournalEntries = async (draftKey: string) =>
+	await createIndexedDbDrawingDraftStore().listJournalEntries(draftKey);
 
 const createLargeEditableAvatarDocument = () =>
 	normalizeDrawingDocumentToEditableV2({
@@ -67,6 +121,11 @@ const createPointerEvent = (
 
 describe('AvatarSketchpad', () => {
 	const enterGalleryButton = () => page.getByRole('button', { name: 'Enter the gallery' });
+
+	beforeEach(async () => {
+		window.localStorage.clear();
+		await resetDrawingDraftDatabase();
+	});
 
 	it('shows a fuller palette and brush slider without a redundant nickname field', async () => {
 		render(AvatarSketchpad, {
@@ -195,6 +254,12 @@ describe('AvatarSketchpad', () => {
 			surface: 'avatar',
 			userKey: 'artist_1'
 		});
+		const indexedDraftKey = buildDrawingDraftKey({
+			schemaVersion: DRAWING_DOCUMENT_V2_VERSION,
+			scope: 'profile',
+			surface: 'avatar',
+			userKey: 'artist_1'
+		});
 		window.localStorage.setItem(draftKey, serializeDrawingDocument(draftDocument));
 		const createAvatarPayload = vi.fn(
 			async (document: Parameters<typeof serializeDrawingDocument>[0]) =>
@@ -216,7 +281,10 @@ describe('AvatarSketchpad', () => {
 				serializeDrawingDocument(normalizeDrawingDocumentToEditableV2(draftDocument))
 			);
 		});
-		window.localStorage.clear();
+		expect(window.localStorage.getItem(draftKey)).toBeNull();
+		await vi.waitFor(async () => {
+			expect(await readPersistedDrawingDraft(indexedDraftKey)).toBeNull();
+		});
 	});
 
 	it('publishes the stored avatar drawing document when reopening the editor', async () => {
@@ -265,16 +333,14 @@ describe('AvatarSketchpad', () => {
 			nickname: 'artist_1'
 		});
 
-		await vi.waitFor(() => {
-			expect(window.localStorage.getItem(draftKey)).not.toBeNull();
+		await vi.waitFor(async () => {
+			expect(await readPersistedDrawingDraft(draftKey)).not.toBeNull();
 		});
 
-		const initialDraft = window.localStorage.getItem(draftKey);
+		const initialDraft = await readPersistedDrawingDraft(draftKey);
 		if (!initialDraft) {
 			throw new Error('Expected the initial avatar draft to be persisted');
 		}
-		const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
-		setItemSpy.mockClear();
 
 		const canvas = document.querySelector('canvas');
 		if (!(canvas instanceof HTMLCanvasElement)) {
@@ -301,17 +367,151 @@ describe('AvatarSketchpad', () => {
 		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 82, clientY: 98 }));
 		await Promise.resolve();
 
-		expect(window.localStorage.getItem(draftKey)).toBe(initialDraft);
-		expect(setItemSpy).not.toHaveBeenCalled();
+		expect(await readPersistedDrawingDraft(draftKey)).toEqual(initialDraft);
 
 		canvas.dispatchEvent(createPointerEvent('pointerup', { buttons: 0, clientX: 82, clientY: 98 }));
 
-		await vi.waitFor(() => {
-			const committedDraft = window.localStorage.getItem(draftKey);
+		await vi.waitFor(async () => {
+			const committedDraft = await readPersistedDrawingDraft(draftKey);
 			expect(committedDraft).not.toBeNull();
-			expect(committedDraft).not.toBe(initialDraft);
-			expect(setItemSpy).toHaveBeenCalledTimes(1);
+			expect(committedDraft?.tail.at(-1)?.points).toEqual([
+				[80, 96],
+				[81, 97],
+				[82, 98]
+			]);
 		});
+	});
+
+	it('appends exactly one journal entry when a large responsive avatar stroke is committed', async () => {
+		const initialDrawingDocument = createLargeEditableAvatarDocument();
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: initialDrawingDocument.version,
+			scope: 'profile',
+			surface: 'avatar',
+			userKey: 'artist_1'
+		});
+
+		render(AvatarSketchpad, {
+			draftUserKey: 'artist_1',
+			initialDrawingDocument,
+			nickname: 'artist_1'
+		});
+
+		await vi.waitFor(async () => {
+			expect(await readPersistedDrawingDraft(draftKey)).not.toBeNull();
+		});
+
+		const canvas = document.querySelector('canvas');
+		if (!(canvas instanceof HTMLCanvasElement)) {
+			throw new Error('Expected avatar sketch canvas to render');
+		}
+
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 340,
+			height: 340,
+			left: 0,
+			right: 340,
+			top: 0,
+			width: 340,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 80, clientY: 96 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 81, clientY: 97 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 82, clientY: 98 }));
+		await Promise.resolve();
+
+		expect(await readPersistedJournalEntries(draftKey)).toEqual([]);
+
+		canvas.dispatchEvent(createPointerEvent('pointerup', { buttons: 0, clientX: 82, clientY: 98 }));
+
+		await vi.waitFor(async () => {
+			expect(await readPersistedJournalEntries(draftKey)).toEqual([
+				{
+					color: drawingPalette[4] ?? '#1a1a1a',
+					points: [
+						[80, 96],
+						[81, 97],
+						[82, 98]
+					],
+					size: 10
+				}
+			]);
+		});
+	});
+
+	it('surfaces an unsaved-draft warning when avatar draft persistence fails while keeping the current drawing', async () => {
+		const backingStore = createIndexedDbDrawingDraftStore();
+		const failingStore = {
+			...backingStore,
+			appendCommittedStroke: async () => {
+				throw new Error('IndexedDB write failed');
+			}
+		};
+		const initialDrawingDocument = createLargeEditableAvatarDocument();
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: initialDrawingDocument.version,
+			scope: 'profile',
+			surface: 'avatar',
+			userKey: 'artist_1'
+		});
+		const createAvatarPayload = vi.fn(async (document) => serializeDrawingDocument(document));
+
+		render(AvatarSketchpad, {
+			createAvatarPayload,
+			draftStore: failingStore,
+			draftUserKey: 'artist_1',
+			initialDrawingDocument,
+			nickname: 'artist_1',
+			saveAvatar: async () => ({ message: 'Retry later', success: false as const })
+		});
+
+		await vi.waitFor(async () => {
+			expect(await readPersistedDrawingDraft(draftKey)).not.toBeNull();
+		});
+
+		const canvas = document.querySelector('canvas');
+		if (!(canvas instanceof HTMLCanvasElement)) {
+			throw new Error('Expected avatar sketch canvas to render');
+		}
+
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 340,
+			height: 340,
+			left: 0,
+			right: 340,
+			top: 0,
+			width: 340,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 80, clientY: 96 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 81, clientY: 97 }));
+		canvas.dispatchEvent(createPointerEvent('pointerup', { buttons: 0, clientX: 81, clientY: 97 }));
+
+		await expect.element(page.getByText(UNSAVED_DRAFT_MESSAGE)).toBeVisible();
+		expect((await readPersistedDrawingDraft(draftKey))?.tail).toHaveLength(
+			initialDrawingDocument.tail.length
+		);
+
+		await enterGalleryButton().click();
+
+		await vi.waitFor(() => {
+			expect(createAvatarPayload).toHaveBeenCalled();
+		});
+		expect(createAvatarPayload.mock.calls.at(-1)?.[0].tail).toHaveLength(
+			initialDrawingDocument.tail.length + 1
+		);
 	});
 
 	it('clears to a blank avatar when configured for the authenticated editor flow', async () => {
