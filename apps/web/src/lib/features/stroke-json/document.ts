@@ -153,8 +153,8 @@ export const DEFAULT_DRAWING_DOCUMENT_LIMITS: Required<
 > = {
 	maxCompressedBytes: 128 * 1024,
 	maxDecompressedBytes: 512 * 1024,
-	maxPointsPerStroke: 2000,
-	maxStrokes: 2000,
+	maxPointsPerStroke: 5000,
+	maxStrokes: 5000,
 	maxTotalPoints: 50_000
 };
 
