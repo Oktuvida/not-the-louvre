@@ -151,11 +151,11 @@ export type DrawingDocumentLimits = {
 export const DEFAULT_DRAWING_DOCUMENT_LIMITS: Required<
 	Omit<DrawingDocumentLimits, 'compressedBytes'>
 > = {
-	maxCompressedBytes: 128 * 1024,
-	maxDecompressedBytes: 512 * 1024,
+	maxCompressedBytes: 256 * 1024,
+	maxDecompressedBytes: 1024 * 1024,
 	maxPointsPerStroke: 5000,
 	maxStrokes: 5000,
-	maxTotalPoints: 50_000
+	maxTotalPoints: 100_000
 };
 
 const getDimensionsForKind = (kind: DrawingKind) =>
