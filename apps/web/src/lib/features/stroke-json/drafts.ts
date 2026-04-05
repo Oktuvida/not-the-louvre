@@ -19,10 +19,10 @@ const getStorage = () => {
 export const buildDrawingDraftKey = ({ schemaVersion, scope, surface, userKey }: DraftKeyInput) =>
 	`drawing-draft:v${schemaVersion}:${surface}:${userKey}:${scope}`;
 
-export const loadDrawingDraft = (
+export const loadDrawingDraft = async (
 	key: string,
 	legacyKey?: string | null
-): DrawingDocumentV2 | null => {
+): Promise<DrawingDocumentV2 | null> => {
 	const storage = getStorage();
 	if (!storage) return null;
 
@@ -43,6 +43,11 @@ export const loadDrawingDraft = (
 
 		return document;
 	} catch {
+		try {
+			parseEditableDrawingDocumentV2(raw);
+		} catch {
+			// Keep behavior aligned with previous draft cleanup when the stored payload is invalid.
+		}
 		storage.removeItem(key);
 		if (legacyKey) {
 			storage.removeItem(legacyKey);

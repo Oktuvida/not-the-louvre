@@ -11,11 +11,7 @@ import { ArtworkFlowError } from './errors';
 import { artworkRepository } from './repository';
 import { supabaseArtworkStorage } from './storage';
 import { checkTextModeration } from '$lib/server/moderation/service';
-import {
-	DRAWING_DOCUMENT_V2_VERSION,
-	parseVersionedDrawingDocument
-} from '$lib/features/stroke-json/document';
-import { encodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
+import { prepareDrawingDocumentForStorage } from '$lib/features/stroke-json/runtime.server';
 import type {
 	ArtworkActorContext,
 	ArtworkCommentView,
@@ -425,8 +421,8 @@ export const publishArtwork = async (
 
 	const providedDrawingDocument = input.drawingDocument?.trim() ?? '';
 	if (providedDrawingDocument) {
-		const parsedDocument = parseVersionedDrawingDocument(providedDrawingDocument);
-		if (parsedDocument.kind !== 'artwork') {
+		const preparedDocument = await prepareDrawingDocumentForStorage(providedDrawingDocument);
+		if (preparedDocument.document.kind !== 'artwork') {
 			throw new ArtworkFlowError(
 				400,
 				'Artwork publish requires an artwork drawing document',
@@ -434,9 +430,9 @@ export const publishArtwork = async (
 			);
 		}
 
-		media = await renderDrawingDocumentMedia(parsedDocument);
-		drawingDocument = encodeCompressedDrawingDocument(parsedDocument);
-		drawingVersion = DRAWING_DOCUMENT_V2_VERSION;
+		media = await renderDrawingDocumentMedia(preparedDocument.document);
+		drawingDocument = preparedDocument.compressedDocumentBase64;
+		drawingVersion = preparedDocument.version;
 	} else if (input.media instanceof File) {
 		media = await sanitizeMedia(input.media);
 	} else {

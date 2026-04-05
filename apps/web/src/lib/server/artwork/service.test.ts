@@ -7,10 +7,13 @@ import {
 } from './config';
 import {
 	createEmptyDrawingDocument,
+	countDrawingPoints,
 	parseDrawingDocument,
-	serializeEditableDrawingDocument
+	parseDrawingDocumentV2,
+	serializeCanonicalDrawingDocument
 } from '$lib/features/stroke-json/document';
 import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
+import { gzipSync, strToU8 } from 'fflate';
 import { ArtworkFlowError } from './errors';
 import {
 	createAvifTestFile,
@@ -36,8 +39,16 @@ const moderation = vi.hoisted(() => ({
 	}))
 }));
 
+const runtime = vi.hoisted(() => ({
+	prepareDrawingDocumentForStorage: vi.fn()
+}));
+
 vi.mock('$lib/server/moderation/service', () => ({
 	checkTextModeration: moderation.checkTextModeration
+}));
+
+vi.mock('$lib/features/stroke-json/runtime.server', () => ({
+	prepareDrawingDocumentForStorage: runtime.prepareDrawingDocumentForStorage
 }));
 
 const createUnsupportedImageFile = (size = 128) =>
@@ -218,6 +229,26 @@ describe('artwork service', () => {
 		vi.resetModules();
 		moderation.checkTextModeration.mockReset();
 		moderation.checkTextModeration.mockResolvedValue({ status: 'allowed' });
+		runtime.prepareDrawingDocumentForStorage.mockReset();
+		runtime.prepareDrawingDocumentForStorage.mockImplementation(async (documentJson: string) => {
+			const document = parseDrawingDocumentV2(documentJson);
+			const canonicalDocumentJson = serializeCanonicalDrawingDocument(document);
+			const compressedDocumentBase64 = Buffer.from(
+				gzipSync(strToU8(canonicalDocumentJson))
+			).toString('base64');
+
+			return {
+				canonicalDocumentJson,
+				compressedDocumentBase64,
+				document,
+				height: document.height,
+				kind: document.kind,
+				strokeCount: document.base.length + document.tail.length,
+				totalPoints: countDrawingPoints(document),
+				version: document.version,
+				width: document.width
+			};
+		});
 	});
 
 	it('publishes an artwork with a stable ownership-aware storage key', async () => {
@@ -330,15 +361,63 @@ describe('artwork service', () => {
 		expect(result.storageKey).toBe('artworks/user-1/artwork-1.avif');
 		expect(result.drawingVersion).toBe(2);
 		expect(result.drawingDocument).toBeTruthy();
+		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(drawingDocument);
 		expect(uploads).toHaveLength(1);
 		expect(uploads[0]?.file.type).toBe('image/avif');
 		expect(decodeCompressedDrawingDocument(result.drawingDocument!)).toBe(
-			serializeEditableDrawingDocument(parseDrawingDocument(drawingDocument))
+			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
 		expect(artworks.get('artwork-1')).toMatchObject({
 			drawingVersion: 2,
 			title: 'Vector First'
 		});
+	});
+
+	it('rejects runtime-prepared avatar payloads on artwork publish', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage } = createStorage();
+		runtime.prepareDrawingDocumentForStorage.mockResolvedValueOnce({
+			canonicalDocumentJson: serializeCanonicalDrawingDocument(
+				createEmptyDrawingDocument('avatar')
+			),
+			compressedDocumentBase64: 'AA==',
+			document: parseDrawingDocumentV2(
+				serializeCanonicalDrawingDocument(createEmptyDrawingDocument('avatar'))
+			),
+			height: 340,
+			kind: 'avatar',
+			strokeCount: 0,
+			totalPoints: 0,
+			version: 2,
+			width: 340
+		});
+
+		await expect(
+			publishArtwork(
+				{
+					drawingDocument: JSON.stringify(createEmptyDrawingDocument('avatar')),
+					title: 'Wrong kind'
+				},
+				{
+					ipAddress: '127.0.0.1',
+					user: {
+						id: 'user-1',
+						authUserId: 'user-1',
+						nickname: 'artist_1',
+						role: 'user',
+						avatarUrl: null,
+						name: 'artist_1',
+						email: 'artist_1@not-the-louvre.local',
+						emailVerified: true,
+						image: null,
+						createdAt: new Date(),
+						updatedAt: new Date()
+					}
+				},
+				{ repository, storage }
+			)
+		).rejects.toMatchObject({ code: 'INVALID_MEDIA_FORMAT', status: 400 });
 	});
 
 	it('persists creator-labeled nsfw metadata on publish', async () => {
@@ -530,7 +609,7 @@ describe('artwork service', () => {
 			forkCount: 0
 		});
 		expect(decodeCompressedDrawingDocument(fork.drawingDocument!)).toBe(
-			serializeEditableDrawingDocument(parseDrawingDocument(childDocument))
+			serializeCanonicalDrawingDocument(parseDrawingDocument(childDocument))
 		);
 		expect(artworks.get('artwork-parent')).toMatchObject({
 			forkCount: 1,

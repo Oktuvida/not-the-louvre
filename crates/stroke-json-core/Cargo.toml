@@ -1,0 +1,22 @@
+[package]
+name = "stroke-json-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+clipper2-rust.workspace = true
+flate2 = { version = "1.1.4", default-features = false, features = ["rust_backend"] }
+serde.workspace = true
+serde_json.workspace = true
+simplify-polyline.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+
+[dev-dependencies]
+base64 = "0.22.1"

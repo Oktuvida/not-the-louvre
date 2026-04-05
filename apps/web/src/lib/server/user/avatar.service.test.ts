@@ -5,10 +5,21 @@ import type { ArtworkStorage } from '$lib/server/artwork/types';
 import type { CanonicalUser } from '$lib/server/auth/types';
 import {
 	createEmptyDrawingDocument,
+	countDrawingPoints,
+	parseDrawingDocumentV2,
 	serializeCanonicalDrawingDocument,
 	serializeDrawingDocument
 } from '$lib/features/stroke-json/document';
 import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
+import { gzipSync, strToU8 } from 'fflate';
+
+const runtime = vi.hoisted(() => ({
+	prepareDrawingDocumentForStorage: vi.fn()
+}));
+
+vi.mock('$lib/features/stroke-json/runtime.server', () => ({
+	prepareDrawingDocumentForStorage: runtime.prepareDrawingDocumentForStorage
+}));
 
 const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
 	avatarDocument: null,
@@ -88,6 +99,26 @@ describe('avatar upload', () => {
 	beforeEach(() => {
 		repository = createRepository(makeUserRecord());
 		storage = createStorage();
+		runtime.prepareDrawingDocumentForStorage.mockReset();
+		runtime.prepareDrawingDocumentForStorage.mockImplementation(async (documentJson: string) => {
+			const document = parseDrawingDocumentV2(documentJson);
+			const canonicalDocumentJson = serializeCanonicalDrawingDocument(document);
+			const compressedDocumentBase64 = Buffer.from(
+				gzipSync(strToU8(canonicalDocumentJson))
+			).toString('base64');
+
+			return {
+				canonicalDocumentJson,
+				compressedDocumentBase64,
+				document,
+				height: document.height,
+				kind: document.kind,
+				strokeCount: document.base.length + document.tail.length,
+				totalPoints: countDrawingPoints(document),
+				version: document.version,
+				width: document.width
+			};
+		});
 	});
 
 	it('rejects unauthenticated requests', async () => {
@@ -128,12 +159,39 @@ describe('avatar upload', () => {
 		const result = await service.uploadAvatar(user, avatarDocument);
 
 		expect(storage.upload).toHaveBeenCalledWith('avatars/user-1.avif', expect.any(File));
+		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(avatarDocument);
 		expect(result.avatarDocument).toBeTruthy();
 		expect(result.avatarDocumentVersion).toBe(2);
 		expect(decodeCompressedDrawingDocument(result.avatarDocument!)).toBe(
 			serializeCanonicalDrawingDocument(createEmptyDrawingDocument('avatar'))
 		);
 		expect(result.avatarUrl).toBe('avatars/user-1.avif');
+	});
+
+	it('rejects artwork payloads before touching avatar storage', async () => {
+		const service = createAvatarService({ repository, storage });
+		const user = makeCanonicalUser();
+		runtime.prepareDrawingDocumentForStorage.mockResolvedValueOnce({
+			canonicalDocumentJson: serializeCanonicalDrawingDocument(
+				createEmptyDrawingDocument('artwork')
+			),
+			compressedDocumentBase64: 'AA==',
+			document: parseDrawingDocumentV2(
+				serializeCanonicalDrawingDocument(createEmptyDrawingDocument('artwork'))
+			),
+			height: 768,
+			kind: 'artwork',
+			strokeCount: 0,
+			totalPoints: 0,
+			version: 2,
+			width: 768
+		});
+
+		await expect(service.uploadAvatar(user, avatarDocument)).rejects.toMatchObject({
+			code: 'INVALID_MEDIA_FORMAT',
+			status: 400
+		});
+		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
 	it('overwrites the previous avatar key in place without a separate deletion', async () => {

@@ -1,11 +1,5 @@
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import {
-	compactDrawingDocumentLosslessly,
-	resolveSafeRasterGuardPreset,
-	type LosslessCompactionOptions,
-	type SafeRasterGuardPresetId
-} from './compaction';
-import {
 	DEFAULT_DRAWING_DOCUMENT_LIMITS,
 	assertDrawingDocumentWithinLimits,
 	normalizeDrawingDocumentToEditableV2,
@@ -17,11 +11,6 @@ import {
 type DecompressOptions = {
 	maxCompressedBytes?: number;
 	maxOutputBytes?: number;
-};
-
-export type CompressDrawingDocumentOptions = {
-	compaction?: LosslessCompactionOptions;
-	rasterGuardPresetId?: SafeRasterGuardPresetId;
 };
 
 const encodeBase64 = (payload: Uint8Array) => {
@@ -54,26 +43,10 @@ const decodeBase64 = (payload: string) => {
 
 export const compressDrawingDocument = (
 	document: DrawingDocument,
-	limits: DrawingDocumentLimits = DEFAULT_DRAWING_DOCUMENT_LIMITS,
-	options: CompressDrawingDocumentOptions = {}
+	limits: DrawingDocumentLimits = DEFAULT_DRAWING_DOCUMENT_LIMITS
 ) => {
 	const parsedDocument = assertDrawingDocumentWithinLimits(document, limits);
-	const editableDocument = normalizeDrawingDocumentToEditableV2(parsedDocument);
-	const compactionOptions = options.compaction
-		? {
-				maxStrokeCoveragePixels: options.compaction.maxStrokeCoveragePixels ?? null
-			}
-		: options.rasterGuardPresetId
-			? {
-					maxStrokeCoveragePixels: resolveSafeRasterGuardPreset(options.rasterGuardPresetId, {
-						height: editableDocument.height,
-						width: editableDocument.width
-					}).maxStrokeCoveragePixels
-				}
-			: null;
-	const documentToPersist = compactionOptions
-		? compactDrawingDocumentLosslessly(editableDocument, compactionOptions)
-		: editableDocument;
+	const documentToPersist = normalizeDrawingDocumentToEditableV2(parsedDocument);
 	const compressed = gzipSync(strToU8(serializeEditableDrawingDocument(documentToPersist)));
 
 	assertDrawingDocumentWithinLimits(documentToPersist, {
@@ -86,9 +59,8 @@ export const compressDrawingDocument = (
 
 export const encodeCompressedDrawingDocument = (
 	document: DrawingDocument,
-	limits: DrawingDocumentLimits = DEFAULT_DRAWING_DOCUMENT_LIMITS,
-	options: CompressDrawingDocumentOptions = {}
-) => encodeBase64(compressDrawingDocument(document, limits, options));
+	limits: DrawingDocumentLimits = DEFAULT_DRAWING_DOCUMENT_LIMITS
+) => encodeBase64(compressDrawingDocument(document, limits));
 
 export const decompressDrawingDocument = (payload: Uint8Array, options: DecompressOptions = {}) => {
 	const maxCompressedBytes =

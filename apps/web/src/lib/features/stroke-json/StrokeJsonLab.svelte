@@ -3,18 +3,13 @@
 	import { gzipSync } from 'fflate';
 	import { renderDrawingDocumentToCanvas } from './canvas';
 	import {
-		compactDrawingDocumentLosslesslyWithReport,
 		DEFAULT_SAFE_RASTER_GUARD_PRESET_ID,
 		resolveSafeRasterGuardPreset,
 		SAFE_RASTER_GUARD_PRESETS,
 		type SafeRasterGuardPresetId
 	} from './compaction';
 	import {
-		PROD_LIKE_PHASE1_HIGH_QUALITY,
-		PROD_LIKE_PHASE1_SIMPLIFY_TOLERANCE,
-		PROD_LIKE_PHASE2_ENGINE_ID,
 		PROD_LIKE_PIPELINE_ITERATION_COUNT,
-		runProdLikePipeline,
 		type ProdLikePipelineIterationResult
 	} from './prod-like-pipeline';
 	import {
@@ -24,6 +19,7 @@
 		createEmptyDrawingDocumentV2,
 		getDrawingPointWithinBounds,
 		getRenderableDrawingStrokes,
+		parseEditableDrawingDocumentV2,
 		parseDrawingDocumentV2,
 		serializeCanonicalDrawingDocument,
 		type DrawingDocumentV2,
@@ -35,7 +31,11 @@
 		runJsonCloneExperiment,
 		type CanvasExportMeasurement
 	} from './experiments';
-	import { decodeCompressedDrawingDocument } from './storage';
+	import {
+		compactDrawingDocumentLosslesslyWithReport,
+		decodeCompressedDrawingDocument,
+		runProdLikePipeline
+	} from './runtime.browser';
 
 	const palette = ['#2d2420', '#d4956c', '#8b9d91', '#c84f4f', '#6b8e7f', '#f4c430', '#fdfbf7'];
 	const brushSizes = [2, 4, 6, 10, 14, 18];
@@ -314,8 +314,8 @@
 		compressedDrawingLoadError = null;
 
 		try {
-			const decodedDocument = parseDrawingDocumentV2(
-				decodeCompressedDrawingDocument(compressedDrawingPayload)
+			const decodedDocument = parseEditableDrawingDocumentV2(
+				await decodeCompressedDrawingDocument(compressedDrawingPayload)
 			);
 
 			drawingKind = decodedDocument.kind;
@@ -459,7 +459,7 @@
 
 		try {
 			const baselineCanvas = buildRenderedCanvas(drawingDocument);
-			const result = compactDrawingDocumentLosslesslyWithReport(drawingDocument, {
+			const result = await compactDrawingDocumentLosslesslyWithReport(drawingDocument, {
 				maxStrokeCoveragePixels: selectedRasterGuardPreset.maxStrokeCoveragePixels
 			});
 			const finalCanvas = buildRenderedCanvas(result.document);
@@ -827,11 +827,9 @@
 			<div class="metrics-card">
 				<p class="label">Prod-like pipeline</p>
 				<p class="comparison-note">
-					Runs {PROD_LIKE_PIPELINE_ITERATION_COUNT} chained passes of `simplify-js` at tolerance
-					{PROD_LIKE_PHASE1_SIMPLIFY_TOLERANCE} with high quality
-					{PROD_LIKE_PHASE1_HIGH_QUALITY ? ' on' : ' off'}, then `{PROD_LIKE_PHASE2_ENGINE_ID}`.
-					Each pass is compared back to the original baseline drawing. Phase 2 shares the current
-					raster guard preset.
+					Runs the Rust/WASM prod-like pipeline for {PROD_LIKE_PIPELINE_ITERATION_COUNT} chained passes.
+					Each pass is compared back to the original baseline drawing, and the raster guard settings match
+					the exact oracle controls above.
 				</p>
 				{#if prodLikePipelineError}
 					<p class="load-error" role="alert">{prodLikePipelineError}</p>
