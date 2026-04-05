@@ -8,6 +8,7 @@
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
 	import { buildDrawingDraftKey, clearDrawingDraft } from '$lib/features/stroke-json/drafts';
 	import {
+		DRAWING_DOCUMENT_VERSION,
 		createEmptyDrawingDocumentV2,
 		parseEditableDrawingDocumentV2
 	} from '$lib/features/stroke-json/document';
@@ -60,6 +61,16 @@
 				})
 			: null
 	);
+	const avatarLegacyDraftKey = $derived(
+		user
+			? buildDrawingDraftKey({
+					schemaVersion: DRAWING_DOCUMENT_VERSION,
+					scope: 'profile',
+					surface: 'avatar',
+					userKey: user.id
+				})
+			: null
+	);
 
 	const updateAdultContentPreference = async (enabled: boolean) => {
 		if (!user || isSavingAdultContentPreference) {
@@ -101,6 +112,9 @@
 	const closeAvatarEditor = () => {
 		if (avatarDraftKey) {
 			clearDrawingDraft(avatarDraftKey);
+		}
+		if (avatarLegacyDraftKey) {
+			clearDrawingDraft(avatarLegacyDraftKey);
 		}
 
 		isAvatarEditorOpen = false;

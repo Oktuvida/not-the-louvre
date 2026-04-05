@@ -4,8 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import {
 	DRAWING_DOCUMENT_V2_VERSION,
 	createEmptyDrawingDocument,
-	normalizeDrawingDocumentToEditableV2,
-	parseEditableDrawingDocumentV2
+	normalizeDrawingDocumentToEditableV2
 } from '$lib/features/stroke-json/document';
 
 const { goto } = vi.hoisted(() => ({ goto: vi.fn() }));
@@ -18,8 +17,61 @@ vi.mock('$app/navigation', async (importOriginal) => {
 	};
 });
 
-import { buildDrawingDraftKey } from '$lib/features/stroke-json/drafts';
+import {
+	buildDrawingDraftKey,
+	createIndexedDbDrawingDraftStore
+} from '$lib/features/stroke-json/drafts';
 import StudioDrawingPage from './StudioDrawingPage.svelte';
+
+const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
+
+const DRAWING_DRAFTS_DB_NAME = 'drawing-drafts';
+const DRAWING_DRAFTS_JOURNAL_STORE = 'journal';
+const DRAWING_DRAFTS_SNAPSHOT_STORE = 'snapshots';
+
+const resetDrawingDraftDatabase = async () =>
+	await new Promise<void>((resolve, reject) => {
+		const request = indexedDB.open(DRAWING_DRAFTS_DB_NAME);
+		request.onupgradeneeded = () => {
+			const database = request.result;
+			if (!database.objectStoreNames.contains(DRAWING_DRAFTS_SNAPSHOT_STORE)) {
+				database.createObjectStore(DRAWING_DRAFTS_SNAPSHOT_STORE, { keyPath: 'draftKey' });
+			}
+			if (!database.objectStoreNames.contains(DRAWING_DRAFTS_JOURNAL_STORE)) {
+				const journalStore = database.createObjectStore(DRAWING_DRAFTS_JOURNAL_STORE, {
+					autoIncrement: true,
+					keyPath: 'entryId'
+				});
+				journalStore.createIndex('by-draft-sequence', ['draftKey', 'sequence'], {
+					unique: true
+				});
+			}
+		};
+		request.onsuccess = () => {
+			const database = request.result;
+			const transaction = database.transaction(
+				[DRAWING_DRAFTS_SNAPSHOT_STORE, DRAWING_DRAFTS_JOURNAL_STORE],
+				'readwrite'
+			);
+			transaction.objectStore(DRAWING_DRAFTS_SNAPSHOT_STORE).clear();
+			transaction.objectStore(DRAWING_DRAFTS_JOURNAL_STORE).clear();
+			transaction.oncomplete = () => {
+				database.close();
+				resolve();
+			};
+			transaction.onerror = () =>
+				reject(transaction.error ?? new Error('Failed to reset drawing drafts DB'));
+			transaction.onabort = () =>
+				reject(transaction.error ?? new Error('Drawing drafts DB reset was aborted'));
+		};
+		request.onerror = () => reject(request.error ?? new Error('Failed to open drawing drafts DB'));
+	});
+
+const readPersistedDrawingDraft = async (draftKey: string) =>
+	await createIndexedDbDrawingDraftStore().hydrate(draftKey);
+
+const readPersistedJournalEntries = async (draftKey: string) =>
+	await createIndexedDbDrawingDraftStore().listJournalEntries(draftKey);
 
 const createLargeEditableArtworkDocument = () =>
 	normalizeDrawingDocumentToEditableV2({
@@ -95,13 +147,14 @@ async function openSketchbook() {
 }
 
 describe('StudioDrawingPage', () => {
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.unstubAllGlobals();
 		vi.stubGlobal(
 			'matchMedia',
 			vi.fn((query: string) => createMediaQueryList(query))
 		);
 		window.localStorage.clear();
+		await resetDrawingDraftDatabase();
 	});
 
 	it('starts with a closed sketchbook and hides active studio controls', async () => {
@@ -451,10 +504,12 @@ describe('StudioDrawingPage', () => {
 			userKey: 'journey_artist'
 		});
 
-		await vi.waitFor(() => {
-			const serializedDraft = window.localStorage.getItem(draftKey);
-			expect(serializedDraft).not.toBeNull();
-			const persistedDraft = parseEditableDrawingDocumentV2(serializedDraft ?? '');
+		await vi.waitFor(async () => {
+			const persistedDraft = await readPersistedDrawingDraft(draftKey);
+			expect(persistedDraft).not.toBeNull();
+			if (!persistedDraft) {
+				throw new Error('Expected the responsive artwork draft to be persisted');
+			}
 			expect(persistedDraft.tail).toHaveLength(2);
 			expect(persistedDraft.tail[1]?.points).toEqual([
 				[192, 282],
@@ -486,16 +541,14 @@ describe('StudioDrawingPage', () => {
 			userKey: 'journey_artist'
 		});
 
-		await vi.waitFor(() => {
-			expect(window.localStorage.getItem(draftKey)).not.toBeNull();
+		await vi.waitFor(async () => {
+			expect(await readPersistedDrawingDraft(draftKey)).not.toBeNull();
 		});
 
-		const initialDraft = window.localStorage.getItem(draftKey);
+		const initialDraft = await readPersistedDrawingDraft(draftKey);
 		if (!initialDraft) {
 			throw new Error('Expected the initial large draft to be persisted');
 		}
-		const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
-		setItemSpy.mockClear();
 
 		const canvas = document.querySelector('canvas[aria-disabled]');
 		if (!(canvas instanceof HTMLCanvasElement)) {
@@ -522,26 +575,176 @@ describe('StudioDrawingPage', () => {
 		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 280, clientY: 300 }));
 		await Promise.resolve();
 
-		expect(window.localStorage.getItem(draftKey)).toBe(initialDraft);
-		expect(setItemSpy).not.toHaveBeenCalled();
+		expect(await readPersistedDrawingDraft(draftKey)).toEqual(initialDraft);
 
 		canvas.dispatchEvent(
 			createPointerEvent('pointerup', { buttons: 0, clientX: 280, clientY: 300 })
 		);
 
-		await vi.waitFor(() => {
-			const committedDraft = window.localStorage.getItem(draftKey);
-			expect(committedDraft).not.toBeNull();
-			expect(committedDraft).not.toBe(initialDraft);
-
-			const persistedDraft = parseEditableDrawingDocumentV2(committedDraft ?? '');
+		await vi.waitFor(async () => {
+			const persistedDraft = await readPersistedDrawingDraft(draftKey);
+			expect(persistedDraft).not.toBeNull();
+			if (!persistedDraft) {
+				throw new Error('Expected the committed artwork draft to be persisted');
+			}
 			expect(persistedDraft.tail.at(-1)?.points).toEqual([
 				[192, 282],
 				[230, 333],
 				[269, 384]
 			]);
-			expect(setItemSpy).toHaveBeenCalledTimes(1);
 		});
+	});
+
+	it('appends exactly one journal entry when a large responsive artwork stroke is committed', async () => {
+		const forkParentDocument = createLargeEditableArtworkDocument();
+
+		render(StudioDrawingPage, {
+			forkParent: {
+				drawingDocument: forkParentDocument,
+				id: 'artwork-parent',
+				mediaUrl: forkParentPreviewDataUrl,
+				title: 'Parent Artwork'
+			},
+			openingDurationMs: 1,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: DRAWING_DOCUMENT_V2_VERSION,
+			scope: 'artwork-parent',
+			surface: 'artwork',
+			userKey: 'journey_artist'
+		});
+
+		await vi.waitFor(async () => {
+			expect(await readPersistedDrawingDraft(draftKey)).not.toBeNull();
+		});
+
+		const canvas = document.querySelector('canvas[aria-disabled]');
+		if (!(canvas instanceof HTMLCanvasElement)) {
+			throw new Error('Expected drawing canvas to render');
+		}
+
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 600,
+			height: 600,
+			left: 0,
+			right: 800,
+			top: 0,
+			width: 800,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 200, clientY: 220 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 240, clientY: 260 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 280, clientY: 300 }));
+		await Promise.resolve();
+
+		expect(await readPersistedJournalEntries(draftKey)).toEqual([]);
+
+		canvas.dispatchEvent(
+			createPointerEvent('pointerup', { buttons: 0, clientX: 280, clientY: 300 })
+		);
+
+		await vi.waitFor(async () => {
+			expect(await readPersistedJournalEntries(draftKey)).toEqual([
+				{
+					color: '#FDBCB4',
+					points: [
+						[192, 282],
+						[230, 333],
+						[269, 384]
+					],
+					size: 6
+				}
+			]);
+		});
+	});
+
+	it('surfaces an unsaved-draft warning when draft persistence fails while keeping the in-memory drawing', async () => {
+		const backingStore = createIndexedDbDrawingDraftStore();
+		const failingStore = {
+			...backingStore,
+			appendCommittedStroke: async () => {
+				throw new Error('IndexedDB write failed');
+			}
+		};
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const createArtworkPayload = vi.fn(async (documentState) => JSON.stringify(documentState));
+		const publishDrawing = vi.fn(async () => ({ message: 'Retry later', success: false as const }));
+		const forkParentDocument = createLargeEditableArtworkDocument();
+
+		render(StudioDrawingPage, {
+			checkTextContent,
+			createArtworkPayload,
+			draftStore: failingStore,
+			forkParent: {
+				drawingDocument: forkParentDocument,
+				id: 'artwork-parent',
+				mediaUrl: forkParentPreviewDataUrl,
+				title: 'Parent Artwork'
+			},
+			openingDurationMs: 1,
+			publishDrawing,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: DRAWING_DOCUMENT_V2_VERSION,
+			scope: 'artwork-parent',
+			surface: 'artwork',
+			userKey: 'journey_artist'
+		});
+
+		const canvas = document.querySelector('canvas[aria-disabled]');
+		if (!(canvas instanceof HTMLCanvasElement)) {
+			throw new Error('Expected drawing canvas to render');
+		}
+
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 600,
+			height: 600,
+			left: 0,
+			right: 800,
+			top: 0,
+			width: 800,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 200, clientY: 220 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 240, clientY: 260 }));
+		canvas.dispatchEvent(
+			createPointerEvent('pointerup', { buttons: 0, clientX: 240, clientY: 260 })
+		);
+
+		await expect.element(page.getByText(UNSAVED_DRAFT_MESSAGE)).toBeVisible();
+
+		const persistedDraft = await readPersistedDrawingDraft(draftKey);
+		expect(persistedDraft?.tail).toHaveLength(forkParentDocument.tail.length);
+
+		await page.getByPlaceholder('Untitled genius').fill('Unsaved Piece');
+		await page.getByRole('button', { name: 'Publish' }).click();
+
+		await vi.waitFor(() => {
+			expect(createArtworkPayload).toHaveBeenCalled();
+		});
+		expect(createArtworkPayload.mock.calls.at(-1)?.[0].tail).toHaveLength(
+			forkParentDocument.tail.length + 1
+		);
 	});
 
 	it('restores a fork draft on reload instead of resetting back to the fork base', async () => {
@@ -591,16 +794,40 @@ describe('StudioDrawingPage', () => {
 
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 
-		await vi.waitFor(() => {
-			const serializedDraft = window.localStorage.getItem(draftKey);
-			expect(serializedDraft).not.toBeNull();
-			const persistedDraft = parseEditableDrawingDocumentV2(serializedDraft ?? '');
+		await vi.waitFor(async () => {
+			const persistedDraft = await readPersistedDrawingDraft(draftKey);
+			expect(persistedDraft).not.toBeNull();
+			if (!persistedDraft) {
+				throw new Error('Expected the fork draft to be restored');
+			}
 			expect(persistedDraft.tail).toHaveLength(2);
 			expect(persistedDraft.tail[1]?.points).toEqual([
 				[220, 240],
 				[280, 320]
 			]);
 		});
+	});
+
+	it('stores only lightweight fork resume metadata in localStorage', async () => {
+		render(StudioDrawingPage, {
+			forkParent: {
+				drawingDocument: normalizeDrawingDocumentToEditableV2(
+					createEmptyDrawingDocument('artwork')
+				),
+				id: 'artwork-parent',
+				mediaUrl: forkParentPreviewDataUrl,
+				title: 'Parent Artwork'
+			},
+			openingDurationMs: 1,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+
+		const storedForkContext = window.localStorage.getItem('studio-fork-context:journey_artist');
+		expect(storedForkContext).not.toBeNull();
+		expect(storedForkContext).toContain('artwork-parent');
+		expect(storedForkContext).not.toContain('drawingDocument');
 	});
 
 	it('lets the user cancel a fork and continue as a new artwork', async () => {
@@ -615,6 +842,12 @@ describe('StudioDrawingPage', () => {
 			]
 		};
 		const forkDraftKey = 'drawing-draft:v1:artwork:journey_artist:artwork-parent';
+		const indexedDraftKey = buildDrawingDraftKey({
+			schemaVersion: DRAWING_DOCUMENT_V2_VERSION,
+			scope: 'artwork-parent',
+			surface: 'artwork',
+			userKey: 'journey_artist'
+		});
 		window.localStorage.setItem(forkDraftKey, JSON.stringify(forkDraftDocument));
 
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
@@ -657,6 +890,10 @@ describe('StudioDrawingPage', () => {
 		await expect.element(page.getByText('Forking Parent Artwork')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Cancel fork' })).not.toBeInTheDocument();
 		expect(window.localStorage.getItem(forkDraftKey)).toBeNull();
+		await vi.waitFor(async () => {
+			expect(await readPersistedDrawingDraft(indexedDraftKey)).toBeNull();
+		});
+		expect(window.localStorage.getItem('studio-fork-context:journey_artist')).toBeNull();
 		expect(replaceStudioUrl).toHaveBeenCalledOnce();
 
 		await page.getByPlaceholder('Untitled genius').fill('Fresh Start');

@@ -1,13 +1,62 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
+	DRAWING_DOCUMENT_V2_VERSION,
 	createEmptyDrawingDocument,
 	normalizeDrawingDocumentToEditableV2,
 	serializeDrawingDocument
 } from '$lib/features/stroke-json/document';
-import { buildDrawingDraftKey } from '$lib/features/stroke-json/drafts';
+import {
+	buildDrawingDraftKey,
+	createIndexedDbDrawingDraftStore
+} from '$lib/features/stroke-json/drafts';
 import PersistentNav from './PersistentNav.svelte';
+
+const DRAWING_DRAFTS_DB_NAME = 'drawing-drafts';
+const DRAWING_DRAFTS_JOURNAL_STORE = 'journal';
+const DRAWING_DRAFTS_SNAPSHOT_STORE = 'snapshots';
+
+const resetDrawingDraftDatabase = async () =>
+	await new Promise<void>((resolve, reject) => {
+		const request = indexedDB.open(DRAWING_DRAFTS_DB_NAME);
+		request.onupgradeneeded = () => {
+			const database = request.result;
+			if (!database.objectStoreNames.contains(DRAWING_DRAFTS_SNAPSHOT_STORE)) {
+				database.createObjectStore(DRAWING_DRAFTS_SNAPSHOT_STORE, { keyPath: 'draftKey' });
+			}
+			if (!database.objectStoreNames.contains(DRAWING_DRAFTS_JOURNAL_STORE)) {
+				const journalStore = database.createObjectStore(DRAWING_DRAFTS_JOURNAL_STORE, {
+					autoIncrement: true,
+					keyPath: 'entryId'
+				});
+				journalStore.createIndex('by-draft-sequence', ['draftKey', 'sequence'], {
+					unique: true
+				});
+			}
+		};
+		request.onsuccess = () => {
+			const database = request.result;
+			const transaction = database.transaction(
+				[DRAWING_DRAFTS_SNAPSHOT_STORE, DRAWING_DRAFTS_JOURNAL_STORE],
+				'readwrite'
+			);
+			transaction.objectStore(DRAWING_DRAFTS_SNAPSHOT_STORE).clear();
+			transaction.objectStore(DRAWING_DRAFTS_JOURNAL_STORE).clear();
+			transaction.oncomplete = () => {
+				database.close();
+				resolve();
+			};
+			transaction.onerror = () =>
+				reject(transaction.error ?? new Error('Failed to reset drawing drafts DB'));
+			transaction.onabort = () =>
+				reject(transaction.error ?? new Error('Drawing drafts DB reset was aborted'));
+		};
+		request.onerror = () => reject(request.error ?? new Error('Failed to open drawing drafts DB'));
+	});
+
+const readPersistedDrawingDraft = async (draftKey: string) =>
+	await createIndexedDbDrawingDraftStore().hydrate(draftKey);
 
 const topArtworks = [
 	{
@@ -24,6 +73,11 @@ const topArtworks = [
 ];
 
 describe('PersistentNav', () => {
+	beforeEach(async () => {
+		window.localStorage.clear();
+		await resetDrawingDraftDatabase();
+	});
+
 	it('shows backend-backed signed-in chrome only when a canonical user is present', async () => {
 		render(PersistentNav, {
 			previewCards: topArtworks,
@@ -150,6 +204,12 @@ describe('PersistentNav', () => {
 			surface: 'avatar',
 			userKey: user.id
 		});
+		const indexedDraftKey = buildDrawingDraftKey({
+			schemaVersion: DRAWING_DOCUMENT_V2_VERSION,
+			scope: 'profile',
+			surface: 'avatar',
+			userKey: user.id
+		});
 		window.localStorage.setItem(draftKey, serializeDrawingDocument(draftDocument));
 
 		const fetchSpy = vi.fn(async () => ({
@@ -164,6 +224,9 @@ describe('PersistentNav', () => {
 		await page.getByRole('button', { name: 'Close' }).click();
 
 		expect(window.localStorage.getItem(draftKey)).toBeNull();
+		await vi.waitFor(async () => {
+			expect(await readPersistedDrawingDraft(indexedDraftKey)).toBeNull();
+		});
 
 		await page.getByRole('button', { name: 'Edit avatar for artist_1' }).click();
 		await page.getByRole('button', { name: 'Done' }).click();
@@ -183,7 +246,6 @@ describe('PersistentNav', () => {
 			serializeDrawingDocument(savedDocument)
 		);
 
-		window.localStorage.clear();
 		vi.unstubAllGlobals();
 	});
 
