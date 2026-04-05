@@ -365,6 +365,18 @@ export const artworkReadRepository: ArtworkReadRepository = {
 
 		return row[0] ?? null;
 	},
+	async findRandomArtwork(viewer) {
+		const activeViewer = defaultViewer(viewer);
+		const rows = await db
+			.select(buildBaseSelect(activeViewer))
+			.from(artworks)
+			.innerJoin(users, eq(users.id, artworks.authorId))
+			.where(artworkVisibilityWhere())
+			.orderBy(sql`random()`)
+			.limit(1);
+
+		return rows[0] ? mapRow(rows[0]) : null;
+	},
 	async listModerationQueue(input: ListModerationQueueInput) {
 		const [artworkRows, commentRows] = await Promise.all([
 			db

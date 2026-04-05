@@ -13,6 +13,8 @@ export const AVATAR_DRAWING_DIMENSIONS = {
 } as const;
 
 export const DRAWING_DOCUMENT_VERSION = 1 as const;
+export const DRAWING_DOCUMENT_V2_VERSION = 2 as const;
+export const LATEST_DRAWING_DOCUMENT_VERSION = DRAWING_DOCUMENT_V2_VERSION;
 
 export const drawingColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 
@@ -27,7 +29,7 @@ const drawingStrokeSchema = z.object({
 	size: z.number().int().min(1).max(64)
 });
 
-const createKindSchema = (
+const createV1KindSchema = (
 	kind: 'artwork' | 'avatar',
 	dimensions: { background: string; height: number; width: number }
 ) =>
@@ -40,49 +42,87 @@ const createKindSchema = (
 		width: z.literal(dimensions.width)
 	});
 
-const baseDrawingDocumentSchema = z.discriminatedUnion('kind', [
-	createKindSchema('artwork', ARTWORK_DRAWING_DIMENSIONS),
-	createKindSchema('avatar', AVATAR_DRAWING_DIMENSIONS)
+const createV2KindSchema = (
+	kind: 'artwork' | 'avatar',
+	dimensions: { background: string; height: number; width: number }
+) =>
+	z.object({
+		background: z.literal(dimensions.background),
+		base: z.array(drawingStrokeSchema),
+		height: z.literal(dimensions.height),
+		kind: z.literal(kind),
+		tail: z.array(drawingStrokeSchema),
+		version: z.literal(DRAWING_DOCUMENT_V2_VERSION),
+		width: z.literal(dimensions.width)
+	});
+
+export const DrawingDocumentV1Schema = z.discriminatedUnion('kind', [
+	createV1KindSchema('artwork', ARTWORK_DRAWING_DIMENSIONS),
+	createV1KindSchema('avatar', AVATAR_DRAWING_DIMENSIONS)
 ]);
 
-export const DrawingDocumentSchema = baseDrawingDocumentSchema.superRefine((document, context) => {
-	for (const [strokeIndex, stroke] of document.strokes.entries()) {
-		if (stroke.points.length === 0) {
-			context.addIssue({
-				code: z.ZodIssueCode.custom,
-				message: 'Each stroke must contain at least one point',
-				path: ['strokes', strokeIndex, 'points']
-			});
-		}
+export const DrawingDocumentV2Schema = z.discriminatedUnion('kind', [
+	createV2KindSchema('artwork', ARTWORK_DRAWING_DIMENSIONS),
+	createV2KindSchema('avatar', AVATAR_DRAWING_DIMENSIONS)
+]);
 
-		for (const [pointIndex, [x, y]] of stroke.points.entries()) {
-			if (x > document.width) {
+const baseDrawingDocumentSchema = z.union([DrawingDocumentV1Schema, DrawingDocumentV2Schema]);
+
+export type DrawingDocumentV1 = z.infer<typeof DrawingDocumentV1Schema>;
+export type DrawingDocumentV2 = z.infer<typeof DrawingDocumentV2Schema>;
+export type DrawingDocument = DrawingDocumentV1 | DrawingDocumentV2;
+export type DrawingKind = DrawingDocument['kind'];
+export type DrawingStroke = z.infer<typeof drawingStrokeSchema>;
+export type DrawingPoint = DrawingStroke['points'][number];
+
+type DrawingStrokeCollection = {
+	key: 'base' | 'strokes' | 'tail';
+	strokes: DrawingStroke[];
+};
+
+const getStrokeCollections = (document: DrawingDocument): DrawingStrokeCollection[] =>
+	document.version === DRAWING_DOCUMENT_VERSION
+		? [{ key: 'strokes', strokes: document.strokes }]
+		: [
+				{ key: 'base', strokes: document.base },
+				{ key: 'tail', strokes: document.tail }
+			];
+
+export const DrawingDocumentSchema = baseDrawingDocumentSchema.superRefine((document, context) => {
+	for (const collection of getStrokeCollections(document)) {
+		for (const [strokeIndex, stroke] of collection.strokes.entries()) {
+			if (stroke.points.length === 0) {
 				context.addIssue({
 					code: z.ZodIssueCode.custom,
-					message: `Point x coordinate must be within canvas width ${document.width}`,
-					path: ['strokes', strokeIndex, 'points', pointIndex, 0]
+					message: 'Each stroke must contain at least one point',
+					path: [collection.key, strokeIndex, 'points']
 				});
 			}
 
-			if (y > document.height) {
-				context.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: `Point y coordinate must be within canvas height ${document.height}`,
-					path: ['strokes', strokeIndex, 'points', pointIndex, 1]
-				});
+			for (const [pointIndex, [x, y]] of stroke.points.entries()) {
+				if (x > document.width) {
+					context.addIssue({
+						code: z.ZodIssueCode.custom,
+						message: `Point x coordinate must be within canvas width ${document.width}`,
+						path: [collection.key, strokeIndex, 'points', pointIndex, 0]
+					});
+				}
+
+				if (y > document.height) {
+					context.addIssue({
+						code: z.ZodIssueCode.custom,
+						message: `Point y coordinate must be within canvas height ${document.height}`,
+						path: [collection.key, strokeIndex, 'points', pointIndex, 1]
+					});
+				}
 			}
 		}
 	}
 });
 
-export type DrawingDocumentV1 = z.infer<typeof DrawingDocumentSchema>;
-export type DrawingKind = DrawingDocumentV1['kind'];
-export type DrawingStroke = DrawingDocumentV1['strokes'][number];
-export type DrawingPoint = DrawingStroke['points'][number];
-
 export const clampDrawingPoint = (
 	point: [number, number],
-	dimensions: Pick<DrawingDocumentV1, 'height' | 'width'>
+	dimensions: Pick<DrawingDocument, 'height' | 'width'>
 ): DrawingPoint => [
 	Math.max(0, Math.min(dimensions.width, Math.round(point[0]))),
 	Math.max(0, Math.min(dimensions.height, Math.round(point[1])))
@@ -90,7 +130,7 @@ export const clampDrawingPoint = (
 
 export const getDrawingPointWithinBounds = (
 	point: [number, number],
-	dimensions: Pick<DrawingDocumentV1, 'height' | 'width'>
+	dimensions: Pick<DrawingDocument, 'height' | 'width'>
 ): DrawingPoint | null => {
 	if (point[0] < 0 || point[1] < 0 || point[0] > dimensions.width || point[1] > dimensions.height) {
 		return null;
@@ -111,11 +151,11 @@ export type DrawingDocumentLimits = {
 export const DEFAULT_DRAWING_DOCUMENT_LIMITS: Required<
 	Omit<DrawingDocumentLimits, 'compressedBytes'>
 > = {
-	maxCompressedBytes: 128 * 1024,
-	maxDecompressedBytes: 512 * 1024,
-	maxPointsPerStroke: 2000,
-	maxStrokes: 2000,
-	maxTotalPoints: 50_000
+	maxCompressedBytes: 256 * 1024,
+	maxDecompressedBytes: 1024 * 1024,
+	maxPointsPerStroke: 5000,
+	maxStrokes: 5000,
+	maxTotalPoints: 100_000
 };
 
 const getDimensionsForKind = (kind: DrawingKind) =>
@@ -134,20 +174,51 @@ export const createEmptyDrawingDocument = (kind: DrawingKind): DrawingDocumentV1
 	};
 };
 
+export const createEmptyDrawingDocumentV2 = (kind: DrawingKind): DrawingDocumentV2 => {
+	const dimensions = getDimensionsForKind(kind);
+
+	return {
+		background: dimensions.background,
+		base: [],
+		height: dimensions.height,
+		kind,
+		tail: [],
+		version: DRAWING_DOCUMENT_V2_VERSION,
+		width: dimensions.width
+	};
+};
+
+const cloneDrawingStroke = (stroke: DrawingStroke): DrawingStroke => ({
+	color: stroke.color,
+	points: stroke.points.map((point) => [point[0], point[1]] as DrawingPoint),
+	size: stroke.size
+});
+
 export const cloneDrawingDocument = (document: DrawingDocumentV1): DrawingDocumentV1 => ({
 	background: document.background,
 	height: document.height,
 	kind: document.kind,
-	strokes: document.strokes.map((stroke) => ({
-		color: stroke.color,
-		points: stroke.points.map((point) => [point[0], point[1]] as DrawingPoint),
-		size: stroke.size
-	})),
+	strokes: document.strokes.map(cloneDrawingStroke),
 	version: document.version,
 	width: document.width
 });
 
-export const parseDrawingDocument = (input: string): DrawingDocumentV1 => {
+export const cloneDrawingDocumentV2 = (document: DrawingDocumentV2): DrawingDocumentV2 => ({
+	background: document.background,
+	base: document.base.map(cloneDrawingStroke),
+	height: document.height,
+	kind: document.kind,
+	tail: document.tail.map(cloneDrawingStroke),
+	version: document.version,
+	width: document.width
+});
+
+export const cloneVersionedDrawingDocument = <T extends DrawingDocument>(document: T): T =>
+	(document.version === DRAWING_DOCUMENT_VERSION
+		? cloneDrawingDocument(document)
+		: cloneDrawingDocumentV2(document)) as T;
+
+const parseDrawingJson = (input: string): unknown => {
 	let parsed: unknown;
 
 	try {
@@ -156,20 +227,118 @@ export const parseDrawingDocument = (input: string): DrawingDocumentV1 => {
 		throw new Error('Invalid drawing document JSON');
 	}
 
-	return DrawingDocumentSchema.parse(parsed);
+	return parsed;
 };
 
-export const serializeDrawingDocument = (document: DrawingDocumentV1) =>
-	JSON.stringify(DrawingDocumentSchema.parse(document));
+export const getRenderableDrawingStrokes = (document: DrawingDocument): DrawingStroke[] =>
+	document.version === DRAWING_DOCUMENT_VERSION
+		? document.strokes.map(cloneDrawingStroke)
+		: [...document.base.map(cloneDrawingStroke), ...document.tail.map(cloneDrawingStroke)];
 
-export const countDrawingPoints = (document: DrawingDocumentV1) =>
-	document.strokes.reduce((total, stroke) => total + stroke.points.length, 0);
+export const normalizeDrawingDocumentToV2 = (document: DrawingDocument): DrawingDocumentV2 =>
+	document.version === DRAWING_DOCUMENT_V2_VERSION
+		? cloneDrawingDocumentV2(document)
+		: {
+				background: document.background,
+				base: document.strokes.map(cloneDrawingStroke),
+				height: document.height,
+				kind: document.kind,
+				tail: [],
+				version: DRAWING_DOCUMENT_V2_VERSION,
+				width: document.width
+			};
 
-export const assertDrawingDocumentWithinLimits = (
-	document: DrawingDocumentV1,
+export const normalizeDrawingDocumentToEditableV2 = (
+	document: DrawingDocument
+): DrawingDocumentV2 =>
+	document.version === DRAWING_DOCUMENT_V2_VERSION
+		? cloneDrawingDocumentV2(document)
+		: {
+				background: document.background,
+				base: [],
+				height: document.height,
+				kind: document.kind,
+				tail: document.strokes.map(cloneDrawingStroke),
+				version: DRAWING_DOCUMENT_V2_VERSION,
+				width: document.width
+			};
+
+export const flattenDrawingDocumentToV1 = (document: DrawingDocument): DrawingDocumentV1 => ({
+	background: document.background,
+	height: document.height,
+	kind: document.kind,
+	strokes: getRenderableDrawingStrokes(document),
+	version: DRAWING_DOCUMENT_VERSION,
+	width: document.width
+});
+
+export const parseVersionedDrawingDocument = (input: string): DrawingDocument =>
+	DrawingDocumentSchema.parse(parseDrawingJson(input));
+
+export const parseDrawingDocument = (input: string): DrawingDocumentV1 =>
+	flattenDrawingDocumentToV1(parseVersionedDrawingDocument(input));
+
+export const parseDrawingDocumentV2 = (input: string): DrawingDocumentV2 =>
+	normalizeDrawingDocumentToV2(parseVersionedDrawingDocument(input));
+
+export const parseEditableDrawingDocumentV2 = (input: string): DrawingDocumentV2 =>
+	normalizeDrawingDocumentToEditableV2(parseVersionedDrawingDocument(input));
+
+const toSerializableStroke = (stroke: DrawingStroke) => ({
+	color: stroke.color,
+	size: stroke.size,
+	points: stroke.points.map((point) => [point[0], point[1]])
+});
+
+const toSerializableDocumentV1 = (document: DrawingDocumentV1) => ({
+	version: DRAWING_DOCUMENT_VERSION,
+	kind: document.kind,
+	width: document.width,
+	height: document.height,
+	background: document.background,
+	strokes: document.strokes.map(toSerializableStroke)
+});
+
+const toSerializableDocumentV2 = (document: DrawingDocumentV2) => ({
+	version: DRAWING_DOCUMENT_V2_VERSION,
+	kind: document.kind,
+	width: document.width,
+	height: document.height,
+	background: document.background,
+	base: document.base.map(toSerializableStroke),
+	tail: document.tail.map(toSerializableStroke)
+});
+
+export const serializeDrawingDocument = (document: DrawingDocument) => {
+	const parsedDocument = DrawingDocumentSchema.parse(document);
+
+	return JSON.stringify(
+		parsedDocument.version === DRAWING_DOCUMENT_VERSION
+			? toSerializableDocumentV1(parsedDocument)
+			: toSerializableDocumentV2(parsedDocument)
+	);
+};
+
+export const serializeCanonicalDrawingDocument = (document: DrawingDocument) =>
+	JSON.stringify(
+		toSerializableDocumentV2(normalizeDrawingDocumentToV2(DrawingDocumentSchema.parse(document)))
+	);
+
+export const serializeEditableDrawingDocument = (document: DrawingDocument) =>
+	JSON.stringify(
+		toSerializableDocumentV2(
+			normalizeDrawingDocumentToEditableV2(DrawingDocumentSchema.parse(document))
+		)
+	);
+
+export const countDrawingPoints = (document: DrawingDocument) =>
+	getRenderableDrawingStrokes(document).reduce((total, stroke) => total + stroke.points.length, 0);
+
+export const assertDrawingDocumentWithinLimits = <T extends DrawingDocument>(
+	document: T,
 	limits: DrawingDocumentLimits = DEFAULT_DRAWING_DOCUMENT_LIMITS
 ) => {
-	const parsedDocument = DrawingDocumentSchema.parse(document);
+	const parsedDocument = DrawingDocumentSchema.parse(document) as T;
 	const mergedLimits = { ...DEFAULT_DRAWING_DOCUMENT_LIMITS, ...limits };
 	const rawBytes = new TextEncoder().encode(serializeDrawingDocument(parsedDocument)).byteLength;
 
@@ -188,7 +357,7 @@ export const assertDrawingDocumentWithinLimits = (
 		);
 	}
 
-	if (parsedDocument.strokes.length > mergedLimits.maxStrokes) {
+	if (getRenderableDrawingStrokes(parsedDocument).length > mergedLimits.maxStrokes) {
 		throw new Error(`Drawing document exceeds max strokes of ${mergedLimits.maxStrokes}`);
 	}
 
@@ -197,7 +366,7 @@ export const assertDrawingDocumentWithinLimits = (
 		throw new Error(`Drawing document exceeds max total points of ${mergedLimits.maxTotalPoints}`);
 	}
 
-	for (const stroke of parsedDocument.strokes) {
+	for (const stroke of getRenderableDrawingStrokes(parsedDocument)) {
 		if (stroke.points.length > mergedLimits.maxPointsPerStroke) {
 			throw new Error(
 				`Drawing document exceeds max points per stroke of ${mergedLimits.maxPointsPerStroke}`

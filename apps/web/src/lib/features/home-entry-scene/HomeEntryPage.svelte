@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Paintbrush } from 'lucide-svelte';
 	import { browser } from '$app/environment';
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
 	import { gsap } from '$lib/client/gsap';
@@ -31,7 +31,7 @@
 		adultContentEnabled?: boolean;
 		entryState?: EntryFlowState;
 		onAvatarSaved?: (payload: {
-			avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV1 | null;
+			avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
 			avatarOnboardingCompletedAt: Date;
 			avatarUrl: string;
 		}) => void;
@@ -60,9 +60,7 @@
 
 	/** Clean the ?from= param from the URL without triggering navigation. */
 	if (browser && isReturning) {
-		const cleanUrl = new URL($page.url!);
-		cleanUrl.searchParams.delete('from');
-		window.history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search);
+		replaceState(resolve('/'), window.history.state);
 	}
 
 	$effect(() => {
@@ -186,7 +184,7 @@
 	/>
 	{#if entryState === 'inside' && user && !isExiting}
 		<div
-			class="pointer-events-auto absolute bottom-28 left-1/2 z-[25] flex -translate-x-1/2 flex-col items-center gap-4 transition-all duration-500"
+			class="pointer-events-auto absolute bottom-52 left-1/2 z-[25] flex -translate-x-1/2 flex-col items-center gap-4 transition-all duration-500 md:bottom-28"
 			class:translate-y-[120%]={isExiting}
 			class:opacity-0={isExiting}
 		>

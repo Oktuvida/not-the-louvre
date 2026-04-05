@@ -2,18 +2,29 @@
 	import { onMount } from 'svelte';
 	import {
 		buildDrawingDraftKey,
-		clearDrawingDraft,
-		loadDrawingDraft,
-		saveDrawingDraft
+		createDrawingDraftSession,
+		type IndexedDbDrawingDraftStore
 	} from '$lib/features/stroke-json/drafts';
 	import {
-		cloneDrawingDocument,
+		AVATAR_DRAWING_DIMENSIONS,
+		DRAWING_DOCUMENT_VERSION,
+		cloneDrawingDocumentV2,
 		createEmptyDrawingDocument,
+		createEmptyDrawingDocumentV2,
 		getDrawingPointWithinBounds,
-		serializeDrawingDocument,
-		type DrawingDocumentV1
+		getRenderableDrawingStrokes,
+		type DrawingDocumentV2,
+		type DrawingPoint,
+		type DrawingStroke
 	} from '$lib/features/stroke-json/document';
+	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/runtime.browser';
 	import { renderDrawingStroke } from '$lib/features/stroke-json/canvas';
+	import {
+		appendBufferedStrokePoint,
+		appendCommittedStroke,
+		createBufferedStroke,
+		shouldUseResponsiveDrawing
+	} from '$lib/features/stroke-json/responsive-editing';
 	import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 
@@ -21,10 +32,11 @@
 	const BRUSH_SIZES = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
 	const BRUSH_PREVIEW_SIZE = Math.max(...BRUSH_SIZES) + 6;
 	const DEFAULT_AVATAR_COLOR = drawingPalette[4] ?? drawingPalette[0] ?? '#1a1a1a';
+	const AVATAR_CANVAS_BACKGROUND = '#ffffff';
 
-	const CANVAS_WIDTH = 520;
-	const CANVAS_HEIGHT = 320;
-	const EXPORT_SIZE = 256;
+	const CANVAS_WIDTH = AVATAR_DRAWING_DIMENSIONS.width;
+	const CANVAS_HEIGHT = AVATAR_DRAWING_DIMENSIONS.height;
+	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
 	type AvatarSaveResult =
 		| { success: true }
@@ -36,7 +48,7 @@
 
 	let {
 		clearMode = 'initial',
-		createAvatarPayload = async (documentState: DrawingDocumentV1) => {
+		createAvatarPayload = async (documentState: DrawingDocumentV2) => {
 			const mode =
 				typeof window === 'undefined'
 					? 'good'
@@ -51,12 +63,13 @@
 			}
 
 			if (mode === 'bad') {
-				return serializeDrawingDocument(createEmptyDrawingDocument('artwork'));
+				return JSON.stringify(createEmptyDrawingDocument('artwork'));
 			}
 
-			return serializeDrawingDocument(documentState);
+			return prepareDrawingDocumentForPublish(documentState);
 		},
 		draftUserKey = null,
+		draftStore,
 		initialDrawingDocument = null,
 		nickname,
 		onContinue,
@@ -67,9 +80,10 @@
 		submitLabel = 'Enter the gallery'
 	}: {
 		clearMode?: 'blank' | 'initial';
-		createAvatarPayload?: (documentState: DrawingDocumentV1) => Promise<string | null>;
+		createAvatarPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		draftUserKey?: string | null;
-		initialDrawingDocument?: DrawingDocumentV1 | null;
+		draftStore?: IndexedDbDrawingDraftStore;
+		initialDrawingDocument?: DrawingDocumentV2 | null;
 		nickname: string;
 		onContinue?: () => void;
 		saveAvatar?: (drawingDocument: string) => Promise<AvatarSaveResult>;
@@ -78,17 +92,23 @@
 
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
 	let activeColor = $state(DEFAULT_AVATAR_COLOR);
-	let baselineDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
+	let baselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
 	let brushStep = $state(Math.floor((BRUSH_SIZES.length - 1) / 2));
-	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
+	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
+	let activeStroke = $state<DrawingStroke | null>(null);
+	let activePointerId = $state<number | null>(null);
 	let isDrawing = $state(false);
 	let isSaving = $state(false);
+	let draftStatusMessage = $state('');
 	let saveError = $state('');
+	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
+	let committedCacheCanvas: HTMLCanvasElement | null = null;
+	let committedCacheDirty = true;
 
 	const brushSize = $derived(BRUSH_SIZES[brushStep] ?? BRUSH_SIZES[BRUSH_SIZES.length - 1]);
 	const brushPreviewDiameter = $derived(Math.max(4, brushSize + 2));
 	const clearDocument = $derived(
-		clearMode === 'blank' ? createEmptyDrawingDocument('avatar') : baselineDocument
+		clearMode === 'blank' ? createEmptyDrawingDocumentV2('avatar') : baselineDocument
 	);
 	const draftKey = $derived(
 		draftUserKey
@@ -100,6 +120,68 @@
 				})
 			: null
 	);
+	const legacyDraftKey = $derived(
+		draftUserKey
+			? buildDrawingDraftKey({
+					schemaVersion: DRAWING_DOCUMENT_VERSION,
+					scope: 'profile',
+					surface: 'avatar',
+					userKey: draftUserKey
+				})
+			: null
+	);
+
+	const createDraftSession = (
+		resolvedDraftKey: string | null,
+		resolvedLegacyDraftKey: string | null
+	) =>
+		resolvedDraftKey
+			? createDrawingDraftSession({
+					draftKey: resolvedDraftKey,
+					legacyKey: resolvedLegacyDraftKey,
+					store: draftStore
+				})
+			: null;
+
+	const clearUnsavedDraftWarning = () => {
+		draftStatusMessage = '';
+	};
+
+	const markUnsavedDraftWarning = () => {
+		draftStatusMessage = UNSAVED_DRAFT_MESSAGE;
+	};
+
+	const resetDraftSession = async (seedDocument: DrawingDocumentV2) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) {
+			return;
+		}
+
+		try {
+			await draftSession.clear();
+			await draftSession.hydrate({ seedDocument });
+			clearUnsavedDraftWarning();
+		} catch {
+			markUnsavedDraftWarning();
+		}
+	};
+
+	const persistCommittedStroke = async (
+		previousDocument: DrawingDocumentV2,
+		stroke: DrawingStroke
+	) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) {
+			return;
+		}
+
+		try {
+			await draftSession.appendCommittedStroke(previousDocument, stroke);
+			clearUnsavedDraftWarning();
+		} catch {
+			markUnsavedDraftWarning();
+		}
+	};
 
 	const drawGhostSilhouette = (ctx: CanvasRenderingContext2D) => {
 		ctx.save();
@@ -155,96 +237,154 @@
 		ctx.restore();
 	};
 
+	const renderCommittedDocument = (
+		context: CanvasRenderingContext2D,
+		documentState: DrawingDocumentV2
+	) => {
+		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
+		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+		drawGhostSilhouette(context);
+
+		for (const stroke of getRenderableDrawingStrokes(documentState)) {
+			renderDrawingStroke(context, stroke);
+		}
+	};
+
+	const renderCommittedCache = () => {
+		committedCacheCanvas ??= window.document.createElement('canvas');
+		if (
+			committedCacheCanvas.width !== CANVAS_WIDTH ||
+			committedCacheCanvas.height !== CANVAS_HEIGHT
+		) {
+			committedCacheCanvas.width = CANVAS_WIDTH;
+			committedCacheCanvas.height = CANVAS_HEIGHT;
+		}
+
+		const context = committedCacheCanvas.getContext('2d');
+		if (!context) return;
+
+		renderCommittedDocument(context, drawingDocument);
+		committedCacheDirty = false;
+	};
+
 	const renderCurrentDocument = () => {
 		if (!canvasElement) return;
 		const context = canvasElement.getContext('2d');
 		if (!context) return;
 
-		context.fillStyle = drawingDocument.background;
-		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-		drawGhostSilhouette(context);
+		if (!responsiveDrawing) {
+			renderCommittedDocument(context, drawingDocument);
+			return;
+		}
 
-		for (const stroke of drawingDocument.strokes) {
-			renderDrawingStroke(context, stroke);
+		if (committedCacheDirty || !committedCacheCanvas) {
+			renderCommittedCache();
+		}
+
+		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
+		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+		if (committedCacheCanvas) {
+			context.drawImage(committedCacheCanvas, 0, 0);
+		}
+		if (activeStroke) {
+			renderDrawingStroke(context, activeStroke);
 		}
 	};
 
-	const getPoint = (event: MouseEvent | TouchEvent) => {
+	const getPoint = (event: PointerEvent): DrawingPoint | null => {
 		if (!canvasElement) return null;
 
 		const rect = canvasElement.getBoundingClientRect();
 		const scaleX = canvasElement.width / rect.width;
 		const scaleY = canvasElement.height / rect.height;
 
-		let clientX: number;
-		let clientY: number;
-
-		if ('touches' in event) {
-			const touch = event.touches[0] ?? event.changedTouches[0];
-			if (!touch) return null;
-			clientX = touch.clientX;
-			clientY = touch.clientY;
-		} else {
-			clientX = event.clientX;
-			clientY = event.clientY;
-		}
-
-		const point = getDrawingPointWithinBounds(
-			[(clientX - rect.left) * scaleX, (clientY - rect.top) * scaleY],
+		return getDrawingPointWithinBounds(
+			[(event.clientX - rect.left) * scaleX, (event.clientY - rect.top) * scaleY],
 			drawingDocument
 		);
-
-		if (!point) return null;
-
-		return {
-			x: point[0],
-			y: point[1]
-		};
 	};
 
-	const startStroke = (point: { x: number; y: number }) => {
-		drawingDocument.strokes.push({
-			color: activeColor,
-			points: [[point.x, point.y]],
-			size: brushSize
-		});
-		renderCurrentDocument();
-	};
-
-	const appendPoint = (point: { x: number; y: number }) => {
-		const stroke = drawingDocument.strokes.at(-1);
-		if (!stroke) return;
-
-		const lastPoint = stroke.points.at(-1);
-		if (lastPoint && Math.hypot(point.x - lastPoint[0], point.y - lastPoint[1]) < 1.5) {
+	const startStroke = (point: DrawingPoint) => {
+		if (responsiveDrawing) {
+			activeStroke = createBufferedStroke({
+				color: activeColor,
+				point,
+				size: brushSize
+			});
+			renderCurrentDocument();
 			return;
 		}
 
-		stroke.points.push([point.x, point.y]);
+		drawingDocument.tail.push({
+			color: activeColor,
+			points: [point],
+			size: brushSize
+		});
+		committedCacheDirty = true;
 		renderCurrentDocument();
 	};
 
-	const startDrawing = (event: MouseEvent | TouchEvent) => {
+	const appendPoint = (point: DrawingPoint) => {
+		if (responsiveDrawing) {
+			if (!activeStroke) return;
+			if (!appendBufferedStrokePoint(activeStroke, point)) return;
+			renderCurrentDocument();
+			return;
+		}
+
+		const stroke = drawingDocument.tail.at(-1);
+		if (!stroke) return;
+
+		const lastPoint = stroke.points.at(-1);
+		if (lastPoint && point[0] === lastPoint[0] && point[1] === lastPoint[1]) {
+			return;
+		}
+
+		stroke.points.push(point);
+		committedCacheDirty = true;
+		renderCurrentDocument();
+	};
+
+	const commitActiveStroke = () => {
+		if (!activeStroke) return;
+
+		const previousDocument = cloneDrawingDocumentV2(drawingDocument);
+		const committedStroke = {
+			color: activeStroke.color,
+			points: activeStroke.points.map((point) => [point[0], point[1]] as [number, number]),
+			size: activeStroke.size
+		};
+
+		drawingDocument = appendCommittedStroke(previousDocument, committedStroke);
+		void persistCommittedStroke(previousDocument, committedStroke);
+		activeStroke = null;
+		committedCacheDirty = true;
+		renderCurrentDocument();
+	};
+
+	const startDrawing = (event: PointerEvent) => {
+		if (!canvasElement) return;
+		if (!event.isPrimary) return;
+
+		event.preventDefault();
+
 		const point = getPoint(event);
 		if (!point) return;
 
+		canvasElement.setPointerCapture(event.pointerId);
+		activePointerId = event.pointerId;
 		startStroke(point);
 		isDrawing = true;
 	};
 
-	const continueDrawingFromEntry = (event: MouseEvent) => {
-		if (!isDrawing || (event.buttons & 1) === 0) return;
-
-		const point = getPoint(event);
-		if (!point) return;
-
-		startStroke(point);
-	};
-
-	const draw = (event: MouseEvent | TouchEvent) => {
+	const draw = (event: PointerEvent) => {
 		if (!isDrawing || !canvasElement) return;
+		if (!event.isPrimary) return;
+		if (activePointerId !== event.pointerId) return;
 
-		if (event instanceof MouseEvent && (event.buttons & 1) === 0) {
+		event.preventDefault();
+
+		if ((event.buttons & 1) === 0) {
 			stopDrawing();
 			return;
 		}
@@ -256,7 +396,41 @@
 	};
 
 	const stopDrawing = () => {
+		activeStroke = null;
 		isDrawing = false;
+		activePointerId = null;
+	};
+
+	const finishDrawing = (event?: PointerEvent) => {
+		if (
+			canvasElement &&
+			event &&
+			activePointerId === event.pointerId &&
+			canvasElement.hasPointerCapture(event.pointerId)
+		) {
+			canvasElement.releasePointerCapture(event.pointerId);
+		}
+
+		if (responsiveDrawing) {
+			commitActiveStroke();
+		} else if (isDrawing) {
+			const previousDocument = cloneDrawingDocumentV2(drawingDocument);
+			const committedStroke = previousDocument.tail.pop();
+			if (committedStroke) {
+				void persistCommittedStroke(previousDocument, committedStroke);
+			}
+		}
+
+		stopDrawing();
+	};
+
+	const cancelDrawing = (event: PointerEvent) => {
+		event.preventDefault();
+		finishDrawing(event);
+	};
+
+	const preventCanvasDrag = (event: DragEvent) => {
+		event.preventDefault();
 	};
 
 	const handleEnterGallery = async () => {
@@ -291,9 +465,8 @@
 				return;
 			}
 
-			if (draftKey) {
-				clearDrawingDraft(draftKey);
-			}
+			const draftSession = createDraftSession(draftKey, legacyDraftKey);
+			void draftSession?.clear();
 
 			onContinue?.();
 		} finally {
@@ -301,55 +474,53 @@
 		}
 	};
 
-	const handleTouchStart = (event: TouchEvent) => {
-		event.preventDefault();
-		startDrawing(event);
-	};
-
-	const handleTouchMove = (event: TouchEvent) => {
-		event.preventDefault();
-		draw(event);
-	};
-
-	const handleTouchEnd = (event: TouchEvent) => {
-		event.preventDefault();
-		stopDrawing();
-	};
-
 	onMount(() => {
-		baselineDocument = initialDrawingDocument
-			? cloneDrawingDocument(initialDrawingDocument)
-			: createEmptyDrawingDocument('avatar');
+		let draftLoadCancelled = false;
 
-		if (draftKey) {
-			const draft = loadDrawingDraft(draftKey);
-			drawingDocument = draft?.kind === 'avatar' ? draft : cloneDrawingDocument(baselineDocument);
+		baselineDocument = initialDrawingDocument
+			? cloneDrawingDocumentV2(initialDrawingDocument)
+			: createEmptyDrawingDocumentV2('avatar');
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+
+		if (draftSession) {
+			void draftSession
+				.hydrate({ seedDocument: baselineDocument })
+				.then((draft) => {
+					if (draftLoadCancelled) return;
+
+					drawingDocument =
+						draft?.kind === 'avatar' ? draft : cloneDrawingDocumentV2(baselineDocument);
+					committedCacheDirty = true;
+					clearUnsavedDraftWarning();
+				})
+				.catch(() => {
+					if (draftLoadCancelled) return;
+
+					drawingDocument = cloneDrawingDocumentV2(baselineDocument);
+					committedCacheDirty = true;
+					markUnsavedDraftWarning();
+				});
 		} else {
-			drawingDocument = cloneDrawingDocument(baselineDocument);
+			drawingDocument = cloneDrawingDocumentV2(baselineDocument);
+			committedCacheDirty = true;
 		}
 
-		const handleWindowMouseUp = () => {
-			stopDrawing();
+		const handleWindowPointerRelease = () => {
+			finishDrawing();
 		};
 
-		const handleWindowTouchEnd = () => {
-			stopDrawing();
-		};
-
-		window.addEventListener('mouseup', handleWindowMouseUp);
-		window.addEventListener('touchend', handleWindowTouchEnd);
+		window.addEventListener('pointerup', handleWindowPointerRelease);
+		window.addEventListener('pointercancel', handleWindowPointerRelease);
+		window.addEventListener('blur', handleWindowPointerRelease);
 
 		renderCurrentDocument();
 
 		return () => {
-			window.removeEventListener('mouseup', handleWindowMouseUp);
-			window.removeEventListener('touchend', handleWindowTouchEnd);
+			draftLoadCancelled = true;
+			window.removeEventListener('pointerup', handleWindowPointerRelease);
+			window.removeEventListener('pointercancel', handleWindowPointerRelease);
+			window.removeEventListener('blur', handleWindowPointerRelease);
 		};
-	});
-
-	$effect(() => {
-		if (!draftKey) return;
-		saveDrawingDraft(draftKey, drawingDocument);
 	});
 
 	$effect(() => {
@@ -370,30 +541,38 @@
 		</div>
 	{/if}
 
+	{#if draftStatusMessage}
+		<div
+			class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
+		>
+			{draftStatusMessage}
+		</div>
+	{/if}
+
 	<div class="mx-auto grid max-w-[41rem] gap-4 md:grid-cols-[10.5rem_minmax(0,1fr)] md:items-start">
 		<div class="order-2 md:order-1">
 			<div class="grid gap-3 md:h-[27rem] md:grid-cols-[3.5rem_minmax(0,1fr)]">
 				<div
-					class="flex flex-col items-center justify-between rounded-[1rem] border border-[rgb(107_74_46_/_0.15)] bg-[rgb(255_255_255_/_0.32)] px-2 py-3"
+					class="flex items-center gap-3 rounded-[1rem] border border-[rgb(107_74_46_/_0.15)] bg-[rgb(255_255_255_/_0.32)] px-3 py-3 md:flex-col md:justify-between md:px-2"
 				>
 					<p
-						class="font-display text-[0.62rem] font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase md:rotate-180 md:[writing-mode:vertical-rl]"
+						class="font-display shrink-0 text-[0.62rem] font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase md:rotate-180 md:[writing-mode:vertical-rl]"
 					>
 						Brush
 					</p>
-					<div class="flex flex-1 items-center justify-center py-2">
+					<div class="flex min-w-0 flex-1 items-center justify-center py-1 md:py-2">
 						<input
 							bind:value={brushStep}
 							type="range"
 							min="0"
 							max={(BRUSH_SIZES.length - 1).toString()}
 							step="1"
-							class="brush-slider h-8 w-24 -rotate-90 cursor-pointer appearance-none md:w-60"
+							class="brush-slider h-8 w-full min-w-0 cursor-pointer appearance-none md:w-60 md:-rotate-90"
 							aria-label="Brush size"
 						/>
 					</div>
 					<div
-						class="flex items-center justify-center"
+						class="flex shrink-0 items-center justify-center"
 						data-testid="brush-preview-shell"
 						style={`width:${BRUSH_PREVIEW_SIZE}px;height:${BRUSH_PREVIEW_SIZE}px;`}
 					>
@@ -405,11 +584,11 @@
 					</div>
 				</div>
 
-				<div class="grid h-full grid-cols-2 content-start gap-2">
+				<div class="grid h-full grid-cols-4 content-start gap-2 sm:grid-cols-6 md:grid-cols-2">
 					{#each palette as color (color)}
 						<button
 							type="button"
-							class={`h-10 w-10 rounded-xl border-2 ${activeColor === color ? 'border-[var(--color-ink)] shadow-[0_0_0_3px_rgb(47_36_28_/_0.18)]' : 'border-[var(--color-accent)]'}`}
+							class={`h-11 w-11 justify-self-center rounded-xl border-2 md:h-10 md:w-10 ${activeColor === color ? 'border-[var(--color-ink)] shadow-[0_0_0_3px_rgb(47_36_28_/_0.18)]' : 'border-[var(--color-accent)]'}`}
 							style={`background:${color};`}
 							aria-pressed={activeColor === color}
 							onclick={() => {
@@ -424,10 +603,11 @@
 
 		<div class="order-1 space-y-3 md:order-2">
 			<div
-				class="mx-auto aspect-square w-full max-w-[27rem] rounded-[1.25rem] border-2 border-[var(--color-ink)] bg-[var(--color-paper)] p-2.5 shadow-[6px_6px_0_rgb(47_36_28_/_0.14)]"
+				class="mx-auto aspect-square w-full max-w-[27rem] rounded-[1.25rem] border-2 border-[var(--color-ink)] bg-[var(--color-paper)] p-2 shadow-[6px_6px_0_rgb(47_36_28_/_0.14)] sm:p-2.5"
+				data-testid="avatar-sketchpad-frame"
 			>
 				<div
-					class="relative h-full w-full overflow-hidden rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)]"
+					class="relative h-full w-full overflow-hidden rounded-[1rem] border-2 border-[var(--color-accent)] bg-white"
 				>
 					<div
 						class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgb(255_255_255_/_0.55),transparent_48%)]"
@@ -440,19 +620,19 @@
 						width={CANVAS_WIDTH}
 						height={CANVAS_HEIGHT}
 						class="relative z-[1] h-full w-full cursor-crosshair touch-none"
-						onmousedown={startDrawing}
-						onmouseenter={continueDrawingFromEntry}
-						onmousemove={draw}
-						onmouseup={stopDrawing}
-						ontouchstart={handleTouchStart}
-						ontouchmove={handleTouchMove}
-						ontouchend={handleTouchEnd}
+						data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
+						draggable="false"
+						ondragstart={preventCanvasDrag}
+						onpointerdown={startDrawing}
+						onpointermove={draw}
+						onpointerup={finishDrawing}
+						onpointercancel={cancelDrawing}
 					></canvas>
 				</div>
 			</div>
 
-			<div class="flex-center gap-3 pt-4 pl-4 sm:flex-row">
-				<div class="flex gap-3 sm:ml-auto">
+			<div class="pt-2 md:pt-4 md:pl-4">
+				<div class="flex flex-col gap-3 sm:flex-row">
 					<GameButton
 						type="button"
 						variant="ghost"
@@ -460,7 +640,10 @@
 						className="w-full sm:w-auto"
 						onclick={() => {
 							saveError = '';
-							drawingDocument = cloneDrawingDocument(clearDocument);
+							activeStroke = null;
+							drawingDocument = cloneDrawingDocumentV2(clearDocument);
+							void resetDraftSession(clearDocument);
+							committedCacheDirty = true;
 						}}
 						disabled={isSaving}
 					>
