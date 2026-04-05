@@ -1,4 +1,7 @@
-use stroke_json_core::{StrokeJsonDocumentLimits, StrokeJsonError, validate_document};
+use stroke_json_core::{
+    StrokeJsonDocumentLimits, StrokeJsonError, prepare_storage_document_with_limits,
+    validate_document,
+};
 
 fn artwork_document_with_strokes(stroke_count: usize, points_per_stroke: usize) -> Vec<u8> {
     let stroke = format!(
@@ -53,4 +56,26 @@ fn validate_document_accepts_5000_points_per_stroke_and_rejects_5001() {
         StrokeJsonError::DocumentLimitsExceeded { .. }
     ));
     assert!(error.to_string().contains("max points per stroke of 5000"));
+}
+
+#[test]
+fn validate_document_defers_byte_limits_to_storage_payload_checks() {
+    let document = artwork_document_with_strokes(100, 10);
+
+    validate_document(&document).expect("shape and point limits should remain valid");
+
+    let error = prepare_storage_document_with_limits(
+        &document,
+        StrokeJsonDocumentLimits {
+            max_decompressed_bytes: 1_024,
+            ..StrokeJsonDocumentLimits::default()
+        },
+    )
+    .expect_err("final storage payload byte limit should fail");
+
+    assert!(matches!(
+        error,
+        StrokeJsonError::DocumentLimitsExceeded { .. }
+    ));
+    assert!(error.to_string().contains("max decompressed bytes of 1024"));
 }
