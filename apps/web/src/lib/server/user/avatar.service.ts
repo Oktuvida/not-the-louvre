@@ -1,9 +1,5 @@
 import { AVATAR_STORAGE_KEY_PREFIX } from './config';
-import {
-	DRAWING_DOCUMENT_V2_VERSION,
-	parseVersionedDrawingDocument
-} from '$lib/features/stroke-json/document';
-import { encodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
+import { prepareDrawingDocumentForStorage } from '$lib/features/stroke-json/runtime.server';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import {
 	assertActiveUser,
@@ -31,8 +27,8 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 		async uploadAvatar(user: CanonicalUser | null, drawingDocument: string): Promise<UserRecord> {
 			const activeUser = assertActiveUser(user);
 
-			const parsedDocument = parseVersionedDrawingDocument(drawingDocument);
-			if (parsedDocument.kind !== 'avatar') {
+			const preparedDocument = await prepareDrawingDocumentForStorage(drawingDocument);
+			if (preparedDocument.document.kind !== 'avatar') {
 				throw new ArtworkFlowError(
 					400,
 					'Avatar save requires an avatar drawing document',
@@ -40,8 +36,8 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 				);
 			}
 
-			const sanitizedMedia = await createAvatarDrawingDocumentMedia(parsedDocument);
-			const encodedDocument = encodeCompressedDrawingDocument(parsedDocument);
+			const sanitizedMedia = await createAvatarDrawingDocumentMedia(preparedDocument.document);
+			const encodedDocument = preparedDocument.compressedDocumentBase64;
 
 			const storageKey = getAvatarStorageKey(activeUser.id);
 			await storage.upload(storageKey, sanitizedMedia.file);
@@ -50,7 +46,7 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 			const updatedUser = repository.updateUserAvatar
 				? await repository.updateUserAvatar(activeUser.id, {
 						avatarDocument: encodedDocument,
-						avatarDocumentVersion: DRAWING_DOCUMENT_V2_VERSION,
+						avatarDocumentVersion: preparedDocument.version,
 						avatarOnboardingCompletedAt: completedAt,
 						avatarUrl: storageKey,
 						updatedAt: completedAt

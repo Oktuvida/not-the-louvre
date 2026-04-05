@@ -1,33 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { encodeCompressedDrawingDocument } from '../../../lib/features/stroke-json/storage';
 
-const compressedArtworkPayload = encodeCompressedDrawingDocument({
-	background: '#fdfbf7',
-	height: 768,
-	kind: 'artwork',
-	strokes: [
-		{
-			color: '#2d2420',
-			points: [
-				[48, 48],
-				[120, 120],
-				[220, 180]
-			],
-			size: 6
-		},
-		{
-			color: '#c84f4f',
-			points: [
-				[280, 160],
-				[360, 220],
-				[420, 260]
-			],
-			size: 10
-		}
-	],
-	version: 1,
-	width: 768
-});
+const compressedArtworkPayload =
+	'H4sIALTX0WkAA02N0QqDMAxF/yV7zUPNipb+ivShWqtFsaPtJkz898Uxhg+Bm3DuyQ6vIeUQV9CEMIfVgQabyhbTDAhbcGUC3dQKYRrCOJXf0tl+HlN8fvmbd77zDfOdzQPo1iAUGxZOO/RxiemEyJEkwVAOb4ZqhEcMa8lMtVKhVAbbigTycKIzKWHMgRdHr6SX/u+oxFVCiiv1Wb7XAlnAiT8i8c0c5vgAmIUvjewAAAA=';
 
 test('draws on the stroke-json demo and runs bitmap, json clone, and raster oracle experiments', async ({
 	page
@@ -75,13 +49,12 @@ test('draws on the stroke-json demo and runs bitmap, json clone, and raster orac
 	await expect(page.getByText(/Bitmap diff pixels:/)).toBeVisible();
 	await expect(page.getByText(/JSON diff pixels:/)).toBeVisible();
 	await expect(page.getByText(/Exact raster oracle/)).toBeVisible();
-	await expect(page.getByText(/Runs 20 chained passes of/)).toBeVisible();
+	await expect(page.getByText(/Runs the Rust\/WASM prod-like pipeline/)).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Run lossless compaction' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Run phase 1 comparison' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Run phase 2 benchmark' })).toHaveCount(0);
 	await expect(page.getByText(/Phase 1 benchmark/)).toHaveCount(0);
 	await expect(page.getByText(/Phase 2 benchmark/)).toHaveCount(0);
-	await expect(page.getByLabel('simplify-js high quality')).toHaveCount(0);
 	await expect(page.getByTestId('bitmap-clone-bytes')).not.toHaveText('Pending');
 	await expect(page.getByTestId('json-clone-bytes')).not.toHaveText('Pending');
 	await expect(page.getByTestId('raster-oracle-selected-preset')).toHaveText(/Conservative/i);
@@ -99,6 +72,12 @@ test('draws on the stroke-json demo and runs bitmap, json clone, and raster orac
 	await expect(page.getByTestId('prod-like-total-duration-ms')).not.toHaveText('Pending');
 	await expect(page.getByTestId('prod-like-final-duration-ms')).not.toHaveText('Pending');
 	await expect(page.getByTestId('prod-like-iteration-row')).toHaveCount(20);
+	expect(
+		Number(await page.getByTestId('prod-like-total-duration-ms').textContent())
+	).toBeGreaterThan(0);
+	expect(
+		Number(await page.getByTestId('prod-like-final-duration-ms').textContent())
+	).toBeGreaterThan(0);
 	expect(
 		Number(await page.getByTestId('prod-like-final-diff-pixels').textContent())
 	).toBeGreaterThanOrEqual(0);

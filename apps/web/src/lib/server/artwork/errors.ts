@@ -4,8 +4,11 @@ export class ArtworkFlowError extends Error {
 		message: string,
 		readonly code:
 			| 'BANNED_USER'
+			| 'DRAWING_DOCUMENT_TOO_LARGE'
+			| 'DRAWING_RUNTIME_FAILED'
 			| 'FORBIDDEN'
 			| 'DUPLICATE_REPORT'
+			| 'INVALID_DRAWING_DOCUMENT'
 			| 'INVALID_COMMENT'
 			| 'INVALID_FORK_PARENT'
 			| 'INVALID_CURSOR'

@@ -6,6 +6,9 @@ import {
 	ensureBuildManifestExcludesRoutePrefix,
 	ensureBuildOutput,
 	ensureServerDependencyBundled,
+	ensureServerWasmAsset,
+	ensureServerWasmReferenced,
+	syncGeneratedServerWasmAsset,
 	syncProductionRoutes
 } from '../src/lib/server/deploy/build';
 
@@ -16,6 +19,10 @@ const targetRoutesDirectory = resolve(generatedSourceDirectory, 'routes');
 const generatedLibDirectory = resolve(generatedSourceDirectory, 'lib');
 const sourceLibDirectory = resolve(projectRoot, 'src/lib');
 const buildDirectory = resolve(projectRoot, DEFAULT_BUILD_DIR);
+const generatedServerWasmPath = resolve(
+	projectRoot,
+	'../../packages/stroke-json-runtime/generated/wasm/server/stroke_json_wasm_bg.wasm'
+);
 
 try {
 	await rm(generatedSourceDirectory, { force: true, recursive: true });
@@ -42,7 +49,11 @@ try {
 
 	await ensureBuildOutput(buildDirectory);
 	await ensureServerDependencyBundled(buildDirectory, 'gsap');
+	await ensureServerDependencyBundled(buildDirectory, '@not-the-louvre/stroke-json-runtime/server');
 	await ensureBuildManifestExcludesRoutePrefix(buildDirectory, '/demo');
+	await syncGeneratedServerWasmAsset(buildDirectory, generatedServerWasmPath);
+	await ensureServerWasmAsset(buildDirectory);
+	await ensureServerWasmReferenced(buildDirectory);
 
 	process.stdout.write(`Validated adapter-node build output at ${buildDirectory}\n`);
 } finally {

@@ -1,0 +1,13 @@
+{
+	"name": "@not-the-louvre/stroke-json-runtime",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"files": ["generated/wasm/**/*", "src/**/*"],
+	"exports": {
+		".": "./src/index.ts",
+		"./browser": "./src/browser.ts",
+		"./server": "./src/server.ts",
+		"./worker": "./src/worker.ts"
+	}
+}
