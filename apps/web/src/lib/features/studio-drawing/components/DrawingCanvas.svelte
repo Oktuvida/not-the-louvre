@@ -4,10 +4,21 @@
 		cloneDrawingDocumentV2,
 		createEmptyDrawingDocumentV2,
 		getDrawingPointWithinBounds,
+		serializeEditableDrawingDocument,
 		type DrawingDocumentV2,
-		type DrawingPoint
+		type DrawingPoint,
+		type DrawingStroke
 	} from '$lib/features/stroke-json/document';
-	import { renderDrawingDocumentToCanvas } from '$lib/features/stroke-json/canvas';
+	import {
+		renderDrawingDocumentToCanvas,
+		renderDrawingStroke
+	} from '$lib/features/stroke-json/canvas';
+	import {
+		appendBufferedStrokePoint,
+		appendCommittedStroke,
+		createBufferedStroke,
+		shouldUseResponsiveDrawing
+	} from '$lib/features/stroke-json/responsive-editing';
 	import { drawingTools } from '$lib/features/studio-drawing/state/drawing.svelte';
 
 	let {
@@ -16,6 +27,7 @@
 		clearVersion = 0,
 		initialDrawingDocument = null,
 		interactive = true,
+		onDocumentChange,
 		onInitialImageSettled,
 		statusMessage = '',
 		statusTone = 'idle'
@@ -25,22 +37,71 @@
 		clearVersion?: number;
 		initialDrawingDocument?: DrawingDocumentV2 | null;
 		interactive?: boolean;
+		onDocumentChange?: (document: DrawingDocumentV2) => void;
 		onInitialImageSettled?: () => void;
 		statusMessage?: string;
 		statusTone?: 'error' | 'success' | 'idle';
 	} = $props();
 
 	let baselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
+	let activeStroke = $state<DrawingStroke | null>(null);
 	let activePointerId = $state<number | null>(null);
 	let isDrawing = $state(false);
 	let lastAppliedClearVersion = $state<number | null>(null);
+	let lastHydratedInitialDocumentSeed = $state<string | null | undefined>(undefined);
+	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
+	let committedCacheCanvas: HTMLCanvasElement | null = null;
+	let committedCacheDirty = true;
+
+	const commitDrawingDocument = (nextDocument: DrawingDocumentV2) => {
+		drawingDocument = nextDocument;
+		committedCacheDirty = true;
+		onDocumentChange?.(cloneDrawingDocumentV2(nextDocument));
+	};
+
+	const renderCommittedCache = () => {
+		if (!canvasRef) return;
+
+		committedCacheCanvas ??= window.document.createElement('canvas');
+		if (
+			committedCacheCanvas.width !== canvasRef.width ||
+			committedCacheCanvas.height !== canvasRef.height
+		) {
+			committedCacheCanvas.width = canvasRef.width;
+			committedCacheCanvas.height = canvasRef.height;
+		}
+
+		renderDrawingDocumentToCanvas(committedCacheCanvas, drawingDocument);
+		committedCacheDirty = false;
+	};
 
 	const renderCurrentDocument = () => {
 		if (!canvasRef) return;
-		renderDrawingDocumentToCanvas(canvasRef, drawingDocument);
+
+		if (!responsiveDrawing) {
+			renderDrawingDocumentToCanvas(canvasRef, drawingDocument);
+			return;
+		}
+
+		if (committedCacheDirty || !committedCacheCanvas) {
+			renderCommittedCache();
+		}
+
+		const context = canvasRef.getContext('2d');
+		if (!context) return;
+
+		context.fillStyle = drawingDocument.background;
+		context.fillRect(0, 0, canvasRef.width, canvasRef.height);
+		if (committedCacheCanvas) {
+			context.drawImage(committedCacheCanvas, 0, 0);
+		}
+		if (activeStroke) {
+			renderDrawingStroke(context, activeStroke);
+		}
 	};
 
 	const stopDrawing = () => {
+		activeStroke = null;
 		isDrawing = false;
 		activePointerId = null;
 	};
@@ -63,39 +124,79 @@
 	};
 
 	const appendPoint = (point: DrawingPoint) => {
-		const stroke = drawingDocument.tail.at(-1);
+		const nextDocument = cloneDrawingDocumentV2(drawingDocument);
+		const stroke = nextDocument.tail.at(-1);
 		if (!stroke) return;
 
 		const lastPoint = stroke.points.at(-1);
-		if (lastPoint && Math.hypot(point[0] - lastPoint[0], point[1] - lastPoint[1]) < 2) {
+		if (lastPoint && point[0] === lastPoint[0] && point[1] === lastPoint[1]) {
 			return;
 		}
 
 		stroke.points.push(point);
+		commitDrawingDocument(nextDocument);
+		renderCurrentDocument();
+	};
+
+	const appendPointToActiveStroke = (point: DrawingPoint) => {
+		if (!activeStroke) return;
+		if (!appendBufferedStrokePoint(activeStroke, point)) return;
+		renderCurrentDocument();
+	};
+
+	const commitActiveStroke = () => {
+		if (!activeStroke) return;
+
+		const nextDocument = appendCommittedStroke(drawingDocument, activeStroke);
+		activeStroke = null;
+		commitDrawingDocument(nextDocument);
 		renderCurrentDocument();
 	};
 
 	$effect(() => {
+		const nextSeed = initialDrawingDocument
+			? serializeEditableDrawingDocument(initialDrawingDocument)
+			: null;
+
+		if (nextSeed === lastHydratedInitialDocumentSeed) {
+			return;
+		}
+
+		lastHydratedInitialDocumentSeed = nextSeed;
+
 		const nextBaseline = initialDrawingDocument
 			? cloneDrawingDocumentV2(initialDrawingDocument)
 			: createEmptyDrawingDocumentV2('artwork');
 
 		baselineDocument = nextBaseline;
-		drawingDocument = cloneDrawingDocumentV2(nextBaseline);
+		commitDrawingDocument(cloneDrawingDocumentV2(nextBaseline));
+	});
+
+	$effect(() => {
 		onInitialImageSettled?.();
 	});
 
 	onMount(() => {
 		renderCurrentDocument();
 
-		window.addEventListener('pointerup', stopDrawing);
-		window.addEventListener('pointercancel', stopDrawing);
-		window.addEventListener('blur', stopDrawing);
+		const handleWindowPointerUp = (event: PointerEvent) => {
+			finishDrawing(event);
+		};
+		const handleWindowPointerCancel = (event: PointerEvent) => {
+			finishDrawing(event);
+		};
+		const handleWindowBlur = () => {
+			finishDrawing();
+		};
+
+		window.addEventListener('pointerup', handleWindowPointerUp);
+		window.addEventListener('pointercancel', handleWindowPointerCancel);
+		window.addEventListener('blur', handleWindowBlur);
 
 		return () => {
-			window.removeEventListener('pointerup', stopDrawing);
-			window.removeEventListener('pointercancel', stopDrawing);
-			window.removeEventListener('blur', stopDrawing);
+			window.removeEventListener('pointerup', handleWindowPointerUp);
+			window.removeEventListener('pointercancel', handleWindowPointerCancel);
+			window.removeEventListener('blur', handleWindowBlur);
 		};
 	});
 
@@ -108,7 +209,8 @@
 		if (clearVersion === lastAppliedClearVersion) return;
 
 		lastAppliedClearVersion = clearVersion;
-		drawingDocument = cloneDrawingDocumentV2(baselineDocument);
+		activeStroke = null;
+		commitDrawingDocument(cloneDrawingDocumentV2(baselineDocument));
 	});
 
 	$effect(() => {
@@ -127,14 +229,26 @@
 
 		canvasRef.setPointerCapture(event.pointerId);
 		activePointerId = event.pointerId;
+		isDrawing = true;
 
-		drawingDocument.tail.push({
+		if (responsiveDrawing) {
+			activeStroke = createBufferedStroke({
+				color: drawingTools.activeColor,
+				point,
+				size: drawingTools.brushSize
+			});
+			renderCurrentDocument();
+			return;
+		}
+
+		const nextDocument = cloneDrawingDocumentV2(drawingDocument);
+		nextDocument.tail.push({
 			color: drawingTools.activeColor,
 			points: [point],
 			size: drawingTools.brushSize
 		});
+		commitDrawingDocument(nextDocument);
 		renderCurrentDocument();
-		isDrawing = true;
 	}
 
 	function draw(event: PointerEvent) {
@@ -152,6 +266,11 @@
 		const point = getPoint(event);
 		if (!point) return;
 
+		if (responsiveDrawing) {
+			appendPointToActiveStroke(point);
+			return;
+		}
+
 		appendPoint(point);
 	}
 
@@ -165,12 +284,15 @@
 			canvasRef.releasePointerCapture(event.pointerId);
 		}
 
+		if (responsiveDrawing) {
+			commitActiveStroke();
+		}
+
 		stopDrawing();
 	}
 
 	function cancelDrawing(event: PointerEvent) {
 		event.preventDefault();
-		stopDrawing();
 		finishDrawing(event);
 	}
 </script>
@@ -183,6 +305,7 @@
 		class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
 		style="background: #fdfbf7; touch-action: none;"
 		aria-disabled={!interactive}
+		data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
 		draggable="false"
 		ondragstart={preventCanvasDrag}
 		onpointerdown={startDrawing}
