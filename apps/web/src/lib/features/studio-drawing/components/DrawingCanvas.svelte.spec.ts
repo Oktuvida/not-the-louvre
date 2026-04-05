@@ -3,14 +3,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
 	createEmptyDrawingDocument,
-	normalizeDrawingDocumentToEditableV2
+	normalizeDrawingDocumentToEditableV2,
+	type DrawingDocumentV2
 } from '$lib/features/stroke-json/document';
 import DrawingCanvas from './DrawingCanvas.svelte';
+
+const createLargeEditableArtworkDocument = () =>
+	normalizeDrawingDocumentToEditableV2({
+		...createEmptyDrawingDocument('artwork'),
+		strokes: Array.from({ length: 72 }, (_, strokeIndex) => ({
+			color: '#2d2420',
+			points: Array.from(
+				{ length: 24 },
+				(_, pointIndex) =>
+					[48 + pointIndex * 8, 80 + (((strokeIndex % 6) * 44 + pointIndex * 3) % 520)] as [
+						number,
+						number
+					]
+			),
+			size: 8
+		}))
+	});
 
 const createMockContext = () =>
 	({
 		arc: vi.fn(),
 		beginPath: vi.fn(),
+		drawImage: vi.fn(),
 		fill: vi.fn(),
 		fillRect: vi.fn(),
 		fillStyle: '#fdfbf7',
@@ -245,6 +264,125 @@ describe('DrawingCanvas', () => {
 			expect(ctx.lineTo).toHaveBeenCalled();
 			expect(ctx.stroke).toHaveBeenCalled();
 		});
+
+		getContextSpy.mockRestore();
+	});
+
+	it('preserves dense user stroke samples while drawing over a fork seed', async () => {
+		const ctx = createMockContext();
+		const getContextSpy = vi
+			.spyOn(HTMLCanvasElement.prototype, 'getContext')
+			.mockImplementation(((contextId: string) =>
+				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
+		const committedDocuments: DrawingDocumentV2[] = [];
+
+		render(DrawingCanvas, {
+			initialDrawingDocument: normalizeDrawingDocumentToEditableV2({
+				...createEmptyDrawingDocument('artwork'),
+				strokes: [
+					{
+						color: '#2d2420',
+						points: [[24, 24] as [number, number], [200, 200] as [number, number]],
+						size: 8
+					}
+				]
+			}),
+			onDocumentChange: (document: DrawingDocumentV2) => {
+				committedDocuments.push(document);
+			}
+		});
+
+		const canvas = document.querySelector('canvas');
+		if (!(canvas instanceof HTMLCanvasElement)) {
+			throw new Error('Expected drawing canvas to render');
+		}
+
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 768,
+			height: 768,
+			left: 0,
+			right: 768,
+			top: 0,
+			width: 768,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 100, clientY: 100 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 101, clientY: 101 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 102, clientY: 102 }));
+		canvas.dispatchEvent(
+			createPointerEvent('pointerup', { buttons: 0, clientX: 102, clientY: 102 })
+		);
+
+		const latestDocument = committedDocuments.at(-1);
+		expect(latestDocument?.tail).toHaveLength(2);
+		expect(latestDocument?.tail[1]?.points).toEqual([
+			[100, 100],
+			[101, 101],
+			[102, 102]
+		]);
+
+		getContextSpy.mockRestore();
+	});
+
+	it('buffers dense points and emits one canonical append when responsive editing is active', async () => {
+		const ctx = createMockContext();
+		const getContextSpy = vi
+			.spyOn(HTMLCanvasElement.prototype, 'getContext')
+			.mockImplementation(((contextId: string) =>
+				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
+		const committedDocuments: DrawingDocumentV2[] = [];
+
+		render(DrawingCanvas, {
+			initialDrawingDocument: createLargeEditableArtworkDocument(),
+			onDocumentChange: (document: DrawingDocumentV2) => {
+				committedDocuments.push(document);
+			}
+		});
+
+		const canvas = document.querySelector('canvas');
+		if (!(canvas instanceof HTMLCanvasElement)) {
+			throw new Error('Expected drawing canvas to render');
+		}
+
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 768,
+			height: 768,
+			left: 0,
+			right: 768,
+			top: 0,
+			width: 768,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		committedDocuments.length = 0;
+
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 180, clientY: 220 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 181, clientY: 221 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 182, clientY: 222 }));
+
+		expect(committedDocuments).toHaveLength(0);
+
+		canvas.dispatchEvent(
+			createPointerEvent('pointerup', { buttons: 0, clientX: 182, clientY: 222 })
+		);
+
+		expect(committedDocuments).toHaveLength(1);
+		expect(committedDocuments[0]?.tail.at(-1)?.points).toEqual([
+			[180, 220],
+			[181, 221],
+			[182, 222]
+		]);
 
 		getContextSpy.mockRestore();
 	});

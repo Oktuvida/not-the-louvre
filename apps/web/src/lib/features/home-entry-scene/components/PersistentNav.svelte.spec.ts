@@ -168,7 +168,9 @@ describe('PersistentNav', () => {
 		await page.getByRole('button', { name: 'Edit avatar for artist_1' }).click();
 		await page.getByRole('button', { name: 'Done' }).click();
 
-		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		await vi.waitFor(() => {
+			expect(fetchSpy).toHaveBeenCalledTimes(1);
+		});
 		const fetchCalls = fetchSpy.mock.calls as unknown as Array<[string, RequestInit]>;
 		const call = fetchCalls[0];
 		expect(call).toBeDefined();

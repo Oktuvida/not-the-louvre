@@ -10,6 +10,23 @@ import { buildDrawingDraftKey } from '$lib/features/stroke-json/drafts';
 import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
 import AvatarSketchpad from './AvatarSketchpad.svelte';
 
+const createLargeEditableAvatarDocument = () =>
+	normalizeDrawingDocumentToEditableV2({
+		...createEmptyDrawingDocument('avatar'),
+		strokes: Array.from({ length: 72 }, (_, strokeIndex) => ({
+			color: '#6b8e7f',
+			points: Array.from(
+				{ length: 16 },
+				(_, pointIndex) =>
+					[22 + pointIndex * 12, 40 + (((strokeIndex % 6) * 26 + pointIndex * 5) % 210)] as [
+						number,
+						number
+					]
+			),
+			size: 6
+		}))
+	});
+
 const createMockContext = () =>
 	({
 		arc: vi.fn(),
@@ -179,9 +196,14 @@ describe('AvatarSketchpad', () => {
 			userKey: 'artist_1'
 		});
 		window.localStorage.setItem(draftKey, serializeDrawingDocument(draftDocument));
+		const createAvatarPayload = vi.fn(
+			async (document: Parameters<typeof serializeDrawingDocument>[0]) =>
+				serializeDrawingDocument(document)
+		);
 		const saveAvatar = vi.fn(async () => ({ success: true as const }));
 
 		render(AvatarSketchpad, {
+			createAvatarPayload,
 			draftUserKey: 'artist_1',
 			nickname: 'artist_1',
 			saveAvatar
@@ -189,9 +211,11 @@ describe('AvatarSketchpad', () => {
 
 		await enterGalleryButton().click();
 
-		expect(saveAvatar).toHaveBeenCalledWith(
-			serializeDrawingDocument(normalizeDrawingDocumentToEditableV2(draftDocument))
-		);
+		await vi.waitFor(() => {
+			expect(saveAvatar).toHaveBeenCalledWith(
+				serializeDrawingDocument(normalizeDrawingDocumentToEditableV2(draftDocument))
+			);
+		});
 		window.localStorage.clear();
 	});
 
@@ -206,9 +230,14 @@ describe('AvatarSketchpad', () => {
 				}
 			]
 		});
+		const createAvatarPayload = vi.fn(
+			async (document: Parameters<typeof serializeDrawingDocument>[0]) =>
+				serializeDrawingDocument(document)
+		);
 		const saveAvatar = vi.fn(async () => ({ success: true as const }));
 
 		render(AvatarSketchpad, {
+			createAvatarPayload,
 			initialDrawingDocument: storedDocument,
 			nickname: 'artist_1',
 			saveAvatar
@@ -216,7 +245,73 @@ describe('AvatarSketchpad', () => {
 
 		await enterGalleryButton().click();
 
-		expect(saveAvatar).toHaveBeenCalledWith(serializeDrawingDocument(storedDocument));
+		await vi.waitFor(() => {
+			expect(saveAvatar).toHaveBeenCalledWith(serializeDrawingDocument(storedDocument));
+		});
+	});
+
+	it('defers avatar draft writes until a large responsive stroke is committed', async () => {
+		const initialDrawingDocument = createLargeEditableAvatarDocument();
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: initialDrawingDocument.version,
+			scope: 'profile',
+			surface: 'avatar',
+			userKey: 'artist_1'
+		});
+
+		render(AvatarSketchpad, {
+			draftUserKey: 'artist_1',
+			initialDrawingDocument,
+			nickname: 'artist_1'
+		});
+
+		await vi.waitFor(() => {
+			expect(window.localStorage.getItem(draftKey)).not.toBeNull();
+		});
+
+		const initialDraft = window.localStorage.getItem(draftKey);
+		if (!initialDraft) {
+			throw new Error('Expected the initial avatar draft to be persisted');
+		}
+		const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+		setItemSpy.mockClear();
+
+		const canvas = document.querySelector('canvas');
+		if (!(canvas instanceof HTMLCanvasElement)) {
+			throw new Error('Expected avatar sketch canvas to render');
+		}
+
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 340,
+			height: 340,
+			left: 0,
+			right: 340,
+			top: 0,
+			width: 340,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 80, clientY: 96 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 81, clientY: 97 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 82, clientY: 98 }));
+		await Promise.resolve();
+
+		expect(window.localStorage.getItem(draftKey)).toBe(initialDraft);
+		expect(setItemSpy).not.toHaveBeenCalled();
+
+		canvas.dispatchEvent(createPointerEvent('pointerup', { buttons: 0, clientX: 82, clientY: 98 }));
+
+		await vi.waitFor(() => {
+			const committedDraft = window.localStorage.getItem(draftKey);
+			expect(committedDraft).not.toBeNull();
+			expect(committedDraft).not.toBe(initialDraft);
+			expect(setItemSpy).toHaveBeenCalledTimes(1);
+		});
 	});
 
 	it('clears to a blank avatar when configured for the authenticated editor flow', async () => {
@@ -230,10 +325,15 @@ describe('AvatarSketchpad', () => {
 				}
 			]
 		});
+		const createAvatarPayload = vi.fn(
+			async (document: Parameters<typeof serializeDrawingDocument>[0]) =>
+				serializeDrawingDocument(document)
+		);
 		const saveAvatar = vi.fn(async () => ({ success: true as const }));
 
 		render(AvatarSketchpad, {
 			clearMode: 'blank',
+			createAvatarPayload,
 			initialDrawingDocument: storedDocument,
 			nickname: 'artist_1',
 			saveAvatar
@@ -242,11 +342,13 @@ describe('AvatarSketchpad', () => {
 		await page.getByRole('button', { name: 'Clear' }).click();
 		await enterGalleryButton().click();
 
-		expect(saveAvatar).toHaveBeenCalledWith(
-			serializeDrawingDocument(
-				normalizeDrawingDocumentToEditableV2(createEmptyDrawingDocument('avatar'))
-			)
-		);
+		await vi.waitFor(() => {
+			expect(saveAvatar).toHaveBeenCalledWith(
+				serializeDrawingDocument(
+					normalizeDrawingDocumentToEditableV2(createEmptyDrawingDocument('avatar'))
+				)
+			);
+		});
 	});
 
 	it('shows a retryable save error and stays in the avatar step when persistence fails', async () => {
@@ -352,8 +454,13 @@ describe('AvatarSketchpad', () => {
 				return originalGetContext.call(this, contextId);
 			} as HTMLCanvasElement['getContext']);
 		const saveAvatar = vi.fn(async () => ({ success: true as const }));
+		const createAvatarPayload = vi.fn(
+			async (document: Parameters<typeof serializeDrawingDocument>[0]) =>
+				serializeDrawingDocument(document)
+		);
 
 		render(AvatarSketchpad, {
+			createAvatarPayload,
 			nickname: 'artist_1',
 			saveAvatar
 		});
@@ -408,6 +515,9 @@ describe('AvatarSketchpad', () => {
 		);
 
 		await enterGalleryButton().click();
+		await vi.waitFor(() => {
+			expect(saveAvatar).toHaveBeenCalledTimes(1);
+		});
 		const savedPayload = saveAvatar.mock.calls.at(0)?.at(0);
 		const savedDocument = JSON.parse(typeof savedPayload === 'string' ? savedPayload : 'null');
 

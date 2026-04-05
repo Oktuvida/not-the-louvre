@@ -23,10 +23,9 @@
 		createEmptyDrawingDocumentV2,
 		getRenderableDrawingStrokes,
 		normalizeDrawingDocumentToEditableV2,
-		serializeDrawingDocument,
 		type DrawingDocumentV2
 	} from '$lib/features/stroke-json/document';
-	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/publish';
+	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/runtime.browser';
 	import type {
 		DrawForkParent,
 		DrawPageUser,
@@ -106,11 +105,11 @@
 			}
 
 			if (mode === 'bad') {
-				return serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
+				return JSON.stringify(createEmptyDrawingDocument('avatar'));
 			}
 
 			if (mode === 'webp' && getRenderableDrawingStrokes(documentState).length === 0) {
-				return serializeDrawingDocument({
+				return JSON.stringify({
 					...createEmptyDrawingDocument('artwork'),
 					strokes: [
 						{
@@ -126,7 +125,7 @@
 				});
 			}
 
-			return serializeDrawingDocument(prepareDrawingDocumentForPublish(documentState));
+			return prepareDrawingDocumentForPublish(documentState);
 		},
 		forkParent = null,
 		openingDurationMs = 950,
@@ -177,7 +176,9 @@
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
 	let clearVersion = $state(0);
 	let currentForkParent = $state<DrawForkParent | null>(null);
+	let draftHydrated = $state(false);
 	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
+	let initialDrawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
 	let forkPreloadSettled = $state(true);
 	let isPublishing = $state(false);
 	let isMobileViewport = $state(false);
@@ -195,11 +196,6 @@
 	let exitFadeOpacity = $state(0);
 	let forkContextHydrated = $state(false);
 	const EXIT_FADE_DURATION_S = 0.5;
-	const initialDrawingDocument = $derived(
-		currentForkParent?.drawingDocument
-			? cloneDrawingDocumentV2(currentForkParent.drawingDocument)
-			: createEmptyDrawingDocumentV2('artwork')
-	);
 	const forkContextStorageKey = $derived(getForkContextStorageKey(user));
 	const draftKey = $derived(
 		user
@@ -211,10 +207,20 @@
 				})
 			: null
 	);
+	const legacyDraftKey = $derived(
+		user
+			? buildDrawingDraftKey({
+					schemaVersion: DRAWING_DOCUMENT_VERSION,
+					scope: currentForkParent?.id ?? 'new',
+					surface: 'artwork',
+					userKey: user.id ?? user.nickname
+				})
+			: null
+	);
 
-	let studioUnlocked = $derived(isMobileViewport || sceneState === 'open');
+	let studioUnlocked = $derived(draftHydrated && (isMobileViewport || sceneState === 'open'));
 	let toolsVisible = $derived(
-		isMobileViewport || (sceneState !== 'closed' && sceneState !== 'closing')
+		draftHydrated && (isMobileViewport || (sceneState !== 'closed' && sceneState !== 'closing'))
 	);
 	let hasForkParent = $derived(Boolean(currentForkParent?.mediaUrl));
 
@@ -249,6 +255,8 @@
 
 	onMount(() => {
 		const mobileMediaQuery = window.matchMedia(MOBILE_STUDIO_MEDIA_QUERY);
+		let draftLoadCancelled = false;
+		draftHydrated = false;
 
 		const syncViewportMode = (matches: boolean) => {
 			isMobileViewport = matches;
@@ -293,24 +301,35 @@
 			drawingDocument = resolvedForkParent?.drawingDocument
 				? cloneDrawingDocumentV2(resolvedForkParent.drawingDocument)
 				: createEmptyDrawingDocumentV2('artwork');
-			return;
+			initialDrawingDocument = cloneDrawingDocumentV2(drawingDocument);
+			draftHydrated = true;
+			return () => {
+				draftLoadCancelled = true;
+				mobileMediaQuery.removeEventListener('change', handleViewportChange);
+			};
 		}
 
-		const draft = loadDrawingDraft(resolvedDraftKey, resolvedLegacyDraftKey);
-		drawingDocument =
-			draft?.kind === 'artwork'
-				? draft
-				: resolvedForkParent?.drawingDocument
-					? cloneDrawingDocumentV2(resolvedForkParent.drawingDocument)
-					: createEmptyDrawingDocumentV2('artwork');
+		void loadDrawingDraft(resolvedDraftKey, resolvedLegacyDraftKey).then((draft) => {
+			if (draftLoadCancelled) return;
+
+			drawingDocument =
+				draft?.kind === 'artwork'
+					? draft
+					: resolvedForkParent?.drawingDocument
+						? cloneDrawingDocumentV2(resolvedForkParent.drawingDocument)
+						: createEmptyDrawingDocumentV2('artwork');
+			initialDrawingDocument = cloneDrawingDocumentV2(drawingDocument);
+			draftHydrated = true;
+		});
 
 		return () => {
+			draftLoadCancelled = true;
 			mobileMediaQuery.removeEventListener('change', handleViewportChange);
 		};
 	});
 
 	$effect(() => {
-		if (!draftKey) return;
+		if (!draftHydrated || !draftKey) return;
 		saveDrawingDraft(draftKey, drawingDocument);
 	});
 
@@ -335,12 +354,16 @@
 		if (forkDraftKey) {
 			clearDrawingDraft(forkDraftKey);
 		}
+		if (legacyDraftKey) {
+			clearDrawingDraft(legacyDraftKey);
+		}
 		if (forkContextStorageKey) {
 			savePersistedForkParent(forkContextStorageKey, null);
 		}
 
 		currentForkParent = null;
 		drawingDocument = createEmptyDrawingDocumentV2('artwork');
+		initialDrawingDocument = createEmptyDrawingDocumentV2('artwork');
 		clearVersion += 1;
 		artworkTitle = '';
 		isArtworkNsfw = false;
@@ -386,6 +409,10 @@
 		if (sceneState !== 'closing') return;
 		sceneState = 'closed';
 		fadeAndExitHome();
+	};
+
+	const handleDrawingDocumentChange = (nextDocument: DrawingDocumentV2) => {
+		drawingDocument = nextDocument;
 	};
 
 	const fadeAndExitHome = () => {
@@ -531,8 +558,9 @@
 							bind:canvasRef
 							bind:drawingDocument
 							{clearVersion}
-							initialDrawingDocument={currentForkParent?.drawingDocument ?? null}
+							{initialDrawingDocument}
 							interactive={studioUnlocked}
+							onDocumentChange={handleDrawingDocumentChange}
 							onInitialImageSettled={markForkPreloadSettled}
 							{statusMessage}
 							{statusTone}
@@ -712,8 +740,9 @@
 								bind:canvasRef
 								bind:drawingDocument
 								{clearVersion}
-								initialDrawingDocument={currentForkParent?.drawingDocument ?? null}
+								{initialDrawingDocument}
 								interactive={studioUnlocked}
+								onDocumentChange={handleDrawingDocumentChange}
 								onInitialImageSettled={markForkPreloadSettled}
 								{statusMessage}
 								{statusTone}
