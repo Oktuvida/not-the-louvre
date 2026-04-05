@@ -18,7 +18,7 @@ use simplify_polyline::{Point as SimplifyPoint, simplify};
 
 use crate::{
     DRAWING_DOCUMENT_V2_VERSION, DrawingDocument, DrawingDocumentV2, DrawingStroke,
-    LosslessCompactionOptions, StrokeJsonError, encode_validated_document,
+    LosslessCompactionOptions, StrokeJsonError, gzip_canonical_json,
     normalize_document_to_canonical_v2, normalize_drawing_stroke_exactly,
     parse_and_validate_document, serialize_document_v2,
 };
@@ -126,7 +126,7 @@ pub fn run_prod_like_pipeline(
             )
         });
         let canonical_json = serialize_document_v2(&phase2_document)?;
-        let gzip_bytes = encode_validated_document(&phase2_document)?.len() as u32;
+        let gzip_bytes = gzip_canonical_json(&canonical_json)?.len() as u32;
         let raw_bytes = canonical_json.len() as u32;
 
         current_document = phase2_document.clone();

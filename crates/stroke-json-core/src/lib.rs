@@ -145,9 +145,8 @@ pub fn stroke_json_wasm_version() -> &'static str {
 pub fn validate_document(
     document_json: &[u8],
 ) -> Result<StrokeJsonDocumentMetadata, StrokeJsonError> {
-    let document = parse_document(document_json)?;
-    validate_document_shape(&document)?;
-    assert_document_within_limits(&document, StrokeJsonDocumentLimits::default())?;
+    let document = parse_and_validate_document_shape_only(document_json)?;
+    assert_document_complexity_limits(&document, StrokeJsonDocumentLimits::default())?;
     Ok(metadata_from_document(&document))
 }
 
@@ -169,8 +168,9 @@ pub fn encode_validated_document_with_limits(
     document: &DrawingDocumentV2,
     limits: StrokeJsonDocumentLimits,
 ) -> Result<Vec<u8>, StrokeJsonError> {
-    validate_document_shape(&DrawingDocument::V2(document.clone()))?;
-    assert_document_within_limits(&DrawingDocument::V2(document.clone()), limits)?;
+    let wrapped_document = DrawingDocument::V2(document.clone());
+    validate_document_shape(&wrapped_document)?;
+    assert_document_complexity_limits(&wrapped_document, limits)?;
 
     let canonical_json = serialize_document_v2(document)?;
     compress_canonical_json(&canonical_json, limits)
@@ -224,7 +224,7 @@ fn parse_and_validate_document_shape_only(
 
 fn parse_and_validate_document(document_json: &[u8]) -> Result<DrawingDocument, StrokeJsonError> {
     let document = parse_and_validate_document_shape_only(document_json)?;
-    assert_document_within_limits(&document, StrokeJsonDocumentLimits::default())?;
+    assert_document_complexity_limits(&document, StrokeJsonDocumentLimits::default())?;
     Ok(document)
 }
 
@@ -392,7 +392,7 @@ fn serialize_document_v2(document: &DrawingDocumentV2) -> Result<Vec<u8>, Stroke
     })
 }
 
-fn assert_document_within_limits(
+fn assert_document_byte_limits(
     document: &DrawingDocument,
     limits: StrokeJsonDocumentLimits,
 ) -> Result<(), StrokeJsonError> {
@@ -413,6 +413,13 @@ fn assert_document_within_limits(
         });
     }
 
+    Ok(())
+}
+
+fn assert_document_complexity_limits(
+    document: &DrawingDocument,
+    limits: StrokeJsonDocumentLimits,
+) -> Result<(), StrokeJsonError> {
     let strokes = renderable_strokes(document);
     if strokes.len() > limits.max_strokes {
         return Err(StrokeJsonError::DocumentLimitsExceeded {
@@ -450,6 +457,28 @@ fn assert_document_within_limits(
     Ok(())
 }
 
+fn assert_document_within_limits(
+    document: &DrawingDocument,
+    limits: StrokeJsonDocumentLimits,
+) -> Result<(), StrokeJsonError> {
+    assert_document_byte_limits(document, limits)?;
+    assert_document_complexity_limits(document, limits)
+}
+
+pub(crate) fn gzip_canonical_json(canonical_json: &[u8]) -> Result<Vec<u8>, StrokeJsonError> {
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(canonical_json)
+        .map_err(|error| StrokeJsonError::CompressionFailed {
+            message: format!("Failed to compress drawing document: {error}"),
+        })?;
+    encoder
+        .finish()
+        .map_err(|error| StrokeJsonError::CompressionFailed {
+            message: format!("Failed to compress drawing document: {error}"),
+        })
+}
+
 fn compress_canonical_json(
     canonical_json: &[u8],
     limits: StrokeJsonDocumentLimits,
@@ -463,18 +492,7 @@ fn compress_canonical_json(
         });
     }
 
-    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-    encoder
-        .write_all(canonical_json)
-        .map_err(|error| StrokeJsonError::CompressionFailed {
-            message: format!("Failed to compress drawing document: {error}"),
-        })?;
-    let compressed_bytes =
-        encoder
-            .finish()
-            .map_err(|error| StrokeJsonError::CompressionFailed {
-                message: format!("Failed to compress drawing document: {error}"),
-            })?;
+    let compressed_bytes = gzip_canonical_json(canonical_json)?;
 
     if compressed_bytes.len() > limits.max_compressed_bytes {
         return Err(StrokeJsonError::DocumentLimitsExceeded {
