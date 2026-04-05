@@ -37,8 +37,8 @@ impl Default for StrokeJsonDocumentLimits {
         Self {
             max_compressed_bytes: 128 * 1024,
             max_decompressed_bytes: 512 * 1024,
-            max_points_per_stroke: 2_000,
-            max_strokes: 2_000,
+            max_points_per_stroke: 5_000,
+            max_strokes: 5_000,
             max_total_points: 50_000,
         }
     }
