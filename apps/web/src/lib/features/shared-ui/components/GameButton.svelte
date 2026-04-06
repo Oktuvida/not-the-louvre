@@ -2,10 +2,12 @@
 	import type { Snippet } from 'svelte';
 	import { getFrequentReadCanvasContext } from '$lib/client/canvas-2d';
 	import {
+		createStickerBackgroundUrl,
 		drawStickerBackground,
 		type StickerVariant
 	} from '../../home-entry-scene/canvas/museum-canvas';
 	import {
+		getStickerControlPreset,
 		getStickerControlVars,
 		getStickerRotation,
 		type StickerControlSize
@@ -36,8 +38,14 @@
 	let resizeObserver: ResizeObserver | undefined;
 
 	const stickerVariant: StickerVariant = $derived(variant);
+	const stickerPreset = $derived(getStickerControlPreset(size));
 	const stickerStyle = $derived(getStickerControlVars(size, variant));
 	const rotation = $derived(getStickerRotation(`button:${variant}:${size}:${type}`));
+	const stickerBackgroundUrl = $derived.by(() =>
+		createStickerBackgroundUrl(stickerPreset.minWidth, stickerPreset.height, {
+			variant: stickerVariant
+		})
+	);
 
 	const redrawSticker = () => {
 		if (!canvasEl || !containerEl) return;
@@ -88,6 +96,14 @@
 	style={stickerStyle}
 	style:transform="rotate({rotation.toFixed(1)}deg)"
 >
+	<img
+		data-testid="game-button-bg"
+		src={stickerBackgroundUrl}
+		alt=""
+		aria-hidden="true"
+		draggable="false"
+		class="sticker-bg"
+	/>
 	<canvas bind:this={canvasEl} class="sticker-canvas"></canvas>
 	<div class="sticker-content">
 		{@render children()}
@@ -142,11 +158,19 @@
 		filter: grayscale(0.3);
 	}
 
+	.sticker-bg,
 	.sticker-canvas {
 		display: block;
 		pointer-events: none;
 		position: absolute;
 		inset: 0;
+	}
+
+	.sticker-bg {
+		height: 100%;
+		width: 100%;
+		object-fit: fill;
+		user-select: none;
 	}
 
 	.sticker-content {

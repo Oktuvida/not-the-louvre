@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { ArrowLeft, Paintbrush, RefreshCw } from 'lucide-svelte';
 	import { browser } from '$app/environment';
-	import { goto, invalidateAll, replaceState } from '$app/navigation';
+	import { goto, invalidateAll, pushState, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
 	import { gsap } from '$lib/client/gsap';
@@ -30,6 +30,39 @@
 	import HotWallRoom from '$lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
 	import MysteryRoom from '$lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
 	import YourStudioRoom from '$lib/features/gallery-exploration/rooms/YourStudioRoom.svelte';
+
+	type GalleryDetailHistoryState = NonNullable<App.PageState['galleryDetail']>;
+
+	const LOCAL_GALLERY_DETAIL_SOURCE = 'local-room-selection' as const;
+
+	const isGalleryDetailHistoryState = (
+		value: App.PageState['galleryDetail'] | null | undefined
+	): value is GalleryDetailHistoryState => {
+		return Boolean(
+			value &&
+			typeof value.artworkId === 'string' &&
+			typeof value.roomId === 'string' &&
+			(value.source === 'external' || value.source === LOCAL_GALLERY_DETAIL_SOURCE)
+		);
+	};
+
+	const readGalleryDetailHistoryState = (
+		state: App.PageState | null | undefined
+	): GalleryDetailHistoryState | null => {
+		if (!state) return null;
+
+		return isGalleryDetailHistoryState(state.galleryDetail) ? state.galleryDetail : null;
+	};
+
+	const clearGalleryDetailHistoryState = (
+		state: App.PageState | null | undefined
+	): App.PageState => {
+		if (!state) return {};
+
+		const nextState = { ...state };
+		delete nextState.galleryDetail;
+		return nextState;
+	};
 
 	let {
 		adultContentEnabled = false,
@@ -185,7 +218,10 @@
 	let isExitingToHome = $state(false);
 	let isRefreshingGallery = $state(false);
 	let previousRoomIndex = $state(-1);
-	let museumWallPatternUrl = $state('');
+	const museumWallPatternUrl = createMuseumWallPatternUrl();
+	let detailOrigin = $state<GalleryDetailHistoryState['source'] | null>(null);
+	let didCreateLocalDetailHistoryEntry = $state(false);
+	let detailLoadSequence = 0;
 
 	const selectedArtworkId = $derived(selectedArtwork?.id ?? null);
 	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
@@ -193,6 +229,10 @@
 		artworks.some((artwork) => artwork.isNsfw) || Boolean(selectedArtwork?.isNsfw)
 	);
 	const currentRoomIndex = $derived(galleryRoomIds.indexOf(roomId));
+	const currentGalleryUrl = $derived(
+		roomId === 'hall-of-fame' ? resolve('/gallery') : resolve('/gallery/[room]', { room: roomId })
+	);
+	const historyDetailState = $derived(readGalleryDetailHistoryState($page.state));
 	const slideDirection = $derived.by(() => {
 		if (previousRoomIndex === -1) return 0;
 		return currentRoomIndex > previousRoomIndex ? 1 : currentRoomIndex < previousRoomIndex ? -1 : 0;
@@ -213,15 +253,75 @@
 	});
 
 	// --- Detail panel ---
-	const openArtwork = async (artwork: Artwork) => {
+	const loadArtworkFromHistoryState = async (historyState: GalleryDetailHistoryState) => {
+		const requestSequence = ++detailLoadSequence;
 		detailErrorMessage = null;
+
 		try {
-			selectedArtwork = await loadArtworkDetail(artwork.id);
+			const nextArtwork = await loadArtworkDetail(historyState.artworkId);
+			if (requestSequence !== detailLoadSequence) return;
+
+			selectedArtwork = nextArtwork;
+			detailOrigin = historyState.source;
 		} catch (error) {
+			if (requestSequence !== detailLoadSequence) return;
+
 			selectedArtwork = null;
+			detailOrigin = null;
 			detailErrorMessage =
 				error instanceof Error ? error.message : 'Artwork details could not be loaded';
+
+			const currentHistoryState = readGalleryDetailHistoryState($page.state);
+			if (
+				browser &&
+				currentHistoryState?.artworkId === historyState.artworkId &&
+				currentHistoryState.roomId === historyState.roomId
+			) {
+				didCreateLocalDetailHistoryEntry = false;
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
+				replaceState(currentGalleryUrl, clearGalleryDetailHistoryState($page.state));
+			}
 		}
+	};
+
+	const openArtwork = (artwork: Artwork) => {
+		detailErrorMessage = null;
+		didCreateLocalDetailHistoryEntry = true;
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
+		pushState(currentGalleryUrl, {
+			...$page.state,
+			galleryDetail: {
+				artworkId: artwork.id,
+				roomId,
+				source: LOCAL_GALLERY_DETAIL_SOURCE
+			}
+		});
+	};
+
+	const closeArtworkDetail = () => {
+		detailErrorMessage = null;
+		detailLoadSequence += 1;
+
+		const currentHistoryState = readGalleryDetailHistoryState($page.state);
+
+		if (
+			browser &&
+			currentHistoryState?.roomId === roomId &&
+			currentHistoryState.source === LOCAL_GALLERY_DETAIL_SOURCE &&
+			didCreateLocalDetailHistoryEntry
+		) {
+			didCreateLocalDetailHistoryEntry = false;
+			window.history.back();
+			return;
+		}
+
+		if (browser && currentHistoryState) {
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
+			replaceState(currentGalleryUrl, clearGalleryDetailHistoryState($page.state));
+		}
+
+		selectedArtwork = null;
+		detailOrigin = null;
 	};
 
 	const syncArtwork = (nextArtwork: Artwork) => {
@@ -340,6 +440,42 @@
 		};
 	});
 
+	$effect(() => {
+		const currentHistoryState = historyDetailState;
+		const galleryUrl = currentGalleryUrl;
+
+		if (!browser) return;
+
+		if (currentHistoryState && currentHistoryState.roomId !== roomId) {
+			detailLoadSequence += 1;
+			didCreateLocalDetailHistoryEntry = false;
+			selectedArtwork = null;
+			detailOrigin = null;
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
+			replaceState(galleryUrl, clearGalleryDetailHistoryState($page.state));
+			return;
+		}
+
+		if (!currentHistoryState) {
+			detailLoadSequence += 1;
+			didCreateLocalDetailHistoryEntry = false;
+
+			if (selectedArtwork || detailOrigin) {
+				selectedArtwork = null;
+				detailOrigin = null;
+			}
+
+			return;
+		}
+
+		if (selectedArtwork?.id === currentHistoryState.artworkId) {
+			detailOrigin = currentHistoryState.source;
+			return;
+		}
+
+		void loadArtworkFromHistoryState(currentHistoryState);
+	});
+
 	// --- Transitions ---
 	const handleBackToHome = (event: MouseEvent) => {
 		if (!viewer) {
@@ -385,12 +521,6 @@
 			isRefreshingGallery = false;
 		}
 	};
-
-	// --- Museum wall pattern ---
-	$effect(() => {
-		if (!browser || museumWallPatternUrl) return;
-		museumWallPatternUrl = createMuseumWallPatternUrl();
-	});
 
 	// --- Clean home return query param ---
 	onMount(() => {
@@ -645,9 +775,7 @@
 		onAdultContentToggle={updateAdultContentPreference}
 		onArtworkChange={syncArtwork}
 		onArtworkPatch={patchArtwork}
-		onClose={() => {
-			selectedArtwork = null;
-		}}
+		onClose={closeArtworkDetail}
 		{viewer}
 	/>
 </div>

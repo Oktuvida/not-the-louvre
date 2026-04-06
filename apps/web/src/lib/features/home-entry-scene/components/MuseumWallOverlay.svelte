@@ -33,6 +33,14 @@
 		width: 0.246,
 		height: 2.395
 	};
+	const FRAME_WIDTH_CSS = 'clamp(19rem, 80vw, 49rem)';
+	const FRAME_HEIGHT_CSS = `calc((${FRAME_WIDTH_CSS} * 640) / 720)`;
+	const FRAME_LEFT_CSS = `calc(50% - (${FRAME_WIDTH_CSS} / 2))`;
+	const FRAME_TOP_CSS = `calc(50% - (${FRAME_HEIGHT_CSS} / 2))`;
+	const OPENING_LEFT_CSS = `calc(${FRAME_LEFT_CSS} + ((${FRAME_WIDTH_CSS} * 130) / 720))`;
+	const OPENING_RIGHT_CSS = `calc(${FRAME_LEFT_CSS} + ((${FRAME_WIDTH_CSS} * 590) / 720))`;
+	const OPENING_TOP_CSS = `calc(${FRAME_TOP_CSS} + ((${FRAME_HEIGHT_CSS} * 118) / 640))`;
+	const OPENING_BOTTOM_CSS = `calc(${FRAME_TOP_CSS} + ((${FRAME_HEIGHT_CSS} * 533) / 640))`;
 
 	let {
 		entryState,
@@ -54,12 +62,12 @@
 	let finalScale = $state(1);
 	let translateX = $state(0);
 	let translateY = $state(0);
-	let wallPatternUrl = $state('');
+	const wallPatternUrl = createMuseumWallPatternUrl();
 	let wallOpeningBounds = $state({
-		bottom: `${(museumWindowOpening.top + museumWindowOpening.height) * 100}%`,
-		left: `${museumWindowOpening.left * 100}%`,
-		right: `${(museumWindowOpening.left + museumWindowOpening.width) * 100}%`,
-		top: `${museumWindowOpening.top * 100}%`
+		bottom: OPENING_BOTTOM_CSS,
+		left: OPENING_LEFT_CSS,
+		right: OPENING_RIGHT_CSS,
+		top: OPENING_TOP_CSS
 	});
 
 	let forwardTimeline: gsap.core.Timeline | null = null;
@@ -323,7 +331,6 @@
 			void scheduleTimelineRebuild();
 		};
 
-		wallPatternUrl = createMuseumWallPatternUrl();
 		void scheduleTimelineRebuild();
 
 		window.addEventListener('resize', handleResize);
@@ -404,10 +411,12 @@
 			<!-- Wall texture rebuilt as two L-shaped slabs instead of a fullscreen mask. -->
 			<div bind:this={wallTextureElement} class="absolute inset-0">
 				<div
+					data-testid="museum-wall-slab-left"
 					class="absolute inset-0 bg-[#252018]"
 					style={`background-image:url('${wallPatternUrl}');background-size:512px 512px;background-repeat:repeat;clip-path:polygon(0% 0%,100% 0%,100% ${wallOpeningBounds.top},${wallOpeningBounds.left} ${wallOpeningBounds.top},${wallOpeningBounds.left} 100%,0% 100%);`}
 				></div>
 				<div
+					data-testid="museum-wall-slab-right"
 					class="absolute inset-0 bg-[#252018]"
 					style={`background-image:url('${wallPatternUrl}');background-size:512px 512px;background-repeat:repeat;clip-path:polygon(100% 0%,100% 100%,0% 100%,0% ${wallOpeningBounds.bottom},${wallOpeningBounds.right} ${wallOpeningBounds.bottom},${wallOpeningBounds.right} 0%);`}
 				></div>
