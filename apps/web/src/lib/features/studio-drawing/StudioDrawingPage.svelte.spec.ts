@@ -290,6 +290,7 @@ describe('StudioDrawingPage', () => {
 		const createArtworkPayload = vi.fn(async () =>
 			JSON.stringify(createEmptyDrawingDocument('artwork'))
 		);
+		const replaceStudioUrl = vi.fn();
 		const publishDrawing = vi.fn(async () => ({
 			action: 'publish' as const,
 			artwork: {
@@ -305,6 +306,7 @@ describe('StudioDrawingPage', () => {
 			checkTextContent,
 			createArtworkPayload,
 			publishDrawing,
+			replaceStudioUrl,
 			user: { nickname: 'journey_artist' }
 		});
 		await openSketchbook();
@@ -328,6 +330,7 @@ describe('StudioDrawingPage', () => {
 			parentArtworkId: null,
 			title: 'My First Piece'
 		});
+		expect(replaceStudioUrl).not.toHaveBeenCalled();
 	});
 
 	it('shows a retryable publish error without leaving the draw route', async () => {
@@ -400,6 +403,7 @@ describe('StudioDrawingPage', () => {
 
 	it('shows fork context and publishes with the parent artwork id', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const replaceStudioUrl = vi.fn();
 		const publishDrawing = vi.fn(async () => ({
 			action: 'publish' as const,
 			artwork: {
@@ -422,7 +426,9 @@ describe('StudioDrawingPage', () => {
 				mediaUrl: forkParentPreviewDataUrl,
 				title: 'Parent Artwork'
 			},
-			publishDrawing
+			publishDrawing,
+			replaceStudioUrl,
+			user: { nickname: 'journey_artist' }
 		});
 
 		await expect.element(page.getByText('Forking Parent Artwork')).toBeVisible();
@@ -430,11 +436,23 @@ describe('StudioDrawingPage', () => {
 		await page.getByPlaceholder('Untitled genius').fill('Forked Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
 
+		await expect.element(page.getByText('Artwork published as Forked Piece')).toBeVisible();
+		expect(replaceStudioUrl).toHaveBeenCalledOnce();
+		await expect.element(page.getByText('Forking Parent Artwork')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Cancel fork' })).not.toBeInTheDocument();
+
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: false,
 			parentArtworkId: 'artwork-parent',
 			title: 'Forked Piece'
 		});
+		expect(window.localStorage.getItem('studio-fork-context:journey_artist')).toBeNull();
+
+		await page.getByRole('button', { name: 'Draw again' }).click();
+
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+		await expect.element(page.getByText('Forking Parent Artwork')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Cancel fork' })).not.toBeInTheDocument();
 	});
 
 	it('keeps fork drawing edits local until publish and persists the new stroke in the draft', async () => {

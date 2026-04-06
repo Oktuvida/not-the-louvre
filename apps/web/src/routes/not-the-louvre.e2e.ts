@@ -1367,6 +1367,65 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('From Fork Source')).toBeVisible();
 	});
 
+	test('successful fork publish exits fork mode so draw again and reload stay empty', async ({
+		page
+	}) => {
+		await installDrawingExportHarness(page);
+
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+		await openDrawSketchbook(page);
+		await setDrawingExportMode(page, 'webp');
+		await page.getByPlaceholder('Untitled genius').fill('Fork Reset Source');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		await page.goto('/gallery/your-studio');
+		await page.getByRole('button', { name: /Fork Reset Source/ }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Fork' }).click();
+
+		await expect(page).toHaveURL(/\/draw\?fork=/);
+		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+		await expect(page.getByText('Forking Fork Reset Source')).toBeVisible();
+
+		const forkArtworkId = new URL(page.url()).searchParams.get('fork');
+		if (!forkArtworkId) {
+			throw new Error('Expected the fork route to expose an artwork id in the query string');
+		}
+
+		await page.getByPlaceholder('Untitled genius').fill('Fork Reset Child');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+		await expect(page).toHaveURL(/\/draw$/);
+		await expect(page.getByText('Forking Fork Reset Source')).not.toBeVisible();
+		await expect
+			.poll(async () =>
+				(await readDrawingDraftEntries(page, 'artwork')).some(({ key }) =>
+					key.endsWith(`:${forkArtworkId}`)
+				)
+			)
+			.toBe(false);
+		expect(
+			await page.evaluate(() =>
+				Object.keys(window.localStorage).filter((key) => key.startsWith('studio-fork-context:'))
+			)
+		).toEqual([]);
+
+		await page.getByRole('button', { name: 'Draw again' }).click();
+		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+		await expect(page).toHaveURL(/\/draw$/);
+		await expect(page.getByText('Forking Fork Reset Source')).not.toBeVisible();
+		await expect.poll(() => readDrawingCanvasCenterPixel(page)).toEqual([253, 251, 247, 255]);
+
+		await page.reload();
+		await expect(page).toHaveURL(/\/draw$/);
+		await expect(page.getByRole('button', { name: 'Open sketchbook' })).toBeVisible();
+		await openDrawSketchbook(page);
+		await expect(page.getByText('Forking Fork Reset Source')).not.toBeVisible();
+		await expect.poll(() => readDrawingCanvasCenterPixel(page)).toEqual([253, 251, 247, 255]);
+	});
+
 	test('fork route preserves dense stroke samples from a legacy v1 draft before publish', async ({
 		page
 	}) => {
