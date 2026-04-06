@@ -954,6 +954,7 @@ test.describe('Not the Louvre frontend port', () => {
 		const seededArtworkDraft = createCompactionCandidateDraft('artwork', strokeCount);
 		const seededArtworkDraftRaw = serializeDrawingDocument(seededArtworkDraft);
 
+		await installDrawingDocumentCaptureHarness(page);
 		await installDrawingExportHarness(page);
 
 		await page.goto('/demo/better-auth/login');
@@ -964,6 +965,13 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByPlaceholder('Untitled genius').fill('Responsive Fork Source');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+		await page.evaluate(() => {
+			(
+				window as Window & {
+					__capturedDrawingRequests?: CapturedDrawingRequest[];
+				}
+			).__capturedDrawingRequests = [];
+		});
 
 		await page.goto('/gallery/your-studio');
 		await page.getByRole('button', { name: /Responsive Fork Source/ }).click();
@@ -1046,6 +1054,51 @@ test.describe('Not the Louvre frontend port', () => {
 				{ timeout: 10000 }
 			)
 			.toEqual({ lastStrokePointCount: 12, strokeCount: strokeCount + 1 });
+
+		const hydratedForkDraftRaw = (await readDrawingDraftEntries(page, 'artwork')).find(({ key }) =>
+			key.endsWith(`:${forkArtworkId}`)
+		)?.value;
+		if (!hydratedForkDraftRaw) {
+			throw new Error('Expected the fork draft to exist before publish');
+		}
+
+		const hydratedForkDraft = parseVersionedDrawingDocument(hydratedForkDraftRaw);
+		expect(hydratedForkDraft.version).toBe(2);
+		if (hydratedForkDraft.version !== 2) {
+			throw new Error('Expected the fork draft to remain a DrawingDocumentV2 before publish');
+		}
+
+		await page.getByPlaceholder('Untitled genius').fill('Responsive Fork Child');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		const forkPublishRequests = await readCapturedDrawingRequests(page);
+		expect(forkPublishRequests).toHaveLength(1);
+		expect(forkPublishRequests[0]).toMatchObject({
+			method: 'POST',
+			parentArtworkId: forkArtworkId,
+			title: 'Responsive Fork Child',
+			url: '?/publish'
+		});
+
+		const forkPayloadRaw = forkPublishRequests[0]?.drawingDocument;
+		if (!forkPayloadRaw) {
+			throw new Error('Expected the fork publish flow to send a drawing document');
+		}
+
+		const forkPayloadDocument = parseVersionedDrawingDocument(forkPayloadRaw);
+		expect(forkPayloadDocument.version).toBe(2);
+		if (forkPayloadDocument.version !== 2) {
+			throw new Error('Expected the fork publish payload to stay on DrawingDocumentV2');
+		}
+
+		expect(forkPayloadDocument.kind).toBe('artwork');
+		expect(forkPayloadDocument.tail.length).toBeLessThan(hydratedForkDraft.tail.length);
+		expect(countDrawingPoints(forkPayloadDocument)).toBeLessThan(
+			countDrawingPoints(hydratedForkDraft)
+		);
+		expect(measureJsonBytes(forkPayloadRaw)).toBeLessThan(measureJsonBytes(hydratedForkDraftRaw));
+		expect(forkPayloadRaw).not.toBe(hydratedForkDraftRaw);
 	});
 
 	test('gallery shows a newly published artwork from the real product flow', async ({ page }) => {
