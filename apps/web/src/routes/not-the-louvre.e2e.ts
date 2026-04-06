@@ -491,6 +491,32 @@ test.describe('Not the Louvre frontend port', () => {
 		).toBeVisible();
 	});
 
+	test('home route stays usable while the studio GLB is still loading', async ({ page }) => {
+		await page.route('**/models/studio-transformed.glb', async () => {
+			await new Promise(() => {});
+		});
+
+		await page.goto('/');
+
+		await expect(page.getByText('Loading Studio...')).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
+		await page.getByRole('button', { name: 'Come In' }).click();
+		await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+	});
+
+	test('home route keeps the localized scene fallback when the studio GLB fails', async ({
+		page
+	}) => {
+		await page.route('**/models/studio-transformed.glb', async (route) => {
+			await route.abort();
+		});
+
+		await page.goto('/');
+
+		await expect(page.getByText('Loading Studio...')).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
+	});
+
 	test('home sign-in flow enters the gallery chrome with a real backend user', async ({ page }) => {
 		await enableReducedMotion(page);
 		await installAvatarExportHarness(page);
@@ -1126,6 +1152,35 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(
 			page.getByRole('dialog', { name: new RegExp(`Artwork details for ${publishedTitle!}`) })
 		).toBeVisible();
+	});
+
+	test('gallery browser back closes locally opened artwork detail before leaving the room', async ({
+		page
+	}) => {
+		await installDrawingExportHarness(page);
+
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+		await openDrawSketchbook(page);
+		await page.getByPlaceholder('Untitled genius').fill('History Close Piece');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		await page.setViewportSize({ height: 844, width: 390 });
+		await page.goto('/gallery/your-studio');
+		await page.getByRole('button', { name: /History Close Piece/ }).click();
+		await expect(
+			page.getByRole('dialog', { name: /Artwork details for History Close Piece/ })
+		).toBeVisible();
+
+		await page.goBack();
+
+		await expect(page).toHaveURL(/\/gallery\/your-studio$/);
+		await expect(
+			page.getByRole('dialog', { name: /Artwork details for History Close Piece/ })
+		).not.toBeVisible();
+		await expect(page.getByRole('button', { name: /History Close Piece/ })).toBeVisible();
 	});
 
 	test('gallery detail persists vote counts and receives realtime vote and comment updates', async ({

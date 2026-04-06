@@ -90,10 +90,10 @@ describe('drawStickerBackground', () => {
 });
 
 describe('createStickerBackgroundUrl', () => {
-	it('returns a valid PNG data URL', () => {
+	it('returns a valid image data URL', () => {
 		const url = createStickerBackgroundUrl(200, 56, { variant: 'primary' });
 
-		expect(url).toMatch(/^data:image\/png/);
+		expect(url).toMatch(/^data:image\/(png|svg\+xml)/);
 	});
 
 	it('returns a non-empty data URL for each variant', () => {

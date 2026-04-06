@@ -18,7 +18,13 @@ declare global {
 
 		// interface Error {}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			galleryDetail?: {
+				artworkId: string;
+				roomId: string;
+				source: 'external' | 'local-room-selection';
+			};
+		}
 		// interface Platform {}
 	}
 }
