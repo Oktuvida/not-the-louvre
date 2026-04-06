@@ -4,6 +4,9 @@ import { render } from 'vitest-browser-svelte';
 
 import AmbientAudioController from './AmbientAudioController.svelte';
 
+const AMBIENT_AUDIO_ENABLED_STORAGE_KEY = 'not-the-louvre:ambient-audio-enabled';
+const AMBIENT_AUDIO_TRACK_STORAGE_KEY = 'not-the-louvre:ambient-audio-track-id';
+
 type FakeAudioElement = HTMLAudioElement & {
 	__currentTimeWrites: () => number[];
 	__endedHandler: () => (() => void) | null;
@@ -64,11 +67,106 @@ describe('AmbientAudioController', () => {
 		await page.getByRole('button', { name: 'Enable ambient audio' }).click();
 
 		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
-		expect(window.localStorage.getItem('not-the-louvre:ambient-audio-enabled')).toBe('true');
+		expect(window.localStorage.getItem(AMBIENT_AUDIO_ENABLED_STORAGE_KEY)).toBe('true');
 		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
 			body: JSON.stringify({ ambientAudioEnabled: true }),
 			headers: { 'content-type': 'application/json' },
 			method: 'PATCH'
+		});
+	});
+
+	it('stays off on first visit when no local or bootstrapped preference exists', async () => {
+		const fakeAudio = createFakeAudio();
+
+		render(AmbientAudioController, {
+			audioFactory: () => fakeAudio,
+			bootstrappedPreference: null,
+			playlist: [{ id: 'track-1', src: '/audio/ambient/test.wav', title: 'Gallery Rain' }],
+			viewerId: null
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Enable ambient audio' })).toBeVisible();
+		await vi.waitFor(() => {
+			expect(fakeAudio.play).not.toHaveBeenCalled();
+		});
+	});
+
+	it('restores the saved track before playback starts', async () => {
+		const fakeAudio = createFakeAudio();
+		window.localStorage.setItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY, 'track-2');
+
+		render(AmbientAudioController, {
+			audioFactory: () => fakeAudio,
+			bootstrappedPreference: true,
+			playlist: [
+				{ id: 'track-1', src: '/audio/ambient/one.wav', title: 'Gallery Rain' },
+				{ id: 'track-2', src: '/audio/ambient/two.wav', title: 'Night Hall' }
+			],
+			viewerId: null
+		});
+
+		await expect.element(page.getByText('Night Hall')).toBeInTheDocument();
+		await vi.waitFor(() => {
+			expect(window.localStorage.getItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY)).toBe('track-2');
+			expect(fakeAudio.load).toHaveBeenCalledTimes(1);
+			expect(fakeAudio.play).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	it('keeps authenticated remote sync working when a local track is restored', async () => {
+		const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ ambientAudioEnabled: true })));
+		const fakeAudio = createFakeAudio();
+		vi.stubGlobal('fetch', fetchSpy);
+		window.localStorage.setItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY, 'track-2');
+
+		render(AmbientAudioController, {
+			audioFactory: () => fakeAudio,
+			bootstrappedPreference: false,
+			playlist: [
+				{ id: 'track-1', src: '/audio/ambient/one.wav', title: 'Gallery Rain' },
+				{ id: 'track-2', src: '/audio/ambient/two.wav', title: 'Night Hall' }
+			],
+			viewerId: 'user-1'
+		});
+
+		await expect.element(page.getByText('Night Hall')).toBeInTheDocument();
+		await page.getByRole('button', { name: 'Enable ambient audio' }).click();
+
+		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
+		expect(window.localStorage.getItem(AMBIENT_AUDIO_ENABLED_STORAGE_KEY)).toBe('true');
+		expect(window.localStorage.getItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY)).toBe('track-2');
+		expect(fakeAudio.load).toHaveBeenCalledTimes(1);
+		expect(fakeAudio.play).toHaveBeenCalledTimes(1);
+		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
+			body: JSON.stringify({ ambientAudioEnabled: true }),
+			headers: { 'content-type': 'application/json' },
+			method: 'PATCH'
+		});
+	});
+
+	it('persists the next track identifier when the playlist advances', async () => {
+		const fakeAudio = createFakeAudio();
+
+		render(AmbientAudioController, {
+			audioFactory: () => fakeAudio,
+			bootstrappedPreference: true,
+			playlist: [
+				{ id: 'track-1', src: '/audio/ambient/one.wav', title: 'Gallery Rain' },
+				{ id: 'track-2', src: '/audio/ambient/two.wav', title: 'Night Hall' }
+			],
+			viewerId: null
+		});
+
+		await vi.waitFor(() => {
+			expect(fakeAudio.play).toHaveBeenCalledTimes(1);
+		});
+
+		await fakeAudio.__endedHandler()?.();
+
+		await vi.waitFor(() => {
+			expect(window.localStorage.getItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY)).toBe('track-2');
+			expect(fakeAudio.load).toHaveBeenCalledTimes(2);
+			expect(fakeAudio.play).toHaveBeenCalledTimes(2);
 		});
 	});
 
