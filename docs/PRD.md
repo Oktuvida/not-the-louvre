@@ -215,9 +215,21 @@ No fill tool, no shapes, no text, no layers. The constraint is the game.
 | ---------------- | ----------------------------------------------- |
 | Resolution       | 768x768 canonical artwork size                  |
 | Editable source  | Product-owned versioned JSON drawing document   |
-| Persistence form | Compact JSON compressed with gzip               |
+| Persistence form | `DrawingDocumentV2` JSON compressed with gzip   |
 | Derived media    | Canonical AVIF rendered from the drawing source |
 | Source limits    | Schema + aggregate limits enforced in backend   |
+
+#### Drawing document format
+
+- The canonical editable format is `DrawingDocumentV2`.
+- `DrawingDocumentV2` stores ordered strokes in two arrays: `base` and `tail`.
+- Render order is deterministic: draw the background, replay `base` in order,
+  then replay `tail` in order.
+- `tail` represents newly appended work since the last rewrite; compaction or
+  canonical rewrites fold the retained result back into `base` and clear
+  `tail`.
+- The system must read legacy V1 documents for compatibility, but all new
+  canonical writes and rewrites emit V2.
 
 #### Drawing Experience
 
@@ -430,6 +442,27 @@ All canvas-generated editing flows in the MVP follow the same contract: JSON
 drawing document for browser-to-backend confirm, gzip-compressed JSON for
 editable persistence, and canonical AVIF for backend media persistence and
 delivery.
+
+**Drawing document evolution and benchmark path**: The drawing source started
+from a simpler append-only JSON model and evolved into `DrawingDocumentV2`
+after research focused on controlling persistence growth without giving up
+editable replay.
+
+- Research compared exact raster-validated compaction against benchmark-driven
+  approximate paths in the stroke-json lab.
+- Phase 1 experiments evaluated mature simplification libraries, including
+  `simplify-js` and `vis-why`.
+- Phase 2 experiments evaluated mature geometry engines, including Clipper 2
+  and `js-angusj-clipper`.
+- That benchmark work informed two product-level decisions:
+  - keep the exact raster-validated compactor as a correctness oracle for
+    research and verification
+  - standardize the current prod-like path on `simplify-js` with tolerance
+    `0.5` and high-quality mode enabled, followed by Clipper 2
+
+The benchmark surface itself is not a product requirement. Its purpose was to
+arrive at the current V2 format and compaction direction, which are the parts
+that matter for MVP product behavior.
 
 **Storage and egress budget first**: The storage tier is capped at 1GB capacity
 and 5GB of egress, so image handling must optimize for both footprint and

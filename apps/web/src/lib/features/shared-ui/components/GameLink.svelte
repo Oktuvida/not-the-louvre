@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { getFrequentReadCanvasContext } from '$lib/client/canvas-2d';
 	import type { Snippet } from 'svelte';
 	import {
+		createStickerBackgroundUrl,
 		drawStickerBackground,
 		type StickerVariant
 	} from '../../home-entry-scene/canvas/museum-canvas';
 	import {
+		getStickerControlPreset,
 		getStickerControlVars,
 		getStickerRotation,
 		type StickerControlSize,
@@ -35,8 +38,14 @@
 	let resizeObserver: ResizeObserver | undefined;
 
 	const stickerVariant: StickerVariant = $derived(variant);
+	const stickerPreset = $derived(getStickerControlPreset(size));
 	const rotation = $derived(getStickerRotation(`link:${href}:${variant}:${size}`));
 	const stickerVars = $derived(getStickerControlVars(size, variant));
+	const stickerBackgroundUrl = $derived.by(() =>
+		createStickerBackgroundUrl(stickerPreset.minWidth, stickerPreset.height, {
+			variant: stickerVariant
+		})
+	);
 	const resolvedHref = $derived.by(() => {
 		if (href === '/') return resolve('/');
 		if (href === '/draw') return resolve('/draw');
@@ -59,7 +68,7 @@
 		canvasEl.style.width = `${w}px`;
 		canvasEl.style.height = `${h}px`;
 
-		const ctx = canvasEl.getContext('2d');
+		const ctx = getFrequentReadCanvasContext(canvasEl);
 		if (!ctx) return;
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -93,6 +102,14 @@
 	style:transform="rotate({rotation.toFixed(1)}deg)"
 	style={stickerVars}
 >
+	<img
+		data-testid="game-link-bg"
+		src={stickerBackgroundUrl}
+		alt=""
+		aria-hidden="true"
+		draggable="false"
+		class="sticker-bg"
+	/>
 	<canvas bind:this={canvasEl} class="sticker-canvas"></canvas>
 	<div class="sticker-content {contentClassName}">
 		{@render children()}
@@ -136,11 +153,19 @@
 		transition-duration: 0.06s;
 	}
 
+	.sticker-bg,
 	.sticker-canvas {
 		display: block;
 		pointer-events: none;
 		position: absolute;
 		inset: 0;
+	}
+
+	.sticker-bg {
+		height: 100%;
+		width: 100%;
+		object-fit: fill;
+		user-select: none;
 	}
 
 	.sticker-content {

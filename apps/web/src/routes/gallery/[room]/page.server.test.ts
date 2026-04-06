@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocked = vi.hoisted(() => ({
+	getViewerContentPreferences: vi.fn(),
 	listArtworkDiscovery: vi.fn()
 }));
 
 vi.mock('$lib/server/artwork/read.service', () => ({
 	listArtworkDiscovery: mocked.listArtworkDiscovery
+}));
+
+vi.mock('$lib/server/moderation/service', () => ({
+	getViewerContentPreferences: mocked.getViewerContentPreferences
 }));
 
 const makeDiscoveryPage = (
@@ -20,7 +25,14 @@ const makeDiscoveryPage = (
 describe('gallery room route', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		mocked.getViewerContentPreferences.mockReset();
 		mocked.listArtworkDiscovery.mockReset();
+		mocked.getViewerContentPreferences.mockResolvedValue({
+			adultContentConsentedAt: null,
+			adultContentEnabled: false,
+			adultContentRevokedAt: null,
+			ambientAudioEnabled: null
+		});
 		mocked.listArtworkDiscovery.mockResolvedValue(
 			makeDiscoveryPage([
 				{
@@ -43,13 +55,45 @@ describe('gallery room route', () => {
 		const result = (await load({
 			locals: {},
 			params: { room: 'hot-wall' }
-		} as never)) as { roomId: string };
+		} as never)) as { roomId: string; discovery: Record<string, unknown> };
 
 		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
-			{ cursor: null, limit: 12, sort: 'hot', window: null },
+			{ cursor: null, limit: 24, sort: 'hot', window: null },
 			{ user: undefined }
 		);
 		expect(result).toMatchObject({ roomId: 'hot-wall' });
+		expect(result.discovery).toMatchObject({
+			pageInfo: { hasMore: false, nextCursor: null },
+			request: {
+				authorId: null,
+				limit: 24,
+				sort: 'hot',
+				window: null
+			}
+		});
+	});
+
+	it('loads the mystery room with continuation metadata', async () => {
+		const { load } = await import('./+page.server');
+		const result = (await load({
+			locals: {},
+			params: { room: 'mystery' }
+		} as never)) as { roomId: string; discovery: Record<string, unknown> };
+
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
+			{ cursor: null, limit: 24, sort: 'recent', window: null },
+			{ user: undefined }
+		);
+		expect(result).toMatchObject({ roomId: 'mystery' });
+		expect(result.discovery).toMatchObject({
+			pageInfo: { hasMore: false, nextCursor: null },
+			request: {
+				authorId: null,
+				limit: 24,
+				sort: 'recent',
+				window: null
+			}
+		});
 	});
 
 	it('returns a user-scoped studio room from recent discovery results', async () => {
@@ -91,7 +135,7 @@ describe('gallery room route', () => {
 			artworks: Array<Record<string, unknown>>;
 			discovery: {
 				pageInfo: { hasMore: boolean; nextCursor: string | null };
-				request: { authorId: string; limit: number; scalable: boolean; sort: string; window: null };
+				request: { authorId: string; limit: number; sort: string; window: null };
 			};
 			viewer: { id: string };
 		};
@@ -107,7 +151,6 @@ describe('gallery room route', () => {
 			request: {
 				authorId: 'user-1',
 				limit: 24,
-				scalable: true,
 				sort: 'recent',
 				window: null
 			}

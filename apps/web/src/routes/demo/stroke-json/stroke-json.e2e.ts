@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-test('draws on the stroke-json demo and runs bitmap and json clone experiments', async ({
+const compressedArtworkPayload =
+	'H4sIALTX0WkAA02N0QqDMAxF/yV7zUPNipb+ivShWqtFsaPtJkz898Uxhg+Bm3DuyQ6vIeUQV9CEMIfVgQabyhbTDAhbcGUC3dQKYRrCOJXf0tl+HlN8fvmbd77zDfOdzQPo1iAUGxZOO/RxiemEyJEkwVAOb4ZqhEcMa8lMtVKhVAbbigTycKIzKWHMgRdHr6SX/u+oxFVCiiv1Wb7XAlnAiT8i8c0c5vgAmIUvjewAAAA=';
+
+test('draws on the stroke-json demo and runs bitmap, json clone, and raster oracle experiments', async ({
 	page
 }) => {
 	await page.goto('/demo/stroke-json');
@@ -22,23 +25,64 @@ test('draws on the stroke-json demo and runs bitmap and json clone experiments',
 	await page.mouse.up();
 
 	await expect(page.getByTestId('stroke-count')).toHaveText('1');
+	await expect(page.getByTestId('document-version')).toHaveText('2');
+	await expect(page.getByTestId('base-stroke-count')).toHaveText('0');
+	await expect(page.getByTestId('tail-stroke-count')).toHaveText('1');
 	await expect(page.getByTestId('total-points')).not.toHaveText('0');
 	await expect(page.getByTestId('json-gzip-bytes')).not.toHaveText('0');
 	await expect(page.getByTestId('original-export-bytes')).not.toHaveText('0');
 
 	await page.getByRole('button', { name: 'Run 20x bitmap clone' }).click();
 	await page.getByRole('button', { name: 'Run 20x JSON clone' }).click();
+	await page.getByLabel('Raster guard preset').selectOption('conservative');
+	await page.getByRole('button', { name: 'Run exact raster oracle' }).click();
+	await page.getByRole('button', { name: 'Run 20x prod-like pipeline' }).click();
 
 	await expect(page.getByText(/Final bitmap clone preview/)).toBeVisible();
 	await expect(page.getByText(/Final JSON clone preview/)).toBeVisible();
+	await expect(page.getByText(/Raster oracle preview/)).toBeVisible();
+	await expect(page.getByText(/Prod-like pipeline preview/)).toBeVisible();
 	await expect(page.getByText(/Original export bytes:/)).toBeVisible();
 	await expect(page.getByText(/Original export format:/)).toBeVisible();
 	await expect(page.getByText(/JSON raw bytes:/)).toBeVisible();
 	await expect(page.getByText(/JSON gzip bytes:/)).toBeVisible();
 	await expect(page.getByText(/Bitmap diff pixels:/)).toBeVisible();
 	await expect(page.getByText(/JSON diff pixels:/)).toBeVisible();
+	await expect(page.getByText(/Exact raster oracle/)).toBeVisible();
+	await expect(page.getByText(/Runs the Rust\/WASM prod-like pipeline/)).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Run lossless compaction' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Run phase 1 comparison' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Run phase 2 benchmark' })).toHaveCount(0);
+	await expect(page.getByText(/Phase 1 benchmark/)).toHaveCount(0);
+	await expect(page.getByText(/Phase 2 benchmark/)).toHaveCount(0);
 	await expect(page.getByTestId('bitmap-clone-bytes')).not.toHaveText('Pending');
 	await expect(page.getByTestId('json-clone-bytes')).not.toHaveText('Pending');
+	await expect(page.getByTestId('raster-oracle-selected-preset')).toHaveText(/Conservative/i);
+	await expect(page.getByTestId('raster-oracle-max-stroke-area')).not.toHaveText('Pending');
+	await expect(page.getByTestId('raster-oracle-guarded-stroke-count')).not.toHaveText('Pending');
+	await expect(page.getByTestId('raster-oracle-final-diff-pixels')).not.toHaveText('Pending');
+	await expect(page.getByTestId('raster-oracle-final-raw-bytes')).not.toHaveText('Pending');
+	await expect(page.getByTestId('raster-oracle-final-gzip-bytes')).not.toHaveText('Pending');
+	await expect(page.getByTestId('raster-oracle-final-stroke-count')).not.toHaveText('Pending');
+	await expect(page.getByTestId('raster-oracle-final-point-count')).not.toHaveText('Pending');
+	await expect(page.getByTestId('prod-like-phase2-max-stroke-area')).not.toHaveText('Unlimited');
+	await expect(page.getByTestId('prod-like-final-diff-pixels')).not.toHaveText('Pending');
+	await expect(page.getByTestId('prod-like-final-raw-bytes')).not.toHaveText('Pending');
+	await expect(page.getByTestId('prod-like-final-gzip-bytes')).not.toHaveText('Pending');
+	await expect(page.getByTestId('prod-like-total-duration-ms')).not.toHaveText('Pending');
+	await expect(page.getByTestId('prod-like-final-duration-ms')).not.toHaveText('Pending');
+	await expect(page.getByTestId('prod-like-iteration-row')).toHaveCount(20);
+	expect(
+		Number(await page.getByTestId('prod-like-total-duration-ms').textContent())
+	).toBeGreaterThan(0);
+	expect(
+		Number(await page.getByTestId('prod-like-final-duration-ms').textContent())
+	).toBeGreaterThan(0);
+	expect(
+		Number(await page.getByTestId('prod-like-final-diff-pixels').textContent())
+	).toBeGreaterThanOrEqual(0);
+	await expect(page.getByTestId('prod-like-final-stroke-count')).not.toHaveText('Pending');
+	await expect(page.getByTestId('prod-like-final-point-count')).not.toHaveText('Pending');
 });
 
 test('does not keep growing the stroke document while the pointer is outside the canvas', async ({
@@ -75,4 +119,21 @@ test('does not keep growing the stroke document while the pointer is outside the
 	await expect(page.getByTestId('total-points')).not.toHaveText(String(pointsWhileOutside));
 	await expect(page.getByTestId('json-raw-bytes')).not.toHaveText('0');
 	await expect(page.getByTestId('json-gzip-bytes')).not.toHaveText('0');
+});
+
+test('loads a compressed artwork payload into the lab', async ({ page }) => {
+	await page.goto('/demo/stroke-json');
+
+	await page.getByLabel('Compressed drawing payload').fill(compressedArtworkPayload);
+	await page.getByRole('button', { name: 'Load compressed payload' }).click();
+
+	await expect(page.getByTestId('document-version')).toHaveText('2');
+	await expect(page.getByTestId('base-stroke-count')).toHaveText('0');
+	await expect(page.getByTestId('tail-stroke-count')).toHaveText('2');
+	await expect(page.getByTestId('stroke-count')).toHaveText('2');
+	await expect(page.getByTestId('total-points')).toHaveText('6');
+	await expect(page.getByTestId('json-raw-bytes')).not.toHaveText('0');
+	await expect(page.getByTestId('json-gzip-bytes')).not.toHaveText('0');
+	await expect(page.getByText(/Original drawing preview/)).toBeVisible();
+	await expect(page.getByLabel('Compressed drawing payload')).toHaveValue(compressedArtworkPayload);
 });

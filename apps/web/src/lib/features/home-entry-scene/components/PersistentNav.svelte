@@ -8,8 +8,9 @@
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
 	import { buildDrawingDraftKey, clearDrawingDraft } from '$lib/features/stroke-json/drafts';
 	import {
-		createEmptyDrawingDocument,
-		parseDrawingDocument
+		DRAWING_DOCUMENT_VERSION,
+		createEmptyDrawingDocumentV2,
+		parseEditableDrawingDocumentV2
 	} from '$lib/features/stroke-json/document';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
@@ -20,7 +21,7 @@
 	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
 
 	type AvatarSavedPayload = {
-		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV1 | null;
+		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
 		avatarOnboardingCompletedAt: Date;
 		avatarUrl: string;
 	};
@@ -53,7 +54,17 @@
 		user
 			? buildDrawingDraftKey({
 					schemaVersion:
-						user.avatarDrawingDocument?.version ?? createEmptyDrawingDocument('avatar').version,
+						user.avatarDrawingDocument?.version ?? createEmptyDrawingDocumentV2('avatar').version,
+					scope: 'profile',
+					surface: 'avatar',
+					userKey: user.id
+				})
+			: null
+	);
+	const avatarLegacyDraftKey = $derived(
+		user
+			? buildDrawingDraftKey({
+					schemaVersion: DRAWING_DOCUMENT_VERSION,
 					scope: 'profile',
 					surface: 'avatar',
 					userKey: user.id
@@ -102,6 +113,9 @@
 		if (avatarDraftKey) {
 			clearDrawingDraft(avatarDraftKey);
 		}
+		if (avatarLegacyDraftKey) {
+			clearDrawingDraft(avatarLegacyDraftKey);
+		}
 
 		isAvatarEditorOpen = false;
 	};
@@ -134,7 +148,7 @@
 
 			dispatchAvatarFaviconUpdate(user.id);
 			onAvatarSaved?.({
-				avatarDrawingDocument: parseDrawingDocument(drawingDocument),
+				avatarDrawingDocument: parseEditableDrawingDocumentV2(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
 				avatarUrl: data.avatarUrl
 			});
@@ -163,7 +177,7 @@
 <div class="pointer-events-none absolute inset-0 z-[30]">
 	{#if user}
 		<div
-			class="pointer-events-auto absolute top-8 left-8 max-w-[22rem] transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)]"
+			class="pointer-events-auto absolute top-4 left-4 max-w-[calc(100vw-2rem)] transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:top-8 md:left-8 md:max-w-[22rem]"
 			class:-translate-x-[calc(100%+3rem)]={isExiting}
 			class:opacity-0={isExiting}
 		>
@@ -177,9 +191,10 @@
 	{/if}
 
 	<div
-		class="pointer-events-auto absolute top-8 right-6 transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:right-8"
+		class="pointer-events-auto absolute top-4 right-4 hidden transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:top-8 md:right-8 md:block"
 		class:translate-x-[calc(100%+3rem)]={isExiting}
 		class:opacity-0={isExiting}
+		data-testid="home-preview-stack"
 	>
 		<div class="relative flex flex-col items-end gap-7 pb-[13.5rem]">
 			{#each previewCards as card (card.id)}
@@ -261,38 +276,41 @@
 	</div>
 
 	<div
-		class="pointer-events-auto absolute bottom-20 left-6 flex flex-col gap-4 transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:left-16"
+		class="pointer-events-auto absolute right-4 bottom-6 left-4 flex items-stretch justify-center transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:right-auto md:bottom-20 md:left-16 md:translate-x-0 md:items-start"
 		class:translate-y-[calc(100%+6rem)]={isExiting}
 		class:opacity-0={isExiting}
 	>
-		{#if user}
-			<GameButton
-				type="button"
-				variant="secondary"
-				size="lg"
-				className="group -rotate-1 hover:translate-x-[10px] hover:rotate-2"
-				onclick={handleGalleryClick}
-			>
-				<Trophy
-					class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-				/>
-				<span>GALLERY</span>
-			</GameButton>
-		{:else}
-			<GameLink
-				href={galleryHref}
-				variant="secondary"
-				size="lg"
-				className="group -rotate-1 hover:translate-x-[10px] hover:rotate-2"
-			>
-				<Trophy
-					class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-				/>
-				<span>GALLERY</span>
-			</GameLink>
-		{/if}
+		<div
+			class="flex w-full max-w-[22rem] flex-col items-stretch gap-4 md:w-auto md:max-w-none md:items-start"
+		>
+			{#if user}
+				<GameButton
+					type="button"
+					variant="secondary"
+					size="lg"
+					className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 md:w-auto"
+					onclick={handleGalleryClick}
+				>
+					<Trophy
+						class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
+					/>
+					<span>GALLERY</span>
+				</GameButton>
+			{:else}
+				<GameLink
+					href={galleryHref}
+					variant="secondary"
+					size="lg"
+					className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 md:w-auto"
+				>
+					<Trophy
+						class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
+					/>
+					<span>GALLERY</span>
+				</GameLink>
+			{/if}
 
-		<!-- <GameLink
+			<!-- <GameLink
 			href="/gallery/mystery"
 			variant="accent"
 			size="lg"
@@ -317,27 +335,28 @@
 			<span>MYSTERY</span>
 		</GameLink> -->
 
-		{#if user}
-			<form method="POST" action="?/signOut" class="w-fit">
-				<GameButton
-					type="submit"
-					variant="danger"
-					size="lg"
-					className="group rotate-1 hover:translate-x-[10px] hover:rotate-[-2deg]"
-				>
-					<LogOut
-						class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-					/>
-					<span>LOGOUT</span>
-				</GameButton>
-			</form>
-		{/if}
+			{#if user}
+				<form method="POST" action="?/signOut" class="w-full md:w-fit md:self-start">
+					<GameButton
+						type="submit"
+						variant="danger"
+						size="lg"
+						className="group w-full justify-center rotate-1 hover:translate-x-[10px] hover:rotate-[-2deg] md:w-auto"
+					>
+						<LogOut
+							class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
+						/>
+						<span>LOGOUT</span>
+					</GameButton>
+				</form>
+			{/if}
+		</div>
 	</div>
 </div>
 
 {#if isAvatarEditorOpen && user}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-8 backdrop-blur-sm"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-3 py-3 backdrop-blur-sm md:px-4 md:py-8"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Edit your avatar"
@@ -353,8 +372,11 @@
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 		>
-			<StudioPanel tone="paper" className="w-full">
-				<div class="p-6 md:p-8">
+			<StudioPanel
+				tone="paper"
+				className="w-full max-h-[calc(100dvh-1.5rem)] overflow-y-auto md:max-h-[calc(100dvh-4rem)]"
+			>
+				<div class="p-4 md:p-8">
 					<div class="mb-4 flex items-center justify-between">
 						<h2 class="font-display text-xl tracking-[0.06em] text-[var(--color-ink)] uppercase">
 							Redraw your avatar

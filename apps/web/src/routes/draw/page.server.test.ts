@@ -6,9 +6,15 @@ import { ArtworkFlowError } from '$lib/server/artwork/errors';
 type DrawPublishActionEvent = Parameters<Actions['publish']>[0];
 
 const mocked = vi.hoisted(() => ({
+	decodeCompressedDrawingDocumentToEditableDocument: vi.fn(),
 	getIp: vi.fn(() => '127.0.0.1'),
 	getArtworkDetail: vi.fn(),
 	publishArtwork: vi.fn()
+}));
+
+vi.mock('$lib/features/stroke-json/runtime.server', () => ({
+	decodeCompressedDrawingDocumentToEditableDocument:
+		mocked.decodeCompressedDrawingDocumentToEditableDocument
 }));
 
 vi.mock('$lib/server/artwork/service', () => ({
@@ -72,14 +78,25 @@ const createActionEvent = (
 describe('draw route page', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockReset();
 		mocked.getIp.mockClear();
 		mocked.getArtworkDetail.mockReset();
 		mocked.publishArtwork.mockReset();
+		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockResolvedValue({
+			background: '#fdfbf7',
+			base: [],
+			height: 768,
+			kind: 'artwork',
+			tail: [],
+			version: 2,
+			width: 768
+		});
 		mocked.getArtworkDetail.mockResolvedValue({
 			author: { avatarUrl: null, id: 'user-9', nickname: 'parent_artist' },
 			childForks: [],
 			commentCount: 0,
 			createdAt: new Date('2026-03-28T10:00:00.000Z'),
+			drawingDocument: null,
 			forkCount: 0,
 			id: 'artwork-parent',
 			lineage: { isFork: false, parent: null, parentStatus: 'none' },
@@ -130,6 +147,23 @@ describe('draw route page', () => {
 	});
 
 	it('loads fork parent artwork metadata when opening the draw route for a fork', async () => {
+		mocked.getArtworkDetail.mockResolvedValueOnce({
+			author: { avatarUrl: null, id: 'user-9', nickname: 'parent_artist' },
+			childForks: [],
+			commentCount: 0,
+			createdAt: new Date('2026-03-28T10:00:00.000Z'),
+			drawingDocument: 'persisted-parent-payload',
+			forkCount: 0,
+			id: 'artwork-parent',
+			isNsfw: false,
+			lineage: { isFork: false, parent: null, parentStatus: 'none' },
+			mediaContentType: 'image/avif',
+			mediaSizeBytes: 128,
+			mediaUrl: '/api/artworks/artwork-parent/media',
+			score: 5,
+			title: 'Parent Artwork',
+			updatedAt: new Date('2026-03-28T10:00:00.000Z')
+		});
 		const { load } = await import('./+page.server');
 
 		await expect(
@@ -139,13 +173,44 @@ describe('draw route page', () => {
 			} as never)
 		).resolves.toMatchObject({
 			forkParent: {
+				drawingDocument: {
+					kind: 'artwork',
+					version: 2
+				},
 				id: 'artwork-parent',
 				mediaUrl: '/api/artworks/artwork-parent/media',
 				title: 'Parent Artwork'
 			}
 		});
+		expect(mocked.decodeCompressedDrawingDocumentToEditableDocument).toHaveBeenCalledWith(
+			'persisted-parent-payload'
+		);
 		expect(mocked.getArtworkDetail).toHaveBeenCalledWith('artwork-parent', {
 			user: authenticatedUser
+		});
+	});
+
+	it('preserves the runtime-backed drawing size contract in publish failures', async () => {
+		mocked.publishArtwork.mockRejectedValue(
+			new ArtworkFlowError(413, 'Drawing document is too large', 'DRAWING_DOCUMENT_TOO_LARGE')
+		);
+
+		const { actions } = await import('./+page.server');
+		const result = await actions.publish(
+			createActionEvent({
+				drawingDocument:
+					'{"version":2,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","base":[],"tail":[]}',
+				title: 'Huge drawing'
+			})
+		);
+
+		expect(result).toMatchObject({
+			status: 413,
+			data: {
+				action: 'publish',
+				code: 'DRAWING_DOCUMENT_TOO_LARGE',
+				message: 'Drawing document is too large'
+			}
 		});
 	});
 

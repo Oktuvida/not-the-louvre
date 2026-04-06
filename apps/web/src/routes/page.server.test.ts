@@ -11,7 +11,10 @@ import {
 type HomeActionEvent = Parameters<Actions['signUp']>[0];
 
 const mocked = vi.hoisted(() => ({
+	decodeCompressedDrawingDocumentToEditableDocument: vi.fn(),
+	findUserById: vi.fn(),
 	getIp: vi.fn(() => '127.0.0.1'),
+	getViewerContentPreferences: vi.fn(),
 	getNicknameAvailability: vi.fn(),
 	listArtworkDiscovery: vi.fn(),
 	recoverAccount: vi.fn(),
@@ -39,10 +42,25 @@ vi.mock('$lib/server/artwork/read.service', () => ({
 	listArtworkDiscovery: mocked.listArtworkDiscovery
 }));
 
+vi.mock('$lib/server/moderation/service', () => ({
+	getViewerContentPreferences: mocked.getViewerContentPreferences
+}));
+
+vi.mock('$lib/server/user/repository', () => ({
+	userRepository: {
+		findUserById: mocked.findUserById
+	}
+}));
+
 vi.mock('$lib/server/user/avatar.service', () => ({
 	avatarService: {
 		uploadAvatar: mocked.uploadAvatar
 	}
+}));
+
+vi.mock('$lib/features/stroke-json/runtime.server', () => ({
+	decodeCompressedDrawingDocumentToEditableDocument:
+		mocked.decodeCompressedDrawingDocumentToEditableDocument
 }));
 
 vi.mock('better-auth/api', () => ({
@@ -84,13 +102,32 @@ describe('home route auth contract', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mocked.getIp.mockClear();
+		mocked.getViewerContentPreferences.mockReset();
 		mocked.getNicknameAvailability.mockReset();
 		mocked.listArtworkDiscovery.mockReset();
+		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockReset();
+		mocked.findUserById.mockReset();
 		mocked.recoverAccount.mockReset();
 		mocked.uploadAvatar.mockReset();
 		mocked.signInWithNickname.mockReset();
 		mocked.signOutCurrentSession.mockReset();
 		mocked.signUpWithNickname.mockReset();
+		mocked.getViewerContentPreferences.mockResolvedValue({
+			adultContentConsentedAt: null,
+			adultContentEnabled: false,
+			adultContentRevokedAt: null,
+			ambientAudioEnabled: null
+		});
+		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockResolvedValue({
+			background: '#f5f0e1',
+			base: [],
+			height: 340,
+			kind: 'avatar',
+			tail: [],
+			version: 2,
+			width: 340
+		});
+		mocked.findUserById.mockResolvedValue(null);
 		mocked.listArtworkDiscovery.mockResolvedValue({
 			items: [
 				{
@@ -150,6 +187,22 @@ describe('home route auth contract', () => {
 	});
 
 	it('returns an authenticated bootstrap from canonical server user data', async () => {
+		mocked.findUserById.mockResolvedValueOnce({
+			avatarDocument: 'persisted-avatar-payload',
+			avatarDocumentVersion: 2,
+			avatarIsHidden: false,
+			avatarIsNsfw: false,
+			avatarOnboardingCompletedAt: new Date('2026-03-28T10:00:00.000Z'),
+			avatarUrl: 'avatars/product-user-1.avif',
+			banReason: null,
+			bannedAt: null,
+			createdAt: new Date('2026-03-28T09:00:00.000Z'),
+			id: 'product-user-1',
+			isBanned: false,
+			nickname: 'artist_1',
+			role: 'user',
+			updatedAt: new Date('2026-03-28T10:00:00.000Z')
+		});
 		const { load } = await import('./+page.server');
 
 		await expect(
@@ -173,10 +226,17 @@ describe('home route auth contract', () => {
 				},
 				status: 'authenticated',
 				user: {
+					avatarDrawingDocument: {
+						kind: 'avatar',
+						version: 2
+					},
 					nickname: 'artist_1'
 				}
 			}
 		});
+		expect(mocked.decodeCompressedDrawingDocumentToEditableDocument).toHaveBeenCalledWith(
+			'persisted-avatar-payload'
+		);
 	});
 
 	it('returns avatar-onboarding bootstrap for authenticated users who have not completed signup onboarding', async () => {
@@ -396,6 +456,44 @@ describe('home route auth contract', () => {
 				action: 'saveAvatar',
 				code: 'INVALID_MEDIA_FORMAT',
 				message: 'Avatar media must be WebP'
+			}
+		});
+	});
+
+	it('preserves runtime-backed drawing validation failures on avatar save', async () => {
+		mocked.uploadAvatar.mockRejectedValue(
+			new ArtworkFlowError(400, 'Invalid drawing document', 'INVALID_DRAWING_DOCUMENT')
+		);
+
+		const { actions } = await import('./+page.server');
+		const formData = new FormData();
+		formData.set('drawingDocument', serializeDrawingDocument(createEmptyDrawingDocument('avatar')));
+
+		const result = await actions.saveAvatar(
+			createEvent(
+				{},
+				{
+					locals: {
+						user: {
+							id: 'product-user-1',
+							authUserId: 'auth-user-1',
+							avatarOnboardingCompletedAt: null,
+							nickname: 'fresh_artist',
+							role: 'user',
+							email: 'fresh_artist@not-the-louvre.local'
+						}
+					} as never,
+					request: new Request('http://localhost/', { method: 'POST', body: formData })
+				}
+			) as never
+		);
+
+		expect(result).toMatchObject({
+			status: 400,
+			data: {
+				action: 'saveAvatar',
+				code: 'INVALID_DRAWING_DOCUMENT',
+				message: 'Invalid drawing document'
 			}
 		});
 	});

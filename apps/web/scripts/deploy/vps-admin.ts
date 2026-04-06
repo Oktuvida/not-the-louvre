@@ -163,6 +163,10 @@ const ensureNodeVersion = () => {
 	}
 };
 
+const ensureStrokeJsonRustPrerequisites = (currentRepoRoot: string) => {
+	runCommand('bun', ['run', 'stroke-json:wasm:verify'], { cwd: currentRepoRoot });
+};
+
 const ensureServiceAccount = (serviceUser: string) => {
 	const groupResult = spawnSync('getent', ['group', serviceUser], { stdio: 'ignore' });
 	if (groupResult.status !== 0) {
@@ -280,11 +284,22 @@ const installCommand = async (options: CliOptions) => {
 		throw new Error('install requires --domain and --email');
 	}
 
-	for (const command of ['git', 'node', 'bun', 'caddy', 'systemctl']) {
+	for (const command of [
+		'git',
+		'node',
+		'bun',
+		'caddy',
+		'systemctl',
+		'rustc',
+		'cargo',
+		'wasm-pack',
+		'rustup'
+	]) {
 		ensureCommandExists(command);
 	}
 
 	ensureNodeVersion();
+	ensureStrokeJsonRustPrerequisites(config.repoRoot);
 	ensureServiceAccount(config.serviceUser);
 	await ensureDirectory(resolve(config.appRoot, 'apps/web'));
 	await ensureEnvFile(config);
@@ -319,9 +334,19 @@ const deployCommand = async (options: CliOptions) => {
 	}
 
 	runCommand('bun', ['install', '--frozen-lockfile'], { cwd: config.repoRoot });
+	ensureStrokeJsonRustPrerequisites(config.repoRoot);
 	const buildEnv = createChildProcessEnv(process.env, validation.env);
-	runCommand('bun', ['run', 'build'], { cwd: config.repoRoot, env: buildEnv });
+	runCommand('bun', ['run', 'stroke-json:wasm:build'], { cwd: config.repoRoot, env: buildEnv });
+	runCommand('bun', ['run', '--filter', '@not-the-louvre/web', 'build'], {
+		cwd: config.repoRoot,
+		env: buildEnv
+	});
 	await ensureBuildOutput(resolve(config.webRoot, DEFAULT_BUILD_DIR));
+	runCommand('bun', ['run', '--filter', '@not-the-louvre/web', 'validate:build-output'], {
+		cwd: config.repoRoot,
+		env: buildEnv
+	});
+	runCommand('bun', ['run', 'stroke-json:wasm:smoke'], { cwd: config.repoRoot, env: buildEnv });
 	runCommand('systemctl', ['restart', config.serviceName]);
 	ensureServiceActive(config.serviceName);
 	process.stdout.write(`Deploy complete for ${config.serviceName}\n`);
