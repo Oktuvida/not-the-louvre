@@ -5,8 +5,10 @@
 	import { ambientPlaylist, type AmbientTrack } from './playlist';
 	import {
 		readStoredAmbientAudioPreference,
+		readStoredAmbientAudioTrackId,
 		resolveInitialAmbientAudioEnabled,
-		writeStoredAmbientAudioPreference
+		writeStoredAmbientAudioPreference,
+		writeStoredAmbientAudioTrackId
 	} from './preferences';
 
 	let {
@@ -50,16 +52,39 @@
 		}
 	};
 
-	const applyTrack = (index: number) => {
+	const persistTrackPreference = (trackId: string) => {
+		writeStoredAmbientAudioTrackId(trackId, browser ? window.localStorage : null);
+	};
+
+	const selectTrack = (index: number) => {
 		const track = playlist[index];
 
-		if (!track || !audio) {
+		if (!track) {
 			return false;
 		}
 
 		currentTrackIndex = index;
 		currentTrackLabel = track.title;
-		audio.src = track.src;
+		persistTrackPreference(track.id);
+		return true;
+	};
+
+	const resolveStoredTrackIndex = (storedTrackId: string | null) => {
+		if (!storedTrackId) {
+			return 0;
+		}
+
+		const restoredIndex = playlist.findIndex((track) => track.id === storedTrackId);
+
+		return restoredIndex >= 0 ? restoredIndex : 0;
+	};
+
+	const applyTrack = (index: number) => {
+		if (!selectTrack(index) || !audio) {
+			return false;
+		}
+
+		audio.src = playlist[index]!.src;
 		audio.load();
 		return true;
 	};
@@ -239,8 +264,11 @@
 
 	onMount(() => {
 		const storedPreference = readStoredAmbientAudioPreference(window.localStorage);
+		const storedTrackId = readStoredAmbientAudioTrackId(window.localStorage);
 		enabled = resolveInitialAmbientAudioEnabled(bootstrappedPreference, storedPreference);
-		currentTrackLabel = playlist[0]?.title ?? null;
+		if (!selectTrack(resolveStoredTrackIndex(storedTrackId))) {
+			currentTrackLabel = null;
+		}
 
 		const initHandle = window.setTimeout(() => {
 			void initializeAudio();

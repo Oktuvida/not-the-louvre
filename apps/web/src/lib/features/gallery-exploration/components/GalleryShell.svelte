@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { ArrowLeft, Paintbrush, RefreshCw } from 'lucide-svelte';
-	import { browser } from '$app/environment';
 	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
 	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
@@ -27,12 +26,7 @@
 		children
 	}: Props = $props();
 
-	let museumWallPatternUrl = $state<string | undefined>(undefined);
-
-	$effect(() => {
-		if (!browser || museumWallPatternUrl) return;
-		museumWallPatternUrl = createMuseumWallPatternUrl();
-	});
+	const museumWallPatternUrl = createMuseumWallPatternUrl();
 </script>
 
 <div

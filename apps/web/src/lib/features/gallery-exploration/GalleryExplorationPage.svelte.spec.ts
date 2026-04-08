@@ -7,6 +7,7 @@ const {
 	goto,
 	getBrowserRealtimeClient,
 	invalidateAll,
+	pushState,
 	replaceState,
 	pageStore,
 	setPageValue
@@ -54,6 +55,16 @@ const {
 		goto: vi.fn(),
 		getBrowserRealtimeClient: vi.fn(() => createRealtimeClient()),
 		invalidateAll: vi.fn(async () => {}),
+		pushState: vi.fn((url: string | URL, state: Record<string, unknown>) => {
+			currentValue = {
+				state,
+				url: url instanceof URL ? url : new URL(url, currentValue.url)
+			};
+
+			for (const subscriber of subscribers) {
+				subscriber(currentValue);
+			}
+		}),
 		pageStore: {
 			subscribe(callback: (value: typeof currentValue) => void) {
 				subscribers.add(callback);
@@ -93,6 +104,7 @@ vi.mock('$app/navigation', async (importOriginal) => {
 		...actual,
 		goto,
 		invalidateAll,
+		pushState,
 		replaceState
 	};
 });
@@ -142,6 +154,7 @@ describe('GalleryExplorationPage', () => {
 		getBrowserRealtimeClient.mockReset();
 		getBrowserRealtimeClient.mockImplementation(() => createRealtimeClient());
 		invalidateAll.mockReset();
+		pushState.mockReset();
 		replaceState.mockReset();
 		setPageValue('/gallery');
 		window.scrollTo(0, 0);
@@ -643,6 +656,98 @@ describe('GalleryExplorationPage', () => {
 				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
 			)
 			.toBeVisible();
+	});
+
+	it('records local detail history and closes the overlay when browser state returns to the room', async () => {
+		const loadArtworkDetail = vi.fn(async () => ({
+			...baseArtwork,
+			forkCount: 0,
+			id: 'artwork-1',
+			title: 'Deterministic Gallery Study'
+		}));
+
+		setPageValue('/gallery/your-studio');
+
+		render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
+
+		await expect
+			.element(
+				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
+			)
+			.toBeVisible();
+		expect(pushState).toHaveBeenCalledWith(
+			'/gallery/your-studio',
+			expect.objectContaining({
+				galleryDetail: expect.objectContaining({
+					artworkId: 'artwork-1',
+					roomId: 'your-studio',
+					source: 'local-room-selection'
+				})
+			})
+		);
+
+		setPageValue('/gallery/your-studio', {});
+
+		await expect
+			.element(
+				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
+			)
+			.not.toBeInTheDocument();
+		await expect
+			.element(page.getByRole('button', { name: /Deterministic Gallery Study/ }))
+			.toBeVisible();
+	});
+
+	it('keeps non-local detail states on normal close semantics instead of forcing browser back', async () => {
+		const historyBack = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+		const loadArtworkDetail = vi.fn(async () => ({
+			...baseArtwork,
+			forkCount: 0,
+			id: 'artwork-1',
+			title: 'Deterministic Gallery Study'
+		}));
+
+		setPageValue('/gallery/your-studio', {
+			galleryDetail: {
+				artworkId: 'artwork-1',
+				roomId: 'your-studio',
+				source: 'external'
+			}
+		});
+
+		render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect
+			.element(
+				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
+			)
+			.toBeVisible();
+
+		await page.getByRole('button', { name: 'Close' }).click();
+
+		expect(historyBack).not.toHaveBeenCalled();
+		expect(replaceState).toHaveBeenCalledWith('/gallery/your-studio', {});
+		await expect
+			.element(
+				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
+			)
+			.not.toBeInTheDocument();
 	});
 
 	it('keeps realtime subscription failures silent in artwork detail', async () => {

@@ -204,26 +204,28 @@
 	let forkContextHydrated = $state(false);
 	const EXIT_FADE_DURATION_S = 0.5;
 	const forkContextStorageKey = $derived(getForkContextStorageKey(user));
-	const draftKey = $derived(
-		user
-			? buildDrawingDraftKey({
-					schemaVersion: drawingDocument.version,
-					scope: currentForkParent?.id ?? 'new',
-					surface: 'artwork',
-					userKey: user.id ?? user.nickname
-				})
-			: null
-	);
-	const legacyDraftKey = $derived(
-		user
-			? buildDrawingDraftKey({
-					schemaVersion: DRAWING_DOCUMENT_VERSION,
-					scope: currentForkParent?.id ?? 'new',
-					surface: 'artwork',
-					userKey: user.id ?? user.nickname
-				})
-			: null
-	);
+	const resolveDraftKeys = (scope: string | null) => {
+		if (!user) {
+			return { draftKey: null, legacyDraftKey: null };
+		}
+
+		return {
+			draftKey: buildDrawingDraftKey({
+				schemaVersion: drawingDocument.version,
+				scope: scope ?? 'new',
+				surface: 'artwork',
+				userKey: user.id ?? user.nickname
+			}),
+			legacyDraftKey: buildDrawingDraftKey({
+				schemaVersion: DRAWING_DOCUMENT_VERSION,
+				scope: scope ?? 'new',
+				surface: 'artwork',
+				userKey: user.id ?? user.nickname
+			})
+		};
+	};
+	const draftKey = $derived(resolveDraftKeys(currentForkParent?.id ?? null).draftKey);
+	const legacyDraftKey = $derived(resolveDraftKeys(currentForkParent?.id ?? null).legacyDraftKey);
 
 	let studioUnlocked = $derived(draftHydrated && (isMobileViewport || sceneState === 'open'));
 	let toolsVisible = $derived(
@@ -255,8 +257,11 @@
 		statusTone = 'error';
 	};
 
-	const resetDraftSession = async (seedDocument: DrawingDocumentV2) => {
-		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+	const resetDraftSession = async (
+		seedDocument: DrawingDocumentV2,
+		draftKeys = { draftKey, legacyDraftKey }
+	) => {
+		const draftSession = createDraftSession(draftKeys.draftKey, draftKeys.legacyDraftKey);
 		if (!draftSession) {
 			return;
 		}
@@ -326,22 +331,9 @@
 
 		forkContextHydrated = true;
 
-		const resolvedDraftKey = user
-			? buildDrawingDraftKey({
-					schemaVersion: drawingDocument.version,
-					scope: resolvedForkParent?.id ?? 'new',
-					surface: 'artwork',
-					userKey: user.id ?? user.nickname
-				})
-			: null;
-		const resolvedLegacyDraftKey = user
-			? buildDrawingDraftKey({
-					schemaVersion: DRAWING_DOCUMENT_VERSION,
-					scope: resolvedForkParent?.id ?? 'new',
-					surface: 'artwork',
-					userKey: user.id ?? user.nickname
-				})
-			: null;
+		const { draftKey: resolvedDraftKey, legacyDraftKey: resolvedLegacyDraftKey } = resolveDraftKeys(
+			resolvedForkParent?.id ?? null
+		);
 
 		if (!resolvedDraftKey) {
 			drawingDocument = resolvedForkParent?.drawingDocument
@@ -400,27 +392,41 @@
 		statusTone = 'idle';
 	};
 
-	const cancelFork = () => {
-		if (!studioUnlocked || !currentForkParent) return;
+	const returnToEmptyArtworkMode = (options?: {
+		preservePublishedArtwork?: boolean;
+		preserveStatusMessage?: boolean;
+	}) => {
+		const previousForkParentId = currentForkParent?.id ?? null;
+		const previousDraftKeys = resolveDraftKeys(previousForkParentId);
+		const nextDraftKeys = resolveDraftKeys(null);
+		const emptyDocument = createEmptyDrawingDocumentV2('artwork');
 
-		const draftSession = createDraftSession(draftKey, legacyDraftKey);
-		void draftSession?.clear();
-		if (forkContextStorageKey) {
-			savePersistedForkParent(forkContextStorageKey, null);
-		}
-
+		void createDraftSession(previousDraftKeys.draftKey, previousDraftKeys.legacyDraftKey)?.clear();
 		currentForkParent = null;
-		drawingDocument = createEmptyDrawingDocumentV2('artwork');
-		initialDrawingDocument = createEmptyDrawingDocumentV2('artwork');
+		initialDrawingDocument = cloneDrawingDocumentV2(emptyDocument);
+		drawingDocument = cloneDrawingDocumentV2(emptyDocument);
 		clearVersion += 1;
 		artworkTitle = '';
 		isArtworkNsfw = false;
 		titleError = '';
-		publishedArtwork = null;
-		statusMessage = '';
-		statusTone = 'idle';
-
+		if (!options?.preservePublishedArtwork) {
+			publishedArtwork = null;
+		}
+		if (!options?.preserveStatusMessage) {
+			statusMessage = '';
+			statusTone = 'idle';
+		}
+		if (forkContextStorageKey) {
+			savePersistedForkParent(forkContextStorageKey, null);
+		}
 		replaceStudioUrl();
+		void resetDraftSession(emptyDocument, nextDraftKeys);
+	};
+
+	const cancelFork = () => {
+		if (!studioUnlocked || !currentForkParent) return;
+
+		returnToEmptyArtworkMode();
 	};
 
 	const startOpeningBook = () => {
@@ -537,19 +543,24 @@
 				title: artworkTitle
 			});
 			if ('success' in result && result.success) {
-				const draftSession = createDraftSession(draftKey, legacyDraftKey);
-				void draftSession?.clear();
-				if (forkContextStorageKey) {
-					savePersistedForkParent(forkContextStorageKey, null);
-				}
 				publishedArtwork = result.artwork;
 				statusMessage = `Artwork published as ${result.artwork.title}`;
 				statusTone = 'success';
-				drawingDocument = cloneDrawingDocumentV2(initialDrawingDocument);
-				clearVersion += 1;
-				artworkTitle = '';
-				isArtworkNsfw = false;
-				titleError = '';
+
+				if (currentForkParent) {
+					returnToEmptyArtworkMode({
+						preservePublishedArtwork: true,
+						preserveStatusMessage: true
+					});
+				} else {
+					const draftSession = createDraftSession(draftKey, legacyDraftKey);
+					void draftSession?.clear();
+					drawingDocument = cloneDrawingDocumentV2(initialDrawingDocument);
+					clearVersion += 1;
+					artworkTitle = '';
+					isArtworkNsfw = false;
+					titleError = '';
+				}
 				return;
 			}
 

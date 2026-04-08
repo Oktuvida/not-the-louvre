@@ -1,4 +1,5 @@
 export const AMBIENT_AUDIO_STORAGE_KEY = 'not-the-louvre:ambient-audio-enabled';
+export const AMBIENT_AUDIO_TRACK_STORAGE_KEY = 'not-the-louvre:ambient-audio-track-id';
 
 export const readStoredAmbientAudioPreference = (
 	storage: Pick<Storage, 'getItem'> | null | undefined
@@ -39,7 +40,42 @@ export const writeStoredAmbientAudioPreference = (
 	}
 };
 
+export const readStoredAmbientAudioTrackId = (
+	storage: Pick<Storage, 'getItem'> | null | undefined
+) => {
+	if (!storage) {
+		return null;
+	}
+
+	try {
+		const storedValue = storage.getItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY);
+
+		if (typeof storedValue === 'string' && storedValue.length > 0) {
+			return storedValue;
+		}
+	} catch {
+		return null;
+	}
+
+	return null;
+};
+
+export const writeStoredAmbientAudioTrackId = (
+	trackId: string,
+	storage: Pick<Storage, 'setItem'> | null | undefined
+) => {
+	if (!storage) {
+		return;
+	}
+
+	try {
+		storage.setItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY, trackId);
+	} catch {
+		// Storage can be unavailable in privacy-restricted environments.
+	}
+};
+
 export const resolveInitialAmbientAudioEnabled = (
 	bootstrappedPreference: boolean | null,
 	storedPreference: boolean | null
-) => bootstrappedPreference ?? storedPreference ?? true;
+) => bootstrappedPreference ?? storedPreference ?? false;

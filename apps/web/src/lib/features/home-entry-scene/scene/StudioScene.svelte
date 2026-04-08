@@ -26,7 +26,7 @@
 		avatarUrl?: string | null;
 	} = $props();
 
-	let loaded = $state(false);
+	let sceneMediaState = $state<'error' | 'loaded' | 'pending'>('pending');
 
 	const LEFT_WALL_CAMERA = {
 		cameraX: 0,
@@ -105,6 +105,8 @@
 		rotationY: initialCamera.rotationY
 	};
 	const studioDracoLoader = browser ? getStudioDracoLoader() : undefined;
+	const sceneReady = $derived(sceneMediaState === 'loaded');
+	const sceneFailed = $derived(sceneMediaState === 'error');
 
 	const syncStudioMotion = () => {
 		cameraX = studioMotion.cameraX;
@@ -333,57 +335,64 @@
 <div
 	class="relative h-full w-full overflow-hidden border-[var(--border-frame)] bg-[radial-gradient(circle_at_50%_18%,_rgba(255,255,255,0.44),_transparent_30%),linear-gradient(180deg,_#ccb194_0%,_#8b6f57_100%)] shadow-[var(--shadow-strong)]"
 >
-	{#if !loaded}
-		<StudioLoadingFallback />
-	{/if}
-	<Canvas dpr={1.5} shadows={studioCanvasShadowMap}>
-		<T.OrthographicCamera
-			bind:ref={studioCamera}
-			makeDefault
-			position={[cameraX, cameraHeight, cameraDepth]}
-			zoom={cameraZoom}
-			oncreate={(camera) => camera.lookAt(cameraTargetX, cameraTargetY, cameraTargetZ)}
-		>
-			<OrbitControls
-				autoRotate={false}
-				enablePan={false}
-				enableZoom={false}
-				enableRotate={false}
-				enableDamping
+	<div
+		aria-hidden={sceneReady}
+		class={`absolute inset-0 z-10 transition-opacity duration-500 ${sceneReady ? 'opacity-0' : 'opacity-100'}`}
+	>
+		<StudioLoadingFallback failed={sceneFailed} />
+	</div>
+	<div
+		class={`h-full w-full transition-opacity duration-500 ${sceneReady ? 'opacity-100' : 'opacity-0'}`}
+	>
+		<Canvas dpr={1.5} shadows={studioCanvasShadowMap}>
+			<T.OrthographicCamera
+				bind:ref={studioCamera}
+				makeDefault
+				position={[cameraX, cameraHeight, cameraDepth]}
+				zoom={cameraZoom}
+				oncreate={(camera) => camera.lookAt(cameraTargetX, cameraTargetY, cameraTargetZ)}
+			>
+				<OrbitControls
+					autoRotate={false}
+					enablePan={false}
+					enableZoom={false}
+					enableRotate={false}
+					enableDamping
+				/>
+			</T.OrthographicCamera>
+			<T.Color attach="background" args={['#d7c2a8']} />
+			<T.Fog args={['#d7c2a8', 14, 32]} />
+			<T.AmbientLight intensity={0.08} />
+			<T.DirectionalLight position={[5, 16, 6]} intensity={1.4} castShadow />
+			{#key avatarUrl}
+				<SceneTextureBindings
+					{avatarUrl}
+					{artworkSlots}
+					nodes={studioNodes}
+					sceneRoot={studioSceneRoot}
+				/>
+			{/key}
+			<GLTF
+				bind:nodes={studioNodes}
+				bind:scene={studioSceneRoot}
+				dracoLoader={studioDracoLoader}
+				url="/models/studio-transformed.glb"
+				scale={5.7}
+				position={[0, -6, 0]}
+				rotation={[modelRotationX, modelRotationY, 0]}
+				castShadow
+				receiveShadow
+				onload={() => {
+					sceneMediaState = 'loaded';
+				}}
+				onerror={() => {
+					sceneMediaState = 'error';
+				}}
 			/>
-		</T.OrthographicCamera>
-		<T.Color attach="background" args={['#d7c2a8']} />
-		<T.Fog args={['#d7c2a8', 14, 32]} />
-		<T.AmbientLight intensity={0.08} />
-		<T.DirectionalLight position={[5, 16, 6]} intensity={1.4} castShadow />
-		{#key avatarUrl}
-			<SceneTextureBindings
-				{avatarUrl}
-				{artworkSlots}
-				nodes={studioNodes}
-				sceneRoot={studioSceneRoot}
-			/>
-		{/key}
-		<GLTF
-			bind:nodes={studioNodes}
-			bind:scene={studioSceneRoot}
-			dracoLoader={studioDracoLoader}
-			url="/models/studio-transformed.glb"
-			scale={5.7}
-			position={[0, -6, 0]}
-			rotation={[modelRotationX, modelRotationY, 0]}
-			castShadow
-			receiveShadow
-			onload={() => {
-				loaded = true;
-			}}
-			onerror={() => {
-				loaded = true;
-			}}
-		/>
-		<T.Mesh rotation={[-Math.PI / 2, 0, 0.5]} position={[0, -2.62, 0]} receiveShadow>
-			<T.CircleGeometry args={[18, 48]} />
-			<T.ShadowMaterial transparent opacity={0.2} />
-		</T.Mesh>
-	</Canvas>
+			<T.Mesh rotation={[-Math.PI / 2, 0, 0.5]} position={[0, -2.62, 0]} receiveShadow>
+				<T.CircleGeometry args={[18, 48]} />
+				<T.ShadowMaterial transparent opacity={0.2} />
+			</T.Mesh>
+		</Canvas>
+	</div>
 </div>
