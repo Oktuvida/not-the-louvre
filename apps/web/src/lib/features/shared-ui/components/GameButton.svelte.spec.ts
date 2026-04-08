@@ -15,6 +15,9 @@ describe('GameButton', () => {
 		await expect.element(cancel).toHaveAttribute('data-sticker-size', 'sm');
 		await expect.element(cancel).toHaveAttribute('data-sticker-variant', 'ghost');
 		await expect.element(cancel).toBeDisabled();
+
+		const ctaBackground = document.querySelector('[data-testid="game-button-bg"]');
+		expect(ctaBackground?.getAttribute('src')).toMatch(/^data:image\/(png|svg\+xml)/);
 	});
 
 	it('requests willReadFrequently for sticker canvases', async () => {

@@ -491,6 +491,32 @@ test.describe('Not the Louvre frontend port', () => {
 		).toBeVisible();
 	});
 
+	test('home route stays usable while the studio GLB is still loading', async ({ page }) => {
+		await page.route('**/models/studio-transformed.glb', async () => {
+			await new Promise(() => {});
+		});
+
+		await page.goto('/');
+
+		await expect(page.getByText('Loading Studio...')).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
+		await page.getByRole('button', { name: 'Come In' }).click();
+		await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+	});
+
+	test('home route keeps the localized scene fallback when the studio GLB fails', async ({
+		page
+	}) => {
+		await page.route('**/models/studio-transformed.glb', async (route) => {
+			await route.abort();
+		});
+
+		await page.goto('/');
+
+		await expect(page.getByText('Loading Studio...')).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
+	});
+
 	test('home sign-in flow enters the gallery chrome with a real backend user', async ({ page }) => {
 		await enableReducedMotion(page);
 		await installAvatarExportHarness(page);
@@ -954,6 +980,7 @@ test.describe('Not the Louvre frontend port', () => {
 		const seededArtworkDraft = createCompactionCandidateDraft('artwork', strokeCount);
 		const seededArtworkDraftRaw = serializeDrawingDocument(seededArtworkDraft);
 
+		await installDrawingDocumentCaptureHarness(page);
 		await installDrawingExportHarness(page);
 
 		await page.goto('/demo/better-auth/login');
@@ -964,6 +991,13 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByPlaceholder('Untitled genius').fill('Responsive Fork Source');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+		await page.evaluate(() => {
+			(
+				window as Window & {
+					__capturedDrawingRequests?: CapturedDrawingRequest[];
+				}
+			).__capturedDrawingRequests = [];
+		});
 
 		await page.goto('/gallery/your-studio');
 		await page.getByRole('button', { name: /Responsive Fork Source/ }).click();
@@ -1046,6 +1080,51 @@ test.describe('Not the Louvre frontend port', () => {
 				{ timeout: 10000 }
 			)
 			.toEqual({ lastStrokePointCount: 12, strokeCount: strokeCount + 1 });
+
+		const hydratedForkDraftRaw = (await readDrawingDraftEntries(page, 'artwork')).find(({ key }) =>
+			key.endsWith(`:${forkArtworkId}`)
+		)?.value;
+		if (!hydratedForkDraftRaw) {
+			throw new Error('Expected the fork draft to exist before publish');
+		}
+
+		const hydratedForkDraft = parseVersionedDrawingDocument(hydratedForkDraftRaw);
+		expect(hydratedForkDraft.version).toBe(2);
+		if (hydratedForkDraft.version !== 2) {
+			throw new Error('Expected the fork draft to remain a DrawingDocumentV2 before publish');
+		}
+
+		await page.getByPlaceholder('Untitled genius').fill('Responsive Fork Child');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		const forkPublishRequests = await readCapturedDrawingRequests(page);
+		expect(forkPublishRequests).toHaveLength(1);
+		expect(forkPublishRequests[0]).toMatchObject({
+			method: 'POST',
+			parentArtworkId: forkArtworkId,
+			title: 'Responsive Fork Child',
+			url: '?/publish'
+		});
+
+		const forkPayloadRaw = forkPublishRequests[0]?.drawingDocument;
+		if (!forkPayloadRaw) {
+			throw new Error('Expected the fork publish flow to send a drawing document');
+		}
+
+		const forkPayloadDocument = parseVersionedDrawingDocument(forkPayloadRaw);
+		expect(forkPayloadDocument.version).toBe(2);
+		if (forkPayloadDocument.version !== 2) {
+			throw new Error('Expected the fork publish payload to stay on DrawingDocumentV2');
+		}
+
+		expect(forkPayloadDocument.kind).toBe('artwork');
+		expect(forkPayloadDocument.tail.length).toBeLessThan(hydratedForkDraft.tail.length);
+		expect(countDrawingPoints(forkPayloadDocument)).toBeLessThan(
+			countDrawingPoints(hydratedForkDraft)
+		);
+		expect(measureJsonBytes(forkPayloadRaw)).toBeLessThan(measureJsonBytes(hydratedForkDraftRaw));
+		expect(forkPayloadRaw).not.toBe(hydratedForkDraftRaw);
 	});
 
 	test('gallery shows a newly published artwork from the real product flow', async ({ page }) => {
@@ -1073,6 +1152,35 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(
 			page.getByRole('dialog', { name: new RegExp(`Artwork details for ${publishedTitle!}`) })
 		).toBeVisible();
+	});
+
+	test('gallery browser back closes locally opened artwork detail before leaving the room', async ({
+		page
+	}) => {
+		await installDrawingExportHarness(page);
+
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+		await openDrawSketchbook(page);
+		await page.getByPlaceholder('Untitled genius').fill('History Close Piece');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		await page.setViewportSize({ height: 844, width: 390 });
+		await page.goto('/gallery/your-studio');
+		await page.getByRole('button', { name: /History Close Piece/ }).click();
+		await expect(
+			page.getByRole('dialog', { name: /Artwork details for History Close Piece/ })
+		).toBeVisible();
+
+		await page.goBack();
+
+		await expect(page).toHaveURL(/\/gallery\/your-studio$/);
+		await expect(
+			page.getByRole('dialog', { name: /Artwork details for History Close Piece/ })
+		).not.toBeVisible();
+		await expect(page.getByRole('button', { name: /History Close Piece/ })).toBeVisible();
 	});
 
 	test('gallery detail persists vote counts and receives realtime vote and comment updates', async ({
@@ -1257,6 +1365,65 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Fork Child')).toBeVisible();
 		await expect(page.getByText('Forked', { exact: true })).toBeVisible();
 		await expect(page.getByText('From Fork Source')).toBeVisible();
+	});
+
+	test('successful fork publish exits fork mode so draw again and reload stay empty', async ({
+		page
+	}) => {
+		await installDrawingExportHarness(page);
+
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+		await openDrawSketchbook(page);
+		await setDrawingExportMode(page, 'webp');
+		await page.getByPlaceholder('Untitled genius').fill('Fork Reset Source');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		await page.goto('/gallery/your-studio');
+		await page.getByRole('button', { name: /Fork Reset Source/ }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Fork' }).click();
+
+		await expect(page).toHaveURL(/\/draw\?fork=/);
+		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+		await expect(page.getByText('Forking Fork Reset Source')).toBeVisible();
+
+		const forkArtworkId = new URL(page.url()).searchParams.get('fork');
+		if (!forkArtworkId) {
+			throw new Error('Expected the fork route to expose an artwork id in the query string');
+		}
+
+		await page.getByPlaceholder('Untitled genius').fill('Fork Reset Child');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+		await expect(page).toHaveURL(/\/draw$/);
+		await expect(page.getByText('Forking Fork Reset Source')).not.toBeVisible();
+		await expect
+			.poll(async () =>
+				(await readDrawingDraftEntries(page, 'artwork')).some(({ key }) =>
+					key.endsWith(`:${forkArtworkId}`)
+				)
+			)
+			.toBe(false);
+		expect(
+			await page.evaluate(() =>
+				Object.keys(window.localStorage).filter((key) => key.startsWith('studio-fork-context:'))
+			)
+		).toEqual([]);
+
+		await page.getByRole('button', { name: 'Draw again' }).click();
+		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+		await expect(page).toHaveURL(/\/draw$/);
+		await expect(page.getByText('Forking Fork Reset Source')).not.toBeVisible();
+		await expect.poll(() => readDrawingCanvasCenterPixel(page)).toEqual([253, 251, 247, 255]);
+
+		await page.reload();
+		await expect(page).toHaveURL(/\/draw$/);
+		await expect(page.getByRole('button', { name: 'Open sketchbook' })).toBeVisible();
+		await openDrawSketchbook(page);
+		await expect(page.getByText('Forking Fork Reset Source')).not.toBeVisible();
+		await expect.poll(() => readDrawingCanvasCenterPixel(page)).toEqual([253, 251, 247, 255]);
 	});
 
 	test('fork route preserves dense stroke samples from a legacy v1 draft before publish', async ({
