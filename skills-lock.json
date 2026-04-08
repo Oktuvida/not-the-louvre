@@ -21,6 +21,11 @@
       "sourceType": "github",
       "computedHash": "e249c58df5d9d59407fc4de70b0d75bb336d917bbe0a75695d6ec8cf13cfaf35"
     },
+    "rust-best-practices": {
+      "source": "apollographql/skills",
+      "sourceType": "github",
+      "computedHash": "fd336f2f772eb46ddf8658de5f9dd8faa1f35615b316665307fc82eeb4b2e658"
+    },
     "supabase-postgres-best-practices": {
       "source": "supabase/agent-skills",
       "sourceType": "github",

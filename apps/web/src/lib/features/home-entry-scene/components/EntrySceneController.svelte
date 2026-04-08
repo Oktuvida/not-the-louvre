@@ -49,7 +49,7 @@
 	const entryState = createEntryState(getInitialEntryState());
 
 	type AvatarOverride = {
-		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV1 | null;
+		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
 		avatarOnboardingCompletedAt: Date;
 		avatarUrl: string;
 		userId: string;

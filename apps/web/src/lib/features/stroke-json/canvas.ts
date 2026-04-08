@@ -1,4 +1,4 @@
-import type { DrawingDocumentV1, DrawingStroke } from './document';
+import { getRenderableDrawingStrokes, type DrawingDocument, type DrawingStroke } from './document';
 
 export const renderDrawingStroke = (context: CanvasRenderingContext2D, stroke: DrawingStroke) => {
 	context.strokeStyle = stroke.color;
@@ -25,7 +25,7 @@ export const renderDrawingStroke = (context: CanvasRenderingContext2D, stroke: D
 
 export const renderDrawingDocumentToCanvas = (
 	canvas: HTMLCanvasElement,
-	document: DrawingDocumentV1
+	document: DrawingDocument
 ) => {
 	const context = canvas.getContext('2d');
 	if (!context) return;
@@ -33,7 +33,7 @@ export const renderDrawingDocumentToCanvas = (
 	context.fillStyle = document.background;
 	context.fillRect(0, 0, canvas.width, canvas.height);
 
-	for (const stroke of document.strokes) {
+	for (const stroke of getRenderableDrawingStrokes(document)) {
 		renderDrawingStroke(context, stroke);
 	}
 };

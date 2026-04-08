@@ -1,7 +1,13 @@
-import { access, cp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
+import { access, copyFile, cp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
+import { dirname, join, relative, resolve } from 'node:path';
 
 export const DEFAULT_BUILD_DIR = 'build';
+export const GENERATED_SERVER_WASM_RELATIVE_PATH = join(
+	'generated',
+	'wasm',
+	'server',
+	'stroke_json_wasm_bg.wasm'
+);
 
 const collectJavaScriptFiles = async (directory: string): Promise<string[]> => {
 	const entries = await readdir(directory, { withFileTypes: true });
@@ -56,6 +62,46 @@ export const ensureBuildOutput = async (buildDirectory: string) => {
 	}
 
 	return entryPoint;
+};
+
+export const ensureServerWasmAsset = async (buildDirectory: string) => {
+	const wasmAssetPath = join(buildDirectory, 'server', GENERATED_SERVER_WASM_RELATIVE_PATH);
+
+	try {
+		await access(wasmAssetPath);
+	} catch {
+		throw new Error(`Expected built server runtime wasm asset at ${wasmAssetPath}`);
+	}
+
+	return wasmAssetPath;
+};
+
+export const ensureServerWasmReferenced = async (buildDirectory: string) => {
+	const serverDirectory = join(buildDirectory, 'server');
+	const serverFiles = await collectJavaScriptFiles(serverDirectory);
+
+	for (const serverFile of serverFiles) {
+		const contents = await readFile(serverFile, 'utf8');
+
+		if (contents.includes('stroke_json_wasm_bg.wasm')) {
+			return serverFile;
+		}
+	}
+
+	throw new Error(
+		`Expected SSR build to reference stroke_json_wasm_bg.wasm from emitted server output under ${serverDirectory}`
+	);
+};
+
+export const syncGeneratedServerWasmAsset = async (
+	buildDirectory: string,
+	generatedServerWasmPath: string
+) => {
+	const targetWasmPath = join(buildDirectory, 'server', GENERATED_SERVER_WASM_RELATIVE_PATH);
+	await mkdir(dirname(targetWasmPath), { recursive: true });
+	await copyFile(generatedServerWasmPath, targetWasmPath);
+
+	return targetWasmPath;
 };
 
 export const ensureBuildManifestExcludesRoutePrefix = async (

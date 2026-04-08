@@ -1,4 +1,4 @@
-import type { DrawingDocumentV1 } from '$lib/features/stroke-json/document';
+import type { DrawingDocumentV2 } from '$lib/features/stroke-json/document';
 
 export type DrawPublishedArtwork = {
 	id: string;
@@ -8,7 +8,7 @@ export type DrawPublishedArtwork = {
 };
 
 export type DrawForkParent = {
-	drawingDocument?: DrawingDocumentV1 | null;
+	drawingDocument?: DrawingDocumentV2 | null;
 	id: string;
 	isNsfw?: boolean;
 	mediaUrl: string;

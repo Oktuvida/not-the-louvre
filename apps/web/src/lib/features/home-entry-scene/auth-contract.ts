@@ -1,8 +1,8 @@
-import type { DrawingDocumentV1 } from '$lib/features/stroke-json/document';
+import type { DrawingDocumentV2 } from '$lib/features/stroke-json/document';
 
 export type HomeAuthUser = {
 	authUserId: string;
-	avatarDrawingDocument?: DrawingDocumentV1 | null;
+	avatarDrawingDocument?: DrawingDocumentV2 | null;
 	avatarOnboardingCompletedAt?: Date | null;
 	avatarUrl?: string | null;
 	email: string;

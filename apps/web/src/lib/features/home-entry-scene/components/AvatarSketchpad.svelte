@@ -2,20 +2,29 @@
 	import { onMount } from 'svelte';
 	import {
 		buildDrawingDraftKey,
-		clearDrawingDraft,
-		loadDrawingDraft,
-		saveDrawingDraft
+		createDrawingDraftSession,
+		type IndexedDbDrawingDraftStore
 	} from '$lib/features/stroke-json/drafts';
 	import {
 		AVATAR_DRAWING_DIMENSIONS,
-		cloneDrawingDocument,
+		DRAWING_DOCUMENT_VERSION,
+		cloneDrawingDocumentV2,
 		createEmptyDrawingDocument,
+		createEmptyDrawingDocumentV2,
 		getDrawingPointWithinBounds,
-		serializeDrawingDocument,
-		type DrawingDocumentV1,
-		type DrawingPoint
+		getRenderableDrawingStrokes,
+		type DrawingDocumentV2,
+		type DrawingPoint,
+		type DrawingStroke
 	} from '$lib/features/stroke-json/document';
+	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/runtime.browser';
 	import { renderDrawingStroke } from '$lib/features/stroke-json/canvas';
+	import {
+		appendBufferedStrokePoint,
+		appendCommittedStroke,
+		createBufferedStroke,
+		shouldUseResponsiveDrawing
+	} from '$lib/features/stroke-json/responsive-editing';
 	import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 
@@ -27,6 +36,7 @@
 
 	const CANVAS_WIDTH = AVATAR_DRAWING_DIMENSIONS.width;
 	const CANVAS_HEIGHT = AVATAR_DRAWING_DIMENSIONS.height;
+	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
 	type AvatarSaveResult =
 		| { success: true }
@@ -38,7 +48,7 @@
 
 	let {
 		clearMode = 'initial',
-		createAvatarPayload = async (documentState: DrawingDocumentV1) => {
+		createAvatarPayload = async (documentState: DrawingDocumentV2) => {
 			const mode =
 				typeof window === 'undefined'
 					? 'good'
@@ -53,12 +63,13 @@
 			}
 
 			if (mode === 'bad') {
-				return serializeDrawingDocument(createEmptyDrawingDocument('artwork'));
+				return JSON.stringify(createEmptyDrawingDocument('artwork'));
 			}
 
-			return serializeDrawingDocument(documentState);
+			return prepareDrawingDocumentForPublish(documentState);
 		},
 		draftUserKey = null,
+		draftStore,
 		initialDrawingDocument = null,
 		nickname,
 		onContinue,
@@ -69,9 +80,10 @@
 		submitLabel = 'Enter the gallery'
 	}: {
 		clearMode?: 'blank' | 'initial';
-		createAvatarPayload?: (documentState: DrawingDocumentV1) => Promise<string | null>;
+		createAvatarPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		draftUserKey?: string | null;
-		initialDrawingDocument?: DrawingDocumentV1 | null;
+		draftStore?: IndexedDbDrawingDraftStore;
+		initialDrawingDocument?: DrawingDocumentV2 | null;
 		nickname: string;
 		onContinue?: () => void;
 		saveAvatar?: (drawingDocument: string) => Promise<AvatarSaveResult>;
@@ -80,18 +92,23 @@
 
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
 	let activeColor = $state(DEFAULT_AVATAR_COLOR);
-	let baselineDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
+	let baselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
 	let brushStep = $state(Math.floor((BRUSH_SIZES.length - 1) / 2));
-	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
+	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
+	let activeStroke = $state<DrawingStroke | null>(null);
 	let activePointerId = $state<number | null>(null);
 	let isDrawing = $state(false);
 	let isSaving = $state(false);
+	let draftStatusMessage = $state('');
 	let saveError = $state('');
+	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
+	let committedCacheCanvas: HTMLCanvasElement | null = null;
+	let committedCacheDirty = true;
 
 	const brushSize = $derived(BRUSH_SIZES[brushStep] ?? BRUSH_SIZES[BRUSH_SIZES.length - 1]);
 	const brushPreviewDiameter = $derived(Math.max(4, brushSize + 2));
 	const clearDocument = $derived(
-		clearMode === 'blank' ? createEmptyDrawingDocument('avatar') : baselineDocument
+		clearMode === 'blank' ? createEmptyDrawingDocumentV2('avatar') : baselineDocument
 	);
 	const draftKey = $derived(
 		draftUserKey
@@ -103,6 +120,68 @@
 				})
 			: null
 	);
+	const legacyDraftKey = $derived(
+		draftUserKey
+			? buildDrawingDraftKey({
+					schemaVersion: DRAWING_DOCUMENT_VERSION,
+					scope: 'profile',
+					surface: 'avatar',
+					userKey: draftUserKey
+				})
+			: null
+	);
+
+	const createDraftSession = (
+		resolvedDraftKey: string | null,
+		resolvedLegacyDraftKey: string | null
+	) =>
+		resolvedDraftKey
+			? createDrawingDraftSession({
+					draftKey: resolvedDraftKey,
+					legacyKey: resolvedLegacyDraftKey,
+					store: draftStore
+				})
+			: null;
+
+	const clearUnsavedDraftWarning = () => {
+		draftStatusMessage = '';
+	};
+
+	const markUnsavedDraftWarning = () => {
+		draftStatusMessage = UNSAVED_DRAFT_MESSAGE;
+	};
+
+	const resetDraftSession = async (seedDocument: DrawingDocumentV2) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) {
+			return;
+		}
+
+		try {
+			await draftSession.clear();
+			await draftSession.hydrate({ seedDocument });
+			clearUnsavedDraftWarning();
+		} catch {
+			markUnsavedDraftWarning();
+		}
+	};
+
+	const persistCommittedStroke = async (
+		previousDocument: DrawingDocumentV2,
+		stroke: DrawingStroke
+	) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) {
+			return;
+		}
+
+		try {
+			await draftSession.appendCommittedStroke(previousDocument, stroke);
+			clearUnsavedDraftWarning();
+		} catch {
+			markUnsavedDraftWarning();
+		}
+	};
 
 	const drawGhostSilhouette = (ctx: CanvasRenderingContext2D) => {
 		ctx.save();
@@ -158,17 +237,57 @@
 		ctx.restore();
 	};
 
+	const renderCommittedDocument = (
+		context: CanvasRenderingContext2D,
+		documentState: DrawingDocumentV2
+	) => {
+		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
+		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+		drawGhostSilhouette(context);
+
+		for (const stroke of getRenderableDrawingStrokes(documentState)) {
+			renderDrawingStroke(context, stroke);
+		}
+	};
+
+	const renderCommittedCache = () => {
+		committedCacheCanvas ??= window.document.createElement('canvas');
+		if (
+			committedCacheCanvas.width !== CANVAS_WIDTH ||
+			committedCacheCanvas.height !== CANVAS_HEIGHT
+		) {
+			committedCacheCanvas.width = CANVAS_WIDTH;
+			committedCacheCanvas.height = CANVAS_HEIGHT;
+		}
+
+		const context = committedCacheCanvas.getContext('2d');
+		if (!context) return;
+
+		renderCommittedDocument(context, drawingDocument);
+		committedCacheDirty = false;
+	};
+
 	const renderCurrentDocument = () => {
 		if (!canvasElement) return;
 		const context = canvasElement.getContext('2d');
 		if (!context) return;
 
+		if (!responsiveDrawing) {
+			renderCommittedDocument(context, drawingDocument);
+			return;
+		}
+
+		if (committedCacheDirty || !committedCacheCanvas) {
+			renderCommittedCache();
+		}
+
 		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
 		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-		drawGhostSilhouette(context);
-
-		for (const stroke of drawingDocument.strokes) {
-			renderDrawingStroke(context, stroke);
+		if (committedCacheCanvas) {
+			context.drawImage(committedCacheCanvas, 0, 0);
+		}
+		if (activeStroke) {
+			renderDrawingStroke(context, activeStroke);
 		}
 	};
 
@@ -186,24 +305,60 @@
 	};
 
 	const startStroke = (point: DrawingPoint) => {
-		drawingDocument.strokes.push({
+		if (responsiveDrawing) {
+			activeStroke = createBufferedStroke({
+				color: activeColor,
+				point,
+				size: brushSize
+			});
+			renderCurrentDocument();
+			return;
+		}
+
+		drawingDocument.tail.push({
 			color: activeColor,
 			points: [point],
 			size: brushSize
 		});
+		committedCacheDirty = true;
 		renderCurrentDocument();
 	};
 
 	const appendPoint = (point: DrawingPoint) => {
-		const stroke = drawingDocument.strokes.at(-1);
+		if (responsiveDrawing) {
+			if (!activeStroke) return;
+			if (!appendBufferedStrokePoint(activeStroke, point)) return;
+			renderCurrentDocument();
+			return;
+		}
+
+		const stroke = drawingDocument.tail.at(-1);
 		if (!stroke) return;
 
 		const lastPoint = stroke.points.at(-1);
-		if (lastPoint && Math.hypot(point[0] - lastPoint[0], point[1] - lastPoint[1]) < 1.5) {
+		if (lastPoint && point[0] === lastPoint[0] && point[1] === lastPoint[1]) {
 			return;
 		}
 
 		stroke.points.push(point);
+		committedCacheDirty = true;
+		renderCurrentDocument();
+	};
+
+	const commitActiveStroke = () => {
+		if (!activeStroke) return;
+
+		const previousDocument = cloneDrawingDocumentV2(drawingDocument);
+		const committedStroke = {
+			color: activeStroke.color,
+			points: activeStroke.points.map((point) => [point[0], point[1]] as [number, number]),
+			size: activeStroke.size
+		};
+
+		drawingDocument = appendCommittedStroke(previousDocument, committedStroke);
+		void persistCommittedStroke(previousDocument, committedStroke);
+		activeStroke = null;
+		committedCacheDirty = true;
 		renderCurrentDocument();
 	};
 
@@ -241,6 +396,7 @@
 	};
 
 	const stopDrawing = () => {
+		activeStroke = null;
 		isDrawing = false;
 		activePointerId = null;
 	};
@@ -253,6 +409,16 @@
 			canvasElement.hasPointerCapture(event.pointerId)
 		) {
 			canvasElement.releasePointerCapture(event.pointerId);
+		}
+
+		if (responsiveDrawing) {
+			commitActiveStroke();
+		} else if (isDrawing) {
+			const previousDocument = cloneDrawingDocumentV2(drawingDocument);
+			const committedStroke = previousDocument.tail.pop();
+			if (committedStroke) {
+				void persistCommittedStroke(previousDocument, committedStroke);
+			}
 		}
 
 		stopDrawing();
@@ -299,9 +465,8 @@
 				return;
 			}
 
-			if (draftKey) {
-				clearDrawingDraft(draftKey);
-			}
+			const draftSession = createDraftSession(draftKey, legacyDraftKey);
+			void draftSession?.clear();
 
 			onContinue?.();
 		} finally {
@@ -310,19 +475,38 @@
 	};
 
 	onMount(() => {
-		baselineDocument = initialDrawingDocument
-			? cloneDrawingDocument(initialDrawingDocument)
-			: createEmptyDrawingDocument('avatar');
+		let draftLoadCancelled = false;
 
-		if (draftKey) {
-			const draft = loadDrawingDraft(draftKey);
-			drawingDocument = draft?.kind === 'avatar' ? draft : cloneDrawingDocument(baselineDocument);
+		baselineDocument = initialDrawingDocument
+			? cloneDrawingDocumentV2(initialDrawingDocument)
+			: createEmptyDrawingDocumentV2('avatar');
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+
+		if (draftSession) {
+			void draftSession
+				.hydrate({ seedDocument: baselineDocument })
+				.then((draft) => {
+					if (draftLoadCancelled) return;
+
+					drawingDocument =
+						draft?.kind === 'avatar' ? draft : cloneDrawingDocumentV2(baselineDocument);
+					committedCacheDirty = true;
+					clearUnsavedDraftWarning();
+				})
+				.catch(() => {
+					if (draftLoadCancelled) return;
+
+					drawingDocument = cloneDrawingDocumentV2(baselineDocument);
+					committedCacheDirty = true;
+					markUnsavedDraftWarning();
+				});
 		} else {
-			drawingDocument = cloneDrawingDocument(baselineDocument);
+			drawingDocument = cloneDrawingDocumentV2(baselineDocument);
+			committedCacheDirty = true;
 		}
 
 		const handleWindowPointerRelease = () => {
-			stopDrawing();
+			finishDrawing();
 		};
 
 		window.addEventListener('pointerup', handleWindowPointerRelease);
@@ -332,15 +516,11 @@
 		renderCurrentDocument();
 
 		return () => {
+			draftLoadCancelled = true;
 			window.removeEventListener('pointerup', handleWindowPointerRelease);
 			window.removeEventListener('pointercancel', handleWindowPointerRelease);
 			window.removeEventListener('blur', handleWindowPointerRelease);
 		};
-	});
-
-	$effect(() => {
-		if (!draftKey) return;
-		saveDrawingDraft(draftKey, drawingDocument);
 	});
 
 	$effect(() => {
@@ -358,6 +538,14 @@
 			class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
 		>
 			{saveError}
+		</div>
+	{/if}
+
+	{#if draftStatusMessage}
+		<div
+			class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
+		>
+			{draftStatusMessage}
 		</div>
 	{/if}
 
@@ -432,6 +620,7 @@
 						width={CANVAS_WIDTH}
 						height={CANVAS_HEIGHT}
 						class="relative z-[1] h-full w-full cursor-crosshair touch-none"
+						data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
 						draggable="false"
 						ondragstart={preventCanvasDrag}
 						onpointerdown={startDrawing}
@@ -451,7 +640,10 @@
 						className="w-full sm:w-auto"
 						onclick={() => {
 							saveError = '';
-							drawingDocument = cloneDrawingDocument(clearDocument);
+							activeStroke = null;
+							drawingDocument = cloneDrawingDocumentV2(clearDocument);
+							void resetDraftSession(clearDocument);
+							committedCacheDirty = true;
 						}}
 						disabled={isSaving}
 					>

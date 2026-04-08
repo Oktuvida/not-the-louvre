@@ -2,8 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
-import { parseDrawingDocument } from '$lib/features/stroke-json/document';
-import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
+import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/features/stroke-json/runtime.server';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { getArtworkDetail } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';
@@ -43,9 +42,9 @@ export const load: PageServerLoad = async (event) => {
 
 	const forkArtworkId = event.url.searchParams.get('fork');
 	const forkParent = forkArtworkId
-		? await getArtworkDetail(forkArtworkId, { user: event.locals.user }).then((artwork) => ({
+		? await getArtworkDetail(forkArtworkId, { user: event.locals.user }).then(async (artwork) => ({
 				drawingDocument: artwork.drawingDocument
-					? parseDrawingDocument(decodeCompressedDrawingDocument(artwork.drawingDocument))
+					? await decodeCompressedDrawingDocumentToEditableDocument(artwork.drawingDocument)
 					: null,
 				id: artwork.id,
 				isNsfw: artwork.isNsfw,

@@ -11,16 +11,19 @@
 	} from '$lib/client/content-filter';
 	import {
 		buildDrawingDraftKey,
-		clearDrawingDraft,
-		loadDrawingDraft,
-		saveDrawingDraft
+		createDrawingDraftSession,
+		type IndexedDbDrawingDraftStore
 	} from '$lib/features/stroke-json/drafts';
 	import {
-		cloneDrawingDocument,
+		DRAWING_DOCUMENT_VERSION,
+		cloneDrawingDocumentV2,
 		createEmptyDrawingDocument,
-		serializeDrawingDocument,
-		type DrawingDocumentV1
+		createEmptyDrawingDocumentV2,
+		getRenderableDrawingStrokes,
+		type DrawingDocumentV2,
+		type DrawingStroke
 	} from '$lib/features/stroke-json/document';
+	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/runtime.browser';
 	import type {
 		DrawForkParent,
 		DrawPageUser,
@@ -34,8 +37,12 @@
 	import DrawingCanvas from '$lib/features/studio-drawing/components/DrawingCanvas.svelte';
 	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 
+	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
+
 	const FORK_CONTEXT_STORAGE_PREFIX = 'studio-fork-context';
 	const MOBILE_STUDIO_MEDIA_QUERY = '(max-width: 700px)';
+
+	type PersistedForkContext = Pick<DrawForkParent, 'id' | 'isNsfw' | 'mediaUrl' | 'title'>;
 
 	const getForkContextStorageKey = (user?: DrawPageUser) => {
 		if (!user) return null;
@@ -47,7 +54,7 @@
 		if (!rawValue) return null;
 
 		try {
-			const parsed = JSON.parse(rawValue) as Partial<DrawForkParent>;
+			const parsed = JSON.parse(rawValue) as Partial<PersistedForkContext>;
 			if (
 				typeof parsed.id !== 'string' ||
 				typeof parsed.mediaUrl !== 'string' ||
@@ -58,7 +65,7 @@
 			}
 
 			return {
-				drawingDocument: parsed.drawingDocument ?? null,
+				drawingDocument: null,
 				id: parsed.id,
 				isNsfw: parsed.isNsfw,
 				mediaUrl: parsed.mediaUrl,
@@ -76,12 +83,19 @@
 			return;
 		}
 
-		window.localStorage.setItem(storageKey, JSON.stringify(forkParent));
+		const persistedForkContext: PersistedForkContext = {
+			id: forkParent.id,
+			isNsfw: forkParent.isNsfw,
+			mediaUrl: forkParent.mediaUrl,
+			title: forkParent.title
+		};
+
+		window.localStorage.setItem(storageKey, JSON.stringify(persistedForkContext));
 	};
 
 	let {
 		checkTextContent = defaultCheckTextContent,
-		createArtworkPayload = async (documentState: DrawingDocumentV1) => {
+		createArtworkPayload = async (documentState: DrawingDocumentV2) => {
 			const mode =
 				typeof window === 'undefined'
 					? 'good'
@@ -96,11 +110,11 @@
 			}
 
 			if (mode === 'bad') {
-				return serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
+				return JSON.stringify(createEmptyDrawingDocument('avatar'));
 			}
 
-			if (mode === 'webp' && documentState.strokes.length === 0) {
-				return serializeDrawingDocument({
+			if (mode === 'webp' && getRenderableDrawingStrokes(documentState).length === 0) {
+				return JSON.stringify({
 					...createEmptyDrawingDocument('artwork'),
 					strokes: [
 						{
@@ -116,7 +130,7 @@
 				});
 			}
 
-			return serializeDrawingDocument(documentState);
+			return prepareDrawingDocumentForPublish(documentState);
 		},
 		forkParent = null,
 		openingDurationMs = 950,
@@ -150,10 +164,12 @@
 		replaceStudioUrl = () => {
 			replaceState(resolve('/draw'), window.history.state);
 		},
+		draftStore,
 		user
 	}: {
 		checkTextContent?: TextContentChecker;
-		createArtworkPayload?: (documentState: DrawingDocumentV1) => Promise<string | null>;
+		createArtworkPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
+		draftStore?: IndexedDbDrawingDraftStore;
 		forkParent?: DrawForkParent | null;
 		openingDurationMs?: number;
 		publishDrawing?: (
@@ -167,7 +183,9 @@
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
 	let clearVersion = $state(0);
 	let currentForkParent = $state<DrawForkParent | null>(null);
-	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('artwork'));
+	let draftHydrated = $state(false);
+	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
+	let initialDrawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
 	let forkPreloadSettled = $state(true);
 	let isPublishing = $state(false);
 	let isMobileViewport = $state(false);
@@ -185,11 +203,6 @@
 	let exitFadeOpacity = $state(0);
 	let forkContextHydrated = $state(false);
 	const EXIT_FADE_DURATION_S = 0.5;
-	const initialDrawingDocument = $derived(
-		currentForkParent?.drawingDocument
-			? cloneDrawingDocument(currentForkParent.drawingDocument)
-			: createEmptyDrawingDocument('artwork')
-	);
 	const forkContextStorageKey = $derived(getForkContextStorageKey(user));
 	const draftKey = $derived(
 		user
@@ -201,12 +214,61 @@
 				})
 			: null
 	);
+	const legacyDraftKey = $derived(
+		user
+			? buildDrawingDraftKey({
+					schemaVersion: DRAWING_DOCUMENT_VERSION,
+					scope: currentForkParent?.id ?? 'new',
+					surface: 'artwork',
+					userKey: user.id ?? user.nickname
+				})
+			: null
+	);
 
-	let studioUnlocked = $derived(isMobileViewport || sceneState === 'open');
+	let studioUnlocked = $derived(draftHydrated && (isMobileViewport || sceneState === 'open'));
 	let toolsVisible = $derived(
-		isMobileViewport || (sceneState !== 'closed' && sceneState !== 'closing')
+		draftHydrated && (isMobileViewport || (sceneState !== 'closed' && sceneState !== 'closing'))
 	);
 	let hasForkParent = $derived(Boolean(currentForkParent?.mediaUrl));
+
+	const createDraftSession = (
+		resolvedDraftKey: string | null,
+		resolvedLegacyDraftKey: string | null
+	) =>
+		resolvedDraftKey
+			? createDrawingDraftSession({
+					draftKey: resolvedDraftKey,
+					legacyKey: resolvedLegacyDraftKey,
+					store: draftStore
+				})
+			: null;
+
+	const clearUnsavedDraftWarning = () => {
+		if (statusMessage === UNSAVED_DRAFT_MESSAGE && statusTone === 'error') {
+			statusMessage = '';
+			statusTone = 'idle';
+		}
+	};
+
+	const markUnsavedDraftWarning = () => {
+		statusMessage = UNSAVED_DRAFT_MESSAGE;
+		statusTone = 'error';
+	};
+
+	const resetDraftSession = async (seedDocument: DrawingDocumentV2) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) {
+			return;
+		}
+
+		try {
+			await draftSession.clear();
+			await draftSession.hydrate({ seedDocument });
+			clearUnsavedDraftWarning();
+		} catch {
+			markUnsavedDraftWarning();
+		}
+	};
 
 	$effect(() => {
 		if (seededForkParent) return;
@@ -239,6 +301,8 @@
 
 	onMount(() => {
 		const mobileMediaQuery = window.matchMedia(MOBILE_STUDIO_MEDIA_QUERY);
+		let draftLoadCancelled = false;
+		draftHydrated = false;
 
 		const syncViewportMode = (matches: boolean) => {
 			isMobileViewport = matches;
@@ -270,30 +334,55 @@
 					userKey: user.id ?? user.nickname
 				})
 			: null;
+		const resolvedLegacyDraftKey = user
+			? buildDrawingDraftKey({
+					schemaVersion: DRAWING_DOCUMENT_VERSION,
+					scope: resolvedForkParent?.id ?? 'new',
+					surface: 'artwork',
+					userKey: user.id ?? user.nickname
+				})
+			: null;
 
 		if (!resolvedDraftKey) {
 			drawingDocument = resolvedForkParent?.drawingDocument
-				? cloneDrawingDocument(resolvedForkParent.drawingDocument)
-				: createEmptyDrawingDocument('artwork');
-			return;
+				? cloneDrawingDocumentV2(resolvedForkParent.drawingDocument)
+				: createEmptyDrawingDocumentV2('artwork');
+			initialDrawingDocument = cloneDrawingDocumentV2(drawingDocument);
+			draftHydrated = true;
+			return () => {
+				draftLoadCancelled = true;
+				mobileMediaQuery.removeEventListener('change', handleViewportChange);
+			};
 		}
 
-		const draft = loadDrawingDraft(resolvedDraftKey);
-		drawingDocument =
-			draft?.kind === 'artwork'
-				? draft
-				: resolvedForkParent?.drawingDocument
-					? cloneDrawingDocument(resolvedForkParent.drawingDocument)
-					: createEmptyDrawingDocument('artwork');
+		const draftSession = createDraftSession(resolvedDraftKey, resolvedLegacyDraftKey);
+		const seedDocument = resolvedForkParent?.drawingDocument
+			? cloneDrawingDocumentV2(resolvedForkParent.drawingDocument)
+			: createEmptyDrawingDocumentV2('artwork');
+
+		void draftSession!
+			.hydrate({ seedDocument })
+			.then((draft) => {
+				if (draftLoadCancelled) return;
+
+				drawingDocument = draft?.kind === 'artwork' ? draft : seedDocument;
+				initialDrawingDocument = cloneDrawingDocumentV2(drawingDocument);
+				draftHydrated = true;
+				clearUnsavedDraftWarning();
+			})
+			.catch(() => {
+				if (draftLoadCancelled) return;
+
+				drawingDocument = cloneDrawingDocumentV2(seedDocument);
+				initialDrawingDocument = cloneDrawingDocumentV2(seedDocument);
+				draftHydrated = true;
+				markUnsavedDraftWarning();
+			});
 
 		return () => {
+			draftLoadCancelled = true;
 			mobileMediaQuery.removeEventListener('change', handleViewportChange);
 		};
-	});
-
-	$effect(() => {
-		if (!draftKey) return;
-		saveDrawingDraft(draftKey, drawingDocument);
 	});
 
 	$effect(() => {
@@ -303,7 +392,8 @@
 
 	const clearCanvas = () => {
 		if (!studioUnlocked) return;
-		drawingDocument = cloneDrawingDocument(initialDrawingDocument);
+		drawingDocument = cloneDrawingDocumentV2(initialDrawingDocument);
+		void resetDraftSession(initialDrawingDocument);
 		clearVersion += 1;
 		publishedArtwork = null;
 		statusMessage = '';
@@ -313,16 +403,15 @@
 	const cancelFork = () => {
 		if (!studioUnlocked || !currentForkParent) return;
 
-		const forkDraftKey = draftKey;
-		if (forkDraftKey) {
-			clearDrawingDraft(forkDraftKey);
-		}
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		void draftSession?.clear();
 		if (forkContextStorageKey) {
 			savePersistedForkParent(forkContextStorageKey, null);
 		}
 
 		currentForkParent = null;
-		drawingDocument = createEmptyDrawingDocument('artwork');
+		drawingDocument = createEmptyDrawingDocumentV2('artwork');
+		initialDrawingDocument = createEmptyDrawingDocumentV2('artwork');
 		clearVersion += 1;
 		artworkTitle = '';
 		isArtworkNsfw = false;
@@ -368,6 +457,28 @@
 		if (sceneState !== 'closing') return;
 		sceneState = 'closed';
 		fadeAndExitHome();
+	};
+
+	const handleDrawingDocumentChange = (nextDocument: DrawingDocumentV2) => {
+		drawingDocument = nextDocument;
+	};
+
+	const handleStrokeCommitted = async (input: {
+		nextDocument: DrawingDocumentV2;
+		previousDocument: DrawingDocumentV2;
+		stroke: DrawingStroke;
+	}) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) {
+			return;
+		}
+
+		try {
+			await draftSession.appendCommittedStroke(input.previousDocument, input.stroke);
+			clearUnsavedDraftWarning();
+		} catch {
+			markUnsavedDraftWarning();
+		}
 	};
 
 	const fadeAndExitHome = () => {
@@ -426,16 +537,15 @@
 				title: artworkTitle
 			});
 			if ('success' in result && result.success) {
-				if (draftKey) {
-					clearDrawingDraft(draftKey);
-				}
+				const draftSession = createDraftSession(draftKey, legacyDraftKey);
+				void draftSession?.clear();
 				if (forkContextStorageKey) {
 					savePersistedForkParent(forkContextStorageKey, null);
 				}
 				publishedArtwork = result.artwork;
 				statusMessage = `Artwork published as ${result.artwork.title}`;
 				statusTone = 'success';
-				drawingDocument = cloneDrawingDocument(initialDrawingDocument);
+				drawingDocument = cloneDrawingDocumentV2(initialDrawingDocument);
 				clearVersion += 1;
 				artworkTitle = '';
 				isArtworkNsfw = false;
@@ -513,8 +623,10 @@
 							bind:canvasRef
 							bind:drawingDocument
 							{clearVersion}
-							initialDrawingDocument={currentForkParent?.drawingDocument ?? null}
+							{initialDrawingDocument}
 							interactive={studioUnlocked}
+							onDocumentChange={handleDrawingDocumentChange}
+							onStrokeCommitted={handleStrokeCommitted}
 							onInitialImageSettled={markForkPreloadSettled}
 							{statusMessage}
 							{statusTone}
@@ -694,8 +806,10 @@
 								bind:canvasRef
 								bind:drawingDocument
 								{clearVersion}
-								initialDrawingDocument={currentForkParent?.drawingDocument ?? null}
+								{initialDrawingDocument}
 								interactive={studioUnlocked}
+								onDocumentChange={handleDrawingDocumentChange}
+								onStrokeCommitted={handleStrokeCommitted}
 								onInitialImageSettled={markForkPreloadSettled}
 								{statusMessage}
 								{statusTone}
