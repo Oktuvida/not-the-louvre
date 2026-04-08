@@ -6,10 +6,14 @@
 	let {
 		adultContentEnabled = false,
 		artworks,
+		onIdleCycleComplete,
+		onIdleProgress,
 		onLand
 	}: {
 		adultContentEnabled?: boolean;
 		artworks: Artwork[];
+		onIdleCycleComplete?: () => void;
+		onIdleProgress?: (fraction: number) => void;
 		onLand: (artwork: Artwork) => void;
 	} = $props();
 
@@ -18,11 +22,12 @@
 	let viewportResizeObserver: ResizeObserver | null = null;
 
 	const BUFFER = 3;
-	const IDLE_DURATION_PER_FRAME = 5;
+	const IDLE_DURATION_PER_FRAME = 4;
 
 	type ReelState = 'idle' | 'spinning' | 'stopped';
 	let reelState = $state<ReelState>('idle');
 	let idleTween: gsap.core.Tween | null = null;
+	let idleRestartTimer: ReturnType<typeof setTimeout> | null = null;
 
 	/*
 	 * Virtual-window approach for efficient circular scrolling.
@@ -107,6 +112,22 @@
 	/* Proxy object that GSAP tweens — we read .value in onUpdate */
 	const proxy = { value: 0 };
 
+	const stopIdleRestart = () => {
+		if (idleRestartTimer !== null) {
+			clearTimeout(idleRestartTimer);
+			idleRestartTimer = null;
+		}
+	};
+
+	const scheduleIdleRestart = (delayMs = 0) => {
+		stopIdleRestart();
+		idleRestartTimer = setTimeout(() => {
+			idleRestartTimer = null;
+			if (reelState !== 'idle') return;
+			startIdle();
+		}, delayMs);
+	};
+
 	const startIdle = () => {
 		if (!browser || artworks.length === 0) return;
 		const { frameStep } = reelMetrics;
@@ -117,14 +138,30 @@
 			value: `+=${artworks.length * frameStep}`,
 			duration: artworks.length * IDLE_DURATION_PER_FRAME,
 			ease: 'none',
-			repeat: -1,
+			repeat: 0,
 			onUpdate() {
 				offset = proxy.value;
+				// Report idle scroll progress as fraction (0-1) of the current cycle
+				if (onIdleProgress && artworks.length > 0) {
+					const cycleLength = artworks.length * frameStep;
+					const startOffset = proxy.value - (proxy.value % cycleLength || cycleLength);
+					const cycleProgress = (proxy.value - startOffset) / cycleLength;
+					onIdleProgress(Math.min(1, Math.max(0, cycleProgress)));
+				}
+			},
+			onComplete() {
+				offset = proxy.value;
+				idleTween = null;
+				onIdleCycleComplete?.();
+				// Restart idle asynchronously with whatever artworks are current now.
+				// This avoids re-entrant recursion under immediate-complete test mocks.
+				scheduleIdleRestart();
 			}
 		});
 	};
 
 	const stopIdle = () => {
+		stopIdleRestart();
 		if (idleTween) {
 			idleTween.kill();
 			idleTween = null;
@@ -173,10 +210,56 @@
 
 	export const resetToIdle = () => {
 		reelState = 'idle';
-		startIdle();
+		// The $effect watching reelState + artworks.length will start the idle tween.
 	};
 
 	export const isSpinning = () => reelState === 'spinning';
+
+	export const spinToArtwork = (artwork: Artwork) => {
+		if (reelState === 'spinning' || artworks.length === 0 || !viewportEl) return;
+		const { frameSize, frameStep } = reelMetrics;
+
+		// Check if artwork is already in the pool
+		let targetIndex = artworks.findIndex((a) => a.id === artwork.id);
+
+		if (targetIndex === -1) {
+			// Inject the artwork at a random position in the pool
+			targetIndex = Math.floor(Math.random() * (artworks.length + 1));
+			artworks.splice(targetIndex, 0, artwork);
+			// Trigger reactivity (artworks is a prop, but parent should pass the same reference)
+			artworks = [...artworks];
+		}
+
+		reelState = 'spinning';
+		stopIdle();
+
+		const vpWidth = viewportWidth || viewportEl.offsetWidth;
+		const centerX = vpWidth / 2;
+
+		const fullCycles = 3 * artworks.length * frameStep;
+		const baseTarget = targetIndex * frameStep - centerX + frameSize / 2;
+
+		const minTarget = offset + fullCycles;
+		const cycleLen = artworks.length * frameStep;
+		const remainder = (baseTarget - minTarget) % cycleLen;
+		const adjustedRemainder = remainder < 0 ? remainder + cycleLen : remainder;
+		const targetOffset = minTarget + adjustedRemainder;
+
+		proxy.value = offset;
+
+		gsap.to(proxy, {
+			value: targetOffset,
+			duration: 4,
+			ease: 'power4.out',
+			onUpdate() {
+				offset = proxy.value;
+			},
+			onComplete: () => {
+				reelState = 'stopped';
+				onLand(artwork);
+			}
+		});
+	};
 
 	$effect(() => {
 		if (!browser || !viewportEl) return;
@@ -198,10 +281,15 @@
 	$effect(() => {
 		if (!browser || artworks.length === 0 || !viewportEl || viewportWidth === 0) return;
 
-		const timer = setTimeout(() => startIdle(), 100);
+		// Only start idle scrolling when the reel is in the idle state.
+		// Idle restarts are scheduled at the end of each cycle after it fires
+		// onIdleCycleComplete (so the parent can swap the pool) then
+		// restarts with the current artworks.
+		if (reelState !== 'idle') return;
+
+		scheduleIdleRestart(100);
 
 		return () => {
-			clearTimeout(timer);
 			stopIdle();
 		};
 	});
@@ -222,6 +310,8 @@
 					alt={slot.artwork.title}
 					class="reel-frame-image"
 					class:nsfw-blurred={isSensitiveBlurred}
+					width={reelMetrics.frameSize}
+					height={reelMetrics.frameSize}
 					loading="lazy"
 				/>
 				{#if isSensitiveBlurred}

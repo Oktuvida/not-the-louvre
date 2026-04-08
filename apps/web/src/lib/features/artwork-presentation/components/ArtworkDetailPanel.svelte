@@ -36,12 +36,13 @@
 
 	let commentBody = $state('');
 	let actionError = $state<string | null>(null);
-	let isAvatarPreviewOpen = $state(false);
+	let avatarPreviewArtworkId = $state<string | null>(null);
 	let isUpdatingAdultContentPreference = $state(false);
 	let isSubmittingComment = $state(false);
 	let isSubmittingVote = $state(false);
 	let commentInput: HTMLInputElement | undefined = $state();
 
+	const isAvatarPreviewOpen = $derived(avatarPreviewArtworkId === (artwork?.id ?? null));
 	const isSensitiveBlurred = $derived(Boolean(artwork?.isNsfw) && !adultContentEnabled);
 	const forkAttribution = $derived.by(() => {
 		if (!artwork?.lineage?.isFork) return null;
@@ -67,11 +68,11 @@
 
 	const openAvatarPreview = () => {
 		if (!artwork?.artistAvatar) return;
-		isAvatarPreviewOpen = true;
+		avatarPreviewArtworkId = artwork.id;
 	};
 
 	const closeAvatarPreview = () => {
-		isAvatarPreviewOpen = false;
+		avatarPreviewArtworkId = null;
 	};
 
 	const patchArtwork = (patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>) => {
