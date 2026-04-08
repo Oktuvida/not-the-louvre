@@ -1,11 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { browser } from '$app/environment';
-	import {
-		createClient,
-		type RealtimeChannel,
-		type RealtimePostgresChangesPayload
-	} from '@supabase/supabase-js';
+	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
+	import { createRealtimeAttemptController } from '$lib/features/realtime/attempt-controller';
+	import { type RealtimeChannel, type RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 	import type { ActionData, PageData } from './$types';
 
 	type SubscriptionState = 'idle' | 'connecting' | 'subscribed' | 'errored' | 'closed';
@@ -28,9 +26,10 @@
 	let actionPending = $state(false);
 	let actionStatus = $state('');
 	let eventLog = $state<string[]>([]);
-	let currentArtworkId = $state<string | null>(null);
+	let currentArtworkId: string | null = null;
 	let cleanupRealtime: (() => void) | null = null;
 	let reconciliationIntervalId: number | null = null;
+	const realtimeAttemptController = createRealtimeAttemptController();
 
 	const pushEvent = (message: string) => {
 		eventLog = [message, ...eventLog].slice(0, 6);
@@ -107,12 +106,14 @@
 
 	const stopRealtime = () => {
 		stopScoreReconciliation();
+		realtimeAttemptController.cancel();
 		cleanupRealtime?.();
 		cleanupRealtime = null;
 	};
 
 	const startRealtime = async (artworkId: string) => {
 		stopRealtime();
+		const attempt = realtimeAttemptController.begin();
 		trackedScore = data.trackedArtwork?.score ?? 0;
 		subscriptionError = '';
 		eventLog = [];
@@ -125,65 +126,89 @@
 
 		subscriptionState = 'connecting';
 
-		const tokenResponse = await fetch('/api/realtime/token', {
-			headers: { accept: 'application/json' }
-		});
-
-		if (!tokenResponse.ok) {
-			subscriptionState = 'errored';
-			subscriptionError = 'Realtime token request failed';
-			return;
-		}
-
-		const { token } = (await tokenResponse.json()) as { token: string };
-		const supabase = createClient(data.realtimeConfig.url, data.realtimeConfig.anonKey, {
-			auth: {
-				autoRefreshToken: false,
-				detectSessionInUrl: false,
-				persistSession: false
-			}
-		});
-		await supabase.realtime.setAuth(token);
-
-		const channel: RealtimeChannel = supabase
-			.channel(`artwork-votes:${artworkId}:${data.user.id}`)
-			.on(
-				'postgres_changes',
-				{
-					event: '*',
-					schema: 'app',
-					table: 'artwork_vote_realtime'
-				},
-				(payload) =>
-					applyRealtimePayload(payload as RealtimePostgresChangesPayload<VoteRow>, artworkId)
-			)
-			.subscribe((status) => {
-				if (status === 'SUBSCRIBED') {
-					subscriptionState = 'subscribed';
-					pushEvent('Realtime status: subscribed');
-					void reconcileTrackedArtworkScore(artworkId);
-					stopScoreReconciliation();
-					reconciliationIntervalId = window.setInterval(() => {
-						void reconcileTrackedArtworkScore(artworkId);
-					}, 1000);
-					return;
-				}
-
-				if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-					subscriptionState = 'errored';
-					subscriptionError = 'Realtime subscription failed';
-					return;
-				}
-
-				if (status === 'CLOSED') {
-					subscriptionState = 'closed';
-				}
+		try {
+			const tokenResponse = await fetch('/api/realtime/token', {
+				headers: { accept: 'application/json' },
+				signal: attempt.signal
 			});
 
-		cleanupRealtime = () => {
-			void supabase.removeChannel(channel);
-			void supabase.realtime.disconnect();
-		};
+			if (!tokenResponse.ok) {
+				subscriptionState = 'errored';
+				subscriptionError = 'Realtime token request failed';
+				return;
+			}
+
+			const { token } = (await tokenResponse.json()) as { token: string };
+			if (!realtimeAttemptController.isCurrent(attempt.id)) {
+				return;
+			}
+
+			const supabase = getBrowserRealtimeClient(
+				data.realtimeConfig.url,
+				data.realtimeConfig.anonKey
+			);
+			await supabase.realtime.setAuth(token);
+			if (!realtimeAttemptController.isCurrent(attempt.id)) {
+				return;
+			}
+
+			const channel: RealtimeChannel = supabase
+				.channel(`artwork-votes:${artworkId}:${data.user.id}`)
+				.on(
+					'postgres_changes',
+					{
+						event: '*',
+						schema: 'app',
+						table: 'artwork_vote_realtime'
+					},
+					(payload) =>
+						realtimeAttemptController.isCurrent(attempt.id)
+							? applyRealtimePayload(payload as RealtimePostgresChangesPayload<VoteRow>, artworkId)
+							: undefined
+				)
+				.subscribe((status) => {
+					if (!realtimeAttemptController.isCurrent(attempt.id)) {
+						return;
+					}
+
+					if (status === 'SUBSCRIBED') {
+						subscriptionState = 'subscribed';
+						pushEvent('Realtime status: subscribed');
+						void reconcileTrackedArtworkScore(artworkId);
+						stopScoreReconciliation();
+						reconciliationIntervalId = window.setInterval(() => {
+							void reconcileTrackedArtworkScore(artworkId);
+						}, 1000);
+						return;
+					}
+
+					if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+						subscriptionState = 'errored';
+						subscriptionError = 'Realtime subscription failed';
+						return;
+					}
+
+					if (status === 'CLOSED') {
+						subscriptionState = 'closed';
+					}
+				});
+
+			if (!realtimeAttemptController.isCurrent(attempt.id)) {
+				void supabase.removeChannel(channel);
+				return;
+			}
+
+			cleanupRealtime = () => {
+				void supabase.removeChannel(channel);
+			};
+		} catch (error) {
+			if (error instanceof DOMException && error.name === 'AbortError') {
+				subscriptionState = 'closed';
+				return;
+			}
+
+			throw error;
+		}
 	};
 
 	const mutateVote = async (mode: 'remove' | 'up') => {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { getFrequentReadCanvasContext } from '$lib/client/canvas-2d';
 	import { onMount } from 'svelte';
 	import type { Snippet } from 'svelte';
 	import { drawArtworkFrame } from '$lib/features/artwork-presentation/canvas/artwork-frame-canvas';
@@ -35,7 +36,7 @@
 		canvas.width = width;
 		canvas.height = height;
 
-		const context = canvas.getContext('2d');
+		const context = getFrequentReadCanvasContext(canvas);
 
 		if (!context) {
 			return;

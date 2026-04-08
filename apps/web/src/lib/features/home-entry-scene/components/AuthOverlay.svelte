@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { deserialize, enhance } from '$app/forms';
 	import { gsap } from '$lib/client/gsap';
 	import {
@@ -21,6 +22,8 @@
 		EntryFlowState
 	} from '$lib/features/home-entry-scene/state/entry-state.svelte';
 	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
+	import { onMount } from 'svelte';
+	import { waitForPageLayoutReady } from '$lib/features/home-entry-scene/components/page-layout-ready';
 
 	type AuthView =
 		| 'login'
@@ -80,11 +83,17 @@
 	let recoveryFormElement = $state<HTMLFormElement | null>(null);
 	let allowValidatedSignupSubmit = $state(false);
 	let backdropElement = $state<HTMLDivElement | null>(null);
+	let pageLayoutReady = $state(!browser || document.readyState === 'complete');
 
 	const isInteractive = $derived(
+		pageLayoutReady &&
+			(entryState === 'auth-login' ||
+				entryState === 'auth-signup' ||
+				entryState === 'auth-recovery')
+	);
+	const showLiveAuthContent = $derived(
 		entryState === 'auth-login' || entryState === 'auth-signup' || entryState === 'auth-recovery'
 	);
-	const showLiveAuthContent = $derived(isInteractive);
 	const isSignUpFlow = $derived(
 		view === 'signup-account' || view === 'signup-success' || view === 'signup-avatar'
 	);
@@ -438,6 +447,24 @@
 		};
 	};
 
+	onMount(() => {
+		if (!browser || pageLayoutReady) {
+			return;
+		}
+
+		let cancelled = false;
+
+		void waitForPageLayoutReady({ document, window }).then(() => {
+			if (!cancelled) {
+				pageLayoutReady = true;
+			}
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	$effect(() => {
 		syncViewWithState();
 	});
@@ -633,6 +660,7 @@
 									</div>
 									<input
 										bind:value={nickname}
+										autocomplete="section-login username"
 										name="nickname"
 										type="text"
 										placeholder="artist_123"
@@ -652,6 +680,7 @@
 									</div>
 									<input
 										bind:value={password}
+										autocomplete="section-login current-password"
 										name="password"
 										type="password"
 										placeholder="Enter your password"
@@ -710,6 +739,7 @@
 									</div>
 									<input
 										bind:value={nickname}
+										autocomplete="section-signup username"
 										name="nickname"
 										type="text"
 										placeholder="artist_123"
@@ -729,6 +759,7 @@
 									</div>
 									<input
 										bind:value={password}
+										autocomplete="section-signup new-password"
 										name="password"
 										type="password"
 										placeholder="Enter your password"
@@ -777,6 +808,7 @@
 									</div>
 									<input
 										bind:value={nickname}
+										autocomplete="section-recovery username"
 										name="nickname"
 										type="text"
 										placeholder="artist_123"
@@ -791,6 +823,7 @@
 									>
 									<input
 										bind:value={recoveryKey}
+										autocomplete="off"
 										name="recoveryKey"
 										type="text"
 										placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -815,6 +848,7 @@
 									</div>
 									<input
 										bind:value={newPassword}
+										autocomplete="section-recovery new-password"
 										name="newPassword"
 										type="password"
 										placeholder="Choose a new password"
