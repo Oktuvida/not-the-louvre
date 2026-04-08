@@ -9,6 +9,44 @@ import { buildDrawingDraftKey } from '$lib/features/stroke-json/drafts';
 import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
 import AvatarSketchpad from './AvatarSketchpad.svelte';
 
+const createMockContext = () =>
+	({
+		arc: vi.fn(),
+		arcTo: vi.fn(),
+		beginPath: vi.fn(),
+		clearRect: vi.fn(),
+		fill: vi.fn(),
+		fillRect: vi.fn(),
+		fillStyle: '#f5f0e1',
+		globalAlpha: 1,
+		lineDashOffset: 0,
+		lineTo: vi.fn(),
+		lineWidth: 1,
+		moveTo: vi.fn(),
+		restore: vi.fn(),
+		save: vi.fn(),
+		scale: vi.fn(),
+		setLineDash: vi.fn(),
+		setTransform: vi.fn(),
+		stroke: vi.fn(),
+		strokeStyle: '#000000'
+	}) as unknown as CanvasRenderingContext2D;
+
+const createPointerEvent = (
+	type: string,
+	init: Partial<PointerEventInit> & { clientX?: number; clientY?: number; pointerId?: number }
+) =>
+	new PointerEvent(type, {
+		bubbles: true,
+		buttons: 1,
+		clientX: init.clientX ?? 0,
+		clientY: init.clientY ?? 0,
+		isPrimary: true,
+		pointerId: init.pointerId ?? 1,
+		pointerType: 'mouse',
+		...init
+	});
+
 describe('AvatarSketchpad', () => {
 	const enterGalleryButton = () => page.getByRole('button', { name: 'Enter the gallery' });
 
@@ -22,6 +60,16 @@ describe('AvatarSketchpad', () => {
 			.element(page.getByText('Sketch a quick self-portrait for artist_1.'))
 			.toBeVisible();
 		await expect.element(page.getByRole('textbox')).not.toBeInTheDocument();
+	});
+
+	it('keeps the avatar drawing frame square across breakpoints', async () => {
+		render(AvatarSketchpad, {
+			nickname: 'artist_1'
+		});
+
+		const frame = document.querySelector('[data-testid="avatar-sketchpad-frame"]');
+		expect(frame).not.toBeNull();
+		expect(frame?.className).toContain('aspect-square');
 	});
 
 	it('keeps palette swatches clickable beside the brush slider', async () => {
@@ -89,7 +137,7 @@ describe('AvatarSketchpad', () => {
 		await page.getByRole('button', { name: `Select color ${drawingPalette[4]}` }).click();
 
 		const recoloredMetrics = await readPreviewMetrics();
-		expect(recoloredMetrics.dotColor).toBe('rgb(33, 118, 217)');
+		expect(recoloredMetrics.dotColor).toBe('rgb(253, 188, 180)');
 	});
 	it('saves the exported avatar and continues into the gallery on success', async () => {
 		const onContinue = vi.fn();
@@ -275,5 +323,94 @@ describe('AvatarSketchpad', () => {
 		expect(onContinue).not.toHaveBeenCalled();
 
 		consoleErrorSpy.mockRestore();
+	});
+
+	it('ignores invalid pointer starts near the edge and prevents drag takeover before a valid stroke', async () => {
+		const ctx = createMockContext();
+		const originalGetContext = HTMLCanvasElement.prototype.getContext as (
+			...args: unknown[]
+		) => unknown;
+		const getContextSpy = vi
+			.spyOn(HTMLCanvasElement.prototype, 'getContext')
+			.mockImplementation(function (
+				this: HTMLCanvasElement,
+				contextId: '2d' | 'bitmaprenderer' | 'webgl' | 'webgl2' | 'webgpu'
+			) {
+				if (contextId !== '2d') {
+					return originalGetContext.call(this, contextId);
+				}
+
+				if (this.width === 340 && this.height === 340) {
+					return ctx;
+				}
+
+				return originalGetContext.call(this, contextId);
+			} as HTMLCanvasElement['getContext']);
+		const saveAvatar = vi.fn(async () => ({ success: true as const }));
+
+		render(AvatarSketchpad, {
+			nickname: 'artist_1',
+			saveAvatar
+		});
+
+		const canvas = document.querySelector('canvas');
+		if (!canvas) {
+			throw new Error('Expected avatar canvas to render');
+		}
+
+		const setPointerCaptureSpy = vi
+			.spyOn(canvas, 'setPointerCapture')
+			.mockImplementation(() => undefined);
+		const releasePointerCaptureSpy = vi
+			.spyOn(canvas, 'releasePointerCapture')
+			.mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 320,
+			height: 320,
+			left: 0,
+			right: 320,
+			top: 0,
+			width: 320,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		const dragStartEvent = new DragEvent('dragstart', { bubbles: true, cancelable: true });
+		canvas.dispatchEvent(dragStartEvent);
+		expect(dragStartEvent.defaultPrevented).toBe(true);
+
+		canvas.dispatchEvent(
+			createPointerEvent('pointerdown', { clientX: -1, clientY: 24, pointerId: 7 })
+		);
+
+		expect(setPointerCaptureSpy).not.toHaveBeenCalled();
+
+		canvas.dispatchEvent(
+			createPointerEvent('pointerdown', { clientX: 24, clientY: 24, pointerId: 7 })
+		);
+		canvas.dispatchEvent(
+			createPointerEvent('pointermove', { clientX: 80, clientY: 80, pointerId: 7 })
+		);
+		canvas.dispatchEvent(
+			createPointerEvent('pointerup', {
+				buttons: 0,
+				clientX: 80,
+				clientY: 80,
+				pointerId: 7
+			})
+		);
+
+		await enterGalleryButton().click();
+		const savedPayload = saveAvatar.mock.calls.at(0)?.at(0);
+		const savedDocument = JSON.parse(typeof savedPayload === 'string' ? savedPayload : 'null');
+
+		expect(setPointerCaptureSpy).toHaveBeenCalledTimes(1);
+		expect(releasePointerCaptureSpy).toHaveBeenCalledTimes(1);
+		expect(savedDocument.strokes).toHaveLength(1);
+		expect(savedDocument.strokes[0]?.points).toHaveLength(2);
+
+		getContextSpy.mockRestore();
 	});
 });

@@ -7,11 +7,13 @@
 		saveDrawingDraft
 	} from '$lib/features/stroke-json/drafts';
 	import {
+		AVATAR_DRAWING_DIMENSIONS,
 		cloneDrawingDocument,
 		createEmptyDrawingDocument,
 		getDrawingPointWithinBounds,
 		serializeDrawingDocument,
-		type DrawingDocumentV1
+		type DrawingDocumentV1,
+		type DrawingPoint
 	} from '$lib/features/stroke-json/document';
 	import { renderDrawingStroke } from '$lib/features/stroke-json/canvas';
 	import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
@@ -21,10 +23,10 @@
 	const BRUSH_SIZES = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
 	const BRUSH_PREVIEW_SIZE = Math.max(...BRUSH_SIZES) + 6;
 	const DEFAULT_AVATAR_COLOR = drawingPalette[4] ?? drawingPalette[0] ?? '#1a1a1a';
+	const AVATAR_CANVAS_BACKGROUND = '#ffffff';
 
-	const CANVAS_WIDTH = 520;
-	const CANVAS_HEIGHT = 320;
-	const EXPORT_SIZE = 256;
+	const CANVAS_WIDTH = AVATAR_DRAWING_DIMENSIONS.width;
+	const CANVAS_HEIGHT = AVATAR_DRAWING_DIMENSIONS.height;
 
 	type AvatarSaveResult =
 		| { success: true }
@@ -81,6 +83,7 @@
 	let baselineDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
 	let brushStep = $state(Math.floor((BRUSH_SIZES.length - 1) / 2));
 	let drawingDocument = $state<DrawingDocumentV1>(createEmptyDrawingDocument('avatar'));
+	let activePointerId = $state<number | null>(null);
 	let isDrawing = $state(false);
 	let isSaving = $state(false);
 	let saveError = $state('');
@@ -160,7 +163,7 @@
 		const context = canvasElement.getContext('2d');
 		if (!context) return;
 
-		context.fillStyle = drawingDocument.background;
+		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
 		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 		drawGhostSilhouette(context);
 
@@ -169,82 +172,64 @@
 		}
 	};
 
-	const getPoint = (event: MouseEvent | TouchEvent) => {
+	const getPoint = (event: PointerEvent): DrawingPoint | null => {
 		if (!canvasElement) return null;
 
 		const rect = canvasElement.getBoundingClientRect();
 		const scaleX = canvasElement.width / rect.width;
 		const scaleY = canvasElement.height / rect.height;
 
-		let clientX: number;
-		let clientY: number;
-
-		if ('touches' in event) {
-			const touch = event.touches[0] ?? event.changedTouches[0];
-			if (!touch) return null;
-			clientX = touch.clientX;
-			clientY = touch.clientY;
-		} else {
-			clientX = event.clientX;
-			clientY = event.clientY;
-		}
-
-		const point = getDrawingPointWithinBounds(
-			[(clientX - rect.left) * scaleX, (clientY - rect.top) * scaleY],
+		return getDrawingPointWithinBounds(
+			[(event.clientX - rect.left) * scaleX, (event.clientY - rect.top) * scaleY],
 			drawingDocument
 		);
-
-		if (!point) return null;
-
-		return {
-			x: point[0],
-			y: point[1]
-		};
 	};
 
-	const startStroke = (point: { x: number; y: number }) => {
+	const startStroke = (point: DrawingPoint) => {
 		drawingDocument.strokes.push({
 			color: activeColor,
-			points: [[point.x, point.y]],
+			points: [point],
 			size: brushSize
 		});
 		renderCurrentDocument();
 	};
 
-	const appendPoint = (point: { x: number; y: number }) => {
+	const appendPoint = (point: DrawingPoint) => {
 		const stroke = drawingDocument.strokes.at(-1);
 		if (!stroke) return;
 
 		const lastPoint = stroke.points.at(-1);
-		if (lastPoint && Math.hypot(point.x - lastPoint[0], point.y - lastPoint[1]) < 1.5) {
+		if (lastPoint && Math.hypot(point[0] - lastPoint[0], point[1] - lastPoint[1]) < 1.5) {
 			return;
 		}
 
-		stroke.points.push([point.x, point.y]);
+		stroke.points.push(point);
 		renderCurrentDocument();
 	};
 
-	const startDrawing = (event: MouseEvent | TouchEvent) => {
+	const startDrawing = (event: PointerEvent) => {
+		if (!canvasElement) return;
+		if (!event.isPrimary) return;
+
+		event.preventDefault();
+
 		const point = getPoint(event);
 		if (!point) return;
 
+		canvasElement.setPointerCapture(event.pointerId);
+		activePointerId = event.pointerId;
 		startStroke(point);
 		isDrawing = true;
 	};
 
-	const continueDrawingFromEntry = (event: MouseEvent) => {
-		if (!isDrawing || (event.buttons & 1) === 0) return;
-
-		const point = getPoint(event);
-		if (!point) return;
-
-		startStroke(point);
-	};
-
-	const draw = (event: MouseEvent | TouchEvent) => {
+	const draw = (event: PointerEvent) => {
 		if (!isDrawing || !canvasElement) return;
+		if (!event.isPrimary) return;
+		if (activePointerId !== event.pointerId) return;
 
-		if (event instanceof MouseEvent && (event.buttons & 1) === 0) {
+		event.preventDefault();
+
+		if ((event.buttons & 1) === 0) {
 			stopDrawing();
 			return;
 		}
@@ -257,6 +242,29 @@
 
 	const stopDrawing = () => {
 		isDrawing = false;
+		activePointerId = null;
+	};
+
+	const finishDrawing = (event?: PointerEvent) => {
+		if (
+			canvasElement &&
+			event &&
+			activePointerId === event.pointerId &&
+			canvasElement.hasPointerCapture(event.pointerId)
+		) {
+			canvasElement.releasePointerCapture(event.pointerId);
+		}
+
+		stopDrawing();
+	};
+
+	const cancelDrawing = (event: PointerEvent) => {
+		event.preventDefault();
+		finishDrawing(event);
+	};
+
+	const preventCanvasDrag = (event: DragEvent) => {
+		event.preventDefault();
 	};
 
 	const handleEnterGallery = async () => {
@@ -301,21 +309,6 @@
 		}
 	};
 
-	const handleTouchStart = (event: TouchEvent) => {
-		event.preventDefault();
-		startDrawing(event);
-	};
-
-	const handleTouchMove = (event: TouchEvent) => {
-		event.preventDefault();
-		draw(event);
-	};
-
-	const handleTouchEnd = (event: TouchEvent) => {
-		event.preventDefault();
-		stopDrawing();
-	};
-
 	onMount(() => {
 		baselineDocument = initialDrawingDocument
 			? cloneDrawingDocument(initialDrawingDocument)
@@ -328,22 +321,20 @@
 			drawingDocument = cloneDrawingDocument(baselineDocument);
 		}
 
-		const handleWindowMouseUp = () => {
+		const handleWindowPointerRelease = () => {
 			stopDrawing();
 		};
 
-		const handleWindowTouchEnd = () => {
-			stopDrawing();
-		};
-
-		window.addEventListener('mouseup', handleWindowMouseUp);
-		window.addEventListener('touchend', handleWindowTouchEnd);
+		window.addEventListener('pointerup', handleWindowPointerRelease);
+		window.addEventListener('pointercancel', handleWindowPointerRelease);
+		window.addEventListener('blur', handleWindowPointerRelease);
 
 		renderCurrentDocument();
 
 		return () => {
-			window.removeEventListener('mouseup', handleWindowMouseUp);
-			window.removeEventListener('touchend', handleWindowTouchEnd);
+			window.removeEventListener('pointerup', handleWindowPointerRelease);
+			window.removeEventListener('pointercancel', handleWindowPointerRelease);
+			window.removeEventListener('blur', handleWindowPointerRelease);
 		};
 	});
 
@@ -374,26 +365,26 @@
 		<div class="order-2 md:order-1">
 			<div class="grid gap-3 md:h-[27rem] md:grid-cols-[3.5rem_minmax(0,1fr)]">
 				<div
-					class="flex flex-col items-center justify-between rounded-[1rem] border border-[rgb(107_74_46_/_0.15)] bg-[rgb(255_255_255_/_0.32)] px-2 py-3"
+					class="flex items-center gap-3 rounded-[1rem] border border-[rgb(107_74_46_/_0.15)] bg-[rgb(255_255_255_/_0.32)] px-3 py-3 md:flex-col md:justify-between md:px-2"
 				>
 					<p
-						class="font-display text-[0.62rem] font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase md:rotate-180 md:[writing-mode:vertical-rl]"
+						class="font-display shrink-0 text-[0.62rem] font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase md:rotate-180 md:[writing-mode:vertical-rl]"
 					>
 						Brush
 					</p>
-					<div class="flex flex-1 items-center justify-center py-2">
+					<div class="flex min-w-0 flex-1 items-center justify-center py-1 md:py-2">
 						<input
 							bind:value={brushStep}
 							type="range"
 							min="0"
 							max={(BRUSH_SIZES.length - 1).toString()}
 							step="1"
-							class="brush-slider h-8 w-24 -rotate-90 cursor-pointer appearance-none md:w-60"
+							class="brush-slider h-8 w-full min-w-0 cursor-pointer appearance-none md:w-60 md:-rotate-90"
 							aria-label="Brush size"
 						/>
 					</div>
 					<div
-						class="flex items-center justify-center"
+						class="flex shrink-0 items-center justify-center"
 						data-testid="brush-preview-shell"
 						style={`width:${BRUSH_PREVIEW_SIZE}px;height:${BRUSH_PREVIEW_SIZE}px;`}
 					>
@@ -405,11 +396,11 @@
 					</div>
 				</div>
 
-				<div class="grid h-full grid-cols-2 content-start gap-2">
+				<div class="grid h-full grid-cols-4 content-start gap-2 sm:grid-cols-6 md:grid-cols-2">
 					{#each palette as color (color)}
 						<button
 							type="button"
-							class={`h-10 w-10 rounded-xl border-2 ${activeColor === color ? 'border-[var(--color-ink)] shadow-[0_0_0_3px_rgb(47_36_28_/_0.18)]' : 'border-[var(--color-accent)]'}`}
+							class={`h-11 w-11 justify-self-center rounded-xl border-2 md:h-10 md:w-10 ${activeColor === color ? 'border-[var(--color-ink)] shadow-[0_0_0_3px_rgb(47_36_28_/_0.18)]' : 'border-[var(--color-accent)]'}`}
 							style={`background:${color};`}
 							aria-pressed={activeColor === color}
 							onclick={() => {
@@ -424,10 +415,11 @@
 
 		<div class="order-1 space-y-3 md:order-2">
 			<div
-				class="mx-auto aspect-square w-full max-w-[27rem] rounded-[1.25rem] border-2 border-[var(--color-ink)] bg-[var(--color-paper)] p-2.5 shadow-[6px_6px_0_rgb(47_36_28_/_0.14)]"
+				class="mx-auto aspect-square w-full max-w-[27rem] rounded-[1.25rem] border-2 border-[var(--color-ink)] bg-[var(--color-paper)] p-2 shadow-[6px_6px_0_rgb(47_36_28_/_0.14)] sm:p-2.5"
+				data-testid="avatar-sketchpad-frame"
 			>
 				<div
-					class="relative h-full w-full overflow-hidden rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)]"
+					class="relative h-full w-full overflow-hidden rounded-[1rem] border-2 border-[var(--color-accent)] bg-white"
 				>
 					<div
 						class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgb(255_255_255_/_0.55),transparent_48%)]"
@@ -440,19 +432,18 @@
 						width={CANVAS_WIDTH}
 						height={CANVAS_HEIGHT}
 						class="relative z-[1] h-full w-full cursor-crosshair touch-none"
-						onmousedown={startDrawing}
-						onmouseenter={continueDrawingFromEntry}
-						onmousemove={draw}
-						onmouseup={stopDrawing}
-						ontouchstart={handleTouchStart}
-						ontouchmove={handleTouchMove}
-						ontouchend={handleTouchEnd}
+						draggable="false"
+						ondragstart={preventCanvasDrag}
+						onpointerdown={startDrawing}
+						onpointermove={draw}
+						onpointerup={finishDrawing}
+						onpointercancel={cancelDrawing}
 					></canvas>
 				</div>
 			</div>
 
-			<div class="flex-center gap-3 pt-4 pl-4 sm:flex-row">
-				<div class="flex gap-3 sm:ml-auto">
+			<div class="pt-2 md:pt-4 md:pl-4">
+				<div class="flex flex-col gap-3 sm:flex-row">
 					<GameButton
 						type="button"
 						variant="ghost"

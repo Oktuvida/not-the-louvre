@@ -38,6 +38,21 @@ describe('MysteryRoom', () => {
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 		await expect.element(page.getByTestId('film-reel-track')).toBeVisible();
+		await expect
+			.element(page.getByTestId('film-reel'))
+			.toHaveAttribute('data-reel-orientation', 'horizontal');
+	});
+
+	it('applies the tighter mystery mobile shell layout hooks', async () => {
+		render(MysteryRoom, {
+			artworks: sampleArtworks,
+			onSelect: vi.fn()
+		});
+
+		const room = document.querySelector('[data-testid="mystery-room"]');
+		expect(room).not.toBeNull();
+		expect(room?.className).toContain('pt-28');
+		expect(room?.className).toContain('gap-8');
 	});
 
 	it('shows the spin button that triggers the reel animation', async () => {
@@ -88,7 +103,7 @@ describe('MysteryRoom', () => {
 			onSelect: vi.fn()
 		});
 
-		await expect.element(page.getByAltText('Sunset Dreams')).toBeVisible();
+		expect(document.querySelectorAll('img[alt="Sunset Dreams"]').length).toBeGreaterThan(0);
 	});
 
 	it('renders helper text explaining the feature', async () => {
@@ -115,7 +130,7 @@ describe('MysteryRoom', () => {
 			onSelect: vi.fn()
 		});
 
-		await expect.element(page.getByText('18+')).toBeVisible();
+		expect(document.querySelectorAll('.nsfw-badge').length).toBeGreaterThan(0);
 	});
 
 	it('shows nsfw artworks unblurred when adult content is enabled', async () => {

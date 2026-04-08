@@ -9,38 +9,59 @@
 
 	let {
 		isPublishing = false,
+		mobile = false,
 		onPublish,
 		onClear
 	}: {
 		isPublishing?: boolean;
+		mobile?: boolean;
 		onPublish?: () => void;
 		onClear?: () => void;
 	} = $props();
+
+	const selectColor = (color: string) => {
+		drawingTools.activeColor = color;
+	};
 </script>
 
-<div class="tool-tray">
+<div class:tool-tray-mobile={mobile} class="tool-tray">
 	<div class="tray-glow" aria-hidden="true"></div>
 
 	<!-- Palette section -->
-	<div class="tray-section">
+	<div class:tray-section-mobile-palette={mobile} class="tray-section">
 		<div class="tray-label">
 			<Palette size={12} />
 			<span>Colors</span>
 		</div>
-		<div class="palette-grid">
-			{#each drawingPalette as color (color)}
-				<button
-					type="button"
-					class="palette-swatch"
-					class:active={drawingTools.activeColor === color}
-					style={`--swatch-color:${color}`}
-					onclick={() => {
-						drawingTools.activeColor = color;
-					}}
-					aria-label={`Select color ${color}`}
-				></button>
-			{/each}
-		</div>
+		{#if mobile}
+			<div class="palette-mobile-row">
+				<div class="palette-mobile-grid">
+					{#each drawingPalette as color (color)}
+						<button
+							type="button"
+							class="palette-swatch"
+							class:active={drawingTools.activeColor === color}
+							style={`--swatch-color:${color}`}
+							onclick={() => selectColor(color)}
+							aria-label={`Select color ${color}`}
+						></button>
+					{/each}
+				</div>
+			</div>
+		{:else}
+			<div class="palette-grid">
+				{#each drawingPalette as color (color)}
+					<button
+						type="button"
+						class="palette-swatch"
+						class:active={drawingTools.activeColor === color}
+						style={`--swatch-color:${color}`}
+						onclick={() => selectColor(color)}
+						aria-label={`Select color ${color}`}
+					></button>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<!-- Brush size section -->
@@ -128,6 +149,10 @@
 		position: relative;
 	}
 
+	.tray-section-mobile-palette {
+		z-index: 2;
+	}
+
 	.tray-label {
 		font-family: var(--font-display, 'Fredoka', sans-serif);
 		font-size: 10px;
@@ -153,6 +178,24 @@
 		display: grid;
 		grid-template-columns: repeat(6, 1fr);
 		gap: 6px;
+	}
+
+	.palette-mobile-row {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.7rem;
+		overflow: visible;
+		z-index: 6;
+	}
+
+	.palette-mobile-grid {
+		display: grid;
+		min-width: 0;
+		flex: 1;
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+		gap: 0.45rem;
 	}
 
 	.palette-swatch {
@@ -289,5 +332,28 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+	}
+
+	.tool-tray-mobile {
+		overflow: visible;
+		transform: rotate(0.8deg);
+	}
+
+	@media (max-width: 700px) {
+		.tool-tray-mobile {
+			padding: 18px 16px;
+		}
+
+		.palette-mobile-row {
+			gap: 0.65rem;
+		}
+
+		.palette-mobile-grid {
+			gap: 0.4rem;
+		}
+
+		.palette-swatch {
+			min-height: 2.45rem;
+		}
 	}
 </style>

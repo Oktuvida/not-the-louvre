@@ -30,7 +30,7 @@
 	);
 </script>
 
-<nav class="flex gap-4 overflow-x-auto p-2">
+<nav class="flex w-full max-w-full gap-2 overflow-x-auto px-1 py-2 md:gap-4 md:p-2">
 	{#each visibleRooms as room (room.id)}
 		{@const isActive = room.id === roomId}
 		{@const href = room.id === 'hall-of-fame' ? '/gallery' : (`/gallery/${room.id}` as const)}
@@ -40,6 +40,7 @@
 			variant={isActive ? roomVariants[room.id] : 'ghost'}
 			size="md"
 			className={`relative shrink-0 ${isActive ? 'scale-105' : 'opacity-80'}`}
+			contentClassName="px-1 text-[0.7rem] sm:text-xs md:px-0 md:text-sm"
 		>
 			<Icon
 				class={`h-6 w-6 shrink-0 ${isActive ? 'animate-[wiggle_0.5s_ease-in-out_0.3s]' : ''}`}

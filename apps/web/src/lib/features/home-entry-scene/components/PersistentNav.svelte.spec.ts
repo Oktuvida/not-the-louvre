@@ -58,6 +58,15 @@ describe('PersistentNav', () => {
 		await expect.element(page.getByText('#1')).not.toBeInTheDocument();
 	});
 
+	it('keeps the homepage preview stack desktop-only through responsive classes', async () => {
+		render(PersistentNav, { previewCards: topArtworks, user: null });
+
+		const previewStack = document.querySelector('[data-testid="home-preview-stack"]');
+		expect(previewStack).not.toBeNull();
+		expect(previewStack?.className).toContain('hidden');
+		expect(previewStack?.className).toContain('md:block');
+	});
+
 	it('marks top-artwork previews as sensitive until 18+ content is enabled', async () => {
 		render(PersistentNav, {
 			adultContentEnabled: false,
@@ -173,5 +182,27 @@ describe('PersistentNav', () => {
 
 		window.localStorage.clear();
 		vi.unstubAllGlobals();
+	});
+
+	it('uses a scrollable avatar editor dialog shell on small screens', async () => {
+		render(PersistentNav, {
+			previewCards: topArtworks,
+			user: {
+				authUserId: 'auth-user-1',
+				email: 'artist_1@not-the-louvre.local',
+				id: 'product-user-1',
+				nickname: 'artist_1',
+				role: 'user'
+			}
+		});
+
+		await page.getByRole('button', { name: 'Edit avatar for artist_1' }).click();
+
+		const panel = [...document.querySelectorAll('div')].find(
+			(element) =>
+				element.className.includes('max-h-[calc(100dvh-1.5rem)]') &&
+				element.className.includes('overflow-y-auto')
+		);
+		expect(panel).not.toBeNull();
 	});
 });

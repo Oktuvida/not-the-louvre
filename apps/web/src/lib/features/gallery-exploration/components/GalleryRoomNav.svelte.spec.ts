@@ -24,4 +24,13 @@ describe('GalleryRoomNav', () => {
 
 		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
 	});
+
+	it('keeps room navigation horizontally scrollable for narrow layouts', async () => {
+		render(GalleryRoomNav, { roomId: 'hall-of-fame' });
+
+		const nav = document.querySelector('nav');
+		expect(nav).not.toBeNull();
+		expect(nav?.className).toContain('overflow-x-auto');
+		expect(nav?.className).toContain('gap-2');
+	});
 });
