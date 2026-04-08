@@ -67,4 +67,13 @@ describe('PolaroidCard', () => {
 		await expect.element(image).toHaveAttribute('loading', 'lazy');
 		await expect.element(image).toHaveAttribute('decoding', 'async');
 	});
+
+	it('sets explicit width and height on the artwork image for layout stability', async () => {
+		render(PolaroidCard, { artwork });
+
+		const image = page.getByAltText('Pinned Study');
+
+		await expect.element(image).toHaveAttribute('width', '768');
+		await expect.element(image).toHaveAttribute('height', '768');
+	});
 });

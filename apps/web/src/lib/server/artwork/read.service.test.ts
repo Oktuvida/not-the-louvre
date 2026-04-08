@@ -383,6 +383,14 @@ const createReadRepository = (
 		},
 		async listModerationQueue() {
 			return [];
+		},
+		async findRandomArtwork() {
+			const visible = Array.from(artworks.values()).filter((record) => !record.isHidden);
+			if (visible.length === 0) return null;
+
+			// Deterministic pick for test reproducibility (first visible by id sort)
+			const picked = visible.sort((a, b) => a.id.localeCompare(b.id))[0]!;
+			return toReadRecord(picked);
 		}
 	};
 };
@@ -1407,5 +1415,81 @@ describe('artwork read service', () => {
 				asReadDeps(readRepository)
 			)
 		).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
+	});
+
+	it('getRandomArtwork returns a single non-hidden artwork as a feed card', async () => {
+		const profiles = createProfiles();
+		const artworks = new Map<string, ArtworkRecord>();
+		const { repository: writeRepo } = createWriteRepository(artworks);
+		const { storage } = createStorage();
+
+		// Publish two artworks
+		await publishArtwork(
+			{ media: createAvifFile(), title: 'Artwork Alpha' },
+			createActor(profiles.get('user-1')!),
+			asWriteDeps(writeRepo, storage, {
+				generateId: () => 'artwork-rng-1',
+				now: () => new Date('2026-03-26T10:00:00.000Z')
+			})
+		);
+		await publishArtwork(
+			{ media: createAvifFile(), title: 'Artwork Beta' },
+			createActor(profiles.get('user-2')!),
+			asWriteDeps(writeRepo, storage, {
+				generateId: () => 'artwork-rng-2',
+				now: () => new Date('2026-03-26T11:00:00.000Z')
+			})
+		);
+
+		const readRepository = createReadRepository(artworks, profiles);
+		const { getRandomArtwork } = await import('./read.service');
+
+		const artwork = await getRandomArtwork(asReadDeps(readRepository));
+
+		expect(artwork).toBeDefined();
+		expect(artwork.id).toBeDefined();
+		expect(artwork.title).toBeDefined();
+		expect(artwork.mediaUrl).toBeDefined();
+		expect(artwork.author).toBeDefined();
+	});
+
+	it('getRandomArtwork returns 404 when no visible artworks exist', async () => {
+		const profiles = createProfiles();
+		const artworks = new Map<string, ArtworkRecord>();
+		const readRepository = createReadRepository(artworks, profiles);
+		const { getRandomArtwork } = await import('./read.service');
+
+		await expect(getRandomArtwork(asReadDeps(readRepository))).rejects.toMatchObject({
+			code: 'NOT_FOUND',
+			status: 404
+		});
+	});
+
+	it('getRandomArtwork never returns a hidden artwork', async () => {
+		const profiles = createProfiles();
+		const artworks = new Map<string, ArtworkRecord>();
+		const { repository: writeRepo } = createWriteRepository(artworks);
+		const { storage } = createStorage();
+
+		// Publish and then hide an artwork
+		await publishArtwork(
+			{ media: createAvifFile(), title: 'Hidden Artwork' },
+			createActor(profiles.get('user-1')!),
+			asWriteDeps(writeRepo, storage, {
+				generateId: () => 'artwork-hidden-rng',
+				now: () => new Date('2026-03-26T10:00:00.000Z')
+			})
+		);
+
+		// Mark as hidden
+		artworks.get('artwork-hidden-rng')!.isHidden = true;
+
+		const readRepository = createReadRepository(artworks, profiles);
+		const { getRandomArtwork } = await import('./read.service');
+
+		await expect(getRandomArtwork(asReadDeps(readRepository))).rejects.toMatchObject({
+			code: 'NOT_FOUND',
+			status: 404
+		});
 	});
 });

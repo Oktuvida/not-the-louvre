@@ -54,7 +54,12 @@ describe('gallery root route', () => {
 		expect(result).toMatchObject({
 			discovery: {
 				pageInfo: { hasMore: false, nextCursor: null },
-				request: null
+				request: {
+					authorId: null,
+					limit: 12,
+					sort: 'top',
+					window: 'all'
+				}
 			},
 			emptyStateMessage: null,
 			roomId: 'hall-of-fame',

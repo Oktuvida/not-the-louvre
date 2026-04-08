@@ -83,6 +83,8 @@
 			<img
 				src={artwork.imageUrl}
 				alt={artwork.title}
+				width="768"
+				height="768"
 				loading="lazy"
 				decoding="async"
 				class="h-full w-full object-cover"
