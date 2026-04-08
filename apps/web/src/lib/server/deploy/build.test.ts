@@ -3,9 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+	ensureServerWasmAsset,
+	ensureServerWasmReferenced,
 	ensureBuildManifestExcludesRoutePrefix,
 	ensureBuildOutput,
 	ensureServerDependencyBundled,
+	syncGeneratedServerWasmAsset,
 	syncProductionRoutes
 } from './build';
 
@@ -56,6 +59,22 @@ describe('ensureBuildOutput', () => {
 		await expect(ensureServerDependencyBundled(buildDir, 'gsap')).resolves.toBeUndefined();
 	});
 
+	it('throws when a server bundle still imports the stroke-json runtime package at runtime', async () => {
+		const buildDir = join(tmpdir(), `ntl-build-${crypto.randomUUID()}`);
+		const serverDir = join(buildDir, 'server', 'chunks');
+		await mkdir(serverDir, { recursive: true });
+		await writeFile(join(buildDir, 'index.js'), 'console.log("ok")');
+		await writeFile(join(buildDir, 'handler.js'), 'export const handler = () => {}');
+		await writeFile(
+			join(serverDir, '_runtime.js'),
+			"import { createServerStrokeJsonRuntime } from '@not-the-louvre/stroke-json-runtime/server';\nexport default createServerStrokeJsonRuntime;"
+		);
+
+		await expect(
+			ensureServerDependencyBundled(buildDir, '@not-the-louvre/stroke-json-runtime/server')
+		).rejects.toThrow('Expected SSR build to bundle @not-the-louvre/stroke-json-runtime/server');
+	});
+
 	it('throws when the production manifest still includes the demo route prefix', async () => {
 		const buildDir = join(tmpdir(), `ntl-build-${crypto.randomUUID()}`);
 		const serverDir = join(buildDir, 'server');
@@ -82,6 +101,58 @@ describe('ensureBuildOutput', () => {
 		await expect(
 			ensureBuildManifestExcludesRoutePrefix(buildDir, '/demo')
 		).resolves.toBeUndefined();
+	});
+
+	it('copies the generated server wasm asset into the built server output', async () => {
+		const buildDir = join(tmpdir(), `ntl-build-${crypto.randomUUID()}`);
+		const generatedWasmPath = join(tmpdir(), `ntl-wasm-${crypto.randomUUID()}.wasm`);
+		await mkdir(join(buildDir, 'server'), { recursive: true });
+		await writeFile(generatedWasmPath, new Uint8Array([0x00, 0x61, 0x73, 0x6d]));
+
+		const copiedAssetPath = await syncGeneratedServerWasmAsset(buildDir, generatedWasmPath);
+
+		await expect(readFile(copiedAssetPath)).resolves.toEqual(Buffer.from([0x00, 0x61, 0x73, 0x6d]));
+	});
+
+	it('throws when the built server runtime wasm asset is missing', async () => {
+		const buildDir = join(tmpdir(), `ntl-build-${crypto.randomUUID()}`);
+		await mkdir(join(buildDir, 'server'), { recursive: true });
+
+		await expect(ensureServerWasmAsset(buildDir)).rejects.toThrow(
+			'Expected built server runtime wasm asset at'
+		);
+	});
+
+	it('passes when the built server runtime wasm asset exists', async () => {
+		const buildDir = join(tmpdir(), `ntl-build-${crypto.randomUUID()}`);
+		const wasmPath = join(buildDir, 'server', 'generated', 'wasm', 'server');
+		await mkdir(wasmPath, { recursive: true });
+		await writeFile(join(wasmPath, 'stroke_json_wasm_bg.wasm'), new Uint8Array([0x00, 0x61]));
+
+		await expect(ensureServerWasmAsset(buildDir)).resolves.toContain('stroke_json_wasm_bg.wasm');
+	});
+
+	it('throws when the built server bundle never references the emitted wasm asset', async () => {
+		const buildDir = join(tmpdir(), `ntl-build-${crypto.randomUUID()}`);
+		const serverDir = join(buildDir, 'server', 'chunks');
+		await mkdir(serverDir, { recursive: true });
+		await writeFile(join(serverDir, '_page.js'), 'export const noop = true;');
+
+		await expect(ensureServerWasmReferenced(buildDir)).rejects.toThrow(
+			'Expected SSR build to reference stroke_json_wasm_bg.wasm'
+		);
+	});
+
+	it('passes when the built server bundle references the emitted wasm asset', async () => {
+		const buildDir = join(tmpdir(), `ntl-build-${crypto.randomUUID()}`);
+		const serverDir = join(buildDir, 'server', 'chunks');
+		await mkdir(serverDir, { recursive: true });
+		await writeFile(
+			join(serverDir, '_runtime.js'),
+			"const wasmUrl = new URL('../generated/wasm/server/stroke_json_wasm_bg.wasm', import.meta.url);\nexport { wasmUrl };"
+		);
+
+		await expect(ensureServerWasmReferenced(buildDir)).resolves.toContain('_runtime.js');
 	});
 });
 

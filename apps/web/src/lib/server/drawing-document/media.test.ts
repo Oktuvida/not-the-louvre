@@ -1,6 +1,12 @@
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { createEmptyDrawingDocument } from '$lib/features/stroke-json/document';
+import {
+	createEmptyDrawingDocument,
+	normalizeDrawingDocumentToEditableV2,
+	parseEditableDrawingDocumentV2,
+	parseDrawingDocumentV2,
+	serializeEditableDrawingDocument
+} from '$lib/features/stroke-json/document';
 import {
 	decodeCompressedDrawingDocument,
 	encodeCompressedDrawingDocument
@@ -8,7 +14,7 @@ import {
 import { createArtworkDrawingDocumentMedia, createAvatarDrawingDocumentMedia } from './media';
 
 describe('drawing-document backend media', () => {
-	it('encodes and decodes compressed drawing documents for persistence', () => {
+	it('encodes and decodes editable V2 compressed drawing documents for persistence', () => {
 		const document = {
 			...createEmptyDrawingDocument('artwork'),
 			strokes: [
@@ -24,7 +30,11 @@ describe('drawing-document backend media', () => {
 		const decoded = decodeCompressedDrawingDocument(encoded);
 
 		expect(encoded.length).toBeGreaterThan(0);
-		expect(JSON.parse(decoded)).toEqual(document);
+		expect(decoded).toBe(serializeEditableDrawingDocument(document));
+		expect(parseEditableDrawingDocumentV2(decoded)).toEqual(
+			normalizeDrawingDocumentToEditableV2(document)
+		);
+		expect(parseDrawingDocumentV2(decoded)).toEqual(normalizeDrawingDocumentToEditableV2(document));
 	});
 
 	it('derives canonical artwork avif from an artwork drawing document', async () => {

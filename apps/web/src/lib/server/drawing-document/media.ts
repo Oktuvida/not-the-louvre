@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import {
 	assertDrawingDocumentWithinLimits,
-	type DrawingDocumentV1
+	type DrawingDocument
 } from '$lib/features/stroke-json/document';
 import { drawingDocumentToSvg } from '$lib/features/stroke-json/svg';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
@@ -33,7 +33,7 @@ const AVATAR_CANONICAL_AVIF_ATTEMPTS = [
 ] as const;
 
 const renderDocumentToAvif = async (
-	document: DrawingDocumentV1,
+	document: DrawingDocument,
 	options: {
 		attempts: ReadonlyArray<{
 			chromaSubsampling: '4:2:0' | '4:4:4';
@@ -42,7 +42,7 @@ const renderDocumentToAvif = async (
 		}>;
 		contentType: string;
 		height: number;
-		kind: DrawingDocumentV1['kind'];
+		kind: DrawingDocument['kind'];
 		label: 'artwork' | 'avatar';
 		maxBytes: number;
 		outputFileName: string;
@@ -90,7 +90,7 @@ const renderDocumentToAvif = async (
 	);
 };
 
-export const createArtworkDrawingDocumentMedia = (document: DrawingDocumentV1) =>
+export const createArtworkDrawingDocumentMedia = (document: DrawingDocument) =>
 	renderDocumentToAvif(document, {
 		attempts: ARTWORK_CANONICAL_AVIF_ATTEMPTS,
 		contentType: ARTWORK_MEDIA_CONTENT_TYPE,
@@ -102,7 +102,7 @@ export const createArtworkDrawingDocumentMedia = (document: DrawingDocumentV1) =
 		width: ARTWORK_MEDIA_WIDTH
 	});
 
-export const createAvatarDrawingDocumentMedia = (document: DrawingDocumentV1) =>
+export const createAvatarDrawingDocumentMedia = (document: DrawingDocument) =>
 	renderDocumentToAvif(document, {
 		attempts: AVATAR_CANONICAL_AVIF_ATTEMPTS,
 		contentType: AVATAR_MEDIA_CONTENT_TYPE,
