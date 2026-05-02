@@ -37,6 +37,8 @@ The repository now uses a small Bun workspace so the root stays focused on share
 .
 ├── apps/
 │   └── web/        # SvelteKit app
+├── devenv.nix      # Linux-first devenv shell, tasks, and processes
+├── devenv.yaml     # Pinned devenv inputs
 ├── docs/           # Product and project docs
 ├── compose.yaml    # Local Supabase stack
 ├── .env.supabase.example
@@ -48,6 +50,42 @@ The repository now uses a small Bun workspace so the root stays focused on share
 - Run the app from the repository root with `bun run dev`, `bun run check`, `bun run build`, etc.
 - App-specific configuration now lives in `apps/web`.
 - Environment files for the app now live in `apps/web/.env` and `apps/web/.env.example`.
+
+## `devenv` workflow
+
+This repo now includes a Linux-first `devenv` setup for local development. The direct Bun and Docker Compose workflow still works, but `devenv` is the preferred DX entrypoint.
+
+Prerequisites:
+
+- install `devenv`
+- keep Docker Engine running on the host; `devenv` provides the client tooling, not the daemon
+
+Typical flow from the repository root:
+
+- `devenv shell` to enter the managed shell
+- inside `devenv shell`, run `ntl:format`, `ntl:check`, `ntl:test`, and the other `ntl:*` commands directly
+- `devenv up` to start the local Supabase stack, run database migrations, and then launch the app
+- `devenv tasks run ntl:check` to run the root typecheck pipeline
+- `devenv tasks run ntl:test` to run the root test pipeline
+- `devenv tasks run ntl:db-stop` to stop the local Supabase stack when you are done
+
+Useful task mappings:
+
+- `ntl:dev` -> `bun run dev`
+- `ntl:format` -> `bun run format`
+- `ntl:lint` -> `bun run lint`
+- `ntl:check` -> `bun run check`
+- `ntl:test` -> `bun run test`
+- `ntl:db-start` -> `bun run db:start`
+- `ntl:db-stop` -> `bun run db:stop`
+- `ntl:db-reset` -> `bun run db:reset`
+- `ntl:db-migrate` -> `bun run db:migrate`
+
+Notes:
+
+- `devenv up` runs `ntl:db-start`, then `ntl:db-migrate`, and only then starts the app process.
+- leaving `devenv up` does not automatically stop the Docker Compose stack; stop it explicitly with `devenv tasks run ntl:db-stop` or `bun run db:stop`.
+- `devenv` does not auto-generate `apps/web/.env`; app env files remain user-managed.
 
 ## Production deployment
 
