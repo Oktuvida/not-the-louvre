@@ -31,6 +31,16 @@ try {
 	await syncProductionRoutes(sourceRoutesDirectory, targetRoutesDirectory, ['demo']);
 	process.stdout.write(`Prepared production routes at ${targetRoutesDirectory}\n`);
 
+	const svelteKitSync = Bun.spawn(['bun', 'run', 'prepare'], {
+		cwd: projectRoot,
+		stderr: 'inherit',
+		stdout: 'inherit'
+	});
+
+	if ((await svelteKitSync.exited) !== 0) {
+		throw new Error('svelte-kit sync failed before production build');
+	}
+
 	const viteBuild = Bun.spawn(['vite', 'build'], {
 		cwd: projectRoot,
 		env: {
