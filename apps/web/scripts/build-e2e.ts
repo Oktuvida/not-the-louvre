@@ -14,6 +14,16 @@ const generatedServerWasmPath = resolve(
 	'../../packages/stroke-json-runtime/generated/wasm/server/stroke_json_wasm_bg.wasm'
 );
 
+const svelteKitSync = Bun.spawn(['bun', 'run', 'prepare'], {
+	cwd: projectRoot,
+	stderr: 'inherit',
+	stdout: 'inherit'
+});
+
+if ((await svelteKitSync.exited) !== 0) {
+	throw new Error('svelte-kit sync failed before e2e build');
+}
+
 const viteBuild = Bun.spawn(['vite', 'build'], {
 	cwd: projectRoot,
 	stderr: 'inherit',
