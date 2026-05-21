@@ -403,17 +403,17 @@ const deployCommand = async (options: CliOptions) => {
 		},
 		validation.env
 	);
-	runCommand(bunExecutablePath, ['run', 'stroke-json:wasm:smoke'], {
+	runCommand(bunExecutablePath, ['run', 'scripts/stroke-json/smoke-server-runtime.ts'], {
 		cwd: config.repoRoot,
 		env: buildEnv
 	});
-	runCommand(bunExecutablePath, ['run', '--filter', '@not-the-louvre/web', 'build'], {
-		cwd: config.repoRoot,
+	runCommand(bunExecutablePath, ['run', 'scripts/build-production.ts'], {
+		cwd: config.webRoot,
 		env: buildEnv
 	});
 	await ensureBuildOutput(resolve(config.webRoot, DEFAULT_BUILD_DIR));
-	runCommand(bunExecutablePath, ['run', '--filter', '@not-the-louvre/web', 'validate:build-output'], {
-		cwd: config.repoRoot,
+	runCommand(bunExecutablePath, ['run', 'scripts/validate-build-output.ts'], {
+		cwd: config.webRoot,
 		env: buildEnv
 	});
 	runCommand('systemctl', ['restart', config.serviceName]);
