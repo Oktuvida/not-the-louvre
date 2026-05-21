@@ -97,6 +97,8 @@ The MVP production target is a single VPS running:
 
 The production runtime uses `@sveltejs/adapter-node`, so the deployed server starts with `node build` after `bun run build` completes.
 
+The committed stroke-json WASM runtime under `packages/stroke-json-runtime/generated/wasm/` is the deployable artifact. Production hosts only need Bun and Node to install dependencies and run the app; they do not need the Rust toolchain unless you are regenerating the WASM after changing the Rust crates.
+
 ### Production env file
 
 Production secrets should not live in the repository. Store them in an env file such as `/etc/not-the-louvre/not-the-louvre.env` and load that file through `systemd`.
