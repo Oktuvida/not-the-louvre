@@ -44,6 +44,7 @@ type DeployConfig = {
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(scriptDirectory, '..', '..');
 const repoRoot = resolve(webRoot, '..', '..');
+const bunExecutablePath = process.execPath;
 
 const runCommand = (
 	command: string,
@@ -61,8 +62,9 @@ const runCommand = (
 	if (result.stderr) process.stderr.write(result.stderr);
 
 	if (result.status !== 0 && !options.allowFailure) {
+		const failureDetail = result.error?.message ? `\n${result.error.message}` : '';
 		throw new Error(
-			`${command} ${args.join(' ')} failed with exit code ${result.status ?? 'unknown'}`
+			`${command} ${args.join(' ')} failed with exit code ${result.status ?? 'unknown'}${failureDetail}`
 		);
 	}
 
@@ -391,7 +393,7 @@ const deployCommand = async (options: CliOptions) => {
 		runCommand('git', ['pull', '--ff-only'], { cwd: config.repoRoot });
 	}
 
-	runCommand('bun', ['install', '--frozen-lockfile'], { cwd: config.repoRoot });
+	runCommand(bunExecutablePath, ['install', '--frozen-lockfile'], { cwd: config.repoRoot });
 	ensureCommandExists(config.nodePath);
 	ensureNodeVersion(config.nodePath);
 	const buildEnv = createChildProcessEnv(
@@ -401,13 +403,16 @@ const deployCommand = async (options: CliOptions) => {
 		},
 		validation.env
 	);
-	runCommand('bun', ['run', 'stroke-json:wasm:smoke'], { cwd: config.repoRoot, env: buildEnv });
-	runCommand('bun', ['run', '--filter', '@not-the-louvre/web', 'build'], {
+	runCommand(bunExecutablePath, ['run', 'stroke-json:wasm:smoke'], {
+		cwd: config.repoRoot,
+		env: buildEnv
+	});
+	runCommand(bunExecutablePath, ['run', '--filter', '@not-the-louvre/web', 'build'], {
 		cwd: config.repoRoot,
 		env: buildEnv
 	});
 	await ensureBuildOutput(resolve(config.webRoot, DEFAULT_BUILD_DIR));
-	runCommand('bun', ['run', '--filter', '@not-the-louvre/web', 'validate:build-output'], {
+	runCommand(bunExecutablePath, ['run', '--filter', '@not-the-louvre/web', 'validate:build-output'], {
 		cwd: config.repoRoot,
 		env: buildEnv
 	});
