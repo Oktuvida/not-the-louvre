@@ -156,11 +156,61 @@ const ensureCommandExists = (command: string) => {
 	}
 };
 
-const ensureNodeVersion = () => {
-	const [majorVersion] = process.versions.node.split('.').map(Number);
-	if (majorVersion < 20) {
-		throw new Error(`Node 20 or newer is required, found ${process.versions.node}`);
+const parseNodeVersion = (versionText: string) => {
+	const match = versionText.trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/u);
+
+	if (!match) {
+		throw new Error(`Unable to parse Node version from: ${versionText}`);
 	}
+
+	return {
+		major: Number(match[1]),
+		minor: Number(match[2]),
+		patch: Number(match[3]),
+		raw: `${match[1]}.${match[2]}.${match[3]}`
+	};
+};
+
+const isSupportedNodeVersion = (version: { major: number; minor: number; patch: number }) => {
+	if (version.major > 22) {
+		return true;
+	}
+
+	if (version.major === 22) {
+		return version.minor > 12 || (version.minor === 12 && version.patch >= 0);
+	}
+
+	if (version.major === 20) {
+		return version.minor > 19 || (version.minor === 19 && version.patch >= 0);
+	}
+
+	return false;
+};
+
+const ensureNodeVersion = (nodePath: string) => {
+	const result = spawnSync(nodePath, ['--version'], {
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
+
+	if (result.status !== 0) {
+		throw new Error(
+			`Failed to read Node version from ${nodePath}${result.stderr ? `\n${result.stderr.trim()}` : ''}`
+		);
+	}
+
+	const version = parseNodeVersion(result.stdout);
+
+	if (!isSupportedNodeVersion(version)) {
+		throw new Error(
+			`Node 20.19+ or 22.12+ is required for builds, found ${version.raw} at ${nodePath}`
+		);
+	}
+};
+
+const prependNodePath = (nodePath: string, currentPath = '') => {
+	const nodeDirectory = dirname(nodePath);
+	return currentPath ? `${nodeDirectory}:${currentPath}` : nodeDirectory;
 };
 
 const ensureServiceAccount = (serviceUser: string) => {
@@ -282,7 +332,7 @@ const installCommand = async (options: CliOptions) => {
 
 	for (const command of [
 		'git',
-		'node',
+		config.nodePath,
 		'bun',
 		'caddy',
 		'systemctl'
@@ -290,7 +340,7 @@ const installCommand = async (options: CliOptions) => {
 		ensureCommandExists(command);
 	}
 
-	ensureNodeVersion();
+	ensureNodeVersion(config.nodePath);
 	ensureServiceAccount(config.serviceUser);
 	await ensureDirectory(resolve(config.appRoot, 'apps/web'));
 	await ensureEnvFile(config);
@@ -325,7 +375,15 @@ const deployCommand = async (options: CliOptions) => {
 	}
 
 	runCommand('bun', ['install', '--frozen-lockfile'], { cwd: config.repoRoot });
-	const buildEnv = createChildProcessEnv(process.env, validation.env);
+	ensureCommandExists(config.nodePath);
+	ensureNodeVersion(config.nodePath);
+	const buildEnv = createChildProcessEnv(
+		{
+			...process.env,
+			PATH: prependNodePath(config.nodePath, process.env.PATH)
+		},
+		validation.env
+	);
 	runCommand('bun', ['run', 'stroke-json:wasm:smoke'], { cwd: config.repoRoot, env: buildEnv });
 	runCommand('bun', ['run', '--filter', '@not-the-louvre/web', 'build'], {
 		cwd: config.repoRoot,
