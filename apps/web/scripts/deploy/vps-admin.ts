@@ -117,13 +117,30 @@ const getFlag = (options: CliOptions, key: string, fallback = '') => {
 
 const hasFlag = (options: CliOptions, key: string) => options.flags.get(key) === true;
 
+const resolveCommandPath = (command: string) => {
+	const result = spawnSync('sh', ['-lc', `command -v ${command}`], {
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
+
+	if (result.status !== 0) {
+		return '';
+	}
+
+	return result.stdout.trim();
+};
+
 const resolveConfig = (options: CliOptions): DeployConfig => {
 	const serviceName = getFlag(options, 'service-name', 'not-the-louvre');
 	const serviceUser = getFlag(options, 'service-user', 'notthelouvre');
 	const appRoot = getFlag(options, 'app-root', repoRoot);
 	const envFilePath = getFlag(options, 'env-file', `/etc/${serviceName}/${serviceName}.env`);
-	const nodePath = getFlag(options, 'node-path', '/usr/bin/node');
+	const nodePath = getFlag(options, 'node-path') || resolveCommandPath('node');
 	const caddyfilePath = getFlag(options, 'caddyfile', '/etc/caddy/Caddyfile');
+
+	if (!nodePath) {
+		throw new Error('Unable to resolve a Node binary from PATH. Pass --node-path explicitly.');
+	}
 
 	return {
 		appRoot,
