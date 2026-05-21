@@ -13,6 +13,7 @@ import {
 } from '../src/lib/server/deploy/build';
 
 const projectRoot = process.cwd();
+const bunExecutablePath = process.execPath;
 const sourceRoutesDirectory = resolve(projectRoot, 'src/routes');
 const generatedSourceDirectory = resolve(projectRoot, '.generated/production-src');
 const targetRoutesDirectory = resolve(generatedSourceDirectory, 'routes');
@@ -31,7 +32,7 @@ try {
 	await syncProductionRoutes(sourceRoutesDirectory, targetRoutesDirectory, ['demo']);
 	process.stdout.write(`Prepared production routes at ${targetRoutesDirectory}\n`);
 
-	const svelteKitSync = Bun.spawn(['bun', 'run', 'prepare'], {
+	const svelteKitSync = Bun.spawn([bunExecutablePath, 'run', 'prepare'], {
 		cwd: projectRoot,
 		stderr: 'inherit',
 		stdout: 'inherit'
