@@ -49,17 +49,25 @@ const bunExecutablePath = process.execPath;
 const runCommand = (
 	command: string,
 	args: string[],
-	options: { cwd?: string; allowFailure?: boolean; env?: NodeJS.ProcessEnv } = {}
+	options: {
+		cwd?: string;
+		allowFailure?: boolean;
+		env?: NodeJS.ProcessEnv;
+		stdio?: 'pipe' | 'inherit';
+	} = {}
 ) => {
+	const stdio = options.stdio ?? 'pipe';
 	const result = spawnSync(command, args, {
 		cwd: options.cwd,
 		encoding: 'utf8',
 		env: options.env ?? process.env,
-		stdio: ['inherit', 'pipe', 'pipe']
+		stdio: stdio === 'inherit' ? 'inherit' : ['inherit', 'pipe', 'pipe']
 	});
 
-	if (result.stdout) process.stdout.write(result.stdout);
-	if (result.stderr) process.stderr.write(result.stderr);
+	if (stdio === 'pipe') {
+		if (result.stdout) process.stdout.write(result.stdout);
+		if (result.stderr) process.stderr.write(result.stderr);
+	}
 
 	if (result.status !== 0 && !options.allowFailure) {
 		const failureDetail = result.error?.message ? `\n${result.error.message}` : '';
@@ -390,10 +398,13 @@ const deployCommand = async (options: CliOptions) => {
 	}
 
 	if (!hasFlag(options, 'skip-pull')) {
-		runCommand('git', ['pull', '--ff-only'], { cwd: config.repoRoot });
+		runCommand('git', ['pull', '--ff-only'], { cwd: config.repoRoot, stdio: 'inherit' });
 	}
 
-	runCommand(bunExecutablePath, ['install', '--frozen-lockfile'], { cwd: config.repoRoot });
+	runCommand(bunExecutablePath, ['install', '--frozen-lockfile'], {
+		cwd: config.repoRoot,
+		stdio: 'inherit'
+	});
 	ensureCommandExists(config.nodePath);
 	ensureNodeVersion(config.nodePath);
 	const buildEnv = createChildProcessEnv(
@@ -405,18 +416,21 @@ const deployCommand = async (options: CliOptions) => {
 	);
 	runCommand(bunExecutablePath, ['run', 'scripts/stroke-json/smoke-server-runtime.ts'], {
 		cwd: config.repoRoot,
-		env: buildEnv
+		env: buildEnv,
+		stdio: 'inherit'
 	});
 	runCommand(bunExecutablePath, ['run', 'scripts/build-production.ts'], {
 		cwd: config.webRoot,
-		env: buildEnv
+		env: buildEnv,
+		stdio: 'inherit'
 	});
 	await ensureBuildOutput(resolve(config.webRoot, DEFAULT_BUILD_DIR));
 	runCommand(bunExecutablePath, ['run', 'scripts/validate-build-output.ts'], {
 		cwd: config.webRoot,
-		env: buildEnv
+		env: buildEnv,
+		stdio: 'inherit'
 	});
-	runCommand('systemctl', ['restart', config.serviceName]);
+	runCommand('systemctl', ['restart', config.serviceName], { stdio: 'inherit' });
 	ensureServiceActive(config.serviceName);
 	process.stdout.write(`Deploy complete for ${config.serviceName}\n`);
 };
