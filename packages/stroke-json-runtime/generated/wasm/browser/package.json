@@ -1,0 +1,16 @@
+{
+  "name": "stroke-json-wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "stroke_json_wasm_bg.wasm",
+    "stroke_json_wasm.js",
+    "stroke_json_wasm.d.ts"
+  ],
+  "main": "stroke_json_wasm.js",
+  "types": "stroke_json_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
