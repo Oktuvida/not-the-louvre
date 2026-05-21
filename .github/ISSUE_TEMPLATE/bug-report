@@ -1,0 +1,125 @@
+name: Bug report
+description: Report a reproducible bug with context, environment details, and evidence.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for product or technical bugs.
+
+        Include a video link whenever possible so the issue can be reproduced and triaged faster.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: Short description of the bug.
+      placeholder: Dragging near the canvas edge selects and moves the image instead of continuing to draw.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: Pick the area that best matches the bug.
+      options:
+        - canvas/avatar
+        - canvas/artwork
+        - animation/performance
+        - mobile
+        - auth
+        - gallery
+        - other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How serious is the impact?
+      options:
+        - low
+        - medium
+        - high
+        - critical
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps needed to trigger the bug.
+      placeholder: |
+        1. Open the avatar editor.
+        2. Start drawing near the drawable boundary.
+        3. Move the pointer slightly outside the drawable area while dragging.
+        4. Observe the canvas behavior.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-result
+    attributes:
+      label: Actual result
+      description: What happens today?
+      placeholder: The image starts moving as if it were selected, and drawing stops following the pointer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-result
+    attributes:
+      label: Expected result
+      description: What should happen instead?
+      placeholder: Drawing should continue smoothly while dragging, without selecting or moving the image.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Provide the environment where the bug was observed.
+      placeholder: |
+        - Browser: Firefox 124
+        - OS: macOS 15
+        - Device: iPhone 15 Pro / Desktop
+        - App area: avatar editor
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Video or screenshot evidence
+      description: Paste a link, or paste, drop, or upload files directly in this field.
+      placeholder: |
+        Drop a video or screenshot here, or paste a link if the file is hosted elsewhere.
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Optional notes, hypotheses, related issues, or extra links.
+      placeholder: Happens more often after zooming the canvas / only reproducible on Firefox.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I reproduced this bug at least once and the steps above are accurate.
+          required: true
+        - label: I included video or screenshot evidence.
+          required: true
