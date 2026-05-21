@@ -8,13 +8,14 @@ import {
 } from '../src/lib/server/deploy/build';
 
 const projectRoot = process.cwd();
+const bunExecutablePath = process.execPath;
 const svelteKitOutputDirectory = resolve(projectRoot, '.svelte-kit/output');
 const generatedServerWasmPath = resolve(
 	projectRoot,
 	'../../packages/stroke-json-runtime/generated/wasm/server/stroke_json_wasm_bg.wasm'
 );
 
-const svelteKitSync = Bun.spawn(['bun', 'run', 'prepare'], {
+const svelteKitSync = Bun.spawn([bunExecutablePath, 'run', 'prepare'], {
 	cwd: projectRoot,
 	stderr: 'inherit',
 	stdout: 'inherit'
