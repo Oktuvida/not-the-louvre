@@ -1,20 +1,57 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Tech stack: TypeScript, SvelteKit, Vite, TailwindCSS v4, Bun, Rust (WASM), Drizzle ORM, Postgres (Supabase), Better Auth, Threlte, Three.js.
+  Architecture: Monorepo (apps/*, packages/*). Node adapter. Code-first DB.
+  Testing: Vitest unit (client + server), Playwright e2e, cargo test for Rust.
+  Quality gates: prettier, eslint, svelte-check, tsc.
+  Commits: Angular-style Conventional Commits with emoji prefix.
+  Strict TDD: Enabled (test-first, red-green-refactor).
+  PR review budget: 400 lines.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+strict_tdd: true
+
+testing:
+  unit:
+    command: "bun run test:unit"
+    runner: "Vitest"
+  rust_unit:
+    command: "cargo test --locked --workspace"
+    runner: "Cargo"
+  e2e:
+    command: "bun run test:e2e"
+    runner: "Playwright"
+  coverage:
+    available: true
+    command: "vitest --coverage"
+  lint:
+    command: "bun run lint"
+  type_check:
+    command: "bun run check"
+  format:
+    command: "bun run format"
+
+rules:
+  proposal:
+    - Keep proposals under 500 words.
+    - Include a rollback plan for risky changes.
+  specs:
+    - Use Given/When/Then for scenarios.
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+  design:
+    - Include sequence diagrams for complex flows.
+    - Document architecture decisions with rationale.
+  tasks:
+    - Group by phase, use hierarchical numbering.
+    - Keep tasks completable in one session.
+  apply:
+    tdd: true
+    test_command: "bun run test:unit"
+    build_command: "bun run build"
+    max_lines_per_pr: 400
+  verify:
+    test_command: "bun run test"
+    build_command: "bun run build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas.
