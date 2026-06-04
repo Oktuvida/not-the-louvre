@@ -9,14 +9,23 @@
 	interface Props {
 		artworks: Artwork[];
 		pageInfo: { hasMore: boolean; nextCursor: string | null };
+		adultContentEnabled?: boolean;
 		loadMoreArtworks?: (request: { cursor: string }) => Promise<{
 			artworks: Artwork[];
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
 		onSelect: (artwork: Artwork) => void;
+		viewerId?: string | null;
 	}
 
-	let { artworks, pageInfo, loadMoreArtworks, onSelect }: Props = $props();
+	let {
+		artworks,
+		pageInfo,
+		adultContentEnabled = false,
+		loadMoreArtworks,
+		onSelect,
+		viewerId = null
+	}: Props = $props();
 
 	const { initialArtworks, initialPageInfo } = (() => ({
 		initialArtworks: $state.snapshot(artworks),
@@ -58,7 +67,12 @@
 	<VirtualizedGrid rows={accumulator.rows} gap="3.75rem">
 		{#snippet renderCard(artwork)}
 			<div data-testid={`virtualized-artwork-card-${artwork.id}`}>
-				<PolaroidCard {artwork} onclick={() => onSelect(artwork)} />
+				<PolaroidCard
+					{artwork}
+					{viewerId}
+					{adultContentEnabled}
+					onclick={() => onSelect(artwork)}
+				/>
 			</div>
 		{/snippet}
 	</VirtualizedGrid>

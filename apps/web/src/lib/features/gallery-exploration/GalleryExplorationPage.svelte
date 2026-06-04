@@ -491,7 +491,7 @@
 		const fade = { opacity: 0 };
 		gsap.to(fade, {
 			opacity: 1,
-			duration: 0.5,
+			duration: 0.25,
 			ease: 'power2.in',
 			onUpdate: () => {
 				exitFadeOpacity = fade.opacity;
@@ -535,8 +535,8 @@
 		const fade = { opacity: 1 };
 		gsap.to(fade, {
 			opacity: 0,
-			duration: 0.5,
-			delay: 0.05,
+			duration: 0.25,
+			delay: 0,
 			ease: 'power2.out',
 			onUpdate: () => {
 				entryFadeOpacity = fade.opacity;
@@ -738,6 +738,7 @@
 							adultContentEnabled={adultContentAllowed}
 							loadMoreArtworks={roomLoadMoreArtworks}
 							onSelect={openArtwork}
+							viewerId={viewer?.id ?? null}
 						/>
 					{:else if roomId === 'hot-wall'}
 						<HotWallRoom
@@ -746,6 +747,7 @@
 							adultContentEnabled={adultContentAllowed}
 							loadMoreArtworks={roomLoadMoreArtworks}
 							onSelect={openArtwork}
+							viewerId={viewer?.id ?? null}
 						/>
 					{:else if roomId === 'mystery' && artworks.length > 0}
 						<MysteryRoom
@@ -760,8 +762,10 @@
 						<YourStudioRoom
 							{artworks}
 							pageInfo={routeDiscovery.pageInfo}
+							adultContentEnabled={adultContentAllowed}
 							loadMoreArtworks={roomLoadMoreArtworks}
 							onSelect={openArtwork}
+							viewerId={viewer?.id ?? null}
 						/>
 					{/if}
 				</div>

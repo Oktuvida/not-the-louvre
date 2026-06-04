@@ -123,6 +123,7 @@ import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 
 const baseArtwork: Artwork = {
 	artist: 'journey_artist',
+	authorId: 'user-test',
 	artistAvatar: undefined,
 	commentCount: 0,
 	comments: [],
@@ -1294,7 +1295,7 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByText('18+ artworks', { exact: true })).toBeVisible();
-		await expect.element(page.getByText('Sensitive artwork', { exact: true })).toBeVisible();
+		await expect.element(page.getByLabelText('Sensitive artwork, click to reveal')).toBeVisible();
 		await page.getByRole('button', { exact: true, name: 'Reveal 18+ artworks' }).click();
 
 		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
