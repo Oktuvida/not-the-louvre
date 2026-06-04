@@ -57,6 +57,7 @@ import MysteryRoomHarness from './MysteryRoomHarness.svelte';
 
 const makeArtwork = (id: string, title: string): Artwork => ({
 	artist: `artist-${id}`,
+	authorId: 'user-test',
 	artistAvatar: undefined,
 	commentCount: 0,
 	comments: [],
