@@ -31,4 +31,12 @@ describe('GameLink', () => {
 		await expect.element(back).toHaveAttribute('data-sticker-variant', 'ghost');
 		await expect.element(back).toHaveAttribute('href', '/draw');
 	});
+
+	it('spreads rest props onto the underlying anchor element', async () => {
+		render(GameControlsHarness);
+
+		const gallery = page.getByRole('link', { name: 'Gallery' });
+
+		await expect.element(gallery).toHaveAttribute('data-sveltekit-preload-data', 'hover');
+	});
 });

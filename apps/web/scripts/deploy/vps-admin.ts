@@ -357,13 +357,7 @@ const installCommand = async (options: CliOptions) => {
 		throw new Error('install requires --domain and --email');
 	}
 
-	for (const command of [
-		'git',
-		config.nodePath,
-		'bun',
-		'caddy',
-		'systemctl'
-	]) {
+	for (const command of ['git', config.nodePath, 'bun', 'caddy', 'systemctl']) {
 		ensureCommandExists(command);
 	}
 

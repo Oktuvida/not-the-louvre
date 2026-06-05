@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
+import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 import VirtualizedGridHarness from './VirtualizedGridHarness.svelte';
 
-const createArtwork = (id: string) => ({
+const createArtwork = (id: string): Artwork => ({
 	id,
 	title: `Artwork ${id}`,
 	artist: 'Test Artist',
+	authorId: `user-${id}`,
 	imageUrl: `https://example.com/${id}.avif`,
 	score: 0,
 	upvotes: 0,

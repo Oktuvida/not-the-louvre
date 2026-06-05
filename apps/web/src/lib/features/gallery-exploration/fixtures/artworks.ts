@@ -221,6 +221,7 @@ const rawMockArtworks = [
 
 export const mockArtworks: Artwork[] = rawMockArtworks.map((artwork) => ({
 	...artwork,
+	authorId: `user-${artwork.id}`,
 	isNsfw: false
 }));
 
