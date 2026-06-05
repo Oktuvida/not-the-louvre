@@ -19,7 +19,8 @@
 		viewer = null,
 		onArtworkChange,
 		onArtworkPatch,
-		onClose
+		onClose,
+		revealedArtworkIds
 	}: {
 		artwork: Artwork | null;
 		adultContentEnabled?: boolean;
@@ -32,6 +33,7 @@
 			patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>
 		) => void;
 		onClose?: () => void;
+		revealedArtworkIds?: import('svelte/store').Writable<Set<string>>;
 	} = $props();
 
 	let commentBody = $state('');
@@ -43,7 +45,17 @@
 	let commentInput: HTMLInputElement | undefined = $state();
 
 	const isAvatarPreviewOpen = $derived(avatarPreviewArtworkId === (artwork?.id ?? null));
-	const isSensitiveBlurred = $derived(Boolean(artwork?.isNsfw) && !adultContentEnabled);
+	let revealedIds = $state<Set<string>>(new Set());
+	$effect(() => {
+		if (!revealedArtworkIds) return;
+		return revealedArtworkIds.subscribe((ids) => {
+			revealedIds = ids;
+		});
+	});
+	const isRevealed = $derived(Boolean(artwork?.id) && revealedIds.has(artwork!.id));
+	const isSensitiveBlurred = $derived(
+		Boolean(artwork?.isNsfw) && !adultContentEnabled && !isRevealed
+	);
 	const forkAttribution = $derived.by(() => {
 		if (!artwork?.lineage?.isFork) return null;
 		if (artwork.lineage.parentStatus !== 'available' || !artwork.lineage.parent) {

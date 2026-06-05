@@ -3,12 +3,14 @@
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
 	import { createArtworkAccumulator } from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
+	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
 	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
 	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import WaxSealMedal from '$lib/features/shared-ui/components/WaxSealMedal.svelte';
 	import { untrack } from 'svelte';
+	import type { Writable } from 'svelte/store';
 
 	interface Props {
 		artworks: Artwork[];
@@ -19,9 +21,27 @@
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
 		onSelect: (artwork: Artwork) => void;
+		revealedArtworkIds?: Writable<Set<string>>;
+		viewerId?: string | null;
 	}
 
-	let { artworks, pageInfo, adultContentEnabled, loadMoreArtworks, onSelect }: Props = $props();
+	let {
+		artworks,
+		pageInfo,
+		adultContentEnabled,
+		loadMoreArtworks,
+		onSelect,
+		revealedArtworkIds,
+		viewerId = null
+	}: Props = $props();
+
+	let revealedPodiumIds = $state<Set<string>>(new Set());
+
+	const isPodiumBlurred = (artwork: Artwork) =>
+		artwork.isNsfw &&
+		!adultContentEnabled &&
+		viewerId !== artwork.authorId &&
+		!revealedPodiumIds.has(artwork.id);
 
 	const podiumMeta = {
 		1: {
@@ -98,12 +118,17 @@
 	});
 
 	const seedIdentity = (items: Artwork[]) => items.map((a) => a.id).join(',');
+	const pageInfoIdentity = (info: { hasMore: boolean; nextCursor: string | null }) =>
+		`${info.hasMore}:${info.nextCursor ?? ''}`;
 	let lastSeedIdentity = seedIdentity(initialArtworks);
+	let lastPageInfoIdentity = pageInfoIdentity(initialPageInfo);
 
 	$effect(() => {
 		const identity = seedIdentity(artworks);
-		if (identity !== lastSeedIdentity) {
+		const nextPageInfoIdentity = pageInfoIdentity(pageInfo);
+		if (identity !== lastSeedIdentity || nextPageInfoIdentity !== lastPageInfoIdentity) {
 			lastSeedIdentity = identity;
+			lastPageInfoIdentity = nextPageInfoIdentity;
 			untrack(() => {
 				accumulator.reseed(artworks.slice(3), pageInfo);
 			});
@@ -144,7 +169,14 @@
 						type="button"
 						class={`relative ${meta.width} ${meta.height} cursor-pointer`}
 						data-testid={`podium-artwork-${position}`}
-						onclick={() => onSelect(artwork)}
+						onclick={() => {
+							if (isPodiumBlurred(artwork)) {
+								revealedPodiumIds = new Set([...revealedPodiumIds, artwork.id]);
+								revealedArtworkIds?.update((ids) => new Set([...ids, artwork.id]));
+								return;
+							}
+							onSelect(artwork);
+						}}
 					>
 						<div class="h-full transition duration-200 hover:-translate-y-2 hover:scale-105">
 							<ArtworkFrame
@@ -154,24 +186,15 @@
 								testId={`podium-frame-${position}`}
 							>
 								<div class="relative h-full w-full">
-									<img
+									<NsfwImage
 										src={artwork.imageUrl}
 										alt={artwork.title}
+										blurred={isPodiumBlurred(artwork)}
+										ariaLabel="Sensitive artwork, click to reveal"
 										loading={position === 1 ? 'eager' : 'lazy'}
 										decoding={position === 1 ? 'sync' : 'async'}
-										class={`h-full w-full object-cover transition duration-200 ${artwork.isNsfw && !adultContentEnabled ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
+										className="h-full w-full object-cover"
 									/>
-									{#if artwork.isNsfw && !adultContentEnabled}
-										<div
-											class="absolute inset-0 flex flex-col items-center justify-center border-2 border-dashed border-[#2d2420] bg-[rgba(45,36,32,0.72)] text-[#fdfbf7]"
-										>
-											<span
-												class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
-												>18+</span
-											>
-											<p class="mt-3 text-sm font-bold uppercase">Sensitive artwork</p>
-										</div>
-									{/if}
 								</div>
 							</ArtworkFrame>
 							{#if artwork.artistAvatar}
@@ -248,6 +271,8 @@
 			{#snippet renderCard(artwork)}
 				<PolaroidCard
 					{artwork}
+					{viewerId}
+					{adultContentEnabled}
 					testId={`ranked-polaroid-${artwork.id}`}
 					onclick={() => onSelect(artwork)}
 				/>
