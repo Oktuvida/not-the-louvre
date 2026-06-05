@@ -588,6 +588,10 @@
 	};
 </script>
 
+<svelte:head>
+	<link rel="preload" as="image" href="/table.avif" type="image/avif" fetchpriority="high" />
+</svelte:head>
+
 <div class="studio-page relative flex h-dvh flex-col overflow-hidden" data-book-state={sceneState}>
 	<picture class="pointer-events-none absolute inset-0 z-0">
 		<source type="image/avif" srcset="/table.avif" />
