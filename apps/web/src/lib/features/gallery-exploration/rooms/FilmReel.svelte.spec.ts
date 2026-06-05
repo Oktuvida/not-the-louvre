@@ -50,6 +50,7 @@ const createArtwork = (id: string): Artwork => ({
 	id,
 	title: `Artwork ${id}`,
 	artist: `Artist ${id}`,
+	authorId: `user-${id}`,
 	imageUrl: `https://example.com/${id}.avif`,
 	score: 50,
 	upvotes: 50,

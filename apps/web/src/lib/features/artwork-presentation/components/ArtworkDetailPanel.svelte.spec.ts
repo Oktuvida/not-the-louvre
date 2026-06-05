@@ -10,6 +10,7 @@ import ArtworkDetailPanel from './ArtworkDetailPanel.svelte';
 
 const artwork = {
 	artist: 'journey_artist',
+	authorId: 'user-test',
 	artistAvatar: undefined,
 	commentCount: 0,
 	comments: [],

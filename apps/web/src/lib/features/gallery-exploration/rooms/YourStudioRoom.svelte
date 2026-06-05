@@ -9,14 +9,23 @@
 	interface Props {
 		artworks: Artwork[];
 		pageInfo: { hasMore: boolean; nextCursor: string | null };
+		adultContentEnabled?: boolean;
 		loadMoreArtworks?: (request: { cursor: string }) => Promise<{
 			artworks: Artwork[];
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
 		onSelect: (artwork: Artwork) => void;
+		viewerId?: string | null;
 	}
 
-	let { artworks, pageInfo, loadMoreArtworks, onSelect }: Props = $props();
+	let {
+		artworks,
+		pageInfo,
+		adultContentEnabled = false,
+		loadMoreArtworks,
+		onSelect,
+		viewerId = null
+	}: Props = $props();
 
 	const { initialArtworks, initialPageInfo } = (() => ({
 		initialArtworks: $state.snapshot(artworks),
@@ -36,12 +45,17 @@
 	});
 
 	const seedIdentity = (items: Artwork[]) => items.map((a) => a.id).join(',');
+	const pageInfoIdentity = (info: { hasMore: boolean; nextCursor: string | null }) =>
+		`${info.hasMore}:${info.nextCursor ?? ''}`;
 	let lastSeedIdentity = seedIdentity(initialArtworks);
+	let lastPageInfoIdentity = pageInfoIdentity(initialPageInfo);
 
 	$effect(() => {
 		const identity = seedIdentity(artworks);
-		if (identity !== lastSeedIdentity) {
+		const nextPageInfoIdentity = pageInfoIdentity(pageInfo);
+		if (identity !== lastSeedIdentity || nextPageInfoIdentity !== lastPageInfoIdentity) {
 			lastSeedIdentity = identity;
+			lastPageInfoIdentity = nextPageInfoIdentity;
 			untrack(() => {
 				accumulator.reseed(artworks, pageInfo);
 			});
@@ -58,7 +72,12 @@
 	<VirtualizedGrid rows={accumulator.rows} gap="3.75rem">
 		{#snippet renderCard(artwork)}
 			<div data-testid={`virtualized-artwork-card-${artwork.id}`}>
-				<PolaroidCard {artwork} onclick={() => onSelect(artwork)} />
+				<PolaroidCard
+					{artwork}
+					{viewerId}
+					{adultContentEnabled}
+					onclick={() => onSelect(artwork)}
+				/>
 			</div>
 		{/snippet}
 	</VirtualizedGrid>
