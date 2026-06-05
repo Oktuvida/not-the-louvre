@@ -222,6 +222,7 @@
 	const hasSensitiveArtwork = $derived(
 		artworks.some((artwork) => artwork.isNsfw) || Boolean(selectedArtwork?.isNsfw)
 	);
+	const showSensitiveArtworkNote = $derived(hasSensitiveArtwork && roomId !== 'your-studio');
 	const currentGalleryUrl = $derived(
 		roomId === 'hall-of-fame' ? resolve('/gallery') : resolve('/gallery/[room]', { room: roomId })
 	);
@@ -614,7 +615,7 @@
 			</div>
 		{/if}
 
-		{#if hasSensitiveArtwork}
+		{#if showSensitiveArtworkNote}
 			<div
 				class="pointer-events-none mb-4 flex justify-center md:mb-6 md:rotate-14 md:justify-end lg:absolute lg:top-20 lg:right-[-2.5rem] lg:z-[26] lg:mb-0 xl:right-[-17.5rem]"
 			>
