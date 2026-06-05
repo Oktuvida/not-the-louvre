@@ -1283,6 +1283,20 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByRole('button', { name: /Adults only study/ })).toBeVisible();
 	});
 
+	it('does not show the 18+ note in your studio', async () => {
+		render(GalleryExplorationPage, {
+			adultContentEnabled: false,
+			artworks: [{ ...baseArtwork, id: 'artwork-1', isNsfw: true, title: 'Private Study' }],
+			emptyStateMessage: null,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByRole('button', { name: /Private Study/ })).toBeVisible();
+		await expect.element(page.getByText('18+ artworks', { exact: true })).not.toBeInTheDocument();
+	});
+
 	it('uses frames only for the top-three podium artworks in hall of fame', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [
