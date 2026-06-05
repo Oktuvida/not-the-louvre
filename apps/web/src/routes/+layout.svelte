@@ -6,6 +6,10 @@
 	import type { LayoutProps } from './$types';
 	import { faviconUpdateEventName } from '$lib/favicon';
 
+	const STUDIO_BACKGROUND_URL = '/table.avif';
+	const STUDIO_BACKGROUND_WARMUP_DELAY_MS = 1200;
+	let studioBackgroundWarmupStarted = false;
+
 	let { children, data }: LayoutProps = $props();
 	let clientFaviconHref = $state<string | null>(null);
 	let clientFaviconBaseHref = $state<string | null>(null);
@@ -18,6 +22,31 @@
 	);
 
 	onMount(() => {
+		let idleHandle: number | null = null;
+		let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+		const warmStudioBackground = () => {
+			if (studioBackgroundWarmupStarted) {
+				return;
+			}
+
+			studioBackgroundWarmupStarted = true;
+			const image = new Image();
+			image.decoding = 'async';
+			image.src = STUDIO_BACKGROUND_URL;
+		};
+
+		const scheduleStudioBackgroundWarmup = () => {
+			if ('requestIdleCallback' in window) {
+				idleHandle = window.requestIdleCallback(() => {
+					warmStudioBackground();
+				});
+				return;
+			}
+
+			timeoutHandle = setTimeout(warmStudioBackground, STUDIO_BACKGROUND_WARMUP_DELAY_MS);
+		};
+
 		const handleFaviconUpdate = (event: Event) => {
 			const customEvent = event as CustomEvent<{ href?: string }>;
 
@@ -30,8 +59,17 @@
 		};
 
 		window.addEventListener(faviconUpdateEventName, handleFaviconUpdate);
+		scheduleStudioBackgroundWarmup();
 
 		return () => {
+			if (idleHandle !== null && 'cancelIdleCallback' in window) {
+				window.cancelIdleCallback(idleHandle);
+			}
+
+			if (timeoutHandle !== null) {
+				clearTimeout(timeoutHandle);
+			}
+
 			window.removeEventListener(faviconUpdateEventName, handleFaviconUpdate);
 		};
 	});
