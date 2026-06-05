@@ -5,6 +5,7 @@
 	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
 	import { untrack } from 'svelte';
+	import type { Writable } from 'svelte/store';
 
 	interface Props {
 		artworks: Artwork[];
@@ -15,6 +16,7 @@
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
 		onSelect?: (artwork: Artwork) => void;
+		revealedArtworkIds?: Writable<Set<string>>;
 		viewerId?: string | null;
 	}
 
@@ -24,6 +26,7 @@
 		adultContentEnabled = false,
 		loadMoreArtworks,
 		onSelect = () => {},
+		revealedArtworkIds,
 		viewerId = null
 	}: Props = $props();
 
@@ -46,12 +49,17 @@
 	});
 
 	const seedIdentity = (items: Artwork[]) => items.map((a) => a.id).join(',');
+	const pageInfoIdentity = (info: { hasMore: boolean; nextCursor: string | null }) =>
+		`${info.hasMore}:${info.nextCursor ?? ''}`;
 	let lastSeedIdentity = seedIdentity(initialArtworks);
+	let lastPageInfoIdentity = pageInfoIdentity(initialPageInfo);
 
 	$effect(() => {
 		const identity = seedIdentity(artworks);
-		if (identity !== lastSeedIdentity) {
+		const nextPageInfoIdentity = pageInfoIdentity(pageInfo);
+		if (identity !== lastSeedIdentity || nextPageInfoIdentity !== lastPageInfoIdentity) {
 			lastSeedIdentity = identity;
+			lastPageInfoIdentity = nextPageInfoIdentity;
 			untrack(() => {
 				accumulator.reseed(artworks, pageInfo);
 			});
@@ -102,6 +110,7 @@
 					onclick={() => {
 						if (isLeadBlurred(leadArtwork)) {
 							revealedLeadId = leadArtwork.id;
+							revealedArtworkIds?.update((ids) => new Set([...ids, leadArtwork.id]));
 							return;
 						}
 						onSelect(leadArtwork);
