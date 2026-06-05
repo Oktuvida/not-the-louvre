@@ -45,12 +45,17 @@
 	});
 
 	const seedIdentity = (items: Artwork[]) => items.map((a) => a.id).join(',');
+	const pageInfoIdentity = (info: { hasMore: boolean; nextCursor: string | null }) =>
+		`${info.hasMore}:${info.nextCursor ?? ''}`;
 	let lastSeedIdentity = seedIdentity(initialArtworks);
+	let lastPageInfoIdentity = pageInfoIdentity(initialPageInfo);
 
 	$effect(() => {
 		const identity = seedIdentity(artworks);
-		if (identity !== lastSeedIdentity) {
+		const nextPageInfoIdentity = pageInfoIdentity(pageInfo);
+		if (identity !== lastSeedIdentity || nextPageInfoIdentity !== lastPageInfoIdentity) {
 			lastSeedIdentity = identity;
+			lastPageInfoIdentity = nextPageInfoIdentity;
 			untrack(() => {
 				accumulator.reseed(artworks, pageInfo);
 			});
