@@ -46,9 +46,9 @@ Chain strategy: stacked-to-main
 ## Phase 4: Layout Persistence
 
 - [ ] 4.1 Create `apps/web/src/routes/gallery/+layout.ts` exporting `roomId` from params
-- [ ] 4.2 Define `GalleryLayoutContext` in `+layout.svelte` exposing `selectedArtwork`, `openArtwork`, `closeArtworkDetail`
-- [ ] 4.3 Strip `GalleryShell` and `ArtworkDetailPanel` from `GalleryExplorationPage.svelte`
-- [ ] 4.4 Create `apps/web/src/routes/gallery/+layout.svelte` mounting `GalleryShell`, keyed `<slot />`, and `ArtworkDetailPanel`
+- [x] 4.2 Define `GalleryLayoutContext` in `+layout.svelte` exposing `selectedArtwork`, `openArtwork`, `closeArtworkDetail` (implemented as shared panel/action bindings)
+- [ ] 4.3 Strip `GalleryShell` and `ArtworkDetailPanel` from `GalleryExplorationPage.svelte` (header fallback still retained for direct component rendering)
+- [x] 4.4 Create `apps/web/src/routes/gallery/+layout.svelte` mounting `GalleryShell`, keyed `<slot />`, and `ArtworkDetailPanel` (implemented incrementally; panel now layout-owned via context with local fallback)
 - [x] 4.5 Add `data-sveltekit-preload-data="hover"` to `GalleryRoomNav.svelte` links
 - [x] 4.6 Reduce GSAP fade duration to 250ms and delay to 0ms in gallery entry animation file
 
@@ -59,3 +59,38 @@ Chain strategy: stacked-to-main
 - [ ] 5.3 Write E2E test verifying room switch preserves scroll and avoids blank flash
 - [ ] 5.4 Write E2E test asserting blurred NSFW images expose `aria-label`
 - [ ] 5.5 Run `bun run format`, `bun run lint`, `bun run check`, and `bun run test` (`format`, `lint`, `check` pass; full `test` still depends on local integration services)
+
+## Next Slice: Gallery Shell Extraction
+
+### Goal
+
+Move the persistent gallery shell into `/gallery/+layout.svelte` without breaking the current `GalleryExplorationPage` test contract in one jump.
+
+### Scope
+
+- [x] Create a dedicated route-level harness/spec for `/gallery/+layout.svelte`
+- [x] Move only wall background, particles, and `GalleryRoomNav` into the layout first
+- [x] Keep `ArtworkDetailPanel` in `GalleryExplorationPage` for this slice
+- [x] Update gallery specs so shell assertions target the layout/harness instead of `GalleryExplorationPage`
+- [x] Verify room switches keep the shell mounted while page content rerenders cleanly
+
+### Explicitly Out of Scope
+
+- [x] Do not move `ArtworkDetailPanel` into the layout in this slice
+- [ ] Do not introduce `GalleryLayoutContext` yet
+- [ ] Do not change room data loading strategy yet
+
+### Exit Criteria
+
+- [ ] `GalleryExplorationPage` renders room content only
+- [x] Layout-level shell tests replace page-level shell assumptions
+- [x] `GalleryExplorationPage.svelte.spec.ts` no longer asserts header/background/nav ownership
+- [x] `bun run lint` and `bun run check` pass
+
+## Third/Fourth Slice Result
+
+- [x] Route layout owns background, particles, nav, and `ArtworkDetailPanel`
+- [x] `GalleryExplorationPage` registers panel/action bindings through shared context
+- [x] Direct component tests still work through local fallback rendering
+- [x] Accumulator-backed rooms reseed when `pageInfo` changes
+- [ ] Remove remaining local fallback header/panel from `GalleryExplorationPage`

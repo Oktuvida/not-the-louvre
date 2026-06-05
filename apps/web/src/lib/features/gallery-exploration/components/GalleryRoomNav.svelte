@@ -41,6 +41,7 @@
 			size="md"
 			className={`relative shrink-0 ${isActive ? 'scale-105' : 'opacity-80'}`}
 			contentClassName="px-1 text-[0.7rem] sm:text-xs md:px-0 md:text-sm"
+			data-sveltekit-preload-data="hover"
 		>
 			<Icon
 				class={`h-6 w-6 shrink-0 ${isActive ? 'animate-[wiggle_0.5s_ease-in-out_0.3s]' : ''}`}

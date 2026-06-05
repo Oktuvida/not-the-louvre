@@ -23,7 +23,8 @@
 		className = '',
 		contentClassName = '',
 		size = 'md',
-		children
+		children,
+		...restProps
 	}: {
 		href: StickerLinkHref;
 		variant?: Variant;
@@ -31,6 +32,7 @@
 		contentClassName?: string;
 		size?: StickerControlSize;
 		children: Snippet;
+		[key: string]: unknown;
 	} = $props();
 
 	let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -95,6 +97,7 @@
 <!-- eslint-disable svelte/no-navigation-without-resolve -->
 <a
 	bind:this={containerEl}
+	{...restProps}
 	href={resolvedHref}
 	class="sticker-link {className}"
 	data-sticker-size={size}

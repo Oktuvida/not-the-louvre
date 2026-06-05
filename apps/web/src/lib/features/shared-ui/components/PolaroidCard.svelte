@@ -1,18 +1,37 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import { hashString } from '$lib/features/artwork-presentation/model/frame';
+	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
 
 	let {
 		artwork,
 		className = '',
 		onclick,
-		testId
+		testId,
+		viewerId = null,
+		adultContentEnabled = false
 	}: {
 		artwork: Artwork;
 		className?: string;
 		onclick?: () => void;
 		testId?: string;
+		viewerId?: string | null;
+		adultContentEnabled?: boolean;
 	} = $props();
+
+	let revealed = $state(false);
+
+	const blurred = $derived(
+		artwork.isNsfw && !adultContentEnabled && viewerId !== artwork.authorId && !revealed
+	);
+
+	const handleClick = () => {
+		if (blurred) {
+			revealed = true;
+			return;
+		}
+		onclick?.();
+	};
 
 	const seed = $derived(hashString(artwork.id));
 	const attachment = $derived(seed % 2 === 0 ? 'tape' : 'pin');
@@ -43,7 +62,7 @@
 	class={`group relative cursor-pointer text-left ${className}`}
 	data-testid={testId}
 	style={`transform: rotate(${rotation}deg);`}
-	{onclick}
+	onclick={handleClick}
 >
 	<div
 		class="polaroid relative bg-[#f8f4ed] p-[8px] pb-0 shadow-[3px_4px_12px_rgba(0,0,0,0.22),0_1px_3px_rgba(0,0,0,0.1)] transition duration-200 group-hover:z-[5] group-hover:scale-[1.06] group-hover:rotate-0"
@@ -80,14 +99,12 @@
 					Forked
 				</div>
 			{/if}
-			<img
+			<NsfwImage
 				src={artwork.imageUrl}
 				alt={artwork.title}
-				width="768"
-				height="768"
-				loading="lazy"
-				decoding="async"
-				class="h-full w-full object-cover"
+				{blurred}
+				ariaLabel={blurred ? 'Sensitive artwork, click to reveal' : undefined}
+				className="h-full w-full object-cover"
 			/>
 		</div>
 

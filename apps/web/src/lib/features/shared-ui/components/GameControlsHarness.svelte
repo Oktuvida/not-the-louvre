@@ -13,7 +13,7 @@
 		<span>Cancel</span>
 	</GameButton>
 
-	<GameLink href="/gallery" variant="secondary" size="md">
+	<GameLink href="/gallery" variant="secondary" size="md" data-sveltekit-preload-data="hover">
 		<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2v20" /></svg>
 		<span>Gallery</span>
 	</GameLink>
