@@ -30,4 +30,28 @@ describe('NsfwImage', () => {
 		await expect.element(image).toBeInTheDocument();
 		await expect.element(image).not.toHaveAttribute('aria-label');
 	});
+
+	it('shows 18+ badge overlay when blurred', async () => {
+		render(NsfwImage, {
+			src: 'https://example.com/nsfw.avif',
+			alt: 'Sensitive artwork',
+			blurred: true
+		});
+
+		const badge = page.getByText('18+', { exact: true });
+
+		await expect.element(badge).toBeInTheDocument();
+	});
+
+	it('does not show 18+ badge overlay when not blurred', async () => {
+		render(NsfwImage, {
+			src: 'https://example.com/safe.avif',
+			alt: 'Safe artwork',
+			blurred: false
+		});
+
+		const badge = page.getByText('18+', { exact: true });
+
+		await expect.element(badge).not.toBeInTheDocument();
+	});
 });
