@@ -4,6 +4,7 @@ import { createStreamingAccumulator } from './streaming-accumulator.svelte';
 
 const makeArtwork = (index: number): Artwork => ({
 	artist: `artist-${index}`,
+	authorId: 'user-test',
 	artistAvatar: undefined,
 	commentCount: 0,
 	comments: [],

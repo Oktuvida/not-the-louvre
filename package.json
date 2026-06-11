@@ -6,7 +6,7 @@
 	"workspaces": ["apps/*", "packages/*"],
 	"scripts": {
 		"dev": "bun run --filter @not-the-louvre/web dev",
-		"build": "bun run stroke-json:wasm:build && bun run --filter @not-the-louvre/web build",
+		"build": "bun run stroke-json:wasm:smoke && bun run --filter @not-the-louvre/web build",
 		"model:transform:studio": "bun run --filter @not-the-louvre/web model:transform:studio",
 		"preview": "bun run --filter @not-the-louvre/web preview",
 		"prepare": "bun run --filter @not-the-louvre/web prepare",

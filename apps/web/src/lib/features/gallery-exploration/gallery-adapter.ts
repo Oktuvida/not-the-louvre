@@ -17,6 +17,7 @@ const baseArtwork = (
 ): Artwork => ({
 	artist: artwork.author.nickname,
 	artistAvatar: artwork.author.avatarUrl ?? undefined,
+	authorId: artwork.author.id,
 	comments: [],
 	commentCount: artwork.commentCount,
 	downvotes: artwork.downvotes ?? 0,

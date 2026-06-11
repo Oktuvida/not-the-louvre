@@ -25,6 +25,7 @@ export interface Artwork {
 	id: string;
 	title: string;
 	artist: string;
+	authorId: string;
 	artistAvatar?: string;
 	imageUrl: string;
 	isHidden?: boolean;

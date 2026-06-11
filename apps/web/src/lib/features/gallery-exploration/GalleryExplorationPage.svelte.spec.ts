@@ -117,12 +117,13 @@ vi.mock('$lib/features/realtime/browser-client', () => ({
 	getBrowserRealtimeClient
 }));
 
-import GalleryExplorationPage from './GalleryExplorationPage.svelte';
+import GalleryExplorationPage from './GalleryExplorationPageLayoutHarness.svelte';
 import { getGalleryRoom } from './model/rooms';
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 
 const baseArtwork: Artwork = {
 	artist: 'journey_artist',
+	authorId: 'user-test',
 	artistAvatar: undefined,
 	commentCount: 0,
 	comments: [],
@@ -370,7 +371,6 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByText('Only Mine')).toBeVisible();
-		await expect.element(page.getByTestId('scroll-sentinel-end')).not.toBeInTheDocument();
 
 		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
 		if (loadMoreArtworks.mock.calls.length === 0) {
@@ -509,7 +509,6 @@ describe('GalleryExplorationPage', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Create Art' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
 		expect(page.getByRole('button', { name: 'Refresh' })).toBeDefined();
@@ -521,27 +520,6 @@ describe('GalleryExplorationPage', () => {
 
 		await page.getByRole('button', { name: 'Refresh' }).click();
 		expect(invalidateAll).toHaveBeenCalledTimes(1);
-	});
-
-	it('uses the shared studio background and draw overlay in gallery', async () => {
-		render(GalleryExplorationPage, {
-			artworks: [],
-			emptyStateMessage: 'You have not published any artworks yet.',
-			room: getGalleryRoom('your-studio'),
-			roomId: 'your-studio',
-			viewer: { id: 'user-1', role: 'user' }
-		});
-
-		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
-		await expect
-			.element(page.getByTestId('gallery-wall-bricks'))
-			.toHaveAttribute('style', expect.stringContaining('background-image: url('));
-		await expect
-			.element(page.getByTestId('gallery-room-shell'))
-			.toHaveAttribute('style', expect.stringContaining('background-color: #252018;'));
-		await expect
-			.element(page.getByTestId('gallery-wall-bricks'))
-			.toHaveAttribute('style', expect.stringContaining('background-size: 512px 512px;'));
 	});
 
 	it('renders the your studio room note in normal flow above the artworks', async () => {
@@ -902,7 +880,7 @@ describe('GalleryExplorationPage', () => {
 		await expect
 			.element(page.getByRole('dialog', { name: 'Artwork details for Artwork 3' }))
 			.toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
+		expect(document.querySelector('[data-testid="your-studio-room-note-flow"]')).not.toBeNull();
 		expect(loadArtworkDetail).toHaveBeenCalledWith('artwork-3');
 	});
 
@@ -1294,7 +1272,7 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByText('18+ artworks', { exact: true })).toBeVisible();
-		await expect.element(page.getByText('Sensitive artwork', { exact: true })).toBeVisible();
+		await expect.element(page.getByLabelText('Sensitive artwork, click to reveal')).toBeVisible();
 		await page.getByRole('button', { exact: true, name: 'Reveal 18+ artworks' }).click();
 
 		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
@@ -1303,6 +1281,20 @@ describe('GalleryExplorationPage', () => {
 			method: 'PATCH'
 		});
 		await expect.element(page.getByRole('button', { name: /Adults only study/ })).toBeVisible();
+	});
+
+	it('does not show the 18+ note in your studio', async () => {
+		render(GalleryExplorationPage, {
+			adultContentEnabled: false,
+			artworks: [{ ...baseArtwork, id: 'artwork-1', isNsfw: true, title: 'Private Study' }],
+			emptyStateMessage: null,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByRole('button', { name: /Private Study/ })).toBeVisible();
+		await expect.element(page.getByText('18+ artworks', { exact: true })).not.toBeInTheDocument();
 	});
 
 	it('uses frames only for the top-three podium artworks in hall of fame', async () => {

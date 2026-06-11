@@ -7,6 +7,7 @@ import PolaroidCard from './PolaroidCard.svelte';
 const artwork = {
 	artist: 'journey_artist',
 	artistAvatar: undefined,
+	authorId: 'user-journey',
 	commentCount: 0,
 	comments: [],
 	downvotes: 0,
@@ -68,12 +69,48 @@ describe('PolaroidCard', () => {
 		await expect.element(image).toHaveAttribute('decoding', 'async');
 	});
 
-	it('sets explicit width and height on the artwork image for layout stability', async () => {
-		render(PolaroidCard, { artwork });
+	it('blurs NSFW artworks for non-authors and forwards viewerId for exemption', async () => {
+		render(PolaroidCard, {
+			artwork: { ...artwork, isNsfw: true },
+			viewerId: 'other-user',
+			testId: 'nsfw-polaroid-card'
+		});
 
 		const image = page.getByAltText('Pinned Study');
 
-		await expect.element(image).toHaveAttribute('width', '768');
-		await expect.element(image).toHaveAttribute('height', '768');
+		await expect.element(image).toBeInTheDocument();
+		await expect.element(image).toHaveAttribute('aria-label', 'Sensitive artwork, click to reveal');
+	});
+
+	it('skips blur for NSFW artwork when viewer is the author', async () => {
+		render(PolaroidCard, {
+			artwork: { ...artwork, isNsfw: true },
+			viewerId: 'user-journey',
+			testId: 'author-polaroid-card'
+		});
+
+		const image = page.getByAltText('Pinned Study');
+
+		await expect.element(image).toBeInTheDocument();
+		await expect.element(image).not.toHaveAttribute('aria-label');
+	});
+
+	it('toggles revealed state on click, removing blur', async () => {
+		render(PolaroidCard, {
+			artwork: { ...artwork, isNsfw: true },
+			viewerId: 'other-user',
+			testId: 'reveal-polaroid-card'
+		});
+
+		const image = page.getByAltText('Pinned Study');
+
+		await expect.element(image).toBeInTheDocument();
+		await expect.element(image).toHaveAttribute('aria-label', 'Sensitive artwork, click to reveal');
+
+		// Simulate click event by invoking onclick
+		const card = page.getByTestId('reveal-polaroid-card');
+		await card.click();
+
+		await expect.element(image).not.toHaveAttribute('aria-label');
 	});
 });

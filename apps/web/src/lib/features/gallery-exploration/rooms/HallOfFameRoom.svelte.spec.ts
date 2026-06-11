@@ -25,6 +25,7 @@ const createArtwork = (id: string, score: number, rank?: number): Artwork => ({
 	id,
 	title: `Artwork ${id}`,
 	artist: `Artist ${id}`,
+	authorId: `user-${id}`,
 	imageUrl: `https://example.com/${id}.avif`,
 	score,
 	upvotes: score,
