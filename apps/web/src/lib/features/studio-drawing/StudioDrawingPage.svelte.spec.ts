@@ -836,6 +836,68 @@ describe('StudioDrawingPage', () => {
 		});
 	});
 
+	it('clears back to the fork base after a reload that compacted the draft', async () => {
+		const forkParentDocument = normalizeDrawingDocumentToEditableV2({
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [[48, 48] as [number, number], [180, 180] as [number, number]],
+					size: 8
+				}
+			]
+		});
+		const compactedDraftDocument = normalizeDrawingDocumentToEditableV2({
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [[48, 48] as [number, number], [180, 180] as [number, number]],
+					size: 8
+				},
+				{
+					color: '#c84f4f',
+					points: [[220, 240] as [number, number], [280, 320] as [number, number]],
+					size: 10
+				}
+			]
+		});
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: DRAWING_DOCUMENT_V2_VERSION,
+			scope: 'artwork-parent',
+			surface: 'artwork',
+			userKey: 'journey_artist'
+		});
+		const draftStore = createIndexedDbDrawingDraftStore();
+		await draftStore.writeSnapshot({ draftKey, document: compactedDraftDocument });
+		await draftStore.writeBaseline({ draftKey, document: forkParentDocument });
+		window.localStorage.setItem(
+			'studio-fork-context:journey_artist',
+			JSON.stringify({
+				id: 'artwork-parent',
+				isNsfw: false,
+				mediaUrl: forkParentPreviewDataUrl,
+				title: 'Parent Artwork'
+			})
+		);
+
+		render(StudioDrawingPage, {
+			openingDurationMs: 1,
+			user: { nickname: 'journey_artist' }
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+		await expect.element(page.getByPlaceholder('Untitled genius')).toBeEnabled();
+
+		await page.getByRole('button', { name: 'Clear' }).click();
+
+		await vi.waitFor(async () => {
+			const persistedDraft = await readPersistedDrawingDraft(draftKey);
+			expect(persistedDraft?.tail).toEqual(forkParentDocument.tail);
+			expect(await readPersistedJournalEntries(draftKey)).toEqual([]);
+		});
+	});
+
 	it('stores only lightweight fork resume metadata in localStorage', async () => {
 		render(StudioDrawingPage, {
 			forkParent: {

@@ -186,6 +186,7 @@
 	let draftHydrated = $state(false);
 	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
 	let initialDrawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
+	let artworkBaselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
 	let forkPreloadSettled = $state(true);
 	let isPublishing = $state(false);
 	let isMobileViewport = $state(false);
@@ -340,6 +341,7 @@
 				? cloneDrawingDocumentV2(resolvedForkParent.drawingDocument)
 				: createEmptyDrawingDocumentV2('artwork');
 			initialDrawingDocument = cloneDrawingDocumentV2(drawingDocument);
+			artworkBaselineDocument = cloneDrawingDocumentV2(drawingDocument);
 			draftHydrated = true;
 			return () => {
 				draftLoadCancelled = true;
@@ -354,11 +356,17 @@
 
 		void draftSession!
 			.hydrate({ seedDocument })
-			.then((draft) => {
+			.then(async (draft) => {
+				if (draftLoadCancelled) return;
+
+				const persistedBaseline = await draftSession!.loadBaseline().catch(() => null);
 				if (draftLoadCancelled) return;
 
 				drawingDocument = draft?.kind === 'artwork' ? draft : seedDocument;
 				initialDrawingDocument = cloneDrawingDocumentV2(drawingDocument);
+				artworkBaselineDocument = cloneDrawingDocumentV2(
+					persistedBaseline?.kind === 'artwork' ? persistedBaseline : seedDocument
+				);
 				draftHydrated = true;
 				clearUnsavedDraftWarning();
 			})
@@ -367,6 +375,7 @@
 
 				drawingDocument = cloneDrawingDocumentV2(seedDocument);
 				initialDrawingDocument = cloneDrawingDocumentV2(seedDocument);
+				artworkBaselineDocument = cloneDrawingDocumentV2(seedDocument);
 				draftHydrated = true;
 				markUnsavedDraftWarning();
 			});
@@ -384,8 +393,9 @@
 
 	const clearCanvas = () => {
 		if (!studioUnlocked) return;
-		drawingDocument = cloneDrawingDocumentV2(initialDrawingDocument);
-		void resetDraftSession(initialDrawingDocument);
+		drawingDocument = cloneDrawingDocumentV2(artworkBaselineDocument);
+		initialDrawingDocument = cloneDrawingDocumentV2(artworkBaselineDocument);
+		void resetDraftSession(artworkBaselineDocument);
 		clearVersion += 1;
 		publishedArtwork = null;
 		statusMessage = '';
@@ -404,6 +414,7 @@
 		void createDraftSession(previousDraftKeys.draftKey, previousDraftKeys.legacyDraftKey)?.clear();
 		currentForkParent = null;
 		initialDrawingDocument = cloneDrawingDocumentV2(emptyDocument);
+		artworkBaselineDocument = cloneDrawingDocumentV2(emptyDocument);
 		drawingDocument = cloneDrawingDocumentV2(emptyDocument);
 		clearVersion += 1;
 		artworkTitle = '';
@@ -555,7 +566,8 @@
 				} else {
 					const draftSession = createDraftSession(draftKey, legacyDraftKey);
 					void draftSession?.clear();
-					drawingDocument = cloneDrawingDocumentV2(initialDrawingDocument);
+					drawingDocument = cloneDrawingDocumentV2(artworkBaselineDocument);
+					initialDrawingDocument = cloneDrawingDocumentV2(artworkBaselineDocument);
 					clearVersion += 1;
 					artworkTitle = '';
 					isArtworkNsfw = false;
