@@ -31,3 +31,5 @@ test-results
 
 demos/
 .generated
+# Local Pi runtime state
+.atl/
