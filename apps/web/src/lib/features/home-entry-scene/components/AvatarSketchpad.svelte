@@ -31,7 +31,7 @@
 	const palette = drawingPalette;
 	const BRUSH_SIZES = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
 	const BRUSH_PREVIEW_SIZE = Math.max(...BRUSH_SIZES) + 6;
-	const DEFAULT_AVATAR_COLOR = drawingPalette[4] ?? drawingPalette[0] ?? '#1a1a1a';
+	const DEFAULT_AVATAR_COLOR = drawingPalette[3] ?? drawingPalette[0] ?? '#1a1a1a';
 	const AVATAR_CANVAS_BACKGROUND = '#ffffff';
 
 	const CANVAS_WIDTH = AVATAR_DRAWING_DIMENSIONS.width;
@@ -584,11 +584,11 @@
 					</div>
 				</div>
 
-				<div class="grid h-full grid-cols-4 content-start gap-2 sm:grid-cols-6 md:grid-cols-2">
+				<div class="grid h-full grid-cols-4 content-center gap-x-8 gap-y-2.5 sm:grid-cols-6 md:grid-cols-3">
 					{#each palette as color (color)}
 						<button
 							type="button"
-							class={`h-11 w-11 justify-self-center rounded-xl border-2 md:h-10 md:w-10 ${activeColor === color ? 'border-[var(--color-ink)] shadow-[0_0_0_3px_rgb(47_36_28_/_0.18)]' : 'border-[var(--color-accent)]'}`}
+							class={`h-11 w-11 justify-self-right rounded-xl border-2 md:h-10 md:w-10 ${activeColor === color ? 'border-[var(--color-ink)] shadow-[0_0_0_3px_rgb(47_36_28_/_0.18)]' : 'border-[var(--color-accent)]'}`}
 							style={`background:${color};`}
 							aria-pressed={activeColor === color}
 							onclick={() => {
