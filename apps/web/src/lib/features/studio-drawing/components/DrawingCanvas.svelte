@@ -58,6 +58,48 @@
 	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
 	let committedCacheCanvas: HTMLCanvasElement | null = null;
 	let committedCacheDirty = true;
+	let overlayRef: HTMLCanvasElement | null = null;
+
+	function syncOverlaySize() {
+		if (!canvasRef || !overlayRef) return;
+		overlayRef.width = canvasRef.width;
+		overlayRef.height = canvasRef.height;
+	}
+
+	function clearOverlay() { 
+		if (!overlayRef) return;
+		const ctx = overlayRef.getContext('2d');
+		if (!ctx) return;
+		ctx.clearRect(0, 0, overlayRef.width, overlayRef.height);
+	}
+
+	function drawPreviewOnOverlayAt(clientX: number, clientY: number) {
+		if (!overlayRef) return;
+		const rect = overlayRef.getBoundingClientRect();
+		const scaleX = overlayRef.width / rect.width;
+		const scaleY = overlayRef.height / rect.height;
+
+		const cx = (clientX - rect.left) * scaleX;
+		const cy = (clientY - rect.top) * scaleY;
+		const radius = drawingTools.brushSize / 2;
+
+		const ctx = overlayRef.getContext('2d');
+		if (!ctx) return;
+
+		ctx.clearRect(0, 0, overlayRef.width, overlayRef.height);
+		ctx.beginPath();
+		ctx.fillStyle = drawingTools.activeColor;
+		ctx.globalAlpha = 0.6;
+		ctx.ellipse(cx, cy, radius, radius, 0, 0, Math.PI * 2);
+		ctx.fill();
+		ctx.globalAlpha = 1;
+	}
+
+	function scheduleOverlayUpdate(event: PointerEvent) {
+		const clientX = event.clientX;
+		const clientY = event.clientY;
+		drawPreviewOnOverlayAt(clientX, clientY);
+	}
 
 	const cloneStroke = (stroke: DrawingStroke): DrawingStroke => ({
 		color: stroke.color,
@@ -215,12 +257,15 @@
 		const handleWindowBlur = () => {
 			finishDrawing();
 		};
+		syncOverlaySize();
 
+    	window.addEventListener('resize', syncOverlaySize);
 		window.addEventListener('pointerup', handleWindowPointerUp);
 		window.addEventListener('pointercancel', handleWindowPointerCancel);
 		window.addEventListener('blur', handleWindowBlur);
 
 		return () => {
+			window.removeEventListener('resize', syncOverlaySize);
 			window.removeEventListener('pointerup', handleWindowPointerUp);
 			window.removeEventListener('pointercancel', handleWindowPointerCancel);
 			window.removeEventListener('blur', handleWindowBlur);
@@ -330,32 +375,41 @@
 	}
 </script>
 
-<div class="relative flex h-full w-full items-center justify-center">
-	<canvas
-		bind:this={canvasRef}
-		width={768}
-		height={768}
-		class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
-		style="background: #fdfbf7; touch-action: none;"
-		aria-disabled={!interactive}
-		data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
-		draggable="false"
-		ondragstart={preventCanvasDrag}
-		onpointerdown={startDrawing}
-		onpointermove={draw}
-		onpointerup={finishDrawing}
-		onpointercancel={cancelDrawing}
-	></canvas>
+<div class="relative h-full w-full items-center justify-center">
+    <canvas
+        bind:this={canvasRef}
+        width={768}
+        height={768}
+        class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
+        style="background: #fdfbf7; touch-action: none;"
+        aria-disabled={!interactive}
+        data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
+        draggable="false"
+        ondragstart={preventCanvasDrag}
+        onpointerdown={startDrawing}
+        onpointermove={(event) => { scheduleOverlayUpdate(event); draw(event); }}
+        onpointerup={(event) => { clearOverlay(); finishDrawing(event); }}
+        onpointercancel={cancelDrawing}
+        onpointerleave={clearOverlay}
+    ></canvas>
 
-	{#if statusMessage}
-		<div
-			class={`absolute -bottom-8 left-1/2 flex -translate-x-1/2 items-center gap-2 text-sm italic ${statusTone === 'error' ? 'text-[#8f3720]' : 'text-[#6b625a]'}`}
-			style="font-family: 'Baloo 2', sans-serif;"
-		>
-			<div
-				class={`h-2 w-2 rounded-full ${statusTone === 'error' ? 'bg-[#c84f4f]' : 'bg-[#8b9d91]'}`}
-			></div>
-			{statusMessage}
-		</div>
-	{/if}
+    <canvas
+        bind:this={overlayRef}
+        width={768}
+        height={768}
+        class={"block h-full w-full pointer-events-none rounded-lg"}
+        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+    ></canvas>
+
+    {#if statusMessage}
+        <div
+            class={`absolute -bottom-8 left-1/2 flex -translate-x-1/2 items-center gap-2 text-sm italic ${statusTone === 'error' ? 'text-[#8f3720]' : 'text-[#6b625a]'}`}
+            style="font-family: 'Baloo 2', sans-serif;"
+        >
+            <div
+                class={`h-2 w-2 rounded-full ${statusTone === 'error' ? 'bg-[#c84f4f]' : 'bg-[#8b9d91]'}`}
+            ></div> 
+            {statusMessage}
+        </div>
+    {/if}
 </div>
