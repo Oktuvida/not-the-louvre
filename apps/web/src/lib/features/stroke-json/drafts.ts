@@ -70,6 +70,8 @@ export type IndexedDbDrawingDraftStore = {
 	compact: (input: WriteSnapshotInput) => Promise<void>;
 	hydrate: (draftKey: string) => Promise<DrawingDocumentV2 | null>;
 	listJournalEntries: (draftKey: string) => Promise<DrawingStroke[]>;
+	readBaseline: (draftKey: string) => Promise<DrawingDocumentV2 | null>;
+	writeBaseline: (input: WriteSnapshotInput) => Promise<void>;
 	writeSnapshot: (input: WriteSnapshotInput) => Promise<void>;
 };
 
@@ -81,6 +83,7 @@ export type DrawingDraftSession = {
 	clear: () => Promise<void>;
 	compact: (document: DrawingDocumentV2) => Promise<void>;
 	hydrate: (input?: DrawingDraftSessionHydrateInput) => Promise<DrawingDocumentV2 | null>;
+	loadBaseline: () => Promise<DrawingDocumentV2 | null>;
 };
 
 const DRAWING_DRAFTS_DB_NAME = 'drawing-drafts';
@@ -89,6 +92,9 @@ const SNAPSHOT_STORE = 'snapshots';
 const JOURNAL_STORE = 'journal';
 const JOURNAL_BY_DRAFT_SEQUENCE_INDEX = 'by-draft-sequence';
 const DEFAULT_MAX_JOURNAL_ENTRIES_BEFORE_COMPACT = 24;
+const BASELINE_DRAFT_KEY_PREFIX = 'baseline:';
+
+const buildBaselineDraftKey = (draftKey: string) => `${BASELINE_DRAFT_KEY_PREFIX}${draftKey}`;
 
 const cloneDrawingStroke = (stroke: DrawingStroke): DrawingStroke => ({
 	color: stroke.color,
@@ -213,6 +219,7 @@ const clearPersistedDraftData = async (options: OpenDraftStoreOptions, draftKey:
 	await withDatabase(options, async (database) => {
 		const transaction = database.transaction([SNAPSHOT_STORE, JOURNAL_STORE], 'readwrite');
 		getSnapshotStore(transaction).delete(draftKey);
+		getSnapshotStore(transaction).delete(buildBaselineDraftKey(draftKey));
 		await deleteJournalEntries(getJournalStore(transaction), draftKey);
 		await waitForTransaction(transaction);
 	});
@@ -304,6 +311,27 @@ export const createIndexedDbDrawingDraftStore = (
 		(
 			await withDatabase(options, async (database) => await getJournalRecords(database, draftKey))
 		).map((journalRecord) => normalizeJournalStroke(journalRecord.stroke)),
+	readBaseline: async (draftKey) => {
+		try {
+			return await withDatabase(options, async (database) => {
+				const baselineRecord = await getSnapshotRecord(database, buildBaselineDraftKey(draftKey));
+				return baselineRecord ? normalizeSnapshotDocument(baselineRecord.document) : null;
+			});
+		} catch {
+			return null;
+		}
+	},
+	writeBaseline: async ({ draftKey, document }) => {
+		await withDatabase(options, async (database) => {
+			const transaction = database.transaction([SNAPSHOT_STORE], 'readwrite');
+			getSnapshotStore(transaction).put({
+				draftKey: buildBaselineDraftKey(draftKey),
+				document: normalizeSnapshotDocument(document),
+				updatedAt: Date.now()
+			} satisfies DraftSnapshotRecord);
+			await waitForTransaction(transaction);
+		});
+	},
 	writeSnapshot: async ({ draftKey, document }) => {
 		await withDatabase(options, async (database) => {
 			const transaction = database.transaction([SNAPSHOT_STORE], 'readwrite');
@@ -362,8 +390,10 @@ export const createDrawingDraftSession = (
 
 			const seedDocument = cloneDrawingDocumentV2(options.seedDocument);
 			await store.writeSnapshot({ document: seedDocument, draftKey: input.draftKey });
+			await store.writeBaseline({ document: seedDocument, draftKey: input.draftKey });
 			return seedDocument;
-		}
+		},
+		loadBaseline: async () => await store.readBaseline(input.draftKey)
 	};
 };
 
