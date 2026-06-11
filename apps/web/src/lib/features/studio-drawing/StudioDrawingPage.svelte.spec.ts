@@ -157,6 +157,16 @@ describe('StudioDrawingPage', () => {
 		await resetDrawingDraftDatabase();
 	});
 
+	it('preloads the studio background image', () => {
+		render(StudioDrawingPage, { openingDurationMs: 1 });
+
+		const preloadLink = document.head.querySelector('link[rel="preload"][href="/table.avif"]');
+
+		expect(preloadLink).not.toBeNull();
+		expect(preloadLink?.getAttribute('as')).toBe('image');
+		expect(preloadLink?.getAttribute('type')).toBe('image/avif');
+	});
+
 	it('starts with a closed sketchbook and hides active studio controls', async () => {
 		render(StudioDrawingPage, { openingDurationMs: 1 });
 

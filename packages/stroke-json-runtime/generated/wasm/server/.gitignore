@@ -1,0 +1,7 @@
+*
+!.gitignore
+!package.json
+!stroke_json_wasm.d.ts
+!stroke_json_wasm.js
+!stroke_json_wasm_bg.wasm
+!stroke_json_wasm_bg.wasm.d.ts

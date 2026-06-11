@@ -44,25 +44,35 @@ type DeployConfig = {
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(scriptDirectory, '..', '..');
 const repoRoot = resolve(webRoot, '..', '..');
+const bunExecutablePath = process.execPath;
 
 const runCommand = (
 	command: string,
 	args: string[],
-	options: { cwd?: string; allowFailure?: boolean; env?: NodeJS.ProcessEnv } = {}
+	options: {
+		cwd?: string;
+		allowFailure?: boolean;
+		env?: NodeJS.ProcessEnv;
+		stdio?: 'pipe' | 'inherit';
+	} = {}
 ) => {
+	const stdio = options.stdio ?? 'pipe';
 	const result = spawnSync(command, args, {
 		cwd: options.cwd,
 		encoding: 'utf8',
 		env: options.env ?? process.env,
-		stdio: ['inherit', 'pipe', 'pipe']
+		stdio: stdio === 'inherit' ? 'inherit' : ['inherit', 'pipe', 'pipe']
 	});
 
-	if (result.stdout) process.stdout.write(result.stdout);
-	if (result.stderr) process.stderr.write(result.stderr);
+	if (stdio === 'pipe') {
+		if (result.stdout) process.stdout.write(result.stdout);
+		if (result.stderr) process.stderr.write(result.stderr);
+	}
 
 	if (result.status !== 0 && !options.allowFailure) {
+		const failureDetail = result.error?.message ? `\n${result.error.message}` : '';
 		throw new Error(
-			`${command} ${args.join(' ')} failed with exit code ${result.status ?? 'unknown'}`
+			`${command} ${args.join(' ')} failed with exit code ${result.status ?? 'unknown'}${failureDetail}`
 		);
 	}
 
@@ -117,13 +127,30 @@ const getFlag = (options: CliOptions, key: string, fallback = '') => {
 
 const hasFlag = (options: CliOptions, key: string) => options.flags.get(key) === true;
 
+const resolveCommandPath = (command: string) => {
+	const result = spawnSync('sh', ['-lc', `command -v ${command}`], {
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
+
+	if (result.status !== 0) {
+		return '';
+	}
+
+	return result.stdout.trim();
+};
+
 const resolveConfig = (options: CliOptions): DeployConfig => {
 	const serviceName = getFlag(options, 'service-name', 'not-the-louvre');
 	const serviceUser = getFlag(options, 'service-user', 'notthelouvre');
 	const appRoot = getFlag(options, 'app-root', repoRoot);
 	const envFilePath = getFlag(options, 'env-file', `/etc/${serviceName}/${serviceName}.env`);
-	const nodePath = getFlag(options, 'node-path', '/usr/bin/node');
+	const nodePath = getFlag(options, 'node-path') || resolveCommandPath('node');
 	const caddyfilePath = getFlag(options, 'caddyfile', '/etc/caddy/Caddyfile');
+
+	if (!nodePath) {
+		throw new Error('Unable to resolve a Node binary from PATH. Pass --node-path explicitly.');
+	}
 
 	return {
 		appRoot,
@@ -156,15 +183,61 @@ const ensureCommandExists = (command: string) => {
 	}
 };
 
-const ensureNodeVersion = () => {
-	const [majorVersion] = process.versions.node.split('.').map(Number);
-	if (majorVersion < 20) {
-		throw new Error(`Node 20 or newer is required, found ${process.versions.node}`);
+const parseNodeVersion = (versionText: string) => {
+	const match = versionText.trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/u);
+
+	if (!match) {
+		throw new Error(`Unable to parse Node version from: ${versionText}`);
+	}
+
+	return {
+		major: Number(match[1]),
+		minor: Number(match[2]),
+		patch: Number(match[3]),
+		raw: `${match[1]}.${match[2]}.${match[3]}`
+	};
+};
+
+const isSupportedNodeVersion = (version: { major: number; minor: number; patch: number }) => {
+	if (version.major > 22) {
+		return true;
+	}
+
+	if (version.major === 22) {
+		return version.minor > 12 || (version.minor === 12 && version.patch >= 0);
+	}
+
+	if (version.major === 20) {
+		return version.minor > 19 || (version.minor === 19 && version.patch >= 0);
+	}
+
+	return false;
+};
+
+const ensureNodeVersion = (nodePath: string) => {
+	const result = spawnSync(nodePath, ['--version'], {
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
+
+	if (result.status !== 0) {
+		throw new Error(
+			`Failed to read Node version from ${nodePath}${result.stderr ? `\n${result.stderr.trim()}` : ''}`
+		);
+	}
+
+	const version = parseNodeVersion(result.stdout);
+
+	if (!isSupportedNodeVersion(version)) {
+		throw new Error(
+			`Node 20.19+ or 22.12+ is required for builds, found ${version.raw} at ${nodePath}`
+		);
 	}
 };
 
-const ensureStrokeJsonRustPrerequisites = (currentRepoRoot: string) => {
-	runCommand('bun', ['run', 'stroke-json:wasm:verify'], { cwd: currentRepoRoot });
+const prependNodePath = (nodePath: string, currentPath = '') => {
+	const nodeDirectory = dirname(nodePath);
+	return currentPath ? `${nodeDirectory}:${currentPath}` : nodeDirectory;
 };
 
 const ensureServiceAccount = (serviceUser: string) => {
@@ -284,22 +357,11 @@ const installCommand = async (options: CliOptions) => {
 		throw new Error('install requires --domain and --email');
 	}
 
-	for (const command of [
-		'git',
-		'node',
-		'bun',
-		'caddy',
-		'systemctl',
-		'rustc',
-		'cargo',
-		'wasm-pack',
-		'rustup'
-	]) {
+	for (const command of ['git', config.nodePath, 'bun', 'caddy', 'systemctl']) {
 		ensureCommandExists(command);
 	}
 
-	ensureNodeVersion();
-	ensureStrokeJsonRustPrerequisites(config.repoRoot);
+	ensureNodeVersion(config.nodePath);
 	ensureServiceAccount(config.serviceUser);
 	await ensureDirectory(resolve(config.appRoot, 'apps/web'));
 	await ensureEnvFile(config);
@@ -330,24 +392,39 @@ const deployCommand = async (options: CliOptions) => {
 	}
 
 	if (!hasFlag(options, 'skip-pull')) {
-		runCommand('git', ['pull', '--ff-only'], { cwd: config.repoRoot });
+		runCommand('git', ['pull', '--ff-only'], { cwd: config.repoRoot, stdio: 'inherit' });
 	}
 
-	runCommand('bun', ['install', '--frozen-lockfile'], { cwd: config.repoRoot });
-	ensureStrokeJsonRustPrerequisites(config.repoRoot);
-	const buildEnv = createChildProcessEnv(process.env, validation.env);
-	runCommand('bun', ['run', 'stroke-json:wasm:build'], { cwd: config.repoRoot, env: buildEnv });
-	runCommand('bun', ['run', '--filter', '@not-the-louvre/web', 'build'], {
+	runCommand(bunExecutablePath, ['install', '--frozen-lockfile'], {
 		cwd: config.repoRoot,
-		env: buildEnv
+		stdio: 'inherit'
+	});
+	ensureCommandExists(config.nodePath);
+	ensureNodeVersion(config.nodePath);
+	const buildEnv = createChildProcessEnv(
+		{
+			...process.env,
+			PATH: prependNodePath(config.nodePath, process.env.PATH)
+		},
+		validation.env
+	);
+	runCommand(bunExecutablePath, ['run', 'scripts/stroke-json/smoke-server-runtime.ts'], {
+		cwd: config.repoRoot,
+		env: buildEnv,
+		stdio: 'inherit'
+	});
+	runCommand(bunExecutablePath, ['run', 'scripts/build-production.ts'], {
+		cwd: config.webRoot,
+		env: buildEnv,
+		stdio: 'inherit'
 	});
 	await ensureBuildOutput(resolve(config.webRoot, DEFAULT_BUILD_DIR));
-	runCommand('bun', ['run', '--filter', '@not-the-louvre/web', 'validate:build-output'], {
-		cwd: config.repoRoot,
-		env: buildEnv
+	runCommand(bunExecutablePath, ['run', 'scripts/validate-build-output.ts'], {
+		cwd: config.webRoot,
+		env: buildEnv,
+		stdio: 'inherit'
 	});
-	runCommand('bun', ['run', 'stroke-json:wasm:smoke'], { cwd: config.repoRoot, env: buildEnv });
-	runCommand('systemctl', ['restart', config.serviceName]);
+	runCommand('systemctl', ['restart', config.serviceName], { stdio: 'inherit' });
 	ensureServiceActive(config.serviceName);
 	process.stdout.write(`Deploy complete for ${config.serviceName}\n`);
 };

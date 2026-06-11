@@ -1,10 +1,11 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import { createArtworkAccumulator } from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
-	import GalleryImage from '$lib/features/gallery-exploration/components/GalleryImage.svelte';
+	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
 	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
 	import { untrack } from 'svelte';
+	import type { Writable } from 'svelte/store';
 
 	interface Props {
 		artworks: Artwork[];
@@ -15,6 +16,8 @@
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
 		onSelect?: (artwork: Artwork) => void;
+		revealedArtworkIds?: Writable<Set<string>>;
+		viewerId?: string | null;
 	}
 
 	let {
@@ -22,7 +25,9 @@
 		pageInfo,
 		adultContentEnabled = false,
 		loadMoreArtworks,
-		onSelect = () => {}
+		onSelect = () => {},
+		revealedArtworkIds,
+		viewerId = null
 	}: Props = $props();
 
 	// Snapshot initial values to avoid reactive re-seeding
@@ -44,12 +49,17 @@
 	});
 
 	const seedIdentity = (items: Artwork[]) => items.map((a) => a.id).join(',');
+	const pageInfoIdentity = (info: { hasMore: boolean; nextCursor: string | null }) =>
+		`${info.hasMore}:${info.nextCursor ?? ''}`;
 	let lastSeedIdentity = seedIdentity(initialArtworks);
+	let lastPageInfoIdentity = pageInfoIdentity(initialPageInfo);
 
 	$effect(() => {
 		const identity = seedIdentity(artworks);
-		if (identity !== lastSeedIdentity) {
+		const nextPageInfoIdentity = pageInfoIdentity(pageInfo);
+		if (identity !== lastSeedIdentity || nextPageInfoIdentity !== lastPageInfoIdentity) {
 			lastSeedIdentity = identity;
+			lastPageInfoIdentity = nextPageInfoIdentity;
 			untrack(() => {
 				accumulator.reseed(artworks, pageInfo);
 			});
@@ -60,6 +70,15 @@
 			accumulator.syncSeedArtworks(artworks);
 		});
 	});
+
+	let revealedLeadId = $state<string | null>(null);
+
+	const isLeadBlurred = (artwork: Artwork | null) =>
+		!!artwork &&
+		artwork.isNsfw &&
+		!adultContentEnabled &&
+		viewerId !== artwork.authorId &&
+		revealedLeadId !== artwork.id;
 
 	const leadArtwork = $derived(accumulator.allArtworks[0] ?? null);
 	const supportingArtworks = $derived(accumulator.allArtworks.slice(1));
@@ -88,24 +107,23 @@
 				<button
 					type="button"
 					class="group hover:shadow-3xl relative mt-12 w-full max-w-md cursor-pointer overflow-hidden rounded-xl shadow-2xl transition duration-300 hover:-translate-y-1"
-					onclick={() => onSelect(leadArtwork)}
+					onclick={() => {
+						if (isLeadBlurred(leadArtwork)) {
+							revealedLeadId = leadArtwork.id;
+							revealedArtworkIds?.update((ids) => new Set([...ids, leadArtwork.id]));
+							return;
+						}
+						onSelect(leadArtwork);
+					}}
 				>
 					<div class="relative aspect-square w-full">
-						<GalleryImage
+						<NsfwImage
 							src={leadArtwork.imageUrl}
 							alt={leadArtwork.title}
-							className={`h-full w-full object-cover ${leadArtwork.isNsfw && !adultContentEnabled ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
+							blurred={isLeadBlurred(leadArtwork)}
+							ariaLabel="Sensitive artwork, click to reveal"
+							className="h-full w-full object-cover"
 						/>
-						{#if leadArtwork.isNsfw && !adultContentEnabled}
-							<div
-								class="absolute inset-0 flex flex-col items-center justify-center bg-[rgba(45,36,32,0.72)] text-[#fdfbf7]"
-							>
-								<span class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
-									>18+</span
-								>
-								<p class="mt-3 text-sm font-bold uppercase">Sensitive artwork</p>
-							</div>
-						{/if}
 					</div>
 					<div
 						class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[rgba(45,36,32,0.85)] to-transparent p-6 pt-16"
@@ -135,6 +153,8 @@
 						<div data-testid={`hot-wall-card-${artwork.id}`}>
 							<PolaroidCard
 								{artwork}
+								{viewerId}
+								{adultContentEnabled}
 								testId={`hot-wall-polaroid-${artwork.id}`}
 								onclick={() => onSelect(artwork)}
 							/>

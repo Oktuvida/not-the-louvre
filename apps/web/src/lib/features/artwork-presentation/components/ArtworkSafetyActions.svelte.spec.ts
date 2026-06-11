@@ -6,6 +6,7 @@ import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 
 const artwork = {
 	artist: 'journey_artist',
+	authorId: 'user-test',
 	comments: [],
 	downvotes: 0,
 	id: 'artwork-1',
