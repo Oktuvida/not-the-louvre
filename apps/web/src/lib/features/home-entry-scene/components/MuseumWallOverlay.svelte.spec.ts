@@ -19,9 +19,10 @@ type MockTimeline = {
 	to: ReturnType<typeof vi.fn>;
 };
 
-const { gsapSet, gsapTimeline, timelineInstances } = vi.hoisted(() => {
+const { gsapSet, gsapTimeline, gsapTo, timelineInstances } = vi.hoisted(() => {
 	const timelineInstances: MockTimeline[] = [];
 	const gsapSet = vi.fn();
+	const gsapTo = vi.fn();
 	const gsapTimeline = vi.fn(() => {
 		const timeline: MockTimeline = {
 			calls: [],
@@ -42,13 +43,14 @@ const { gsapSet, gsapTimeline, timelineInstances } = vi.hoisted(() => {
 		return timeline;
 	});
 
-	return { gsapSet, gsapTimeline, timelineInstances };
+	return { gsapSet, gsapTimeline, gsapTo, timelineInstances };
 });
 
 vi.mock('$lib/client/gsap', () => {
 	const gsap = {
 		set: gsapSet,
-		timeline: gsapTimeline
+		timeline: gsapTimeline,
+		to: gsapTo
 	};
 
 	return {
@@ -56,6 +58,8 @@ vi.mock('$lib/client/gsap', () => {
 		gsap
 	};
 });
+
+const STRUCTURAL_KEYFRAME_KEYS = ['offset', 'computedOffset', 'easing', 'composite'];
 
 const reducedMotionMediaQuery = {
 	addEventListener: vi.fn(),
@@ -73,6 +77,7 @@ describe('MuseumWallOverlay', () => {
 		timelineInstances.length = 0;
 		gsapSet.mockClear();
 		gsapTimeline.mockClear();
+		gsapTo.mockClear();
 		vi.unstubAllGlobals();
 	});
 
@@ -105,12 +110,7 @@ describe('MuseumWallOverlay', () => {
 		authOverlayElement.remove();
 	});
 
-	it('keeps the full Come In timeline when reduced motion is requested', async () => {
-		vi.stubGlobal(
-			'matchMedia',
-			vi.fn(() => reducedMotionMediaQuery)
-		);
-
+	it('swaps wall texture and logo to bitmaps after mount so zooming never re-rasterizes svg', async () => {
 		const authOverlayElement = document.createElement('div');
 		document.body.append(authOverlayElement);
 
@@ -120,17 +120,78 @@ describe('MuseumWallOverlay', () => {
 			entryState: 'outside'
 		});
 
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		const leftSlab = document.querySelector('[data-testid="museum-wall-slab-left"]');
 
-		expect(timelineInstances).toHaveLength(2);
-		expect(
-			timelineInstances.some((timeline) =>
-				timeline.calls.some(
-					(call) =>
-						call.method === 'to' && call.vars?.duration === 2.08 && call.vars?.scale !== undefined
-				)
-			)
-		).toBe(true);
+		await expect
+			.poll(() => leftSlab?.getAttribute('style'), { timeout: 5000 })
+			.toMatch(/background-image:\s*url\(["']?blob:/);
+
+		const logoImage = document.querySelector('[data-testid="museum-wall-logo"]');
+
+		await expect.poll(() => logoImage?.getAttribute('src'), { timeout: 5000 }).toMatch(/^blob:/);
+
+		authOverlayElement.remove();
+	});
+
+	it('runs the come-in zoom on the compositor using only transform and opacity tracks', async () => {
+		const authOverlayElement = document.createElement('div');
+		document.body.append(authOverlayElement);
+
+		const { rerender } = render(MuseumWallOverlay, {
+			authOverlayElement,
+			dispatch: vi.fn(),
+			entryState: 'outside'
+		});
+
+		await rerender({ entryState: 'transitioning-in' });
+
+		const wallScene = document.querySelector('[data-testid="museum-wall-scene"]') as HTMLElement;
+		const zoomAnimations = wallScene.getAnimations();
+
+		expect(zoomAnimations).toHaveLength(1);
+		expect(zoomAnimations[0].effect?.getTiming().duration).toBe(2080);
+
+		const overlayRoot = wallScene.parentElement as HTMLElement;
+		const subtreeAnimations = overlayRoot.getAnimations({ subtree: true });
+
+		expect(subtreeAnimations.length).toBeGreaterThan(1);
+		for (const animation of subtreeAnimations) {
+			const keyframes = (animation.effect as KeyframeEffect).getKeyframes();
+			for (const keyframe of keyframes) {
+				const properties = Object.keys(keyframe).filter(
+					(key) => !STRUCTURAL_KEYFRAME_KEYS.includes(key)
+				);
+				for (const property of properties) {
+					expect(['opacity', 'transform']).toContain(property);
+				}
+			}
+		}
+
+		authOverlayElement.remove();
+	});
+
+	it('keeps the full Come In zoom when reduced motion is requested', async () => {
+		vi.stubGlobal(
+			'matchMedia',
+			vi.fn(() => reducedMotionMediaQuery)
+		);
+
+		const authOverlayElement = document.createElement('div');
+		document.body.append(authOverlayElement);
+
+		const { rerender } = render(MuseumWallOverlay, {
+			authOverlayElement,
+			dispatch: vi.fn(),
+			entryState: 'outside'
+		});
+
+		await rerender({ entryState: 'transitioning-in' });
+
+		const wallScene = document.querySelector('[data-testid="museum-wall-scene"]') as HTMLElement;
+		const zoomAnimations = wallScene.getAnimations();
+
+		expect(zoomAnimations).toHaveLength(1);
+		expect(zoomAnimations[0].effect?.getTiming().duration).toBe(2080);
 
 		authOverlayElement.remove();
 	});
