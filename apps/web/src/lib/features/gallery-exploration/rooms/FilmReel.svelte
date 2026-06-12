@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { gsap } from '$lib/client/gsap';
+	import { prefersReducedMotion } from 'svelte/motion';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 
 	let {
@@ -40,6 +41,18 @@
 	 */
 	let offset = $state(0);
 
+	// A spun-to artwork that is not in the pool yet is appended locally instead
+	// of mutating the `artworks` prop owned by the parent accumulator.
+	let injectedArtwork = $state<Artwork | null>(null);
+
+	const reelArtworks = $derived.by(() => {
+		const injected = injectedArtwork;
+		if (!injected || artworks.some((artwork) => artwork.id === injected.id)) {
+			return artworks;
+		}
+		return [...artworks, injected];
+	});
+
 	const reelMetrics = $derived.by(() => {
 		const width = viewportWidth || 768;
 		const isNarrow = width < 640;
@@ -58,7 +71,7 @@
 	});
 
 	const visibleSlots = $derived.by(() => {
-		if (!viewportEl || viewportWidth === 0 || artworks.length === 0) return [];
+		if (!viewportEl || viewportWidth === 0 || reelArtworks.length === 0) return [];
 
 		const { frameSize, frameStep } = reelMetrics;
 		const vpWidth = viewportWidth;
@@ -75,15 +88,15 @@
 
 		for (let i = 0; i < totalSlots; i++) {
 			const slotIndex = firstSlotLogical + i;
-			let artworkIndex = slotIndex % artworks.length;
-			if (artworkIndex < 0) artworkIndex += artworks.length;
+			let artworkIndex = slotIndex % reelArtworks.length;
+			if (artworkIndex < 0) artworkIndex += reelArtworks.length;
 
 			const x = slotIndex * frameStep - offset;
 			const frameCenterX = x + frameSize / 2;
 			const distFromCenter = Math.abs(frameCenterX - centerX) / (vpWidth / 2);
 
 			slots.push({
-				artwork: artworks[artworkIndex]!,
+				artwork: reelArtworks[artworkIndex]!,
 				key: slotIndex,
 				x,
 				distFromCenter: Math.min(distFromCenter, 1)
@@ -93,19 +106,19 @@
 		return slots;
 	});
 
+	// Transform-only styling: position and depth cues stay on the compositor,
+	// no per-frame layout or filter work. Edge depth comes from the viewport mask.
 	const getSlotStyle = (slot: { x: number; distFromCenter: number }): string => {
 		const { frameSize } = reelMetrics;
 		const d = slot.distFromCenter;
 		const scale = 1 - d * 0.35;
 		const opacity = 1 - d * 0.85;
-		const blur = d * 5;
 
 		return (
-			`position:absolute;left:${slot.x.toFixed(1)}px;top:50%;` +
+			`position:absolute;left:0;top:50%;` +
 			`width:${frameSize}px;height:${frameSize}px;` +
-			`transform:translateY(-50%) scale(${scale.toFixed(3)});` +
-			`opacity:${opacity.toFixed(3)};` +
-			`filter:blur(${blur.toFixed(1)}px);`
+			`transform:translate3d(${slot.x.toFixed(1)}px, -50%, 0) scale(${scale.toFixed(3)});` +
+			`opacity:${opacity.toFixed(3)};`
 		);
 	};
 
@@ -129,21 +142,24 @@
 	};
 
 	const startIdle = () => {
-		if (!browser || artworks.length === 0) return;
+		if (!browser || reelArtworks.length === 0) return;
+		// Ambient auto-scroll is decorative; honor reduced-motion users.
+		if (prefersReducedMotion.current) return;
 		const { frameStep } = reelMetrics;
+		const poolSize = reelArtworks.length;
 
 		proxy.value = offset;
 
 		idleTween = gsap.to(proxy, {
-			value: `+=${artworks.length * frameStep}`,
-			duration: artworks.length * IDLE_DURATION_PER_FRAME,
+			value: `+=${poolSize * frameStep}`,
+			duration: poolSize * IDLE_DURATION_PER_FRAME,
 			ease: 'none',
 			repeat: 0,
 			onUpdate() {
 				offset = proxy.value;
 				// Report idle scroll progress as fraction (0-1) of the current cycle
-				if (onIdleProgress && artworks.length > 0) {
-					const cycleLength = artworks.length * frameStep;
+				if (onIdleProgress && poolSize > 0) {
+					const cycleLength = poolSize * frameStep;
 					const startOffset = proxy.value - (proxy.value % cycleLength || cycleLength);
 					const cycleProgress = (proxy.value - startOffset) / cycleLength;
 					onIdleProgress(Math.min(1, Math.max(0, cycleProgress)));
@@ -169,13 +185,14 @@
 	};
 
 	export const spin = () => {
-		if (reelState === 'spinning' || artworks.length === 0 || !viewportEl) return;
+		if (reelState === 'spinning' || reelArtworks.length === 0 || !viewportEl) return;
+		const pool = reelArtworks;
 		const { frameSize, frameStep } = reelMetrics;
 
 		reelState = 'spinning';
 		stopIdle();
 
-		const randomIndex = Math.floor(Math.random() * artworks.length);
+		const randomIndex = Math.floor(Math.random() * pool.length);
 
 		const vpWidth = viewportWidth || viewportEl.offsetWidth;
 		const centerX = vpWidth / 2;
@@ -183,11 +200,11 @@
 		/* We want the chosen artwork centered:
 		 *   randomIndex * FRAME_STEP - targetOffset + FRAME_SIZE/2 = centerX
 		 * Plus at least 3 full cycles of travel for the visual spin effect. */
-		const fullCycles = 3 * artworks.length * frameStep;
+		const fullCycles = 3 * pool.length * frameStep;
 		const baseTarget = randomIndex * frameStep - centerX + frameSize / 2;
 
 		const minTarget = offset + fullCycles;
-		const cycleLen = artworks.length * frameStep;
+		const cycleLen = pool.length * frameStep;
 		const remainder = (baseTarget - minTarget) % cycleLen;
 		const adjustedRemainder = remainder < 0 ? remainder + cycleLen : remainder;
 		const targetOffset = minTarget + adjustedRemainder;
@@ -196,14 +213,14 @@
 
 		gsap.to(proxy, {
 			value: targetOffset,
-			duration: 4,
+			duration: prefersReducedMotion.current ? 0.8 : 4,
 			ease: 'power4.out',
 			onUpdate() {
 				offset = proxy.value;
 			},
 			onComplete: () => {
 				reelState = 'stopped';
-				onLand(artworks[randomIndex]!);
+				onLand(pool[randomIndex]!);
 			}
 		});
 	};
@@ -216,31 +233,30 @@
 	export const isSpinning = () => reelState === 'spinning';
 
 	export const spinToArtwork = (artwork: Artwork) => {
-		if (reelState === 'spinning' || artworks.length === 0 || !viewportEl) return;
+		if (reelState === 'spinning' || reelArtworks.length === 0 || !viewportEl) return;
 		const { frameSize, frameStep } = reelMetrics;
 
-		// Check if artwork is already in the pool
-		let targetIndex = artworks.findIndex((a) => a.id === artwork.id);
+		// Check if artwork is already in the pool; otherwise append it locally
+		let targetIndex = reelArtworks.findIndex((a) => a.id === artwork.id);
 
 		if (targetIndex === -1) {
-			// Inject the artwork at a random position in the pool
-			targetIndex = Math.floor(Math.random() * (artworks.length + 1));
-			artworks.splice(targetIndex, 0, artwork);
-			// Trigger reactivity (artworks is a prop, but parent should pass the same reference)
-			artworks = [...artworks];
+			injectedArtwork = artwork;
+			targetIndex = reelArtworks.findIndex((a) => a.id === artwork.id);
+			if (targetIndex === -1) return;
 		}
 
+		const pool = reelArtworks;
 		reelState = 'spinning';
 		stopIdle();
 
 		const vpWidth = viewportWidth || viewportEl.offsetWidth;
 		const centerX = vpWidth / 2;
 
-		const fullCycles = 3 * artworks.length * frameStep;
+		const fullCycles = 3 * pool.length * frameStep;
 		const baseTarget = targetIndex * frameStep - centerX + frameSize / 2;
 
 		const minTarget = offset + fullCycles;
-		const cycleLen = artworks.length * frameStep;
+		const cycleLen = pool.length * frameStep;
 		const remainder = (baseTarget - minTarget) % cycleLen;
 		const adjustedRemainder = remainder < 0 ? remainder + cycleLen : remainder;
 		const targetOffset = minTarget + adjustedRemainder;
@@ -249,7 +265,7 @@
 
 		gsap.to(proxy, {
 			value: targetOffset,
-			duration: 4,
+			duration: prefersReducedMotion.current ? 0.8 : 4,
 			ease: 'power4.out',
 			onUpdate() {
 				offset = proxy.value;
@@ -279,7 +295,7 @@
 	});
 
 	$effect(() => {
-		if (!browser || artworks.length === 0 || !viewportEl || viewportWidth === 0) return;
+		if (!browser || reelArtworks.length === 0 || !viewportEl || viewportWidth === 0) return;
 
 		// Only start idle scrolling when the reel is in the idle state.
 		// Idle restarts are scheduled at the end of each cycle after it fires
@@ -341,6 +357,9 @@
 		height: var(--reel-viewport-height, 280px);
 		overflow: hidden;
 		border-radius: 12px;
+		/* Static edge fade replaces the old per-frame blur depth cue */
+		-webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14%, #000 86%, transparent);
+		mask-image: linear-gradient(90deg, transparent 0, #000 14%, #000 86%, transparent);
 	}
 
 	.reel-frame {
@@ -348,7 +367,7 @@
 		border-radius: 8px;
 		overflow: hidden;
 		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-		will-change: transform, opacity, filter;
+		will-change: transform, opacity;
 		background: #e5dfd5;
 	}
 
