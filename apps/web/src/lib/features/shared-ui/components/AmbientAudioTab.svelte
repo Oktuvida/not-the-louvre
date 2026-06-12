@@ -28,6 +28,103 @@
 		aria-label={buttonLabel}
 		onclick={onToggle}
 	>
+		<!-- A brushstroke swiped across the glass — it follows you between rooms -->
+		<svg
+			class="stroke-bg"
+			viewBox="0 0 360 110"
+			preserveAspectRatio="none"
+			xmlns="http://www.w3.org/2000/svg"
+			aria-hidden="true"
+		>
+			<defs>
+				<filter
+					id="amb-paint"
+					x="-30%"
+					y="-110%"
+					width="160%"
+					height="320%"
+					color-interpolation-filters="sRGB"
+				>
+					<feTurbulence
+						type="fractalNoise"
+						baseFrequency="0.013 0.08"
+						numOctaves="3"
+						seed="7"
+						result="e"
+					/>
+					<feDisplacementMap
+						in="SourceGraphic"
+						in2="e"
+						scale="30"
+						xChannelSelector="R"
+						yChannelSelector="G"
+					/>
+				</filter>
+				<filter
+					id="amb-bristle"
+					x="-30%"
+					y="-110%"
+					width="160%"
+					height="320%"
+					color-interpolation-filters="sRGB"
+				>
+					<feTurbulence
+						type="turbulence"
+						baseFrequency="0.5 0.012"
+						numOctaves="2"
+						seed="3"
+						result="n"
+					/>
+					<feColorMatrix
+						in="n"
+						type="matrix"
+						values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.5 0 0 0 -0.42"
+						result="a"
+					/>
+					<feComposite in="SourceGraphic" in2="a" operator="in" />
+				</filter>
+				<clipPath id="amb-clip">
+					<path
+						d="M24,55 C40,40 72,37 104,38 C152,32 212,34 262,32 C302,33 326,38 336,52 C326,68 302,73 262,74 C212,76 152,78 104,73 C72,74 40,71 24,55 Z"
+					/>
+				</clipPath>
+			</defs>
+			<g transform="translate(0 55) scale(1 1.35) translate(0 -55)">
+				<path
+					d="M24,55 C40,40 72,37 104,38 C152,32 212,34 262,32 C302,33 326,38 336,52 C326,68 302,73 262,74 C212,76 152,78 104,73 C72,74 40,71 24,55 Z"
+					class="stroke-shadow"
+					opacity="0.22"
+					filter="url(#amb-paint)"
+					transform="translate(0,3)"
+				/>
+				<path
+					d="M24,55 C40,40 72,37 104,38 C152,32 212,34 262,32 C302,33 326,38 336,52 C326,68 302,73 262,74 C212,76 152,78 104,73 C72,74 40,71 24,55 Z"
+					class="stroke-body"
+					filter="url(#amb-paint)"
+				/>
+				<g clip-path="url(#amb-clip)" filter="url(#amb-paint)">
+					<rect
+						x="18"
+						y="28"
+						width="324"
+						height="56"
+						fill="#4a429f"
+						opacity="0.0"
+						filter="url(#amb-bristle)"
+					/>
+				</g>
+				<path
+					d="M56,47 C120,42 190,43 268,45"
+					fill="none"
+					class="stroke-streak"
+					stroke-width="3"
+					stroke-linecap="round"
+					opacity="0.35"
+					filter="url(#amb-paint)"
+				/>
+			</g>
+		</svg>
+
 		<span class="ambient-tab-icon" data-muted={isMuted ? 'true' : 'false'} aria-hidden="true">
 			<svg
 				viewBox="0 0 24 24"
@@ -46,87 +143,143 @@
 				{/if}
 			</svg>
 		</span>
-		<div class="ambient-tab-pin"></div>
 		<div class="ambient-tab-copy">
-			<span class="ambient-tab-kicker">Ambience</span>
+			<span class="stroke-note" class:stroke-note-muted={isMuted} aria-hidden="true">♪</span>
 			<span class="ambient-tab-title">{statusLabel}</span>
+			<span class="ambient-tab-pill">{enabled ? 'ON' : 'OFF'}</span>
 		</div>
-		<span class="ambient-tab-pill">{enabled ? 'ON' : 'OFF'}</span>
 	</button>
 </div>
 
 <style>
 	.ambient-tab-shell {
 		position: fixed;
-		right: 1rem;
-		bottom: 1rem;
+		right: 0.4rem;
+		bottom: 0.5rem;
 		z-index: 920;
 		pointer-events: none;
 	}
 
 	.ambient-tab {
+		--stroke-paint: #7f77dd;
+		--stroke-deep: #4a429f;
+		--stroke-light: #afa9ec;
 		pointer-events: auto;
+		position: relative;
 		display: inline-flex;
 		align-items: center;
-		gap: 0.85rem;
-		min-width: 12.5rem;
-		padding: 0.9rem 1rem 0.9rem 1.15rem;
-		border: 2px solid rgba(78, 60, 40, 0.24);
-		border-radius: 1.1rem;
-		background: linear-gradient(180deg, rgba(255, 248, 222, 0.96), rgba(240, 224, 169, 0.96));
-		box-shadow:
-			0 1rem 2rem rgba(58, 34, 19, 0.16),
-			inset 0 1px 0 rgba(255, 255, 255, 0.44);
-		color: #2f241c;
-		text-align: left;
-		transform: rotate(-2deg);
-		transition:
-			transform 180ms ease,
-			box-shadow 180ms ease,
-			filter 180ms ease;
+		justify-content: center;
+		width: 17rem;
+		height: 5.2rem;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: #262240;
+		cursor: pointer;
+		transition: transform 180ms ease;
 	}
 
 	.ambient-tab:hover {
-		transform: rotate(-1deg) translateY(-1px);
-		box-shadow:
-			0 1.15rem 2.2rem rgba(58, 34, 19, 0.18),
-			inset 0 1px 0 rgba(255, 255, 255, 0.5);
+		transform: translateY(-1px) rotate(-0.5deg);
 	}
 
 	.ambient-tab:focus-visible {
-		outline: 3px solid rgba(113, 145, 127, 0.5);
-		outline-offset: 3px;
+		outline: 3px solid #4ecdc4;
+		outline-offset: -8px;
+		border-radius: 2rem;
 	}
 
-	.ambient-tab-on {
-		filter: saturate(1.04);
-	}
-
-	.ambient-tab-off {
-		background: linear-gradient(180deg, rgba(252, 244, 223, 0.92), rgba(236, 224, 193, 0.92));
-	}
-
+	/* the paint dries gray while the music is off */
+	.ambient-tab-off,
 	.ambient-tab-unavailable {
-		background: linear-gradient(180deg, rgba(250, 242, 227, 0.92), rgba(231, 223, 204, 0.94));
+		--stroke-paint: #8d8d96;
+		--stroke-deep: #44444c;
+		--stroke-light: #b9b9c2;
 	}
 
-	.ambient-tab-pin {
-		width: 0.9rem;
-		height: 0.9rem;
-		border-radius: 999px;
-		flex: none;
-		border: 1px solid rgba(95, 69, 41, 0.5);
-		background: radial-gradient(circle at 35% 35%, #fff5d6, #8e6632 80%);
-		box-shadow: 0 0.15rem 0.4rem rgba(58, 34, 19, 0.24);
+	.stroke-shadow {
+		fill: var(--stroke-deep);
+	}
+
+	.stroke-body {
+		fill: var(--stroke-paint);
+		transition: fill 220ms ease;
+	}
+
+	.stroke-streak {
+		stroke: var(--stroke-light);
+	}
+
+	.stroke-bg {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+	}
+
+	.ambient-tab-copy {
+		position: relative;
+		display: inline-flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		max-width: 78%;
+		/* sit inside the meat of the stroke, clear of the ragged tail */
+		translate: -4% 0;
+	}
+
+	.stroke-note {
+		font-size: 1.05rem;
+		line-height: 1;
+		translate: 0 -2px;
+	}
+
+	.stroke-note-muted {
+		opacity: 0.45;
+	}
+
+	/* the track name, written into the wet paint */
+	.ambient-tab-title {
+		font-family: 'Caveat', cursive;
+		font-size: 1.5rem;
+		font-weight: 600;
+		line-height: 1;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		rotate: -1.2deg;
+	}
+
+	/* ON/OFF, stamped in the same ink */
+	.ambient-tab-pill {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.14rem 0.32rem;
+		border: 1.5px solid currentColor;
+		border-radius: 4px;
+		background: transparent;
+		font-family: 'Fredoka', sans-serif;
+		font-size: 0.56rem;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		opacity: 0.75;
+		rotate: 2deg;
+		translate: 0 -3px;
+	}
+
+	.ambient-tab-on .ambient-tab-pill {
+		rotate: -2deg;
 	}
 
 	.ambient-tab-icon {
 		display: none;
+		position: relative;
 		align-items: center;
 		justify-content: center;
-		width: 1.6rem;
-		height: 1.6rem;
+		width: 1.5rem;
+		height: 1.5rem;
 		flex: none;
+		color: #262240;
 	}
 
 	.ambient-tab-icon svg {
@@ -134,76 +287,24 @@
 		height: 100%;
 	}
 
-	.ambient-tab-copy {
-		display: flex;
-		flex: 1;
-		flex-direction: column;
-		min-width: 0;
-	}
-
-	.ambient-tab-kicker {
-		font-family: var(--font-body);
-		font-size: 0.66rem;
-		font-weight: 800;
-		letter-spacing: 0.16em;
-		text-transform: uppercase;
-		color: #7a5a33;
-	}
-
-	.ambient-tab-title {
-		font-family: var(--font-display);
-		font-size: 1rem;
-		font-weight: 700;
-		line-height: 1.05;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.ambient-tab-pill {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 2.8rem;
-		padding: 0.4rem 0.55rem;
-		border-radius: 999px;
-		border: 1px solid rgba(47, 36, 28, 0.16);
-		background: rgba(255, 250, 240, 0.72);
-		font-family: var(--font-display);
-		font-size: 0.78rem;
-		font-weight: 800;
-		letter-spacing: 0.08em;
-	}
-
 	@media (max-width: 700px) {
 		.ambient-tab-shell {
-			right: 0.8rem;
-			bottom: 0.8rem;
+			right: -1.6rem;
+			bottom: 0.4rem;
 		}
 
 		.ambient-tab {
-			min-width: 0;
-			width: 3.4rem;
-			height: 3.4rem;
-			max-width: none;
-			padding: 0;
-			justify-content: center;
-			border-radius: 999px;
-			transform: none;
+			width: 9.5rem;
+			height: 3.6rem;
 		}
 
-		.ambient-tab:hover {
-			transform: translateY(-1px);
+		.ambient-tab-copy {
+			display: none;
 		}
 
 		.ambient-tab-icon {
 			display: inline-flex;
-		}
-
-		.ambient-tab-pin,
-		.ambient-tab-copy,
-		.ambient-tab-pill {
-			display: none;
+			translate: -14% 0;
 		}
 	}
 </style>

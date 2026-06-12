@@ -29,7 +29,9 @@ const createMockContext = () =>
 	({
 		arc: vi.fn(),
 		beginPath: vi.fn(),
+		clearRect: vi.fn(),
 		drawImage: vi.fn(),
+		ellipse: vi.fn(),
 		fill: vi.fn(),
 		fillRect: vi.fn(),
 		fillStyle: '#fdfbf7',
@@ -472,7 +474,9 @@ describe('DrawingCanvas', () => {
 
 		expect(setPointerCaptureSpy).toHaveBeenCalledTimes(1);
 		expect(releasePointerCaptureSpy).toHaveBeenCalledTimes(1);
-		expect(ctx.beginPath).toHaveBeenCalledTimes(2);
+		// Two inking renders plus one brush-preview circle from the pointermove.
+		expect(ctx.beginPath).toHaveBeenCalledTimes(3);
+		expect(ctx.ellipse).toHaveBeenCalledTimes(1);
 		expect(ctx.lineTo).toHaveBeenCalledTimes(1);
 
 		getContextSpy.mockRestore();

@@ -17,6 +17,7 @@
 
 	let {
 		type = 'button',
+		ariaLabel = undefined,
 		variant = 'primary',
 		size = 'md',
 		disabled = false,
@@ -25,6 +26,7 @@
 		onclick
 	}: {
 		type?: 'button' | 'submit' | 'reset';
+		ariaLabel?: string;
 		variant?: Variant;
 		size?: StickerControlSize;
 		disabled?: boolean;
@@ -90,6 +92,7 @@
 	{type}
 	{disabled}
 	{onclick}
+	aria-label={ariaLabel}
 	data-sticker-size={size}
 	data-sticker-variant={variant}
 	class="sticker-btn {className}"

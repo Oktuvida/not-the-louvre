@@ -7,26 +7,28 @@ const MAT_COLORS = {
 	matShadow: [218, 210, 196] as Rgb
 };
 
+/* Museum metals: aged gilt, warm pewter, and deep copper — richer highlights
+ * and darker shadow steps so the podium frames read carved, not plastic. */
 const COLOR_SCHEMES = {
 	bronze: {
-		gA: [212, 160, 106] as Rgb,
-		gB: [205, 127, 50] as Rgb,
-		gC: [160, 98, 46] as Rgb,
-		gD: [122, 74, 26] as Rgb,
+		gA: [224, 158, 100] as Rgb,
+		gB: [186, 114, 56] as Rgb,
+		gC: [138, 80, 38] as Rgb,
+		gD: [90, 50, 22] as Rgb,
 		...MAT_COLORS
 	},
 	gold: {
-		gA: [212, 168, 64] as Rgb,
-		gB: [192, 146, 42] as Rgb,
-		gC: [142, 104, 32] as Rgb,
-		gD: [98, 72, 22] as Rgb,
+		gA: [240, 204, 114] as Rgb,
+		gB: [202, 154, 58] as Rgb,
+		gC: [150, 106, 38] as Rgb,
+		gD: [96, 66, 22] as Rgb,
 		...MAT_COLORS
 	},
 	silver: {
-		gA: [216, 216, 216] as Rgb,
-		gB: [192, 192, 192] as Rgb,
-		gC: [144, 144, 144] as Rgb,
-		gD: [96, 96, 96] as Rgb,
+		gA: [228, 230, 234] as Rgb,
+		gB: [190, 194, 202] as Rgb,
+		gC: [138, 144, 156] as Rgb,
+		gD: [90, 96, 108] as Rgb,
 		...MAT_COLORS
 	}
 } satisfies Record<NonNullable<ArtworkFrameRenderOptions['colorScheme']>, Record<string, Rgb>>;

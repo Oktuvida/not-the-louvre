@@ -57,8 +57,11 @@
 		class="relative transition duration-300 group-hover:-translate-y-2 group-hover:scale-110 group-hover:rotate-0"
 	>
 		{#if viewer}
+			<!-- Positioning lives in component CSS on purpose: the vitest client
+			     project loads no Tailwind, and the right-aligned mod menu must stay
+			     on-screen there for its buttons to be clickable. -->
 			<div
-				class="absolute top-2 right-2 z-20 opacity-0 transition duration-150 group-focus-within:opacity-100 group-hover:opacity-100"
+				class="safety-overlay opacity-0 transition duration-150 group-focus-within:opacity-100 group-hover:opacity-100"
 			>
 				<ArtworkSafetyActions {artwork} compact {viewer} {onArtworkPatch} />
 			</div>
@@ -164,6 +167,13 @@
 </button>
 
 <style>
+	.safety-overlay {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		z-index: 20;
+	}
+
 	@keyframes slideUp {
 		0% {
 			opacity: 0;
