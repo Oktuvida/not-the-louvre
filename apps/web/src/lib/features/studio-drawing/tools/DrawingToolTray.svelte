@@ -19,20 +19,33 @@
 		onClear?: () => void;
 	} = $props();
 
+	const LIGHT_SWATCH_COLORS = new Set([
+		'#FFFFFF',
+		'#C8C8C8',
+		'#FDBCB4',
+		'#F5D200',
+		'#DCC9A3',
+		'#E5DECA'
+	]);
+
 	const selectColor = (color: string) => {
 		drawingTools.activeColor = color;
 	};
 </script>
 
 <div class:tool-tray-mobile={mobile} class="tool-tray">
-	<div class="tray-glow" aria-hidden="true"></div>
+	<span class="tray-tape tray-tape-left" aria-hidden="true"></span>
+	<span class="tray-tape tray-tape-right" aria-hidden="true"></span>
+	<span class="tray-stain tray-stain-a" aria-hidden="true"></span>
+	<span class="tray-stain tray-stain-b" aria-hidden="true"></span>
 
 	<!-- Palette section -->
 	<div class:tray-section-mobile-palette={mobile} class="tray-section">
 		<div class="tray-label">
 			<Palette size={12} />
-			<span>Colors</span>
+			<span>Paints</span>
 		</div>
+		<span class="tray-label-swipe" aria-hidden="true"></span>
 		{#if mobile}
 			<div class="palette-mobile-row">
 				<div class="palette-mobile-grid">
@@ -44,7 +57,13 @@
 							style={`--swatch-color:${color}`}
 							onclick={() => selectColor(color)}
 							aria-label={`Select color ${color}`}
-						></button>
+						>
+							<span
+								class="swatch-paint"
+								class:swatch-paint-light={LIGHT_SWATCH_COLORS.has(color)}
+								aria-hidden="true"
+							></span>
+						</button>
 					{/each}
 				</div>
 			</div>
@@ -58,7 +77,13 @@
 						style={`--swatch-color:${color}`}
 						onclick={() => selectColor(color)}
 						aria-label={`Select color ${color}`}
-					></button>
+					>
+						<span
+							class="swatch-paint"
+							class:swatch-paint-light={LIGHT_SWATCH_COLORS.has(color)}
+							aria-hidden="true"
+						></span>
+					</button>
 				{/each}
 			</div>
 		{/if}
@@ -83,11 +108,13 @@
 			/>
 		</div>
 		<div class="brush-preview">
-			<div class="brush-preview-shell">
-				<div
-					class="brush-dot"
-					style={`width: ${Math.max(4, Math.min(28, drawingTools.brushSize))}px; height: ${Math.max(4, Math.min(28, drawingTools.brushSize))}px; background: ${drawingTools.activeColor};`}
-				></div>
+			<div class="test-scrap">
+				<div class="brush-preview-shell">
+					<div
+						class="brush-dot"
+						style={`width: ${Math.max(4, Math.min(28, drawingTools.brushSize))}px; height: ${Math.max(4, Math.min(28, drawingTools.brushSize))}px; background: ${drawingTools.activeColor};`}
+					></div>
+				</div>
 			</div>
 			<span class="brush-size-text">{drawingTools.brushSize}px</span>
 		</div>
@@ -121,27 +148,84 @@
 			<span>Clear</span>
 		</GameButton>
 	</div>
+
+	<p class="tray-edge-print">Not the Louvre · Studio Supplies</p>
 </div>
 
 <style>
+	/* A scrap of studio paper, same family as the sketchbook sheets */
 	.tool-tray {
-		background: linear-gradient(180deg, rgb(251 247 240 / 0.97), rgb(245 235 220 / 0.97));
-		border: 3px solid var(--color-ink, #2f241c);
-		border-radius: 16px;
+		background-color: #fbf7f0;
+		border-radius: 3px;
 		padding: 20px;
 		box-shadow:
-			0 12px 32px rgb(47 36 28 / 0.18),
-			inset 0 1px 0 rgb(255 255 255 / 0.5);
-		transform: rotate(1.5deg);
+			4px 6px 16px rgba(0, 0, 0, 0.28),
+			1px 2px 4px rgba(0, 0, 0, 0.16);
+		transform: rotate(1.2deg);
 		position: relative;
-		overflow: hidden;
 	}
 
-	.tray-glow {
+	/* per-pixel paper noise */
+	.tool-tray::before {
+		content: '';
 		position: absolute;
 		inset: 0;
-		background: radial-gradient(circle at 30% 20%, rgb(255 255 255 / 0.35), transparent 60%);
+		border-radius: inherit;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 		pointer-events: none;
+	}
+
+	.tray-tape {
+		position: absolute;
+		top: -10px;
+		width: 74px;
+		height: 22px;
+		background: rgba(243, 235, 216, 0.88);
+		box-shadow: 0 1px 3px rgba(45, 36, 32, 0.18);
+	}
+
+	.tray-tape-left {
+		left: 18px;
+		rotate: -6deg;
+	}
+
+	.tray-tape-right {
+		right: 22px;
+		rotate: 5deg;
+	}
+
+	/* faint paint stains — radial gradients on purpose, never filter: blur */
+	.tray-stain {
+		position: absolute;
+		pointer-events: none;
+		border-radius: 50%;
+	}
+
+	.tray-stain-a {
+		width: 150px;
+		height: 120px;
+		right: -26px;
+		top: 34%;
+		background: radial-gradient(closest-side, rgba(113, 145, 127, 0.14), transparent 70%);
+	}
+
+	.tray-stain-b {
+		width: 130px;
+		height: 110px;
+		left: -22px;
+		bottom: -18px;
+		background: radial-gradient(closest-side, rgba(244, 196, 48, 0.13), transparent 70%);
+	}
+
+	/* a swipe of paint under the paints label */
+	.tray-label-swipe {
+		display: block;
+		width: 86px;
+		height: 6px;
+		margin: -4px 0 12px;
+		rotate: -1deg;
+		border-radius: 4px 7px 5px 8px;
+		background: linear-gradient(90deg, rgba(212, 131, 74, 0.7), rgba(212, 131, 74, 0.22) 92%);
 	}
 
 	.tray-section {
@@ -155,11 +239,11 @@
 
 	.tray-label {
 		font-family: var(--font-display, 'Fredoka', sans-serif);
-		font-size: 10px;
-		font-weight: 600;
-		letter-spacing: 2.5px;
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.22em;
 		text-transform: uppercase;
-		color: var(--color-muted, #6f6257);
+		color: #8a6c52;
 		margin-bottom: 10px;
 		display: flex;
 		align-items: center;
@@ -172,12 +256,12 @@
 		flex-shrink: 0;
 	}
 
-	/* --- Palette grid: 6 columns x 3 rows --- */
+	/* --- Paint dabs: 6 columns --- */
 
 	.palette-grid {
 		display: grid;
 		grid-template-columns: repeat(6, 1fr);
-		gap: 6px;
+		gap: 9px 8px;
 	}
 
 	.palette-mobile-row {
@@ -195,49 +279,101 @@
 		min-width: 0;
 		flex: 1;
 		grid-template-columns: repeat(6, minmax(0, 1fr));
-		gap: 0.45rem;
+		gap: 0.5rem;
 	}
 
+	/* The button box stays still — the blob inside animates — so pointer
+	 * clicks always land where the press started. */
 	.palette-swatch {
+		position: relative;
 		width: 100%;
 		aspect-ratio: 1;
-		border-radius: 8px;
-		border: 2.5px solid var(--color-ink, #2f241c);
-		background-color: var(--swatch-color);
-		cursor: pointer;
-		transition:
-			transform 0.15s,
-			box-shadow 0.15s;
-		position: relative;
+		border: 0;
 		padding: 0;
+		background: transparent;
+		cursor: pointer;
 	}
 
-	.palette-swatch:hover {
-		transform: scale(1.08);
+	.palette-swatch:focus-visible {
+		outline: 3px solid #4ecdc4;
+		outline-offset: 2px;
 	}
 
-	.palette-swatch.active {
-		transform: scale(1.12);
-		box-shadow:
-			0 0 0 2.5px #f4c430,
-			0 3px 8px rgb(244 196 48 / 0.3);
-		z-index: 1;
+	.swatch-paint {
+		position: absolute;
+		inset: 1px;
+		display: block;
+		background: var(--swatch-color);
+		box-shadow: 1px 2px 3px rgba(45, 36, 32, 0.28);
+		transition:
+			scale 130ms cubic-bezier(0.34, 1.5, 0.6, 1),
+			rotate 130ms ease;
 	}
 
-	/* Gloss highlight */
-	.palette-swatch::after {
+	/* four blob silhouettes, rotated per cell — every dab is hand-squeezed */
+	.palette-swatch:nth-child(4n + 1) .swatch-paint {
+		border-radius: 58% 42% 55% 45% / 48% 60% 40% 52%;
+		rotate: -4deg;
+		translate: 0 1px;
+	}
+	.palette-swatch:nth-child(4n + 2) .swatch-paint {
+		border-radius: 45% 55% 48% 52% / 60% 42% 58% 40%;
+		rotate: 3deg;
+		translate: 1px -2px;
+		scale: 0.94;
+	}
+	.palette-swatch:nth-child(4n + 3) .swatch-paint {
+		border-radius: 52% 48% 60% 40% / 45% 55% 45% 55%;
+		rotate: -2deg;
+		translate: -1px 2px;
+		scale: 1.05;
+	}
+	.palette-swatch:nth-child(4n + 4) .swatch-paint {
+		border-radius: 40% 60% 44% 56% / 55% 45% 60% 40%;
+		rotate: 5deg;
+		translate: 0 -1px;
+	}
+	/* a second rhythm every 5 cells so rows never repeat the same dance */
+	.palette-swatch:nth-child(5n + 2) .swatch-paint {
+		translate: 2px 1px;
+	}
+	.palette-swatch:nth-child(5n + 4) .swatch-paint {
+		scale: 0.92;
+	}
+
+	/* gloss — fresh paint catches the studio lights */
+	.swatch-paint::before {
 		content: '';
 		position: absolute;
-		top: 2px;
-		left: 2px;
-		right: 40%;
-		height: 35%;
-		border-radius: 4px 4px 50% 0;
-		background: linear-gradient(180deg, rgb(255 255 255 / 0.3), transparent);
-		pointer-events: none;
+		inset: 0;
+		border-radius: inherit;
+		background: radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.5), transparent 46%);
 	}
 
-	/* --- Brush size slider --- */
+	.swatch-paint-light {
+		border: 1px solid rgba(47, 36, 28, 0.22);
+	}
+
+	.palette-swatch:hover .swatch-paint {
+		scale: 1.14;
+	}
+
+	.palette-swatch.active .swatch-paint {
+		scale: 1.1;
+		translate: 0 0;
+	}
+
+	/* selection = circled in pencil */
+	.palette-swatch.active::after {
+		content: '';
+		position: absolute;
+		inset: -4px -3px -3px -4px;
+		border: 2.5px dashed rgba(47, 36, 28, 0.75);
+		border-radius: 54% 46% 50% 50% / 48% 52% 46% 54%;
+		rotate: -6deg;
+	}
+
+	/* --- Brush: pencil line + wax knob --- */
 
 	.slider-wrapper {
 		position: relative;
@@ -248,14 +384,16 @@
 		-webkit-appearance: none;
 		appearance: none;
 		width: 100%;
-		height: 5px;
-		border-radius: 2.5px;
+		height: 7px;
+		rotate: -0.8deg;
+		/* a drying brushstroke: thick where it starts, thin where it lifts */
+		border-radius: 4px 12px 10px 6px / 6px 8px 12px 4px;
 		background: linear-gradient(
 			90deg,
-			#d9b07b 0%,
+			#d9a468 0%,
 			#d4834a var(--slider-pct, 30%),
-			rgb(47 36 28 / 0.1) var(--slider-pct, 30%),
-			rgb(47 36 28 / 0.1) 100%
+			rgba(107, 74, 46, 0.18) var(--slider-pct, 30%),
+			rgba(107, 74, 46, 0.12) 100%
 		);
 		outline: none;
 		cursor: pointer;
@@ -264,65 +402,91 @@
 	.brush-slider::-webkit-slider-thumb {
 		-webkit-appearance: none;
 		appearance: none;
+		margin-top: -1px;
 		width: 20px;
 		height: 20px;
-		border-radius: 50%;
-		background: #fdfbf7;
-		border: 2.5px solid var(--color-ink, #2f241c);
-		box-shadow: 0 2px 6px rgb(43 38 34 / 0.2);
+		border: 2px solid #fdfbf7;
+		border-radius: 48% 52% 50% 50% / 52% 48% 54% 46%;
+		background: radial-gradient(circle at 32% 28%, #c96a5b, #a8403a 55%, #6e211c);
+		box-shadow: 1px 2px 4px rgba(45, 36, 32, 0.35);
 		cursor: pointer;
 	}
 
 	.brush-slider::-moz-range-thumb {
 		width: 20px;
 		height: 20px;
+		border: 2px solid #fdfbf7;
 		border-radius: 50%;
-		background: #fdfbf7;
-		border: 2.5px solid var(--color-ink, #2f241c);
-		box-shadow: 0 2px 6px rgb(43 38 34 / 0.2);
+		background: radial-gradient(circle at 32% 28%, #c96a5b, #a8403a 55%, #6e211c);
+		box-shadow: 1px 2px 4px rgba(45, 36, 32, 0.35);
 		cursor: pointer;
 	}
 
-	/* --- Brush preview --- */
+	.brush-slider:focus-visible {
+		outline: 3px solid #4ecdc4;
+		outline-offset: 2px;
+	}
+
+	/* --- Brush preview: a taped test scrap --- */
 
 	.brush-preview {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
-		margin-top: 6px;
+		gap: 10px;
+		margin-top: 8px;
+	}
+
+	.test-scrap {
+		position: relative;
+		padding: 3px;
+		background: #fdfbf7;
+		border: 1px solid #d6cfc5;
+		box-shadow: 2px 3px 7px rgba(0, 0, 0, 0.16);
+		rotate: 3deg;
+	}
+
+	.test-scrap::before {
+		content: '';
+		position: absolute;
+		top: -6px;
+		left: 10px;
+		width: 26px;
+		height: 10px;
+		background: rgba(243, 235, 216, 0.9);
+		rotate: -4deg;
+		box-shadow: 0 1px 2px rgba(45, 36, 32, 0.15);
 	}
 
 	.brush-preview-shell {
 		width: 40px;
 		height: 40px;
-		border-radius: 50%;
-		border: 1.5px solid rgb(47 36 28 / 0.1);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: rgb(255 255 255 / 0.4);
 	}
 
 	.brush-dot {
 		border-radius: 50%;
+		border: 1px solid rgba(47, 36, 28, 0.14);
 		transition:
 			width 0.15s,
 			height 0.15s;
 	}
 
 	.brush-size-text {
-		font-family: var(--font-body, 'Baloo 2', sans-serif);
-		font-size: 12px;
-		color: var(--color-muted, #6f6257);
+		font-family: 'Caveat', cursive;
+		font-size: 1.05rem;
 		font-weight: 600;
+		color: #8a6c52;
+		rotate: -2deg;
 	}
 
 	/* --- Separator --- */
 
 	.tray-sep {
 		height: 1px;
-		background: linear-gradient(90deg, transparent, rgb(47 36 28 / 0.1), transparent);
+		background: linear-gradient(90deg, transparent, rgba(47, 36, 28, 0.14), transparent);
 		margin: 14px 0;
 	}
 
@@ -334,8 +498,18 @@
 		gap: 8px;
 	}
 
+	.tray-edge-print {
+		margin: 14px 0 -6px;
+		text-align: center;
+		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-size: 0.5rem;
+		font-weight: 600;
+		letter-spacing: 0.26em;
+		text-transform: uppercase;
+		color: rgba(138, 108, 82, 0.55);
+	}
+
 	.tool-tray-mobile {
-		overflow: visible;
 		transform: rotate(0.8deg);
 	}
 
@@ -349,11 +523,7 @@
 		}
 
 		.palette-mobile-grid {
-			gap: 0.4rem;
-		}
-
-		.palette-swatch {
-			min-height: 2.45rem;
+			gap: 0.45rem;
 		}
 	}
 </style>

@@ -369,6 +369,10 @@
 		padding: clamp(0.75rem, 1.5vw, 1.125rem);
 		height: 100%;
 		aspect-ratio: 10 / 12;
+		/* Explicit width (frame height minus the vertical chrome, × 10/12):
+		 * WebKit resolves the aspect-ratio fallback above from the canvas's
+		 * intrinsic 768px width, stretching the closed book to landscape. */
+		width: calc((var(--book-frame-h, 40rem) - 4.5rem) * 10 / 12);
 	}
 
 	.canvas-window {
