@@ -330,6 +330,13 @@
 		box-shadow: 0 14px 30px rgba(45, 36, 32, 0.22);
 	}
 
+	/* `display: grid` above would defeat the `hidden` attribute (its UA rule
+	 * loses the cascade); without this, the closed menu still intercepts
+	 * clicks wherever Tailwind's preflight isn't loaded. */
+	.report-menu[hidden] {
+		display: none;
+	}
+
 	.report-menu.report-menu-compact {
 		left: auto;
 		right: 0;
