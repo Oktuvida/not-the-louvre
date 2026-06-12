@@ -15,7 +15,6 @@
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
-	import StudioPanel from '$lib/features/shared-ui/components/StudioPanel.svelte';
 	import VisitorBadge from '$lib/features/shared-ui/components/VisitorBadge.svelte';
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
@@ -372,19 +371,19 @@
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 		>
-			<StudioPanel
-				tone="paper"
-				className="w-full max-h-[calc(100dvh-1.5rem)] overflow-y-auto md:max-h-[calc(100dvh-4rem)]"
+			<div
+				class="avatar-sheet max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto md:max-h-[calc(100dvh-4rem)]"
 			>
-				<div class="p-4 md:p-8">
-					<div class="mb-4 flex items-center justify-between">
-						<h2 class="font-display text-xl tracking-[0.06em] text-[var(--color-ink)] uppercase">
-							Redraw your avatar
-						</h2>
-						<GameButton type="button" variant="ghost" size="sm" onclick={closeAvatarEditor}>
+				<div class="avatar-sheet-inner relative p-4 pl-9 md:p-8 md:pl-12">
+					<div class="mb-3 flex items-start justify-between gap-4">
+						<div>
+							<h2 class="avatar-sheet-title">Redraw your avatar</h2>
+							<span class="avatar-sheet-swipe" aria-hidden="true"></span>
+						</div>
+						<button type="button" class="avatar-tape-close" onclick={closeAvatarEditor}>
 							<span class="sr-only">Close</span>
-							<X />
-						</GameButton>
+							<X aria-hidden="true" />
+						</button>
 					</div>
 					<AvatarSketchpad
 						clearMode="blank"
@@ -396,7 +395,106 @@
 						submitLabel="Done"
 					/>
 				</div>
-			</StudioPanel>
+			</div>
 		</div>
 	</div>
 {/if}
+
+<style>
+	.avatar-sheet {
+		background-color: #fbf7f0;
+		border-radius: 3px;
+		box-shadow:
+			4px 6px 16px rgba(0, 0, 0, 0.32),
+			1px 2px 4px rgba(0, 0, 0, 0.18);
+	}
+
+	/* per-pixel paper noise */
+	.avatar-sheet-inner::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+		pointer-events: none;
+	}
+
+	/* torn-out spiral perforations along the left edge */
+	.avatar-sheet-inner::after {
+		content: '';
+		position: absolute;
+		top: 18px;
+		bottom: 18px;
+		left: 10px;
+		width: 14px;
+		background-image: radial-gradient(
+			circle at 7px 9px,
+			rgba(45, 36, 32, 0.18) 4px,
+			rgba(45, 36, 32, 0.07) 4.6px,
+			transparent 5.4px
+		);
+		background-size: 14px 44px;
+		background-repeat: repeat-y;
+		pointer-events: none;
+	}
+
+	.avatar-sheet-title {
+		margin: 0;
+		font-family: 'Fredoka', sans-serif;
+		font-size: 1.3rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: #2f241c;
+	}
+
+	/* a swipe of paint under the title */
+	.avatar-sheet-swipe {
+		display: block;
+		width: 150px;
+		height: 7px;
+		margin-top: 4px;
+		rotate: -0.8deg;
+		border-radius: 4px 7px 5px 8px;
+		background: linear-gradient(90deg, rgba(212, 131, 74, 0.75), rgba(212, 131, 74, 0.25) 92%);
+	}
+
+	/* washi-tape close, same species as the postcard flip tape */
+	.avatar-tape-close {
+		flex-shrink: 0;
+		border: 0;
+		padding: 9px 18px;
+		font-weight: 700;
+		color: #5d4e37;
+		cursor: pointer;
+		rotate: 2.4deg;
+		background: repeating-linear-gradient(
+			-45deg,
+			rgba(228, 214, 186, 0.92) 0 10px,
+			rgba(240, 230, 207, 0.92) 10px 20px
+		);
+		box-shadow: 0 2px 5px rgba(45, 36, 32, 0.22);
+		/* torn tape ends — drop this line if it ghosts */
+		clip-path: polygon(
+			3% 0%,
+			97% 2%,
+			100% 26%,
+			98% 52%,
+			100% 78%,
+			96% 100%,
+			4% 98%,
+			0% 70%,
+			2% 44%,
+			0% 22%
+		);
+		transition: translate 140ms ease;
+	}
+
+	.avatar-tape-close:hover {
+		translate: 0 -2px;
+	}
+
+	.avatar-tape-close:focus-visible {
+		outline: 3px solid #4ecdc4;
+		outline-offset: 2px;
+	}
+</style>
