@@ -94,13 +94,16 @@ describe('ArtworkCard', () => {
 			viewer: { id: 'admin-1', role: 'admin' }
 		});
 
+		await page.getByRole('button', { name: 'Moderation menu' }).click();
 		await page.getByRole('button', { name: 'Mark artwork NSFW' }).click();
 
 		expect(onclick).not.toHaveBeenCalled();
-		expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/moderation', {
-			body: JSON.stringify({ action: 'mark_nsfw' }),
-			headers: { 'content-type': 'application/json' },
-			method: 'PATCH'
+		await vi.waitFor(() => {
+			expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/moderation', {
+				body: JSON.stringify({ action: 'mark_nsfw' }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			});
 		});
 	});
 });

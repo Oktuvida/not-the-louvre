@@ -92,7 +92,7 @@
 />
 
 {#if data.viewer && !data.viewer.isBanned && data.viewer.role !== 'user'}
-	<a class="ops-link" href={resolve('/admin')}>Internal ops</a>
+	<a class="ops-link" href={resolve('/admin')}>Ops</a>
 {/if}
 
 <style>

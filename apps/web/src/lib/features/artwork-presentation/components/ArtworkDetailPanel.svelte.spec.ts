@@ -261,6 +261,7 @@ describe('ArtworkDetailPanel', () => {
 
 		await expect.element(page.getByRole('button', { name: 'Report artwork' })).toBeVisible();
 
+		await page.getByRole('button', { name: 'Moderation menu' }).click();
 		await page.getByRole('button', { name: 'Mark artwork NSFW' }).click();
 
 		await vi.waitFor(() => {

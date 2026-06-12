@@ -457,7 +457,10 @@
 							<div class="relative">
 								<span class="photo-tape photo-tape-left" aria-hidden="true"></span>
 								<span class="photo-tape photo-tape-right" aria-hidden="true"></span>
-								{#if viewer}
+								<!-- Unmounted while flipped or mid-flip: the positioned wrapper gets
+								     its own compositor layer, which ignores the face's
+								     backface-visibility and would ghost mirrored through the back. -->
+								{#if viewer && !isFlipped && !isLifting}
 									<div class="absolute top-2 right-2 z-20">
 										<ArtworkSafetyActions
 											{artwork}
@@ -674,14 +677,16 @@
 												placeholder="Write a comment"
 												class="guestbook-input"
 											/>
-											<button
+											<GameButton
 												type="submit"
-												class="guestbook-send"
+												variant="accent"
+												size="sm"
+												className="guestbook-send"
 												disabled={isSubmittingComment}
-												aria-label="Send comment"
+												ariaLabel="Send comment"
 											>
 												Send
-											</button>
+											</GameButton>
 										</form>
 									{/if}
 									{#if actionError && isFlipped}
@@ -979,13 +984,13 @@
 	}
 
 	.photo-tape-left {
-		top: -8px;
+		top: -20px;
 		left: 14px;
 		rotate: -7deg;
 	}
 
 	.photo-tape-right {
-		top: -7px;
+		top: -18px;
 		right: 12px;
 		rotate: 9deg;
 	}
@@ -1321,31 +1326,19 @@
 		color: rgba(138, 108, 82, 0.65);
 	}
 
-	.guestbook-send {
+	/* The SEND sticker rides smaller than the action-row stickers — and it
+	 * must NOT move on hover/press: inside the mirrored back face the lift
+	 * transforms shift the button mid-click and real pointer clicks die. */
+	.postcard :global(.sticker-btn.guestbook-send),
+	.postcard :global(.sticker-btn.guestbook-send:hover),
+	.postcard :global(.sticker-btn.guestbook-send:active) {
+		height: 38px;
+		min-height: 38px;
+		min-width: 0;
 		flex-shrink: 0;
-		cursor: pointer;
-		border: 2px solid #2d2420;
-		border-radius: 999px;
-		background: #f4c430;
-		padding: 6px 12px;
-		font-family: 'Fredoka', sans-serif;
-		font-size: 0.6rem;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-		color: #2d2420;
-		rotate: 1.2deg;
-		box-shadow: 1px 2px 0 rgba(45, 36, 32, 0.25);
-		transition: translate 130ms ease;
-	}
-
-	.guestbook-send:hover {
-		translate: 0 -2px;
-	}
-
-	.guestbook-send:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
+		padding-inline: 13px;
+		font-size: 11px;
+		transform: none !important;
 	}
 
 	.postcard-stamp-cluster {
