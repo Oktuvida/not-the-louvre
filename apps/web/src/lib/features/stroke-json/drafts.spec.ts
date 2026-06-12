@@ -324,6 +324,92 @@ describe('stroke-json drafts', () => {
 		expect(storage.getItem(legacyKey)).toBeNull();
 	});
 
+	it('persists the seeded baseline and keeps it intact across strokes and compaction', async () => {
+		const draftStore = createIndexedDbDrawingDraftStore({ databaseName: TEST_DATABASE_NAME });
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: 2,
+			scope: 'artwork-parent',
+			surface: 'artwork',
+			userKey: 'artist_1'
+		});
+		const session = createDrawingDraftSession({ draftKey, store: draftStore });
+		const seedDocument = createEmptyDrawingDocumentV2('artwork');
+		seedDocument.tail.push(
+			createStroke({
+				points: [
+					[48, 48],
+					[180, 180]
+				]
+			})
+		);
+
+		const hydrated = await session.hydrate({ seedDocument });
+		if (!hydrated) {
+			throw new Error('Expected the draft session to hydrate the seeded fork document');
+		}
+
+		const withStroke = await session.appendCommittedStroke(
+			hydrated,
+			createStroke({
+				color: '#c84f4f',
+				points: [
+					[220, 240],
+					[280, 320]
+				]
+			})
+		);
+		await session.compact(withStroke);
+
+		expect(await session.hydrate()).toEqual(withStroke);
+		expect(await session.loadBaseline()).toEqual(seedDocument);
+	});
+
+	it('returns no baseline for drafts persisted before baseline tracking existed', async () => {
+		const draftStore = createIndexedDbDrawingDraftStore({ databaseName: TEST_DATABASE_NAME });
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: 2,
+			scope: 'artwork-parent',
+			surface: 'artwork',
+			userKey: 'artist_1'
+		});
+		const legacyDocument = createEmptyDrawingDocumentV2('artwork');
+		legacyDocument.tail.push(
+			createStroke({
+				points: [
+					[20, 20],
+					[64, 64]
+				]
+			})
+		);
+
+		await draftStore.writeSnapshot({ draftKey, document: legacyDocument });
+
+		expect(await draftStore.readBaseline(draftKey)).toBeNull();
+		expect(
+			await createDrawingDraftSession({ draftKey, store: draftStore }).loadBaseline()
+		).toBeNull();
+	});
+
+	it('clears the persisted baseline together with the draft snapshot and journal', async () => {
+		const draftStore = createIndexedDbDrawingDraftStore({ databaseName: TEST_DATABASE_NAME });
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: 2,
+			scope: 'artwork-parent',
+			surface: 'artwork',
+			userKey: 'artist_1'
+		});
+		const session = createDrawingDraftSession({ draftKey, store: draftStore });
+		const seedDocument = createEmptyDrawingDocumentV2('artwork');
+
+		await session.hydrate({ seedDocument });
+		expect(await session.loadBaseline()).toEqual(seedDocument);
+
+		await session.clear();
+
+		expect(await session.loadBaseline()).toBeNull();
+		expect(await draftStore.hydrate(draftKey)).toBeNull();
+	});
+
 	it('compacts a session into a fresh snapshot without changing the hydrated document', async () => {
 		const draftStore = createIndexedDbDrawingDraftStore({ databaseName: TEST_DATABASE_NAME });
 		const draftKey = buildDrawingDraftKey({
