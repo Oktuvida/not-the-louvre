@@ -5,6 +5,12 @@
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import graffitiLogoUrl from '$lib/assets/logo-graffiti.svg';
 	import { applyMuseumWallWillChange } from '$lib/features/home-entry-scene/components/museum-wall-will-change';
+	import {
+		playWallZoomIn,
+		playWallZoomOut,
+		resetWallZoom,
+		type WallZoomGeometry
+	} from '$lib/features/home-entry-scene/components/museum-wall-zoom';
 	import { waitForPageLayoutReady } from '$lib/features/home-entry-scene/components/page-layout-ready';
 	import MuseumWindowFrame from '$lib/features/home-entry-scene/components/MuseumWindowFrame.svelte';
 	import {
@@ -12,6 +18,7 @@
 		museumWindowAspectRatio,
 		museumWindowOpening
 	} from '$lib/features/home-entry-scene/canvas/museum-canvas';
+	import { rasterizeSvgUrl } from '$lib/features/home-entry-scene/canvas/svg-bitmap';
 	import type {
 		EntryFlowEvent,
 		EntryFlowState
@@ -58,11 +65,15 @@
 	let frameVisualElement = $state<HTMLDivElement | null>(null);
 	let frameElement = $state<HTMLDivElement | null>(null);
 	let openingElement = $state<HTMLDivElement | null>(null);
-	let targetScale = $state(1);
-	let finalScale = $state(1);
-	let translateX = $state(0);
-	let translateY = $state(0);
-	const wallPatternUrl = createMuseumWallPatternUrl();
+	const zoomGeometry: WallZoomGeometry = { finalScale: 1, translateX: 0, translateY: 0 };
+	// SVG sources render the first frame; bitmaps replace them after mount so
+	// the zoom never triggers main-thread SVG re-rasterization (see svg-bitmap).
+	const WALL_TILE_CSS_PX = 512;
+	const LOGO_MAX_WIDTH_CSS_PX = 544; // clamp(24rem, 36vw, 34rem) upper bound
+	const LOGO_VIEWBOX_RATIO = 440 / 680;
+	const wallPatternSvgUrl = createMuseumWallPatternUrl();
+	let wallPatternUrl = $state(wallPatternSvgUrl);
+	let logoUrl = $state(graffitiLogoUrl);
 	let wallOpeningBounds = $state({
 		bottom: OPENING_BOTTOM_CSS,
 		left: OPENING_LEFT_CSS,
@@ -70,11 +81,9 @@
 		top: OPENING_TOP_CSS
 	});
 
-	let forwardTimeline: gsap.core.Timeline | null = null;
-	let reverseTimeline: gsap.core.Timeline | null = null;
 	let enterFallbackHandle: ReturnType<typeof setTimeout> | null = null;
 	let resetFallbackHandle: ReturnType<typeof setTimeout> | null = null;
-	let rebuildPending = false;
+	let measurePending = false;
 
 	const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
 	const toPercent = (value: number) => `${clampUnit(value) * 100}%`;
@@ -94,27 +103,28 @@
 		}
 	};
 
+	const wallElements = () =>
+		overlayElement && wallSceneElement && wallTextureElement && frameVisualElement
+			? { frameVisualElement, overlayElement, wallSceneElement, wallTextureElement }
+			: null;
+
 	const updateWillChange = (active: boolean) => {
-		if (!overlayElement || !wallSceneElement || !wallTextureElement || !frameVisualElement) {
+		const elements = wallElements();
+		if (!elements) {
 			return;
 		}
 
-		applyMuseumWallWillChange(
-			{ frameVisualElement, overlayElement, wallSceneElement, wallTextureElement },
-			active
-		);
+		applyMuseumWallWillChange(elements, active);
 	};
 
 	const resetWallStyles = () => {
-		if (!overlayElement || !wallSceneElement || !wallTextureElement || !frameVisualElement) {
+		const elements = wallElements();
+		if (!elements) {
 			return;
 		}
 
-		gsap.set(overlayElement, { clearProps: 'opacity' });
-		gsap.set(wallSceneElement, { clearProps: 'transform' });
-		gsap.set(wallTextureElement, { clearProps: 'opacity' });
-		gsap.set(frameVisualElement, { clearProps: 'opacity,filter' });
-		updateWillChange(false);
+		resetWallZoom(elements);
+		applyMuseumWallWillChange(elements, false);
 	};
 
 	const updateMeasurements = () => {
@@ -131,7 +141,7 @@
 			measuredOpening.height * GLASS_FOCUS_BOUNDS.height
 		);
 
-		targetScale = Math.max(
+		const targetScale = Math.max(
 			(window.innerWidth + WINDOW_MARGIN * 2) / focusRect.width,
 			(window.innerHeight + WINDOW_MARGIN * 2) / focusRect.height
 		);
@@ -153,210 +163,84 @@
 			)
 		};
 
-		finalScale = targetScale * FINAL_ZOOM_MULTIPLIER;
-		translateX = window.innerWidth / 2 - (focusRect.left + focusRect.width / 2);
-		translateY = window.innerHeight / 2 - (focusRect.top + focusRect.height / 2);
+		zoomGeometry.finalScale = targetScale * FINAL_ZOOM_MULTIPLIER;
+		zoomGeometry.translateX = window.innerWidth / 2 - (focusRect.left + focusRect.width / 2);
+		zoomGeometry.translateY = window.innerHeight / 2 - (focusRect.top + focusRect.height / 2);
 	};
 
-	const createForwardTimeline = () => {
-		if (
-			!overlayElement ||
-			!wallSceneElement ||
-			!wallTextureElement ||
-			!frameVisualElement ||
-			!authOverlayElement
-		) {
-			return null;
-		}
-
-		return gsap
-			.timeline({
-				paused: true,
-				onStart: () => {
-					updateWillChange(true);
-					gsap.set(overlayElement, { opacity: 1 });
-					gsap.set(wallTextureElement, { opacity: 1 });
-					gsap.set(frameVisualElement, { opacity: 1, filter: 'blur(0px)' });
-					gsap.set(authOverlayElement, { opacity: 0, scale: 0.95 });
-					gsap.set(wallSceneElement, { x: 0, y: 0, scale: 1, yPercent: 0 });
-				},
-				onComplete: () => {
-					updateWillChange(false);
-				}
-			})
-			.to(
-				wallSceneElement,
-				{
-					scale: finalScale,
-					x: translateX,
-					y: translateY,
-					duration: ENTER_DURATION,
-					ease: 'power4.in'
-				},
-				0
-			)
-			.to(
-				wallTextureElement,
-				{
-					opacity: 0,
-					duration: 0.26,
-					ease: 'power3.in'
-				},
-				1.52
-			)
-			.to(
-				frameVisualElement,
-				{
-					opacity: 0,
-					filter: 'blur(18px) brightness(1.18)',
-					duration: 0.1,
-					ease: 'power4.in'
-				},
-				1.99
-			)
-			.call(
-				() => {
-					dispatch('TRANSITION_DONE');
-				},
-				undefined,
-				ENTER_DURATION
-			);
-	};
-
-	const createReverseTimeline = () => {
-		if (
-			!overlayElement ||
-			!wallSceneElement ||
-			!wallTextureElement ||
-			!frameVisualElement ||
-			!authOverlayElement
-		) {
-			return null;
-		}
-
-		return gsap
-			.timeline({
-				paused: true,
-				onStart: () => {
-					updateWillChange(true);
-					gsap.set(overlayElement, { opacity: 0 });
-					gsap.set(wallTextureElement, { opacity: 0 });
-					gsap.set(frameVisualElement, { opacity: 0, filter: 'blur(18px) brightness(1.18)' });
-					gsap.set(authOverlayElement, { opacity: 1, scale: 1 });
-					gsap.set(wallSceneElement, {
-						scale: finalScale,
-						x: translateX,
-						y: translateY,
-						yPercent: 0
-					});
-				},
-				onComplete: () => {
-					resetWallStyles();
-					dispatch('TRANSITION_RESET_DONE');
-				}
-			})
-			.to(
-				overlayElement,
-				{
-					opacity: 1,
-					duration: 0.38,
-					ease: 'power2.out'
-				},
-				0
-			)
-			.to(
-				authOverlayElement,
-				{
-					opacity: 0,
-					scale: 0.95,
-					duration: 0.3,
-					ease: 'power1.in'
-				},
-				0
-			)
-			.to(
-				frameVisualElement,
-				{
-					opacity: 1,
-					filter: 'blur(0px) brightness(1)',
-					duration: 0.26,
-					ease: 'power1.out'
-				},
-				0.3
-			)
-			.to(
-				wallTextureElement,
-				{
-					opacity: 1,
-					duration: 0.38,
-					ease: 'power2.in'
-				},
-				0.3
-			)
-			.to(
-				wallSceneElement,
-				{
-					scale: 1,
-					x: 0,
-					y: 0,
-					duration: RESET_DURATION,
-					ease: 'power3.out'
-				},
-				0
-			);
-	};
-
-	const rebuildTimelines = () => {
-		forwardTimeline?.kill();
-		reverseTimeline?.kill();
-
-		updateMeasurements();
-		forwardTimeline = createForwardTimeline();
-		reverseTimeline = createReverseTimeline();
-	};
-
-	const scheduleTimelineRebuild = async () => {
-		if (rebuildPending || typeof window === 'undefined' || typeof document === 'undefined') {
+	const scheduleMeasurement = async () => {
+		if (measurePending || typeof window === 'undefined' || typeof document === 'undefined') {
 			return;
 		}
 
-		rebuildPending = true;
+		measurePending = true;
 		await waitForPageLayoutReady({ document, window });
-		rebuildPending = false;
-		rebuildTimelines();
+		measurePending = false;
+		updateMeasurements();
 	};
 
 	onMount(() => {
 		const handleResize = () => {
-			void scheduleTimelineRebuild();
+			void scheduleMeasurement();
 		};
 
-		void scheduleTimelineRebuild();
+		void scheduleMeasurement();
+
+		const rasterScale = Math.min(window.devicePixelRatio || 1, 2);
+		void rasterizeSvgUrl(wallPatternSvgUrl, {
+			height: WALL_TILE_CSS_PX * rasterScale,
+			width: WALL_TILE_CSS_PX * rasterScale
+		})
+			.then((url) => {
+				wallPatternUrl = url;
+			})
+			.catch(() => {
+				// Keep the SVG source if rasterization fails.
+			});
+		void rasterizeSvgUrl(graffitiLogoUrl, {
+			height: LOGO_MAX_WIDTH_CSS_PX * rasterScale * LOGO_VIEWBOX_RATIO,
+			width: LOGO_MAX_WIDTH_CSS_PX * rasterScale
+		})
+			.then((url) => {
+				logoUrl = url;
+			})
+			.catch(() => {
+				// Keep the SVG source if rasterization fails.
+			});
 
 		window.addEventListener('resize', handleResize);
 
 		return () => {
 			window.removeEventListener('resize', handleResize);
-			forwardTimeline?.kill();
-			reverseTimeline?.kill();
 			clearFallbacks();
 		};
 	});
 
 	$effect(() => {
-		if (authOverlayElement && !forwardTimeline && !reverseTimeline) {
-			void scheduleTimelineRebuild();
-		}
-	});
-
-	$effect(() => {
 		if (entryState === 'transitioning-in') {
 			clearFallbacks();
-			if (!forwardTimeline) {
-				rebuildTimelines();
+			const elements = wallElements();
+
+			if (elements) {
+				// The wall is untransformed while outside, so this measurement is fresh.
+				updateMeasurements();
+				applyMuseumWallWillChange(elements, true);
+
+				if (authOverlayElement) {
+					gsap.set(authOverlayElement, { opacity: 0, scale: 0.95 });
+				}
+
+				const zoom = playWallZoomIn(elements, zoomGeometry);
+				zoom.finished
+					.then(() => {
+						updateWillChange(false);
+						dispatch('TRANSITION_DONE');
+					})
+					.catch(() => {
+						// Cancelled by a newer state change; that path owns cleanup.
+					});
 			}
-			reverseTimeline?.pause(0);
-			forwardTimeline?.restart();
+
 			enterFallbackHandle = setTimeout(
 				() => {
 					if (entryState === 'transitioning-in') {
@@ -369,11 +253,31 @@
 
 		if (entryState === 'transitioning-out') {
 			clearFallbacks();
-			if (!reverseTimeline) {
-				rebuildTimelines();
+			const elements = wallElements();
+
+			if (elements) {
+				applyMuseumWallWillChange(elements, true);
+
+				if (authOverlayElement) {
+					gsap.to(authOverlayElement, {
+						opacity: 0,
+						scale: 0.95,
+						duration: 0.3,
+						ease: 'power1.in'
+					});
+				}
+
+				const zoom = playWallZoomOut(elements, zoomGeometry);
+				zoom.finished
+					.then(() => {
+						resetWallStyles();
+						dispatch('TRANSITION_RESET_DONE');
+					})
+					.catch(() => {
+						// Cancelled by a newer state change; that path owns cleanup.
+					});
 			}
-			forwardTimeline?.pause(0);
-			reverseTimeline?.restart();
+
 			resetFallbackHandle = setTimeout(
 				() => {
 					if (entryState === 'transitioning-out') {
@@ -386,8 +290,6 @@
 
 		if (entryState === 'outside') {
 			clearFallbacks();
-			forwardTimeline?.pause(0);
-			reverseTimeline?.pause(0);
 			resetWallStyles();
 		}
 
@@ -407,7 +309,11 @@
 		bind:this={overlayElement}
 		class="pointer-events-none absolute inset-0 z-[20] overflow-hidden"
 	>
-		<div bind:this={wallSceneElement} class="absolute inset-0 origin-center">
+		<div
+			bind:this={wallSceneElement}
+			data-testid="museum-wall-scene"
+			class="absolute inset-0 origin-center"
+		>
 			<!-- Wall texture rebuilt as two L-shaped slabs instead of a fullscreen mask. -->
 			<div bind:this={wallTextureElement} class="absolute inset-0">
 				<div
@@ -443,7 +349,8 @@
 				<div bind:this={frameVisualElement} class="relative flex items-center justify-center">
 					<!-- Graffiti logo floating beside the frame. -->
 					<img
-						src={graffitiLogoUrl}
+						src={logoUrl}
+						data-testid="museum-wall-logo"
 						alt=""
 						draggable="false"
 						class="pointer-events-none absolute top-[15%] right-[calc(100%-4.5rem)] z-[1] w-[clamp(24rem,36vw,34rem)] -rotate-[10deg] opacity-95"
@@ -468,7 +375,7 @@
 						></div>
 						<!-- Side shadow to separate the frame from the wall. -->
 						<div
-							class="pointer-events-none absolute top-[12%] -left-[8%] h-[88%] w-[92%] bg-[radial-gradient(ellipse_at_88%_12%,rgba(46,28,11,0.18)_0%,rgba(46,28,11,0.28)_36%,rgba(46,28,11,0.14)_58%,transparent_74%)] blur-[14px]"
+							class="pointer-events-none absolute top-[12%] -left-[8%] h-[88%] w-[92%] bg-[radial-gradient(ellipse_at_88%_12%,rgba(46,28,11,0.16)_0%,rgba(46,28,11,0.24)_34%,rgba(46,28,11,0.12)_58%,transparent_82%)]"
 						></div>
 						<div
 							bind:this={openingElement}
@@ -492,7 +399,7 @@
 								class="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.025)_48%,rgba(24,14,8,0.06))]"
 							></div>
 							<div
-								class="absolute inset-y-[12%] right-[8%] w-[22%] rounded-full bg-white/6 blur-xl"
+								class="absolute inset-y-[12%] right-[8%] w-[22%] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.05)_45%,transparent_72%)]"
 							></div>
 						</div>
 

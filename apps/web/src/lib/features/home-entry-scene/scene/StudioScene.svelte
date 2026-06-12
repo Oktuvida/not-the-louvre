@@ -3,11 +3,12 @@
 	import { untrack } from 'svelte';
 	import { gsap } from '$lib/client/gsap';
 	import { Canvas, T } from '@threlte/core';
-	import { GLTF, OrbitControls } from '@threlte/extras';
+	import { GLTF } from '@threlte/extras';
 	import type { Group, Object3D, OrthographicCamera } from 'three';
 	import type { HomeSceneArtworkSlot } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import { studioCanvasShadowMap } from '$lib/features/home-entry-scene/scene/studio-renderer-config';
 	import { getStudioDracoLoader } from '$lib/features/home-entry-scene/scene/studio-draco-loader';
+	import SceneFrameInvalidator from '$lib/features/home-entry-scene/scene/SceneFrameInvalidator.svelte';
 	import SceneTextureBindings from '$lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
 	import StudioLoadingFallback from '$lib/features/shared-3d-world/components/StudioLoadingFallback.svelte';
 	import type { EntryFlowState } from '$lib/features/home-entry-scene/state/entry-state.svelte';
@@ -69,16 +70,7 @@
 				? TOP_CLOSE_CAMERA
 				: DEFAULT_CAMERA;
 
-	let cameraX = $state(initialCamera.cameraX);
-	let cameraZoom = $state(initialCamera.zoom);
-	let cameraHeight = $state(initialCamera.cameraHeight);
-	let cameraDepth = $state(initialCamera.cameraDepth);
-	let cameraTargetX = $state(initialCamera.targetX);
-	let cameraTargetY = $state(initialCamera.targetY);
-	let cameraTargetZ = $state(initialCamera.targetZ);
 	let studioCamera = $state<OrthographicCamera | undefined>(undefined);
-	let modelRotationX = $state(initialCamera.rotationX);
-	let modelRotationY = $state(initialCamera.rotationY);
 	let studioNodes = $state<Record<string, Object3D>>({});
 	let studioSceneRoot = $state<Group | null>(null);
 	let previousScenePose: 'default' | 'left-wall' | 'top-close' | undefined = initialPoseValue;
@@ -108,28 +100,40 @@
 	const sceneReady = $derived(sceneMediaState === 'loaded');
 	const sceneFailed = $derived(sceneMediaState === 'error');
 
-	const syncStudioMotion = () => {
-		cameraX = studioMotion.cameraX;
-		cameraZoom = studioMotion.zoom;
-		cameraDepth = studioMotion.cameraDepth;
-		cameraHeight = studioMotion.cameraHeight;
-		cameraTargetX = studioMotion.targetX;
-		cameraTargetY = studioMotion.targetY;
-		cameraTargetZ = studioMotion.targetZ;
-		modelRotationX = studioMotion.rotationX;
-		modelRotationY = studioMotion.rotationY;
+	let invalidateFrame: (() => void) | undefined;
+
+	/**
+	 * Applies studioMotion straight onto the three.js objects and requests a
+	 * single frame. Routing this through Svelte state would invalidate the
+	 * effect graph nine times per animation frame while GSAP drives the tween.
+	 */
+	const applyStudioMotion = () => {
+		const camera = studioCamera;
+		const sceneRoot = studioSceneRoot;
+
+		if (camera) {
+			camera.position.set(
+				studioMotion.cameraX,
+				studioMotion.cameraHeight,
+				studioMotion.cameraDepth
+			);
+			camera.zoom = studioMotion.zoom;
+			camera.updateProjectionMatrix();
+			camera.lookAt(studioMotion.targetX, studioMotion.targetY, studioMotion.targetZ);
+		}
+
+		sceneRoot?.rotation.set(studioMotion.rotationX, studioMotion.rotationY, 0);
+
+		if (camera || sceneRoot) {
+			invalidateFrame?.();
+		}
 	};
 
+	/** Re-sync once the camera binds or the GLTF scene finishes loading mid-tween. */
 	$effect(() => {
-		void cameraX;
-		void cameraDepth;
-		void cameraHeight;
-		void cameraTargetX;
-		void cameraTargetY;
-		void cameraTargetZ;
-		if (!studioCamera) return;
-
-		studioCamera.lookAt(cameraTargetX, cameraTargetY, cameraTargetZ);
+		void studioCamera;
+		void studioSceneRoot;
+		applyStudioMotion();
 	});
 
 	$effect(() => {
@@ -165,7 +169,7 @@
 					rotationY: 0,
 					duration: LEFT_WALL_ROTATE_DURATION,
 					ease: 'power3.inOut',
-					onUpdate: syncStudioMotion
+					onUpdate: applyStudioMotion
 				})
 				.to(studioMotion, {
 					cameraX: LEFT_WALL_CAMERA.cameraX,
@@ -178,7 +182,7 @@
 					rotationX: 0,
 					duration: LEFT_WALL_ZOOM_DURATION,
 					ease: 'power4.inOut',
-					onUpdate: syncStudioMotion
+					onUpdate: applyStudioMotion
 				});
 
 			return;
@@ -198,7 +202,7 @@
 				rotationY: TOP_CLOSE_CAMERA.rotationY,
 				duration: TOP_CLOSE_ENTER_DURATION,
 				ease: 'power3.inOut',
-				onUpdate: syncStudioMotion
+				onUpdate: applyStudioMotion
 			});
 
 			return;
@@ -219,13 +223,13 @@
 					rotationX: -0.22,
 					duration: LEFT_WALL_EXIT_ZOOM_DURATION,
 					ease: 'power3.out',
-					onUpdate: syncStudioMotion
+					onUpdate: applyStudioMotion
 				})
 				.to(studioMotion, {
 					rotationY: -Math.PI / 4,
 					duration: LEFT_WALL_EXIT_ROTATE_DURATION,
 					ease: 'power3.inOut',
-					onUpdate: syncStudioMotion
+					onUpdate: applyStudioMotion
 				});
 
 			return;
@@ -246,13 +250,13 @@
 					rotationX: -0.22,
 					duration: TOP_CLOSE_EXIT_DURATION,
 					ease: 'power3.inOut',
-					onUpdate: syncStudioMotion
+					onUpdate: applyStudioMotion
 				})
 				.to(studioMotion, {
 					rotationY: -Math.PI / 4,
 					duration: 0.8,
 					ease: 'power3.inOut',
-					onUpdate: syncStudioMotion
+					onUpdate: applyStudioMotion
 				});
 
 			return;
@@ -272,7 +276,7 @@
 				rotationY: 0,
 				duration: RESET_DURATION,
 				ease: 'power3.out',
-				onUpdate: syncStudioMotion
+				onUpdate: applyStudioMotion
 			});
 
 			return;
@@ -291,15 +295,9 @@
 				rotationX: -0.22,
 				rotationY: 0
 			});
-			cameraX = 0;
-			cameraZoom = 40;
-			cameraDepth = 16;
-			cameraHeight = 7.8;
-			cameraTargetX = 0;
-			cameraTargetY = 0.8;
-			cameraTargetZ = 0;
-			modelRotationX = -0.22;
-			modelRotationY = 0;
+			// untrack: applyStudioMotion reads studioCamera/studioSceneRoot, which must
+			// not become dependencies of this pose effect.
+			untrack(applyStudioMotion);
 			return;
 		}
 
@@ -317,7 +315,7 @@
 				rotationX: -0.22,
 				duration: ENTER_DURATION,
 				ease: 'power4.inOut',
-				onUpdate: syncStudioMotion
+				onUpdate: applyStudioMotion
 			})
 			.to(
 				studioMotion,
@@ -325,7 +323,7 @@
 					rotationY: -Math.PI / 4,
 					duration: ENTER_DURATION - 0.55,
 					ease: 'power3.inOut',
-					onUpdate: syncStudioMotion
+					onUpdate: applyStudioMotion
 				},
 				0.55
 			);
@@ -348,18 +346,16 @@
 			<T.OrthographicCamera
 				bind:ref={studioCamera}
 				makeDefault
-				position={[cameraX, cameraHeight, cameraDepth]}
-				zoom={cameraZoom}
-				oncreate={(camera) => camera.lookAt(cameraTargetX, cameraTargetY, cameraTargetZ)}
-			>
-				<OrbitControls
-					autoRotate={false}
-					enablePan={false}
-					enableZoom={false}
-					enableRotate={false}
-					enableDamping
-				/>
-			</T.OrthographicCamera>
+				position={[initialCamera.cameraX, initialCamera.cameraHeight, initialCamera.cameraDepth]}
+				zoom={initialCamera.zoom}
+				oncreate={(camera) =>
+					camera.lookAt(initialCamera.targetX, initialCamera.targetY, initialCamera.targetZ)}
+			/>
+			<SceneFrameInvalidator
+				onready={(invalidate) => {
+					invalidateFrame = invalidate;
+				}}
+			/>
 			<T.Color attach="background" args={['#d7c2a8']} />
 			<T.Fog args={['#d7c2a8', 14, 32]} />
 			<T.AmbientLight intensity={0.08} />
@@ -379,7 +375,7 @@
 				url="/models/studio-transformed.glb"
 				scale={5.7}
 				position={[0, -6, 0]}
-				rotation={[modelRotationX, modelRotationY, 0]}
+				rotation={[initialCamera.rotationX, initialCamera.rotationY, 0]}
 				castShadow
 				receiveShadow
 				onload={() => {
