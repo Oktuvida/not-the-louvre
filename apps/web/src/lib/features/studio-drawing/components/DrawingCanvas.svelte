@@ -66,7 +66,7 @@
 		overlayRef.height = canvasRef.height;
 	}
 
-	function clearOverlay() { 
+	function clearOverlay() {
 		if (!overlayRef) return;
 		const ctx = overlayRef.getContext('2d');
 		if (!ctx) return;
@@ -76,6 +76,7 @@
 	function drawPreviewOnOverlayAt(clientX: number, clientY: number) {
 		if (!overlayRef) return;
 		const rect = overlayRef.getBoundingClientRect();
+		if (rect.width === 0 || rect.height === 0) return;
 		const scaleX = overlayRef.width / rect.width;
 		const scaleY = overlayRef.height / rect.height;
 
@@ -259,7 +260,7 @@
 		};
 		syncOverlaySize();
 
-    	window.addEventListener('resize', syncOverlaySize);
+		window.addEventListener('resize', syncOverlaySize);
 		window.addEventListener('pointerup', handleWindowPointerUp);
 		window.addEventListener('pointercancel', handleWindowPointerCancel);
 		window.addEventListener('blur', handleWindowBlur);
@@ -376,40 +377,47 @@
 </script>
 
 <div class="relative h-full w-full items-center justify-center">
-    <canvas
-        bind:this={canvasRef}
-        width={768}
-        height={768}
-        class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
-        style="background: #fdfbf7; touch-action: none;"
-        aria-disabled={!interactive}
-        data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
-        draggable="false"
-        ondragstart={preventCanvasDrag}
-        onpointerdown={startDrawing}
-        onpointermove={(event) => { scheduleOverlayUpdate(event); draw(event); }}
-        onpointerup={(event) => { clearOverlay(); finishDrawing(event); }}
-        onpointercancel={cancelDrawing}
-        onpointerleave={clearOverlay}
-    ></canvas>
+	<canvas
+		bind:this={canvasRef}
+		width={768}
+		height={768}
+		class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
+		style="background: #fdfbf7; touch-action: none;"
+		aria-disabled={!interactive}
+		data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
+		draggable="false"
+		ondragstart={preventCanvasDrag}
+		onpointerdown={startDrawing}
+		onpointermove={(event) => {
+			// Ink first: the brush preview is cosmetic and must never block drawing.
+			draw(event);
+			scheduleOverlayUpdate(event);
+		}}
+		onpointerup={(event) => {
+			finishDrawing(event);
+			clearOverlay();
+		}}
+		onpointercancel={cancelDrawing}
+		onpointerleave={clearOverlay}
+	></canvas>
 
-    <canvas
-        bind:this={overlayRef}
-        width={768}
-        height={768}
-        class={"block h-full w-full pointer-events-none rounded-lg"}
-        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
-    ></canvas>
+	<canvas
+		bind:this={overlayRef}
+		width={768}
+		height={768}
+		class="pointer-events-none block h-full w-full rounded-lg"
+		style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+	></canvas>
 
-    {#if statusMessage}
-        <div
-            class={`absolute -bottom-8 left-1/2 flex -translate-x-1/2 items-center gap-2 text-sm italic ${statusTone === 'error' ? 'text-[#8f3720]' : 'text-[#6b625a]'}`}
-            style="font-family: 'Baloo 2', sans-serif;"
-        >
-            <div
-                class={`h-2 w-2 rounded-full ${statusTone === 'error' ? 'bg-[#c84f4f]' : 'bg-[#8b9d91]'}`}
-            ></div> 
-            {statusMessage}
-        </div>
-    {/if}
+	{#if statusMessage}
+		<div
+			class={`absolute -bottom-8 left-1/2 flex -translate-x-1/2 items-center gap-2 text-sm italic ${statusTone === 'error' ? 'text-[#8f3720]' : 'text-[#6b625a]'}`}
+			style="font-family: 'Baloo 2', sans-serif;"
+		>
+			<div
+				class={`h-2 w-2 rounded-full ${statusTone === 'error' ? 'bg-[#c84f4f]' : 'bg-[#8b9d91]'}`}
+			></div>
+			{statusMessage}
+		</div>
+	{/if}
 </div>
