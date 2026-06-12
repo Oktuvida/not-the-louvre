@@ -28,6 +28,24 @@ const artwork = {
 };
 
 describe('ArtworkDetailPanel', () => {
+	// Clicking the back of the postcard mid-flip is unreliable: while the card
+	// rotates, mousedown and mouseup can land on different targets and the
+	// browser never synthesizes the click. Wait for the settled 180° transform
+	// (rotateY(180deg) → matrix m11 = -1) and for the lift animation to end.
+	const openCommentsSide = async () => {
+		await page.getByRole('button', { name: 'Read the comments' }).click();
+		await vi.waitFor(
+			() => {
+				const card = document.querySelector('.postcard');
+				if (!card) throw new Error('postcard is missing');
+				expect(card.className).not.toContain('is-lifting');
+				const m11 = Number(getComputedStyle(card).transform.match(/matrix(?:3d)?\(([^,]+)/)?.[1]);
+				expect(m11).toBeLessThanOrEqual(-0.9999);
+			},
+			{ timeout: 3000 }
+		);
+	};
+
 	it('links forking into the draw studio with the parent artwork id', async () => {
 		goto.mockReset();
 
@@ -38,10 +56,14 @@ describe('ArtworkDetailPanel', () => {
 
 		await page.getByRole('button', { name: 'Fork' }).click();
 		expect(goto).toHaveBeenCalledWith('/draw?fork=artwork-1');
-		await expect.element(page.getByText('2 forks')).toBeVisible();
 		await expect.element(page.getByText('Artwork details')).not.toBeInTheDocument();
 		await expect.element(page.getByText('POWER SCORE')).not.toBeInTheDocument();
-		await expect.element(page.getByRole('button', { name: 'Close' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Download' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Dismiss details' })).toBeVisible();
+
+		// The fork count is franked on the back of the postcard
+		await page.getByRole('button', { name: 'Read the comments' }).click();
+		await expect.element(page.getByText('2 forks')).toBeVisible();
 	});
 
 	it('shows fork attribution when the artwork comes from a parent artwork', async () => {
@@ -99,18 +121,21 @@ describe('ArtworkDetailPanel', () => {
 			.toBeVisible();
 	});
 
-	it('uses a scrollable responsive dialog shell', async () => {
+	it('keeps the visitor book scrollable inside the postcard back', async () => {
 		render(ArtworkDetailPanel, {
-			artwork,
+			artwork: {
+				...artwork,
+				comments: [{ author: 'visitor_one', id: 'comment-1', text: 'hello', timestamp: Date.now() }]
+			},
 			viewer: null
 		});
 
-		const panel = [...document.querySelectorAll('div')].find(
+		const guestbook = [...document.querySelectorAll('div')].find(
 			(element) =>
-				element.className.includes('max-h-[calc(100dvh-1.5rem)]') &&
+				element.className.includes('guestbook-pages') &&
 				element.className.includes('overflow-y-auto')
 		);
-		expect(panel).not.toBeNull();
+		expect(guestbook).toBeDefined();
 	});
 
 	it('posts comments and syncs the artwork detail state', async () => {
@@ -148,15 +173,19 @@ describe('ArtworkDetailPanel', () => {
 			document.querySelector('input[placeholder="Write a comment"]')?.getAttribute('name')
 		).toBe('commentBody');
 
+		// The comment form lives on the back of the postcard
+		await openCommentsSide();
 		await page.getByPlaceholder('Write a comment').fill('Great work');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 
-		expect(onArtworkChange).toHaveBeenCalledWith(
-			expect.objectContaining({
-				commentCount: 1,
-				comments: [expect.objectContaining({ id: 'comment-1', text: 'Great work' })]
-			})
-		);
+		await vi.waitFor(() => {
+			expect(onArtworkChange).toHaveBeenCalledWith(
+				expect.objectContaining({
+					commentCount: 1,
+					comments: [expect.objectContaining({ id: 'comment-1', text: 'Great work' })]
+				})
+			);
+		});
 		expect(checkTextContent).toHaveBeenCalledWith('Great work', 'comment');
 	});
 
@@ -176,6 +205,7 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
+		await openCommentsSide();
 		await page.getByPlaceholder('Write a comment').fill('blocked text');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 
@@ -200,6 +230,7 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
+		await openCommentsSide();
 		await page.getByPlaceholder('Write a comment').fill('retry later');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 
@@ -232,13 +263,77 @@ describe('ArtworkDetailPanel', () => {
 
 		await page.getByRole('button', { name: 'Mark artwork NSFW' }).click();
 
-		expect(fetchSpy).toHaveBeenNthCalledWith(1, '/api/artworks/artwork-1/moderation', {
-			body: JSON.stringify({ action: 'mark_nsfw' }),
-			headers: { 'content-type': 'application/json' },
-			method: 'PATCH'
+		await vi.waitFor(() => {
+			expect(fetchSpy).toHaveBeenNthCalledWith(1, '/api/artworks/artwork-1/moderation', {
+				body: JSON.stringify({ action: 'mark_nsfw' }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			});
+			expect(onArtworkChange).toHaveBeenCalledWith(
+				expect.objectContaining({ isHidden: true, isNsfw: true })
+			);
 		});
-		expect(onArtworkChange).toHaveBeenCalledWith(
-			expect.objectContaining({ isHidden: true, isNsfw: true })
-		);
+	});
+
+	it('blurs NSFW artwork for viewers without the 18+ preference', async () => {
+		render(ArtworkDetailPanel, {
+			artwork: { ...artwork, isNsfw: true },
+			viewer: { id: 'user-other', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Sensitive artwork')).toBeVisible();
+	});
+
+	it('never blurs the author viewing their own NSFW artwork', async () => {
+		render(ArtworkDetailPanel, {
+			artwork: { ...artwork, isNsfw: true },
+			viewer: { id: 'user-test', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Sensitive artwork')).not.toBeInTheDocument();
+	});
+
+	it('shows a comments skeleton while the detail is hydrating', async () => {
+		render(ArtworkDetailPanel, {
+			artwork,
+			isHydrating: true
+		});
+
+		await expect.element(page.getByTestId('artwork-comments-loading')).toBeInTheDocument();
+		await expect
+			.element(page.getByText("The visitor's book is empty — be the first to sign it."))
+			.not.toBeInTheDocument();
+	});
+
+	it('downloads the artwork image as a named file', async () => {
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(new Blob(['fake-image'], { type: 'image/png' }), { status: 200 })
+			);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		const createObjectURL = vi.fn(() => 'blob:mock-url');
+		const revokeObjectURL = vi.fn();
+		vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL }));
+
+		const anchorClick = vi
+			.spyOn(HTMLAnchorElement.prototype, 'click')
+			.mockImplementation(() => undefined);
+
+		render(ArtworkDetailPanel, {
+			artwork: { ...artwork, title: 'Detail Artwork!' }
+		});
+
+		await page.getByRole('button', { name: 'Download' }).click();
+
+		await vi.waitFor(() => {
+			expect(anchorClick).toHaveBeenCalledTimes(1);
+		});
+		expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/media');
+		expect(createObjectURL).toHaveBeenCalledTimes(1);
+		expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+
+		anchorClick.mockRestore();
 	});
 });

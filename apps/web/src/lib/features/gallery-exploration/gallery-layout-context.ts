@@ -7,6 +7,7 @@ type Viewer = { id: string; role: 'admin' | 'moderator' | 'user' } | null;
 export type GalleryPanelBindings = {
 	adultContentEnabled: boolean;
 	artwork: Artwork | null;
+	isHydratingDetail: boolean;
 	onAdultContentToggle: (enabled: boolean) => Promise<void> | void;
 	onArtworkChange: (artwork: Artwork) => void;
 	onArtworkPatch: (artworkId: string, patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>) => void;
