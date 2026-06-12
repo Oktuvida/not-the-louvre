@@ -31,6 +31,14 @@
 	const palette = drawingPalette;
 	const BRUSH_SIZES = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
 	const BRUSH_PREVIEW_SIZE = Math.max(...BRUSH_SIZES) + 6;
+	const LIGHT_DAB_COLORS = new Set([
+		'#FFFFFF',
+		'#C8C8C8',
+		'#FDBCB4',
+		'#F5D200',
+		'#DCC9A3',
+		'#E5DECA'
+	]);
 	const DEFAULT_AVATAR_COLOR = drawingPalette[3] ?? drawingPalette[0] ?? '#1a1a1a';
 	const AVATAR_CANVAS_BACKGROUND = '#ffffff';
 
@@ -104,6 +112,8 @@
 	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
 	let committedCacheCanvas: HTMLCanvasElement | null = null;
 	let committedCacheDirty = true;
+	let sealCanvasElement = $state<HTMLCanvasElement | null>(null);
+	let sealBlobElement = $state<HTMLDivElement | null>(null);
 
 	const brushSize = $derived(BRUSH_SIZES[brushStep] ?? BRUSH_SIZES[BRUSH_SIZES.length - 1]);
 	const brushPreviewDiameter = $derived(Math.max(4, brushSize + 2));
@@ -267,6 +277,37 @@
 		committedCacheDirty = false;
 	};
 
+	// Live wax-seal preview: the drawing (sans ghost guides) scaled into the
+	// seal well, so artists see exactly what gets pressed into their seal.
+	const updateSealPreview = () => {
+		const seal = sealCanvasElement;
+		const context = seal?.getContext('2d');
+		if (!seal || !context) return;
+
+		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
+		context.fillRect(0, 0, seal.width, seal.height);
+		context.save();
+		context.scale(seal.width / CANVAS_WIDTH, seal.height / CANVAS_HEIGHT);
+		for (const stroke of getRenderableDrawingStrokes(drawingDocument)) {
+			renderDrawingStroke(context, stroke);
+		}
+		if (activeStroke) {
+			renderDrawingStroke(context, activeStroke);
+		}
+		context.restore();
+	};
+
+	const pressSealAnimation = () => {
+		const blob = sealBlobElement;
+		if (!blob) return;
+		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+		blob.animate([{ scale: '1' }, { scale: '0.88', offset: 0.4 }, { scale: '1' }], {
+			duration: 360,
+			easing: 'cubic-bezier(0.34, 1.5, 0.6, 1)'
+		});
+	};
+
 	const renderCurrentDocument = () => {
 		if (!canvasElement) return;
 		const context = canvasElement.getContext('2d');
@@ -422,6 +463,7 @@
 		}
 
 		stopDrawing();
+		pressSealAnimation();
 	};
 
 	const cancelDrawing = (event: PointerEvent) => {
@@ -525,175 +567,566 @@
 
 	$effect(() => {
 		renderCurrentDocument();
+		updateSealPreview();
 	});
 </script>
 
-<div class="space-y-4">
-	<div class="space-y-2 text-center">
-		<p class="text-sm text-[var(--color-muted)]">Sketch a quick self-portrait for {nickname}.</p>
-	</div>
+<div class="sketchpad">
+	<p class="sketch-subtitle">
+		Sketch a quick self-portrait for <span class="sketch-nickname">{nickname}</span>.
+	</p>
 
 	{#if saveError}
-		<div
-			class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
-		>
-			{saveError}
-		</div>
+		<div class="sketch-alert">{saveError}</div>
 	{/if}
 
 	{#if draftStatusMessage}
-		<div
-			class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
-		>
-			{draftStatusMessage}
-		</div>
+		<div class="sketch-alert">{draftStatusMessage}</div>
 	{/if}
 
-	<div class="mx-auto grid max-w-[41rem] gap-4 md:grid-cols-[10.5rem_minmax(0,1fr)] md:items-start">
-		<div class="order-2 md:order-1">
-			<div class="grid gap-3 md:h-[27rem] md:grid-cols-[3.5rem_minmax(0,1fr)]">
-				<div
-					class="flex items-center gap-3 rounded-[1rem] border border-[rgb(107_74_46_/_0.15)] bg-[rgb(255_255_255_/_0.32)] px-3 py-3 md:flex-col md:justify-between md:px-2"
-				>
-					<p
-						class="font-display shrink-0 text-[0.62rem] font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase md:rotate-180 md:[writing-mode:vertical-rl]"
-					>
-						Brush
-					</p>
-					<div class="flex min-w-0 flex-1 items-center justify-center py-1 md:py-2">
-						<input
-							bind:value={brushStep}
-							type="range"
-							min="0"
-							max={(BRUSH_SIZES.length - 1).toString()}
-							step="1"
-							class="brush-slider h-8 w-full min-w-0 cursor-pointer appearance-none md:w-60 md:-rotate-90"
-							aria-label="Brush size"
-						/>
-					</div>
-					<div
-						class="flex shrink-0 items-center justify-center"
-						data-testid="brush-preview-shell"
-						style={`width:${BRUSH_PREVIEW_SIZE}px;height:${BRUSH_PREVIEW_SIZE}px;`}
-					>
-						<div
-							class="rounded-full border border-[rgb(47_36_28_/_0.14)]"
-							data-testid="brush-preview-dot"
-							style={`width:${brushPreviewDiameter}px;height:${brushPreviewDiameter}px;background:${activeColor};`}
-						></div>
-					</div>
-				</div>
-
-				<div class="grid h-full grid-cols-4 content-center gap-x-8 gap-y-2.5 sm:grid-cols-6 md:grid-cols-3">
-					{#each palette as color (color)}
-						<button
-							type="button"
-							class={`h-11 w-11 justify-self-right rounded-xl border-2 md:h-10 md:w-10 ${activeColor === color ? 'border-[var(--color-ink)] shadow-[0_0_0_3px_rgb(47_36_28_/_0.18)]' : 'border-[var(--color-accent)]'}`}
-							style={`background:${color};`}
-							aria-pressed={activeColor === color}
-							onclick={() => {
-								activeColor = color;
-							}}
-							aria-label={`Select color ${color}`}
-						></button>
-					{/each}
-				</div>
-			</div>
-		</div>
-
-		<div class="order-1 space-y-3 md:order-2">
-			<div
-				class="mx-auto aspect-square w-full max-w-[27rem] rounded-[1.25rem] border-2 border-[var(--color-ink)] bg-[var(--color-paper)] p-2 shadow-[6px_6px_0_rgb(47_36_28_/_0.14)] sm:p-2.5"
-				data-testid="avatar-sketchpad-frame"
-			>
-				<div
-					class="relative h-full w-full overflow-hidden rounded-[1rem] border-2 border-[var(--color-accent)] bg-white"
-				>
-					<div
-						class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgb(255_255_255_/_0.55),transparent_48%)]"
-					></div>
-					<div
-						class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-[linear-gradient(180deg,transparent,rgb(47_36_28_/_0.06))]"
-					></div>
-					<canvas
-						bind:this={canvasElement}
-						width={CANVAS_WIDTH}
-						height={CANVAS_HEIGHT}
-						class="relative z-[1] h-full w-full cursor-crosshair touch-none"
-						data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
-						draggable="false"
-						ondragstart={preventCanvasDrag}
-						onpointerdown={startDrawing}
-						onpointermove={draw}
-						onpointerup={finishDrawing}
-						onpointercancel={cancelDrawing}
-					></canvas>
-				</div>
-			</div>
-
-			<div class="pt-2 md:pt-4 md:pl-4">
-				<div class="flex flex-col gap-3 sm:flex-row">
-					<GameButton
+	<div class="sketch-bench">
+		<div class="sketch-rail">
+			<p class="rail-label">Paints</p>
+			<div class="paint-grid">
+				{#each palette as color, index (color)}
+					<button
 						type="button"
-						variant="ghost"
-						size="sm"
-						className="w-full sm:w-auto"
+						class="paint-dab"
+						class:is-active={activeColor === color}
+						style={`--dab-color:${color};--dab-i:${index};`}
+						aria-pressed={activeColor === color}
 						onclick={() => {
-							saveError = '';
-							activeStroke = null;
-							drawingDocument = cloneDrawingDocumentV2(clearDocument);
-							void resetDraftSession(clearDocument);
-							committedCacheDirty = true;
+							activeColor = color;
 						}}
-						disabled={isSaving}
+						aria-label={`Select color ${color}`}
 					>
-						<span>Clear</span>
-					</GameButton>
-					<GameButton
-						onclick={handleEnterGallery}
-						disabled={isSaving}
-						size="md"
-						className="w-full sm:w-auto"
-					>
-						<span>{isSaving ? 'Saving...' : submitLabel}</span>
-					</GameButton>
+						<!-- The blob animates while the button box stays still, so clicks
+						     always land where the pointer went down. -->
+						<span
+							class="dab-paint"
+							class:dab-paint-light={LIGHT_DAB_COLORS.has(color)}
+							aria-hidden="true"
+						></span>
+					</button>
+				{/each}
+			</div>
+
+			<div class="brush-block">
+				<p class="rail-label">Brush</p>
+				<div class="brush-row">
+					<input
+						bind:value={brushStep}
+						type="range"
+						min="0"
+						max={(BRUSH_SIZES.length - 1).toString()}
+						step="1"
+						class="brush-slider"
+						aria-label="Brush size"
+					/>
+					<div class="test-scrap-stack">
+						<div class="test-scrap">
+							<div
+								class="flex items-center justify-center"
+								data-testid="brush-preview-shell"
+								style={`width:${BRUSH_PREVIEW_SIZE}px;height:${BRUSH_PREVIEW_SIZE}px;`}
+							>
+								<div
+									class="test-dot"
+									data-testid="brush-preview-dot"
+									style={`width:${brushPreviewDiameter}px;height:${brushPreviewDiameter}px;background:${activeColor};`}
+								></div>
+							</div>
+						</div>
+						<p class="test-caption">test dab</p>
+					</div>
 				</div>
 			</div>
 		</div>
+
+		<div class="sketch-easel">
+			<div class="canvas-mat aspect-square" data-testid="avatar-sketchpad-frame">
+				<span class="canvas-tape canvas-tape-left" aria-hidden="true"></span>
+				<span class="canvas-tape canvas-tape-right" aria-hidden="true"></span>
+				<canvas
+					bind:this={canvasElement}
+					width={CANVAS_WIDTH}
+					height={CANVAS_HEIGHT}
+					class="sketch-canvas"
+					data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
+					draggable="false"
+					ondragstart={preventCanvasDrag}
+					onpointerdown={startDrawing}
+					onpointermove={draw}
+					onpointerup={finishDrawing}
+					onpointercancel={cancelDrawing}
+				></canvas>
+			</div>
+			<div class="seal-station" aria-hidden="true">
+				<div class="seal-blob" bind:this={sealBlobElement}>
+					<div class="seal-well">
+						<canvas bind:this={sealCanvasElement} width="124" height="124" class="seal-canvas"
+						></canvas>
+					</div>
+				</div>
+				<p class="seal-caption">your wax seal</p>
+			</div>
+			<p class="easel-note">draw inside the lines… or don't.</p>
+		</div>
+	</div>
+
+	<div class="sketch-footer">
+		<p class="footer-note">you can redraw it whenever you like</p>
+		<GameButton
+			type="button"
+			variant="ghost"
+			size="sm"
+			onclick={() => {
+				saveError = '';
+				activeStroke = null;
+				drawingDocument = cloneDrawingDocumentV2(clearDocument);
+				void resetDraftSession(clearDocument);
+				committedCacheDirty = true;
+				pressSealAnimation();
+			}}
+			disabled={isSaving}
+		>
+			<span>Clear</span>
+		</GameButton>
+		<GameButton onclick={handleEnterGallery} disabled={isSaving} size="md">
+			<span>{isSaving ? 'Saving...' : submitLabel}</span>
+		</GameButton>
 	</div>
 </div>
 
 <style>
+	.sketch-subtitle {
+		margin: 0;
+		font-family: 'Caveat', cursive;
+		font-size: 1.45rem;
+		font-weight: 600;
+		text-align: center;
+		color: #6b5a45;
+		rotate: -0.4deg;
+	}
+
+	.sketch-nickname {
+		color: #9c4a3c;
+	}
+
+	/* a taped warning strip, not a UI alert */
+	.sketch-alert {
+		margin-top: 12px;
+		padding: 10px 14px;
+		background: #faeeea;
+		border: 1px solid rgba(162, 77, 73, 0.5);
+		box-shadow: 1px 2px 5px rgba(45, 36, 32, 0.12);
+		rotate: -0.3deg;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: #8f3720;
+	}
+
+	.sketch-bench {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 26px 30px;
+		margin-top: 18px;
+		align-items: start;
+	}
+
+	@media (min-width: 768px) {
+		.sketch-bench {
+			grid-template-columns: 232px minmax(0, 1fr);
+		}
+	}
+
+	.sketch-rail {
+		order: 2;
+	}
+
+	.sketch-easel {
+		position: relative;
+		order: 1;
+	}
+
+	@media (min-width: 768px) {
+		.sketch-rail {
+			order: 1;
+		}
+		.sketch-easel {
+			order: 2;
+		}
+	}
+
+	.rail-label {
+		margin: 0 0 10px;
+		font-family: 'Fredoka', sans-serif;
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.22em;
+		text-transform: uppercase;
+		color: #8a6c52;
+	}
+
+	/* ── paint dabs ── */
+	.paint-grid {
+		display: grid;
+		grid-template-columns: repeat(6, 40px);
+		gap: 12px 10px;
+		justify-content: start;
+	}
+
+	@media (min-width: 768px) {
+		.paint-grid {
+			grid-template-columns: repeat(4, 44px);
+		}
+	}
+
+	.paint-dab {
+		position: relative;
+		width: 40px;
+		height: 36px;
+		border: 0;
+		padding: 0;
+		cursor: pointer;
+		background: transparent;
+	}
+
+	@media (min-width: 768px) {
+		.paint-dab {
+			width: 44px;
+			height: 40px;
+		}
+	}
+
+	.dab-paint {
+		position: absolute;
+		inset: 0;
+		display: block;
+		background: var(--dab-color);
+		box-shadow: 1px 2px 3px rgba(45, 36, 32, 0.28);
+		transition:
+			scale 130ms cubic-bezier(0.34, 1.5, 0.6, 1),
+			rotate 130ms ease;
+		animation: dab-pop 320ms cubic-bezier(0.3, 1.5, 0.55, 1) both;
+		animation-delay: calc(var(--dab-i) * 16ms);
+	}
+
+	@keyframes dab-pop {
+		from {
+			opacity: 0;
+			scale: 0.3;
+		}
+	}
+
+	/* four blob silhouettes, rotated per cell — every dab is hand-squeezed */
+	.paint-dab:nth-child(4n + 1) .dab-paint {
+		border-radius: 58% 42% 55% 45% / 48% 60% 40% 52%;
+		rotate: -4deg;
+	}
+	.paint-dab:nth-child(4n + 2) .dab-paint {
+		border-radius: 45% 55% 48% 52% / 60% 42% 58% 40%;
+		rotate: 3deg;
+	}
+	.paint-dab:nth-child(4n + 3) .dab-paint {
+		border-radius: 52% 48% 60% 40% / 45% 55% 45% 55%;
+		rotate: -2deg;
+	}
+	.paint-dab:nth-child(4n + 4) .dab-paint {
+		border-radius: 40% 60% 44% 56% / 55% 45% 60% 40%;
+		rotate: 5deg;
+	}
+
+	/* gloss — fresh paint catches the gallery lights */
+	.dab-paint::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		background: radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.5), transparent 46%);
+	}
+
+	.dab-paint-light {
+		border: 1px solid rgba(47, 36, 28, 0.22);
+	}
+
+	.paint-dab:hover .dab-paint {
+		scale: 1.12;
+	}
+
+	.paint-dab:focus-visible {
+		outline: 3px solid #4ecdc4;
+		outline-offset: 3px;
+	}
+
+	/* selection = circled in pencil */
+	.paint-dab.is-active .dab-paint {
+		scale: 1.1;
+	}
+
+	.paint-dab.is-active::after {
+		content: '';
+		position: absolute;
+		inset: -6px -5px -5px -6px;
+		border: 2.5px dashed rgba(47, 36, 28, 0.75);
+		border-radius: 54% 46% 50% 50% / 48% 52% 46% 54%;
+		rotate: -6deg;
+	}
+
+	/* ── brush: pencil line + wax knob ── */
+	.brush-block {
+		margin-top: 26px;
+	}
+
+	.brush-row {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+	}
+
+	.brush-slider {
+		flex: 1;
+		appearance: none;
+		-webkit-appearance: none;
+		height: 28px;
+		background: transparent;
+		cursor: pointer;
+		min-width: 0;
+	}
+
 	.brush-slider::-webkit-slider-runnable-track {
-		height: 2px;
+		height: 3px;
 		border-radius: 999px;
-		background: rgba(107, 74, 46, 0.35);
+		background: rgba(107, 74, 46, 0.4);
 	}
 
 	.brush-slider::-webkit-slider-thumb {
 		-webkit-appearance: none;
-		margin-top: -7px;
-		height: 16px;
-		width: 16px;
-		border: 2px solid #2b2622;
-		border-radius: 999px;
-		background: #fdfbf7;
-		box-shadow: 0 1px 4px rgba(43, 38, 34, 0.18);
+		margin-top: -8.5px;
+		height: 20px;
+		width: 20px;
+		border: 2px solid #fdfbf7;
+		border-radius: 48% 52% 50% 50% / 52% 48% 54% 46%;
+		background: radial-gradient(circle at 32% 28%, #c96a5b, #a8403a 55%, #6e211c);
+		box-shadow: 1px 2px 4px rgba(45, 36, 32, 0.35);
 	}
 
 	.brush-slider::-moz-range-track {
-		height: 2px;
+		height: 3px;
 		border: none;
 		border-radius: 999px;
-		background: rgba(107, 74, 46, 0.35);
+		background: rgba(107, 74, 46, 0.4);
 	}
 
 	.brush-slider::-moz-range-thumb {
-		height: 16px;
-		width: 16px;
-		border: 2px solid #2b2622;
-		border-radius: 999px;
+		height: 20px;
+		width: 20px;
+		border: 2px solid #fdfbf7;
+		border-radius: 50%;
+		background: radial-gradient(circle at 32% 28%, #c96a5b, #a8403a 55%, #6e211c);
+		box-shadow: 1px 2px 4px rgba(45, 36, 32, 0.35);
+	}
+
+	.brush-slider:focus-visible {
+		outline: 3px solid #4ecdc4;
+		outline-offset: 2px;
+	}
+
+	/* the test scrap: a chip of paper where the current dab size shows */
+	.test-scrap-stack {
+		flex-shrink: 0;
+	}
+
+	.test-scrap {
+		position: relative;
+		display: grid;
+		place-items: center;
+		padding: 5px;
 		background: #fdfbf7;
-		box-shadow: 0 1px 4px rgba(43, 38, 34, 0.18);
+		border: 1px solid #d6cfc5;
+		box-shadow: 2px 3px 7px rgba(0, 0, 0, 0.18);
+		rotate: 3deg;
+	}
+
+	.test-scrap::before {
+		content: '';
+		position: absolute;
+		top: -7px;
+		left: 12px;
+		width: 30px;
+		height: 12px;
+		background: rgba(243, 235, 216, 0.9);
+		rotate: -4deg;
+		box-shadow: 0 1px 2px rgba(45, 36, 32, 0.15);
+	}
+
+	.test-dot {
+		border-radius: 50%;
+		border: 1px solid rgba(47, 36, 28, 0.14);
+		transition:
+			width 120ms ease,
+			height 120ms ease,
+			background 120ms ease;
+	}
+
+	.test-caption {
+		margin: 6px 0 0;
+		font-family: 'Caveat', cursive;
+		font-size: 1rem;
+		font-weight: 600;
+		text-align: center;
+		color: #8a6c52;
+		rotate: 2deg;
+	}
+
+	/* ── the easel ── */
+	.canvas-mat {
+		position: relative;
+		aspect-ratio: 1;
+		width: 100%;
+		max-width: 27rem;
+		margin-inline: auto;
+		background: #fdfbf7;
+		padding: 11px;
+		border: 1px solid #d6cfc5;
+		box-shadow:
+			3px 4px 12px rgba(0, 0, 0, 0.22),
+			1px 1px 3px rgba(0, 0, 0, 0.12);
+	}
+
+	.canvas-tape {
+		position: absolute;
+		width: 84px;
+		height: 24px;
+		background: rgba(243, 235, 216, 0.85);
+		box-shadow: 0 1px 3px rgba(45, 36, 32, 0.18);
+		z-index: 2;
+	}
+
+	.canvas-tape-left {
+		top: -11px;
+		left: 26px;
+		rotate: -6deg;
+	}
+
+	.canvas-tape-right {
+		top: -9px;
+		right: 30px;
+		rotate: 5deg;
+	}
+
+	.sketch-canvas {
+		display: block;
+		width: 100%;
+		/* Sized by its own ratio, never by the mat's height: Safari cannot
+		 * resolve a percentage height against an aspect-ratio-derived box and
+		 * falls back to the canvas's intrinsic 340px, overflowing the mat. */
+		height: auto;
+		aspect-ratio: 1;
+		cursor: crosshair;
+		touch-action: none;
+		background: #ffffff;
+		border: 1px solid #e7dfd2;
+	}
+
+	.easel-note {
+		margin: 10px 4px 0;
+		font-family: 'Caveat', cursive;
+		font-size: 1.15rem;
+		font-weight: 600;
+		color: #8a6c52;
+		rotate: -1.4deg;
+	}
+
+	/* live wax-seal preview, pressed onto the corner of the easel */
+	.seal-station {
+		position: absolute;
+		top: -26px;
+		right: -8px;
+		z-index: 3;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		rotate: 6deg;
+		pointer-events: none;
+	}
+
+	@media (min-width: 768px) {
+		.seal-station {
+			right: -14px;
+		}
+	}
+
+	.seal-blob {
+		position: relative;
+		width: 92px;
+		height: 92px;
+		border-radius: 53% 47% 50% 50% / 49% 53% 47% 51%;
+		background:
+			radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.28), transparent 38%),
+			radial-gradient(circle at 70% 80%, rgba(0, 0, 0, 0.3), transparent 52%),
+			radial-gradient(circle at 50% 45%, #a8403a 0%, #6e211c 78%);
+		box-shadow:
+			2px 4px 9px rgba(20, 6, 4, 0.45),
+			inset 0 -3px 6px rgba(0, 0, 0, 0.25);
+		display: grid;
+		place-items: center;
+	}
+
+	.seal-well {
+		width: 62px;
+		height: 62px;
+		border-radius: 50%;
+		overflow: hidden;
+		box-shadow:
+			inset 0 2px 5px rgba(0, 0, 0, 0.45),
+			0 1px 1px rgba(255, 255, 255, 0.22);
+		background: #ffffff;
+	}
+
+	.seal-canvas {
+		display: block;
+		width: 100%;
+		height: 100%;
+	}
+
+	.seal-caption {
+		margin: 6px 0 0;
+		font-family: 'Caveat', cursive;
+		font-size: 1.05rem;
+		font-weight: 700;
+		color: #7a5c40;
+		rotate: -4deg;
+	}
+
+	/* ── footer ── */
+	.sketch-footer {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 12px 16px;
+		margin-top: 22px;
+	}
+
+	.footer-note {
+		margin: 0 auto 0 0;
+		font-family: 'Caveat', cursive;
+		font-size: 1.1rem;
+		font-weight: 600;
+		color: #8a6c52;
+		rotate: -1deg;
+	}
+
+	@media (max-width: 540px) {
+		.footer-note {
+			display: none;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.dab-paint {
+			animation: none;
+		}
 	}
 </style>

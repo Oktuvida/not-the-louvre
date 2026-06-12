@@ -5,7 +5,7 @@ export const drawingPalette = [
 	'#1A1A1A', // Negro
 	'#2563EB', // Azul
 	'#38BDF8', // Celeste
-	
+
 	'#FDBCB4', // Durazno
 	'#EC4899', // Fucsia
 	'#ed7ad2', // Rosa
@@ -25,7 +25,7 @@ export const drawingPalette = [
 	'#6B4A2E', // Marrón
 	'#b8925e', // Marrón claro
 	'#DCC9A3', // Piel pálida
-	'#E5DECA' // Beige 
+	'#E5DECA' // Beige
 ];
 
 export const brushSizeSteps = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 38, 45, 54, 64];
