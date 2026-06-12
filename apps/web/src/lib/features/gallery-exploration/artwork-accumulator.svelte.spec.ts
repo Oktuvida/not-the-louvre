@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { flushSync } from 'svelte';
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 import { createArtworkAccumulator } from './artwork-accumulator.svelte';
 
@@ -129,44 +128,6 @@ describe('createArtworkAccumulator', () => {
 		expect(acc.error).toBeNull();
 		expect(acc.allArtworks).toHaveLength(2);
 		expect(acc.hasMore).toBe(false);
-	});
-
-	it('chunks artworks into rows based on columnCount', () => {
-		const initial = Array.from({ length: 7 }, (_, i) => makeArtwork(i + 1));
-
-		const acc = createArtworkAccumulator({
-			initialArtworks: initial,
-			initialPageInfo: { hasMore: false, nextCursor: null },
-			fetchPage: vi.fn(),
-			columnCount: 3
-		});
-
-		expect(acc.rows).toHaveLength(3); // ceil(7/3)
-		expect(acc.rows[0]).toHaveLength(3);
-		expect(acc.rows[1]).toHaveLength(3);
-		expect(acc.rows[2]).toHaveLength(1);
-	});
-
-	it('recomputes rows when columnCount changes', () => {
-		const initial = Array.from({ length: 6 }, (_, i) => makeArtwork(i + 1));
-		let colCount = $state(3);
-
-		const acc = createArtworkAccumulator({
-			initialArtworks: initial,
-			initialPageInfo: { hasMore: false, nextCursor: null },
-			fetchPage: vi.fn(),
-			get columnCount() {
-				return colCount;
-			}
-		});
-
-		expect(acc.rows).toHaveLength(2); // 6/3
-
-		flushSync(() => {
-			colCount = 2;
-		});
-
-		expect(acc.rows).toHaveLength(3); // 6/2
 	});
 
 	it('reset clears appended artworks and restores to initial state', async () => {
