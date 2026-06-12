@@ -10,7 +10,7 @@
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import WaxSealMedal from '$lib/features/shared-ui/components/WaxSealMedal.svelte';
 	import { untrack } from 'svelte';
-	import type { Writable } from 'svelte/store';
+	import { writable, type Writable } from 'svelte/store';
 
 	interface Props {
 		artworks: Artwork[];
@@ -35,13 +35,18 @@
 		viewerId = null
 	}: Props = $props();
 
-	let revealedPodiumIds = $state<Set<string>>(new Set());
+	const fallbackRevealedIds = writable<Set<string>>(new Set());
+	const revealedIds = $derived(revealedArtworkIds ?? fallbackRevealedIds);
+
+	const revealArtwork = (artworkId: string) => {
+		revealedIds.update((ids) => new Set([...ids, artworkId]));
+	};
 
 	const isPodiumBlurred = (artwork: Artwork) =>
 		artwork.isNsfw &&
 		!adultContentEnabled &&
 		viewerId !== artwork.authorId &&
-		!revealedPodiumIds.has(artwork.id);
+		!$revealedIds.has(artwork.id);
 
 	const podiumMeta = {
 		1: {
@@ -106,7 +111,6 @@
 	}))();
 
 	const accumulator = createArtworkAccumulator({
-		columnCount: 6,
 		fetchPage: async (cursor: string) => {
 			if (!loadMoreArtworks) {
 				throw new Error('loadMoreArtworks is not configured');
@@ -170,9 +174,8 @@
 						class={`relative ${meta.width} ${meta.height} cursor-pointer`}
 						data-testid={`podium-artwork-${position}`}
 						onclick={() => {
-							if (isPodiumBlurred(artwork)) {
-								revealedPodiumIds = new Set([...revealedPodiumIds, artwork.id]);
-								revealedArtworkIds?.update((ids) => new Set([...ids, artwork.id]));
+							if (isPodiumBlurred(artwork) && viewerId) {
+								revealArtwork(artwork.id);
 								return;
 							}
 							onSelect(artwork);
@@ -190,7 +193,9 @@
 										src={artwork.imageUrl}
 										alt={artwork.title}
 										blurred={isPodiumBlurred(artwork)}
-										ariaLabel="Sensitive artwork, click to reveal"
+										ariaLabel={viewerId
+											? 'Sensitive artwork, click to reveal'
+											: 'Sensitive artwork'}
 										loading={position === 1 ? 'eager' : 'lazy'}
 										decoding={position === 1 ? 'sync' : 'async'}
 										className="h-full w-full object-cover"
@@ -267,12 +272,15 @@
 	</div>
 
 	<div class="w-full">
-		<VirtualizedGrid rows={accumulator.rows}>
+		<VirtualizedGrid items={accumulator.allArtworks}>
 			{#snippet renderCard(artwork)}
 				<PolaroidCard
 					{artwork}
 					{viewerId}
 					{adultContentEnabled}
+					revealed={$revealedIds.has(artwork.id)}
+					onReveal={() => revealArtwork(artwork.id)}
+					imageLoading="eager"
 					testId={`ranked-polaroid-${artwork.id}`}
 					onclick={() => onSelect(artwork)}
 				/>

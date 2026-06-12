@@ -446,7 +446,7 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByText('💬 7')).toBeVisible();
 	});
 
-	it('keeps hall-of-fame podium hero artwork eager while deferring ranked cards', async () => {
+	it('keeps hall-of-fame podium hero eager and lets the virtualizer drive ranked card loading', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
@@ -461,7 +461,9 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByAltText('Champion')).toHaveAttribute('loading', 'eager');
 		await expect.element(page.getByAltText('Champion')).toHaveAttribute('decoding', 'sync');
-		await expect.element(page.getByAltText('Gallery Favorite')).toHaveAttribute('loading', 'lazy');
+		// Ranked cards are mounted by the window virtualizer only when near the
+		// viewport, so they load eagerly once mounted instead of double-deferring.
+		await expect.element(page.getByAltText('Gallery Favorite')).toHaveAttribute('loading', 'eager');
 		await expect
 			.element(page.getByAltText('Gallery Favorite'))
 			.toHaveAttribute('decoding', 'async');
@@ -717,7 +719,7 @@ describe('GalleryExplorationPage', () => {
 			)
 			.toBeVisible();
 
-		await page.getByRole('button', { name: 'Close' }).click();
+		await page.getByRole('button', { name: 'Dismiss details' }).click();
 
 		expect(historyBack).not.toHaveBeenCalled();
 		expect(replaceState).toHaveBeenCalledWith('/gallery/your-studio', {});
@@ -828,14 +830,16 @@ describe('GalleryExplorationPage', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
+		const roomCard = page.getByTestId('virtualized-artwork-card-artwork-1');
+
 		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
 		await expect
 			.element(
 				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
 			)
 			.toBeVisible();
-		await expect.element(page.getByText('⭐ 0')).toBeVisible();
-		await expect.element(page.getByText('💬 0')).toBeVisible();
+		await expect.element(roomCard.getByText('⭐ 0')).toBeVisible();
+		await expect.element(roomCard.getByText('💬 0')).toBeVisible();
 
 		voteRefreshHandler?.({ new: { artwork_id: 'artwork-1' } });
 
@@ -844,8 +848,8 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByRole('button', { name: /👍\s*1/ })).toBeVisible();
-		await expect.element(page.getByText('⭐ 1')).toBeVisible();
-		await expect.element(page.getByText('💬 1')).toBeVisible();
+		await expect.element(roomCard.getByText('⭐ 1')).toBeVisible();
+		await expect.element(roomCard.getByText('💬 1')).toBeVisible();
 		await expect.element(page.getByText('Realtime hello')).toBeVisible();
 	});
 
