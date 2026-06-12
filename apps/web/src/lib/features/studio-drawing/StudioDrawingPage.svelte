@@ -742,7 +742,7 @@
 			</div>
 		{:else}
 			<div
-				class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_15rem] xl:gap-8"
+				class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17rem] xl:gap-4"
 			>
 				<div class="order-1 flex min-h-0 flex-col">
 					<div class="studio-book-frame">
@@ -871,7 +871,11 @@
 
 <style>
 	.studio-book-frame {
-		height: clamp(29rem, 78vh, 56rem);
+		/* exposed as a var so DrawingBookStage can size the page explicitly
+		 * (Safari resolves aspect-ratio + height:100% from the canvas's
+		 * intrinsic 768px and the closed book goes landscape) */
+		--book-frame-h: clamp(29rem, 78vh, 56rem);
+		height: var(--book-frame-h);
 		flex: 0 0 auto;
 		justify-self: center;
 		--book-closed-offset-x: 20rem;
@@ -903,7 +907,9 @@
 
 	.tools-stage {
 		width: min(100%, 15rem);
-		margin-left: clamp(1.5rem, 3vw, 3rem);
+		/* hug the book side of the column; the old margin pushed the tray
+		 * past its grid cell and off-screen on ~1500px viewports */
+		justify-self: start;
 		transform-origin: left center;
 		will-change: opacity, transform;
 	}
@@ -1243,7 +1249,8 @@
 
 	@media (max-width: 1279px) {
 		.studio-book-frame {
-			height: clamp(27rem, 74vh, 52rem);
+			--book-frame-h: clamp(27rem, 74vh, 52rem);
+			height: var(--book-frame-h);
 			--book-closed-offset-x: 0rem;
 			--book-closed-offset-y: 0.8rem;
 			--book-closed-scale: 0.9;
@@ -1264,7 +1271,8 @@
 		}
 
 		.studio-book-frame {
-			height: clamp(24rem, 68vh, 48rem);
+			--book-frame-h: clamp(24rem, 68vh, 48rem);
+			height: var(--book-frame-h);
 			--book-closed-offset-x: 0rem;
 			--book-closed-offset-y: 0.65rem;
 			--book-closed-scale: 0.88;
