@@ -3,9 +3,10 @@
 	import { createArtworkAccumulator } from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
 	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
 	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
+	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
 	import { untrack } from 'svelte';
-	import type { Writable } from 'svelte/store';
+	import { writable, type Writable } from 'svelte/store';
 
 	interface Props {
 		artworks: Artwork[];
@@ -37,7 +38,6 @@
 	}))();
 
 	const accumulator = createArtworkAccumulator({
-		columnCount: 6,
 		fetchPage: async (cursor: string) => {
 			if (!loadMoreArtworks) {
 				throw new Error('loadMoreArtworks is not configured');
@@ -71,14 +71,19 @@
 		});
 	});
 
-	let revealedLeadId = $state<string | null>(null);
+	const fallbackRevealedIds = writable<Set<string>>(new Set());
+	const revealedIds = $derived(revealedArtworkIds ?? fallbackRevealedIds);
+
+	const revealArtwork = (artworkId: string) => {
+		revealedIds.update((ids) => new Set([...ids, artworkId]));
+	};
 
 	const isLeadBlurred = (artwork: Artwork | null) =>
 		!!artwork &&
 		artwork.isNsfw &&
 		!adultContentEnabled &&
 		viewerId !== artwork.authorId &&
-		revealedLeadId !== artwork.id;
+		!$revealedIds.has(artwork.id);
 
 	const leadArtwork = $derived(accumulator.allArtworks[0] ?? null);
 	const supportingArtworks = $derived(accumulator.allArtworks.slice(1));
@@ -108,9 +113,8 @@
 					type="button"
 					class="group hover:shadow-3xl relative mt-12 w-full max-w-md cursor-pointer overflow-hidden rounded-xl shadow-2xl transition duration-300 hover:-translate-y-1"
 					onclick={() => {
-						if (isLeadBlurred(leadArtwork)) {
-							revealedLeadId = leadArtwork.id;
-							revealedArtworkIds?.update((ids) => new Set([...ids, leadArtwork.id]));
+						if (isLeadBlurred(leadArtwork) && viewerId) {
+							revealArtwork(leadArtwork.id);
 							return;
 						}
 						onSelect(leadArtwork);
@@ -121,7 +125,7 @@
 							src={leadArtwork.imageUrl}
 							alt={leadArtwork.title}
 							blurred={isLeadBlurred(leadArtwork)}
-							ariaLabel="Sensitive artwork, click to reveal"
+							ariaLabel={viewerId ? 'Sensitive artwork, click to reveal' : 'Sensitive artwork'}
 							className="h-full w-full object-cover"
 						/>
 					</div>
@@ -142,25 +146,25 @@
 			</div>
 		{/if}
 
-		<!-- Supporting wall: remaining artworks in a grid -->
+		<!-- Supporting wall: remaining artworks in a virtualized grid -->
 		{#if supportingArtworks.length > 0}
 			<div class="w-full">
-				<div
-					class="grid gap-12"
-					style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr))"
-				>
-					{#each supportingArtworks as artwork (artwork.id)}
+				<VirtualizedGrid items={supportingArtworks}>
+					{#snippet renderCard(artwork)}
 						<div data-testid={`hot-wall-card-${artwork.id}`}>
 							<PolaroidCard
 								{artwork}
 								{viewerId}
 								{adultContentEnabled}
+								revealed={$revealedIds.has(artwork.id)}
+								onReveal={() => revealArtwork(artwork.id)}
+								imageLoading="eager"
 								testId={`hot-wall-polaroid-${artwork.id}`}
 								onclick={() => onSelect(artwork)}
 							/>
 						</div>
-					{/each}
-				</div>
+					{/snippet}
+				</VirtualizedGrid>
 			</div>
 		{/if}
 

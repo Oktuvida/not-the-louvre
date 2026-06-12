@@ -9,7 +9,10 @@
 		onclick,
 		testId,
 		viewerId = null,
-		adultContentEnabled = false
+		adultContentEnabled = false,
+		revealed = false,
+		onReveal,
+		imageLoading = 'lazy'
 	}: {
 		artwork: Artwork;
 		className?: string;
@@ -17,17 +20,31 @@
 		testId?: string;
 		viewerId?: string | null;
 		adultContentEnabled?: boolean;
+		revealed?: boolean;
+		onReveal?: () => void;
+		imageLoading?: 'eager' | 'lazy';
 	} = $props();
 
-	let revealed = $state(false);
+	// Fallback for callers that don't own the reveal state; controlled `revealed`
+	// survives virtualization unmounts, this one intentionally does not.
+	let internalRevealed = $state(false);
 
 	const blurred = $derived(
-		artwork.isNsfw && !adultContentEnabled && viewerId !== artwork.authorId && !revealed
+		artwork.isNsfw &&
+			!adultContentEnabled &&
+			viewerId !== artwork.authorId &&
+			!revealed &&
+			!internalRevealed
 	);
 
+	// Only signed-in viewers may reveal; signed-out clicks fall through to the
+	// details panel, which keeps the blur and shows the sign-in notice.
+	const canReveal = $derived(viewerId !== null);
+
 	const handleClick = () => {
-		if (blurred) {
-			revealed = true;
+		if (blurred && canReveal) {
+			internalRevealed = true;
+			onReveal?.();
 			return;
 		}
 		onclick?.();
@@ -65,7 +82,7 @@
 	onclick={handleClick}
 >
 	<div
-		class="polaroid relative bg-[#f8f4ed] p-[8px] pb-0 shadow-[3px_4px_12px_rgba(0,0,0,0.22),0_1px_3px_rgba(0,0,0,0.1)] transition duration-200 group-hover:z-[5] group-hover:scale-[1.06] group-hover:rotate-0"
+		class="polaroid relative bg-[#f8f4ed] p-[8px] pb-0 shadow-[3px_4px_12px_rgba(0,0,0,0.22),0_1px_3px_rgba(0,0,0,0.1)] transition duration-200 group-hover:z-[5] group-hover:scale-[1.06] group-hover:rotate-0 group-active:scale-[0.97]"
 	>
 		<!-- Paint stain decoration -->
 		<div
@@ -103,7 +120,12 @@
 				src={artwork.imageUrl}
 				alt={artwork.title}
 				{blurred}
-				ariaLabel={blurred ? 'Sensitive artwork, click to reveal' : undefined}
+				ariaLabel={blurred
+					? canReveal
+						? 'Sensitive artwork, click to reveal'
+						: 'Sensitive artwork'
+					: undefined}
+				loading={imageLoading}
 				className="h-full w-full object-cover"
 			/>
 		</div>
