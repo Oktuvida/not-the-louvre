@@ -35,6 +35,13 @@
 	font: inherit;
 }
 
+/* Keep rapid consecutive taps as clicks instead of double-tap zoom on touch devices */
+:global(button),
+:global(a),
+:global([role='button']) {
+	touch-action: manipulation;
+}
+
 :global(::selection) {
 	background: rgb(212 131 74 / 0.24);
 }

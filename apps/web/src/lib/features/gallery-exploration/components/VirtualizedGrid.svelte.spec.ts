@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
@@ -18,14 +18,12 @@ const createArtwork = (id: string): Artwork => ({
 	comments: []
 });
 
+const createArtworks = (count: number, prefix: string): Artwork[] =>
+	Array.from({ length: count }, (_, index) => createArtwork(`${prefix}${index + 1}`));
+
 describe('VirtualizedGrid', () => {
 	it('renders rows using WindowVirtualizer with the provided items', async () => {
-		const rows = [
-			[createArtwork('a1'), createArtwork('a2'), createArtwork('a3')],
-			[createArtwork('a4'), createArtwork('a5'), createArtwork('a6')]
-		];
-
-		render(VirtualizedGridHarness, { rows });
+		render(VirtualizedGridHarness, { items: createArtworks(6, 'a') });
 
 		// Each artwork should be rendered via the renderCard snippet
 		const cards = page.getByRole('list').getByRole('listitem');
@@ -37,12 +35,7 @@ describe('VirtualizedGrid', () => {
 	});
 
 	it('row wrappers do not clip overflow so hover animations are visible', async () => {
-		const rows = [
-			[createArtwork('b1'), createArtwork('b2')],
-			[createArtwork('b3'), createArtwork('b4')]
-		];
-
-		render(VirtualizedGridHarness, { rows });
+		render(VirtualizedGridHarness, { items: createArtworks(4, 'b') });
 
 		await expect.element(page.getByTestId('grid-card-b1')).toBeVisible();
 
@@ -56,10 +49,8 @@ describe('VirtualizedGrid', () => {
 		expect(style.contentVisibility).not.toBe('auto');
 	});
 
-	it('accepts a renderCard snippet and calls it for each artwork in each row', async () => {
-		const rows = [[createArtwork('c1'), createArtwork('c2')], [createArtwork('c3')]];
-
-		render(VirtualizedGridHarness, { rows });
+	it('accepts a renderCard snippet and calls it for each artwork', async () => {
+		render(VirtualizedGridHarness, { items: createArtworks(3, 'c') });
 
 		// Harness renders each artwork with a data-testid
 		await expect.element(page.getByTestId('grid-card-c1')).toBeVisible();
@@ -70,5 +61,29 @@ describe('VirtualizedGrid', () => {
 		expect(page.getByTestId('grid-card-c1').element().textContent).toContain('Artwork c1');
 		expect(page.getByTestId('grid-card-c2').element().textContent).toContain('Artwork c2');
 		expect(page.getByTestId('grid-card-c3').element().textContent).toContain('Artwork c3');
+	});
+
+	it('chunks rows to match the real column count for the measured width', async () => {
+		// Harness viewport defaults to the test browser width; force a narrow
+		// minColumnWidth so multiple columns fit deterministically.
+		render(VirtualizedGridHarness, { items: createArtworks(24, 'd'), minColumnWidth: 100 });
+
+		await expect.element(page.getByTestId('grid-card-d1')).toBeVisible();
+
+		// Width measurement lands asynchronously via bind:clientWidth, so poll
+		// until the explicit column template replaces the auto-fill fallback.
+		await vi.waitFor(() => {
+			const firstRow = document.querySelector('[data-testid="virtualized-row"]') as HTMLElement;
+			// CSSOM serializes `minmax(0, 1fr)` back as `minmax(0px, 1fr)`
+			const match = /^repeat\((\d+), minmax\(0(?:px)?, 1fr\)\)$/.exec(
+				firstRow.style.gridTemplateColumns
+			);
+			expect(match).not.toBeNull();
+
+			const columnCount = Number(match![1]);
+			expect(columnCount).toBeGreaterThanOrEqual(1);
+			// Every full row must hold exactly columnCount cards
+			expect(firstRow.querySelectorAll('[data-testid^="grid-card-"]')).toHaveLength(columnCount);
+		});
 	});
 });

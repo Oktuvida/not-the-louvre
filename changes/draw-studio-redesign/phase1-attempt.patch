@@ -1,0 +1,243 @@
+diff --git a/apps/web/src/lib/features/studio-drawing/StudioDrawingPage.svelte b/apps/web/src/lib/features/studio-drawing/StudioDrawingPage.svelte
+index 9037574..aef9367 100644
+--- a/apps/web/src/lib/features/studio-drawing/StudioDrawingPage.svelte
++++ b/apps/web/src/lib/features/studio-drawing/StudioDrawingPage.svelte
+@@ -40,7 +40,9 @@
+ 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
+ 
+ 	const FORK_CONTEXT_STORAGE_PREFIX = 'studio-fork-context';
+-	const MOBILE_STUDIO_MEDIA_QUERY = '(max-width: 700px)';
++	// The book cinematic needs side-by-side room; below lg the studio uses
++	// the compact scrollable layout (canvas card + docked tray).
++	const MOBILE_STUDIO_MEDIA_QUERY = '(max-width: 1023px)';
+ 
+ 	type PersistedForkContext = Pick<DrawForkParent, 'id' | 'isNsfw' | 'mediaUrl' | 'title'>;
+ 
+@@ -628,7 +630,7 @@
+ 	</header>
+ 
+ 	<main
+-		class="relative z-10 mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col px-4 pt-3 pb-4 sm:px-6"
++		class="relative z-10 mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 flex-col px-4 pt-3 pb-4 sm:px-6"
+ 	>
+ 		{#if isMobileViewport}
+ 			<div class="studio-mobile-layout">
+@@ -742,9 +744,9 @@
+ 			</div>
+ 		{:else}
+ 			<div
+-				class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_15rem] xl:gap-8"
++				class="grid min-h-0 flex-1 items-center justify-items-center gap-4 lg:grid-cols-[minmax(0,1fr)_clamp(12rem,15vw,15rem)] lg:gap-6"
+ 			>
+-				<div class="order-1 flex min-h-0 flex-col">
++				<div class="order-1 flex min-h-0 w-full flex-col items-center justify-center">
+ 					<div class="studio-book-frame">
+ 						<DrawingBookStage
+ 							stageState={sceneState}
+@@ -871,39 +873,57 @@
+ 
+ <style>
+ 	.studio-book-frame {
+-		height: clamp(29rem, 78vh, 56rem);
++		/* Exact geometry, one chain of viewport-relative vars (no absolute
++		 * offsets — the lesson of this whole change):
++		 *   --book-h  → frame height, budgeted on BOTH axes
++		 *   --page-h  → book-h minus the stage's fixed vertical chrome
++		 *   --page-w  → page-h · 10/12 (the drawing page ratio)
++		 *   --book-wing → cover width = page + spine/inside-cover/pads
++		 * DrawingBookStage consumes --page-w as an EXPLICIT page width, so
++		 * every engine (Safari included) resolves the same footprint. */
++		--studio-main-w: min(100vw, 1800px);
++		--book-avail-w: calc(var(--studio-main-w) - var(--studio-tray-w, 0rem) - 4.5rem);
++		--book-h-from-width: calc((var(--book-avail-w) - 8rem) * 0.6);
++		--book-h-from-height: calc(100dvh - 8rem);
++		--book-h: max(20rem, min(var(--book-h-from-height), var(--book-h-from-width), 60rem));
++		--page-h: calc(var(--book-h) - 4.2rem);
++		--page-w: calc(var(--page-h) * 10 / 12);
++		--book-wing: calc(var(--page-w) + 7.5rem);
++		/* static fallback first, in case the var math fails in an old engine */
++		height: 30rem;
++		height: var(--book-h);
++		width: fit-content;
+ 		flex: 0 0 auto;
+-		justify-self: center;
+-		--book-closed-offset-x: 20rem;
+-		--book-closed-offset-y: 7rem;
+-		--book-closed-scale: 0.8;
+-		--book-closed-rotation: -4deg;
+-		--book-open-offset-x: 30rem;
+-		--book-open-offset-y: 2rem;
+-		--book-open-scale: 1.3;
+-		--book-open-rotation: 0deg;
+-		--book-offset-x: var(--book-closed-offset-x);
+-		--book-offset-y: var(--book-closed-offset-y);
+-		--book-scale: var(--book-closed-scale);
+-		--book-rotation: var(--book-closed-rotation);
+-		transform: translate(var(--book-offset-x), var(--book-offset-y)) scale(var(--book-scale))
+-			rotate(var(--book-rotation));
+-		transform-origin: center center;
++		margin-inline: auto;
++		--book-shift: 0px;
++		--book-rotation: 0deg;
++		transform: translateX(var(--book-shift)) rotate(var(--book-rotation));
+ 		transition: transform 800ms cubic-bezier(0.23, 1, 0.32, 1);
+ 	}
+ 
+-	/* Book approaches viewer when opening/open */
+-	.studio-page[data-book-state='opening'] .studio-book-frame,
+-	.studio-page[data-book-state='open'] .studio-book-frame {
+-		--book-offset-x: var(--book-open-offset-x);
+-		--book-offset-y: var(--book-open-offset-y);
+-		--book-scale: var(--book-open-scale);
+-		--book-rotation: var(--book-open-rotation);
++	@media (min-width: 1024px) {
++		.studio-book-frame {
++			--studio-tray-w: clamp(12rem, 15vw, 15rem);
++			/* reserve real space for the cover wing (relative, never rem-tuned) */
++			width: calc(2 * var(--book-wing) + 1rem);
++			display: flex;
++			justify-content: flex-end;
++		}
++
++		/* Closed, the book sits centered like the 3D handoff leaves it —
++		 * shifted left by half its own wing, a RELATIVE amount. Opening
++		 * slides it right while the cover unfolds left, like a real book. */
++		.studio-page[data-book-state='closed'] .studio-book-frame,
++		.studio-page[data-book-state='closing'] .studio-book-frame {
++			--book-shift: calc(var(--book-wing) / -2);
++			--book-rotation: -1.5deg;
++		}
+ 	}
+ 
+ 	.tools-stage {
+ 		width: min(100%, 15rem);
+-		margin-left: clamp(1.5rem, 3vw, 3rem);
++		justify-self: center;
++		align-self: center;
+ 		transform-origin: left center;
+ 		will-change: opacity, transform;
+ 	}
+@@ -947,6 +967,10 @@
+ 	.studio-mobile-canvas-card {
+ 		position: relative;
+ 		aspect-ratio: 1 / 1;
++		/* never taller than the window: short landscape laptops keep the
++		 * paints and publish controls within reach */
++		max-width: max(18rem, calc(100dvh - 9rem));
++		margin-inline: auto;
+ 		overflow: visible;
+ 		border: 3px solid rgb(47 36 28 / 0.8);
+ 		border-radius: 1.4rem;
+@@ -1242,16 +1266,6 @@
+ 	}
+ 
+ 	@media (max-width: 1279px) {
+-		.studio-book-frame {
+-			height: clamp(27rem, 74vh, 52rem);
+-			--book-closed-offset-x: 0rem;
+-			--book-closed-offset-y: 0.8rem;
+-			--book-closed-scale: 0.9;
+-			--book-open-offset-x: 7rem;
+-			--book-open-offset-y: 1rem;
+-			--book-open-scale: 1.48;
+-		}
+-
+ 		.tools-stage {
+ 			width: min(100%, 14rem);
+ 			margin-left: 0;
+@@ -1263,16 +1277,6 @@
+ 			overflow: hidden;
+ 		}
+ 
+-		.studio-book-frame {
+-			height: clamp(24rem, 68vh, 48rem);
+-			--book-closed-offset-x: 0rem;
+-			--book-closed-offset-y: 0.65rem;
+-			--book-closed-scale: 0.88;
+-			--book-open-offset-x: 4.5rem;
+-			--book-open-offset-y: 0.8rem;
+-			--book-open-scale: 1.02;
+-		}
+-
+ 		.cover-postit-cancel {
+ 			margin-right: 0.2rem;
+ 			max-width: 170px;
+diff --git a/apps/web/src/lib/features/studio-drawing/StudioDrawingPage.svelte.spec.ts b/apps/web/src/lib/features/studio-drawing/StudioDrawingPage.svelte.spec.ts
+index 7e2cc70..34ca93a 100644
+--- a/apps/web/src/lib/features/studio-drawing/StudioDrawingPage.svelte.spec.ts
++++ b/apps/web/src/lib/features/studio-drawing/StudioDrawingPage.svelte.spec.ts
+@@ -109,7 +109,7 @@ const defaultDesktopMediaQuery = {
+ 	addListener: vi.fn(),
+ 	dispatchEvent: vi.fn(),
+ 	matches: false,
+-	media: '(max-width: 700px)',
++	media: '(max-width: 1023px)',
+ 	onchange: null,
+ 	removeEventListener: vi.fn(),
+ 	removeListener: vi.fn()
+@@ -193,7 +193,7 @@ describe('StudioDrawingPage', () => {
+ 				addEventListener: vi.fn(),
+ 				addListener: vi.fn(),
+ 				dispatchEvent: vi.fn(),
+-				matches: query === '(max-width: 700px)',
++				matches: query === '(max-width: 1023px)',
+ 				media: query,
+ 				onchange: null,
+ 				removeEventListener: vi.fn(),
+diff --git a/apps/web/src/lib/features/studio-drawing/components/DrawingBookStage.svelte b/apps/web/src/lib/features/studio-drawing/components/DrawingBookStage.svelte
+index 3899440..70c9484 100644
+--- a/apps/web/src/lib/features/studio-drawing/components/DrawingBookStage.svelte
++++ b/apps/web/src/lib/features/studio-drawing/components/DrawingBookStage.svelte
+@@ -167,7 +167,8 @@
+ 		flex: 1;
+ 		min-height: 0;
+ 		width: fit-content;
+-		padding: clamp(0.5rem, 1vw, 1rem);
++		width: calc(var(--page-w, 24rem) + 92px + 24px);
++		padding: 12px;
+ 	}
+ 
+ 	/* --- Book spread (open state interior) --- */
+@@ -176,6 +177,7 @@
+ 		position: relative;
+ 		display: flex;
+ 		width: fit-content;
++		width: calc(var(--page-w, 24rem) + 92px);
+ 		height: 100%;
+ 		border: 3px solid #1a1611;
+ 		border-radius: 2px;
+@@ -368,7 +370,12 @@
+ 		flex-direction: column;
+ 		padding: clamp(0.75rem, 1.5vw, 1.125rem);
+ 		height: 100%;
++		/* Width comes EXPLICITLY from the studio's var chain: deriving it from
++		 * aspect-ratio + percentage height resolves differently across engines
++		 * (Safari falls back to the canvas's intrinsic 768px and the book goes
++		 * landscape). The aspect-ratio stays as a fallback for bare usage. */
+ 		aspect-ratio: 10 / 12;
++		width: var(--page-w, auto);
+ 	}
+ 
+ 	.canvas-window {
+@@ -430,7 +437,7 @@
+ 
+ 	.book-cover {
+ 		position: absolute;
+-		inset: clamp(0.5rem, 1vw, 1rem);
++		inset: 12px;
+ 		border-radius: 3px 6px 6px 3px;
+ 		background: linear-gradient(155deg, #e8e0d4 0%, #ddd5c8 30%, #d5cdc0 60%, #cec5b8 100%);
+ 		box-shadow:
+diff --git a/apps/web/src/lib/features/studio-drawing/tools/DrawingToolTray.svelte b/apps/web/src/lib/features/studio-drawing/tools/DrawingToolTray.svelte
+index 3926777..bb5f744 100644
+--- a/apps/web/src/lib/features/studio-drawing/tools/DrawingToolTray.svelte
++++ b/apps/web/src/lib/features/studio-drawing/tools/DrawingToolTray.svelte
+@@ -513,7 +513,7 @@
+ 		transform: rotate(0.8deg);
+ 	}
+ 
+-	@media (max-width: 700px) {
++	@media (max-width: 1023px) {
+ 		.tool-tray-mobile {
+ 			padding: 18px 16px;
+ 		}

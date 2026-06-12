@@ -3,14 +3,15 @@
 	import VirtualizedGrid from './VirtualizedGrid.svelte';
 
 	interface Props {
-		rows: Artwork[][];
+		items: Artwork[];
+		minColumnWidth?: number;
 	}
 
-	let { rows }: Props = $props();
+	let { items, minColumnWidth }: Props = $props();
 </script>
 
 <div role="list" style="height: 800px; overflow: auto;">
-	<VirtualizedGrid {rows}>
+	<VirtualizedGrid {items} {minColumnWidth}>
 		{#snippet renderCard(artwork)}
 			<div role="listitem" data-testid={`grid-card-${artwork.id}`}>
 				{artwork.title}

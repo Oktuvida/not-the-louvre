@@ -33,7 +33,6 @@
 	}))();
 
 	const accumulator = createArtworkAccumulator({
-		columnCount: 6,
 		fetchPage: async (cursor: string) => {
 			if (!loadMoreArtworks) {
 				throw new Error('loadMoreArtworks is not configured');
@@ -69,13 +68,14 @@
 </script>
 
 <div class="w-full">
-	<VirtualizedGrid rows={accumulator.rows} gap="3.75rem">
+	<VirtualizedGrid items={accumulator.allArtworks} gap={60}>
 		{#snippet renderCard(artwork)}
 			<div data-testid={`virtualized-artwork-card-${artwork.id}`}>
 				<PolaroidCard
 					{artwork}
 					{viewerId}
 					{adultContentEnabled}
+					imageLoading="eager"
 					onclick={() => onSelect(artwork)}
 				/>
 			</div>

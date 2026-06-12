@@ -18,16 +18,30 @@
 		loading?: 'eager' | 'lazy';
 		decoding?: 'async' | 'sync';
 	} = $props();
+
+	let imageElement = $state<HTMLImageElement>();
+	let isLoaded = $state(false);
+
+	// Re-check on src changes so recycled cards fade the new image in too;
+	// `complete` covers images that resolved from cache before hydration.
+	$effect(() => {
+		void src;
+		isLoaded = imageElement?.complete ?? false;
+	});
 </script>
 
-<div class={`relative h-full w-full ${className}`}>
+<div class={`relative h-full w-full bg-[#ece4d8] ${className}`}>
 	<img
+		bind:this={imageElement}
 		{src}
 		{alt}
 		{loading}
 		{decoding}
+		onload={() => {
+			isLoaded = true;
+		}}
 		aria-label={blurred ? ariaLabel : undefined}
-		class={`h-full w-full object-cover transition duration-200 ${blurred ? BLUR_CLASSES : ''}`}
+		class={`h-full w-full object-cover transition duration-200 ${blurred ? BLUR_CLASSES : ''} ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
 	/>
 	{#if blurred}
 		<div

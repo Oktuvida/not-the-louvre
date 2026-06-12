@@ -684,7 +684,7 @@ describe('StudioDrawingPage', () => {
 		await vi.waitFor(async () => {
 			expect(await readPersistedJournalEntries(draftKey)).toEqual([
 				{
-					color: '#FDBCB4',
+					color: '#1A1A1A',
 					points: [
 						[192, 282],
 						[230, 333],

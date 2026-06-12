@@ -1,5 +1,5 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 import PolaroidCard from './PolaroidCard.svelte';
@@ -112,5 +112,72 @@ describe('PolaroidCard', () => {
 		await card.click();
 
 		await expect.element(image).not.toHaveAttribute('aria-label');
+	});
+
+	it('notifies the owner of the reveal state and suppresses card selection on the reveal click', async () => {
+		const onReveal = vi.fn();
+		const onclick = vi.fn();
+
+		render(PolaroidCard, {
+			artwork: { ...artwork, isNsfw: true },
+			viewerId: 'other-user',
+			onReveal,
+			onclick,
+			testId: 'controlled-reveal-card'
+		});
+
+		const card = page.getByTestId('controlled-reveal-card');
+		await card.click();
+
+		expect(onReveal).toHaveBeenCalledTimes(1);
+		expect(onclick).not.toHaveBeenCalled();
+
+		await card.click();
+
+		expect(onReveal).toHaveBeenCalledTimes(1);
+		expect(onclick).toHaveBeenCalledTimes(1);
+	});
+
+	it('never reveals for signed-out visitors — the click falls through to selection', async () => {
+		const onReveal = vi.fn();
+		const onclick = vi.fn();
+
+		render(PolaroidCard, {
+			artwork: { ...artwork, isNsfw: true },
+			viewerId: null,
+			onReveal,
+			onclick,
+			testId: 'signed-out-card'
+		});
+
+		const image = page.getByAltText('Pinned Study');
+
+		await expect.element(image).toHaveAttribute('aria-label', 'Sensitive artwork');
+
+		await page.getByTestId('signed-out-card').click();
+
+		expect(onReveal).not.toHaveBeenCalled();
+		expect(onclick).toHaveBeenCalledTimes(1);
+		await expect.element(image).toHaveAttribute('aria-label', 'Sensitive artwork');
+	});
+
+	it('honors an externally revealed state so reveals survive virtualization remounts', async () => {
+		const onclick = vi.fn();
+
+		render(PolaroidCard, {
+			artwork: { ...artwork, isNsfw: true },
+			viewerId: 'other-user',
+			revealed: true,
+			onclick,
+			testId: 'external-reveal-card'
+		});
+
+		const image = page.getByAltText('Pinned Study');
+
+		await expect.element(image).not.toHaveAttribute('aria-label');
+
+		await page.getByTestId('external-reveal-card').click();
+
+		expect(onclick).toHaveBeenCalledTimes(1);
 	});
 });

@@ -155,7 +155,7 @@ describe('AvatarSketchpad', () => {
 		});
 
 		const defaultSwatch = page.getByRole('button', {
-			name: `Select color ${drawingPalette[4]}`
+			name: `Select color ${drawingPalette[3]}`
 		});
 		const targetSwatch = page.getByRole('button', {
 			name: `Select color ${drawingPalette[10]}`
@@ -211,10 +211,11 @@ describe('AvatarSketchpad', () => {
 		expect(resizedMetrics.shellWidth).toBe(initialMetrics.shellWidth);
 		expect(resizedMetrics.shellHeight).toBe(initialMetrics.shellHeight);
 
-		await page.getByRole('button', { name: `Select color ${drawingPalette[4]}` }).click();
+		await page.getByRole('button', { name: `Select color ${drawingPalette[6]}` }).click();
 
-		const recoloredMetrics = await readPreviewMetrics();
-		expect(recoloredMetrics.dotColor).toBe('rgb(253, 188, 180)');
+		await vi.waitFor(() => {
+			expect(readPreviewMetrics().dotColor).toBe('rgb(253, 188, 180)');
+		});
 	});
 	it('saves the exported avatar and continues into the gallery on success', async () => {
 		const onContinue = vi.fn();
@@ -433,7 +434,7 @@ describe('AvatarSketchpad', () => {
 		await vi.waitFor(async () => {
 			expect(await readPersistedJournalEntries(draftKey)).toEqual([
 				{
-					color: drawingPalette[4] ?? '#1a1a1a',
+					color: drawingPalette[3] ?? '#1a1a1a',
 					points: [
 						[80, 96],
 						[81, 97],

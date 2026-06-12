@@ -16,7 +16,6 @@
 	} from '$lib/features/home-entry-scene/auth-contract';
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import StudioPanel from '$lib/features/shared-ui/components/StudioPanel.svelte';
 	import type {
 		EntryFlowEvent,
 		EntryFlowState
@@ -98,13 +97,9 @@
 		view === 'signup-account' || view === 'signup-success' || view === 'signup-avatar'
 	);
 	const isAvatarView = $derived(view === 'signup-avatar');
-	const panelClassName = $derived(
-		isAvatarView
-			? 'w-full max-w-[50rem] border-[var(--color-ink)] bg-[linear-gradient(180deg,rgba(255,252,246,0.98),rgba(247,239,228,0.98))] text-[var(--color-ink)]'
-			: 'w-full max-w-[44rem] border-[var(--color-ink)] bg-[linear-gradient(180deg,rgba(255,252,246,0.97),rgba(248,241,230,0.97))] text-[var(--color-ink)]'
-	);
+	const panelClassName = $derived(isAvatarView ? 'w-full max-w-[50rem]' : 'w-full max-w-[44rem]');
 	const contentClassName = $derived(
-		isAvatarView ? 'space-y-4 p-4 md:p-5 lg:p-6' : 'min-h-[26rem] space-y-5 p-6 md:p-8'
+		isAvatarView ? 'space-y-5 p-6 md:p-8 lg:pl-16 lg:p-10' : 'min-h-[26rem] space-y-5 p-6 md:p-8'
 	);
 
 	const normalizeNickname = (value: string) => value.trim().toLowerCase();
@@ -536,14 +531,10 @@
 			class="flex w-full items-center justify-center py-2 opacity-0 md:py-0"
 			style="transform: scale(0.95);"
 		>
-			<StudioPanel
-				tone="paper"
-				className={`${panelClassName} ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
+			<div
+				class={`auth-sheet relative ${panelClassName} ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
 			>
-				<div
-					class="pointer-events-none absolute inset-x-8 top-0 h-20 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.42),transparent_72%)]"
-				></div>
-				<div class={contentClassName}>
+				<div class={`auth-sheet-inner relative pl-8 md:pl-11 ${contentClassName}`}>
 					<div class="flex items-start justify-between gap-4">
 						<div class="space-y-2">
 							<p
@@ -552,7 +543,7 @@
 								Studio Access
 							</p>
 							<h2
-								class="font-display text-3xl tracking-[0.06em] text-[var(--color-ink)] uppercase md:text-4xl"
+								class="font-display text-2xl tracking-[0.06em] text-[var(--color-ink)] uppercase md:text-3xl"
 							>
 								{view === 'signup-account'
 									? 'Draw yourself'
@@ -566,7 +557,8 @@
 													? 'Replacement key'
 													: 'Welcome back'}
 							</h2>
-							<p class="max-w-2xl text-sm text-[var(--color-muted)] md:text-base">
+							<span class="auth-sheet-swipe" aria-hidden="true"></span>
+							<p class="auth-sheet-subtitle max-w-2xl">
 								{view === 'login'
 									? 'The room missed you. Probably.'
 									: view === 'signup-account'
@@ -576,10 +568,9 @@
 											: 'One more step and you are in.'}
 							</p>
 						</div>
-						<GameButton
+						<button
 							type="button"
-							variant="ghost"
-							size="sm"
+							class="auth-tape-close"
 							onclick={() => {
 								if (view === 'signup-avatar') {
 									onAvatarDismiss?.();
@@ -590,12 +581,13 @@
 								dispatch('AUTH_CANCEL');
 							}}
 						>
-							<span>Close</span>
-						</GameButton>
+							<span class="sr-only">Close</span>
+							<span aria-hidden="true">✕</span>
+						</button>
 					</div>
 
 					<div
-						class={`rounded-[1.25rem] border border-[rgb(141_108_82_/_0.2)] bg-[linear-gradient(180deg,rgb(255_248_238_/_0.92),rgb(245_235_220_/_0.92))] p-4 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.45)] md:p-5 ${showLiveAuthContent ? '' : 'pointer-events-none invisible'}`}
+						class={showLiveAuthContent ? '' : 'pointer-events-none invisible'}
 						inert={!showLiveAuthContent}
 						aria-hidden={!showLiveAuthContent}
 					>
@@ -941,7 +933,104 @@
 						{/if}
 					</div>
 				</div>
-			</StudioPanel>
+			</div>
 		</div>
 	</div>
 </div>
+
+<style>
+	.auth-sheet {
+		background-color: #fbf7f0;
+		border-radius: 3px;
+		box-shadow:
+			4px 6px 16px rgba(0, 0, 0, 0.32),
+			1px 2px 4px rgba(0, 0, 0, 0.18);
+	}
+
+	/* per-pixel paper noise */
+	.auth-sheet-inner::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+		pointer-events: none;
+	}
+
+	/* torn-out spiral perforations along the left edge */
+	.auth-sheet-inner::after {
+		content: '';
+		position: absolute;
+		top: 18px;
+		bottom: 18px;
+		left: 8px;
+		width: 14px;
+		background-image: radial-gradient(
+			circle at 7px 9px,
+			rgba(45, 36, 32, 0.18) 4px,
+			rgba(45, 36, 32, 0.07) 4.6px,
+			transparent 5.4px
+		);
+		background-size: 14px 44px;
+		background-repeat: repeat-y;
+		pointer-events: none;
+	}
+
+	/* a swipe of paint under the view title */
+	.auth-sheet-swipe {
+		display: block;
+		width: 150px;
+		height: 7px;
+		margin-top: 2px;
+		rotate: -0.8deg;
+		border-radius: 4px 7px 5px 8px;
+		background: linear-gradient(90deg, rgba(212, 131, 74, 0.75), rgba(212, 131, 74, 0.25) 92%);
+	}
+
+	.auth-sheet-subtitle {
+		font-family: 'Caveat', cursive;
+		font-size: 1.3rem;
+		font-weight: 600;
+		color: #6b5a45;
+		rotate: -0.4deg;
+	}
+
+	/* washi-tape close, same species as the postcard flip tape */
+	.auth-tape-close {
+		flex-shrink: 0;
+		border: 0;
+		padding: 9px 18px;
+		font-weight: 700;
+		color: #5d4e37;
+		cursor: pointer;
+		rotate: 2.4deg;
+		background: repeating-linear-gradient(
+			-45deg,
+			rgba(228, 214, 186, 0.92) 0 10px,
+			rgba(240, 230, 207, 0.92) 10px 20px
+		);
+		box-shadow: 0 2px 5px rgba(45, 36, 32, 0.22);
+		/* torn tape ends — drop this line if it ghosts */
+		clip-path: polygon(
+			3% 0%,
+			97% 2%,
+			100% 26%,
+			98% 52%,
+			100% 78%,
+			96% 100%,
+			4% 98%,
+			0% 70%,
+			2% 44%,
+			0% 22%
+		);
+		transition: translate 140ms ease;
+	}
+
+	.auth-tape-close:hover {
+		translate: 0 -2px;
+	}
+
+	.auth-tape-close:focus-visible {
+		outline: 3px solid #4ecdc4;
+		outline-offset: 2px;
+	}
+</style>
