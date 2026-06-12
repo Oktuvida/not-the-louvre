@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 
 	type ViewerRole = 'admin' | 'moderator' | 'user';
@@ -40,11 +41,12 @@
 
 	let isBusy = $state(false);
 	let isReportMenuOpen = $state(false);
+	let isModMenuOpen = $state(false);
 	let statusMessage = $state<string | null>(null);
 	let statusTone = $state<'error' | 'success'>('success');
 
 	const canReport = $derived(Boolean(viewer));
-	const canModerate = $derived(viewer?.role === 'admin');
+	const canModerate = $derived(viewer?.role === 'admin' || viewer?.role === 'moderator');
 
 	const setStatus = (tone: 'error' | 'success', message: string) => {
 		statusTone = tone;
@@ -73,6 +75,14 @@
 	const toggleReportMenu = (event: Event) => {
 		stopEvent(event);
 		isReportMenuOpen = !isReportMenuOpen;
+		isModMenuOpen = false;
+		statusMessage = null;
+	};
+
+	const toggleModMenu = (event: Event) => {
+		stopEvent(event);
+		isModMenuOpen = !isModMenuOpen;
+		isReportMenuOpen = false;
 		statusMessage = null;
 	};
 
@@ -113,7 +123,16 @@
 		}
 	};
 
-	const moderateArtwork = async (action: 'hide' | 'mark_nsfw') => {
+	type ModerationAction = 'clear_nsfw' | 'hide' | 'mark_nsfw' | 'unhide';
+
+	const MODERATION_SUCCESS_COPY: Record<ModerationAction, string> = {
+		clear_nsfw: 'NSFW cleared.',
+		hide: 'Artwork hidden.',
+		mark_nsfw: 'Marked NSFW and hidden.',
+		unhide: 'Artwork visible again.'
+	};
+
+	const moderateArtwork = async (action: ModerationAction) => {
 		if (!canModerate || isBusy) {
 			return;
 		}
@@ -150,7 +169,8 @@
 			} satisfies ArtworkPatch;
 
 			onArtworkPatch?.(patch);
-			setStatus('success', action === 'hide' ? 'Artwork hidden.' : 'Artwork marked NSFW.');
+			isModMenuOpen = false;
+			setStatus('success', MODERATION_SUCCESS_COPY[action]);
 		} catch (error) {
 			setStatus('error', error instanceof Error ? error.message : 'Moderation failed');
 		} finally {
@@ -209,30 +229,93 @@
 		{/if}
 
 		{#if canModerate}
-			<button
-				type="button"
-				class="action-button admin"
-				aria-label="Hide artwork"
-				disabled={isBusy}
-				onclick={(event) => {
-					stopEvent(event);
-					moderateArtwork('hide');
-				}}
-			>
-				Hide
-			</button>
-			<button
-				type="button"
-				class="action-button admin"
-				aria-label="Mark artwork NSFW"
-				disabled={isBusy}
-				onclick={(event) => {
-					stopEvent(event);
-					moderateArtwork('mark_nsfw');
-				}}
-			>
-				NSFW
-			</button>
+			<div class="mod-group">
+				<button
+					type="button"
+					class="action-button mod"
+					aria-expanded={isModMenuOpen}
+					aria-label="Moderation menu"
+					disabled={isBusy}
+					onclick={toggleModMenu}
+				>
+					Mod
+				</button>
+
+				<div
+					class="mod-menu"
+					class:mod-menu-compact={compact}
+					aria-hidden={!isModMenuOpen}
+					hidden={!isModMenuOpen}
+				>
+					<p class="mod-heading">Moderation</p>
+					<p class="mod-status">
+						Status: {artwork.isHidden ? 'Hidden' : 'Visible'} · {artwork.isNsfw
+							? 'NSFW'
+							: 'Not NSFW'}
+					</p>
+					{#if artwork.isHidden}
+						<button
+							type="button"
+							class="reason-button"
+							aria-label="Unhide artwork"
+							disabled={isBusy}
+							onclick={(event) => {
+								stopEvent(event);
+								moderateArtwork('unhide');
+							}}
+						>
+							Unhide
+						</button>
+					{:else}
+						<button
+							type="button"
+							class="reason-button"
+							aria-label="Hide artwork"
+							disabled={isBusy}
+							onclick={(event) => {
+								stopEvent(event);
+								moderateArtwork('hide');
+							}}
+						>
+							Hide
+						</button>
+					{/if}
+					{#if artwork.isNsfw}
+						<button
+							type="button"
+							class="reason-button"
+							aria-label="Clear artwork NSFW"
+							disabled={isBusy}
+							onclick={(event) => {
+								stopEvent(event);
+								moderateArtwork('clear_nsfw');
+							}}
+						>
+							Clear NSFW
+						</button>
+					{:else}
+						<button
+							type="button"
+							class="reason-button"
+							aria-label="Mark artwork NSFW"
+							disabled={isBusy}
+							onclick={(event) => {
+								stopEvent(event);
+								moderateArtwork('mark_nsfw');
+							}}
+						>
+							Mark NSFW + hide
+						</button>
+					{/if}
+					<a
+						class="reason-button mod-ops-link"
+						href={resolve('/admin')}
+						onclick={(event) => event.stopPropagation()}
+					>
+						Open in Ops ↗
+					</a>
+				</div>
+			</div>
 		{/if}
 	</div>
 
@@ -255,42 +338,68 @@
 	.action-row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.45rem;
+		gap: 0.5rem;
 		align-items: center;
 	}
 
-	.report-group {
+	.report-group,
+	.mod-group {
 		position: relative;
 	}
 
-	.action-button,
-	.reason-button {
-		border: 2px solid #2d2420;
-		border-radius: 999px;
-		background: rgba(253, 251, 247, 0.96);
-		color: #2d2420;
-		font: inherit;
-		font-size: 0.72rem;
-		font-weight: 800;
+	/* washi-tape chips, same species as the postcard flip tape */
+	.action-button {
+		border: 0;
+		padding: 8px 13px;
+		font-family: 'Fredoka', sans-serif;
+		font-size: 0.68rem;
+		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
+		color: #5d4e37;
 		cursor: pointer;
-		padding: 0.45rem 0.7rem;
-		box-shadow: 0 6px 14px rgba(45, 36, 32, 0.14);
+		background: repeating-linear-gradient(
+			-45deg,
+			rgba(238, 228, 205, 0.94) 0 9px,
+			rgba(248, 240, 222, 0.94) 9px 18px
+		);
+		box-shadow: 0 2px 5px rgba(45, 36, 32, 0.28);
+		/* torn tape ends — drop this line if it ghosts */
+		clip-path: polygon(
+			3% 0%,
+			97% 2%,
+			100% 26%,
+			98% 52%,
+			100% 78%,
+			96% 100%,
+			4% 98%,
+			0% 70%,
+			2% 44%,
+			0% 22%
+		);
+		transition: translate 140ms ease;
+	}
+
+	.action-button:hover {
+		translate: 0 -2px;
+	}
+
+	.action-button:focus-visible {
+		outline: 3px solid #4ecdc4;
+		outline-offset: 2px;
 	}
 
 	.action-button.report {
-		background: rgba(248, 240, 225, 0.98);
+		rotate: -2deg;
 	}
 
 	.action-button.icon-only {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 2.35rem;
-		height: 2.35rem;
+		width: 2.2rem;
+		height: 2rem;
 		padding: 0;
-		border-radius: 999px;
 	}
 
 	.action-button.icon-only :global(svg) {
@@ -298,15 +407,78 @@
 		height: 1rem;
 	}
 
-	.action-button.admin {
-		background: rgba(228, 214, 195, 0.98);
+	.action-button.mod {
+		rotate: 2deg;
+		background: repeating-linear-gradient(
+			-45deg,
+			rgba(224, 207, 180, 0.94) 0 9px,
+			rgba(236, 222, 198, 0.94) 9px 18px
+		);
+	}
+
+	/* dropdowns are paper scraps pinned over the artwork */
+	.report-menu,
+	.mod-menu {
+		position: absolute;
+		z-index: 30;
+		top: calc(100% + 0.5rem);
+		left: 0;
+		min-width: 11rem;
+		display: grid;
+		gap: 0.2rem;
+		padding: 0.55rem;
+		border: 1px solid #d6cfc5;
+		border-radius: 2px;
+		background: #fdfbf7;
+		box-shadow:
+			3px 4px 12px rgba(0, 0, 0, 0.24),
+			1px 1px 3px rgba(0, 0, 0, 0.12);
+		rotate: -0.8deg;
+	}
+
+	.mod-menu {
+		min-width: 12.5rem;
+		rotate: 0.6deg;
+	}
+
+	/* `display: grid` above would defeat the `hidden` attribute (its UA rule
+	 * loses the cascade); without this, the closed menus still intercept
+	 * clicks wherever Tailwind's preflight isn't loaded. */
+	.report-menu[hidden],
+	.mod-menu[hidden] {
+		display: none;
+	}
+
+	.report-menu.report-menu-compact,
+	.mod-menu.mod-menu-compact {
+		left: auto;
+		right: 0;
 	}
 
 	.reason-button {
 		width: 100%;
-		border-radius: 0.85rem;
+		border: 0;
+		border-radius: 2px;
+		background: transparent;
+		padding: 0.38rem 0.5rem;
+		font-family: 'Fredoka', sans-serif;
+		font-size: 0.66rem;
+		font-weight: 700;
+		letter-spacing: 0.07em;
+		text-transform: uppercase;
 		text-align: left;
+		color: #2f241c;
+		cursor: pointer;
 		box-shadow: none;
+	}
+
+	.reason-button:hover {
+		background: rgba(212, 131, 74, 0.16);
+	}
+
+	.reason-button:focus-visible {
+		outline: 3px solid #4ecdc4;
+		outline-offset: -1px;
 	}
 
 	.action-button:disabled,
@@ -315,38 +487,53 @@
 		cursor: not-allowed;
 	}
 
-	.report-menu {
-		position: absolute;
-		z-index: 30;
-		top: calc(100% + 0.45rem);
-		left: 0;
-		min-width: 11rem;
-		display: grid;
-		gap: 0.35rem;
-		padding: 0.45rem;
-		border: 2px solid #2d2420;
-		border-radius: 1rem;
-		background: rgba(255, 249, 239, 0.98);
-		box-shadow: 0 14px 30px rgba(45, 36, 32, 0.22);
+	.mod-heading {
+		margin: 0;
+		padding: 0 0.5rem;
+		font-family: 'Fredoka', sans-serif;
+		font-size: 0.58rem;
+		font-weight: 700;
+		letter-spacing: 0.2em;
+		text-transform: uppercase;
+		color: #8a6c52;
 	}
 
-	/* `display: grid` above would defeat the `hidden` attribute (its UA rule
-	 * loses the cascade); without this, the closed menu still intercepts
-	 * clicks wherever Tailwind's preflight isn't loaded. */
-	.report-menu[hidden] {
-		display: none;
+	/* the artwork's paperwork status, pencilled in by the mod on duty */
+	.mod-status {
+		margin: 0 0 0.25rem;
+		padding: 0 0.5rem;
+		font-family: 'Caveat', cursive;
+		font-size: 1.02rem;
+		font-weight: 600;
+		color: #5d4e37;
+		rotate: -0.6deg;
 	}
 
-	.report-menu.report-menu-compact {
-		left: auto;
-		right: 0;
+	.mod-ops-link {
+		display: block;
+		margin-top: 0.2rem;
+		border-top: 1px dashed rgba(141, 110, 78, 0.4);
+		padding-top: 0.45rem;
+		text-decoration: none;
+		color: #6b5a45;
 	}
 
+	/* a slip of paper so the confirmation reads over any artwork */
 	.status {
 		margin: 0;
-		font-size: 0.74rem;
+		justify-self: start;
+		padding: 2px 9px;
+		background: rgba(253, 251, 247, 0.95);
+		box-shadow: 1px 2px 5px rgba(45, 36, 32, 0.2);
+		rotate: -1deg;
+		font-family: 'Caveat', cursive;
+		font-size: 0.98rem;
 		font-weight: 700;
 		color: #2d2420;
+	}
+
+	.safety-actions.compact .status {
+		justify-self: end;
 	}
 
 	.status[data-tone='error'] {

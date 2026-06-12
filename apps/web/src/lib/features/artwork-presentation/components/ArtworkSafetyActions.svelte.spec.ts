@@ -74,6 +74,8 @@ describe('ArtworkSafetyActions', () => {
 			onArtworkPatch
 		});
 
+		await page.getByRole('button', { name: 'Moderation menu' }).click();
+		await expect.element(page.getByText('Status: Visible · Not NSFW')).toBeVisible();
 		await page.getByRole('button', { name: 'Hide artwork' }).click();
 
 		await vi.waitFor(() => {
@@ -83,6 +85,40 @@ describe('ArtworkSafetyActions', () => {
 				method: 'PATCH'
 			});
 			expect(onArtworkPatch).toHaveBeenCalledWith({ isHidden: true, isNsfw: false });
+		});
+	});
+
+	it('gives moderators state-aware controls to unhide and clear NSFW', async () => {
+		const onArtworkPatch = vi.fn();
+		const fetchSpy = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({ artwork: { id: 'artwork-1', isHidden: false, isNsfw: true } }),
+					{ status: 200 }
+				)
+		);
+
+		render(ArtworkSafetyActions, {
+			artwork: { ...artwork, isHidden: true, isNsfw: true },
+			request: fetchSpy as typeof fetch,
+			viewer: { id: 'moderator-1', role: 'moderator' },
+			onArtworkPatch
+		});
+
+		await page.getByRole('button', { name: 'Moderation menu' }).click();
+		await expect.element(page.getByText('Status: Hidden · NSFW')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Clear artwork NSFW' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Open in Ops ↗' })).toBeVisible();
+
+		await page.getByRole('button', { name: 'Unhide artwork' }).click();
+
+		await vi.waitFor(() => {
+			expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/moderation', {
+				body: JSON.stringify({ action: 'unhide' }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			});
+			expect(onArtworkPatch).toHaveBeenCalledWith({ isHidden: false, isNsfw: true });
 		});
 	});
 });
