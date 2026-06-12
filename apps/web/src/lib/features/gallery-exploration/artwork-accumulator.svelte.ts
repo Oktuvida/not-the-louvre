@@ -7,12 +7,10 @@ export interface ArtworkAccumulatorOptions {
 		artworks: Artwork[];
 		pageInfo: { hasMore: boolean; nextCursor: string | null };
 	}>;
-	columnCount?: number;
 }
 
 export interface ArtworkAccumulator {
 	readonly allArtworks: Artwork[];
-	readonly rows: Artwork[][];
 	readonly hasMore: boolean;
 	readonly isLoading: boolean;
 	readonly error: string | null;
@@ -35,17 +33,6 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 	let error = $state<string | null>(null);
 
 	const allArtworks = $derived([...baseArtworks, ...appendedArtworks]);
-
-	const columnCount = $derived(typeof options.columnCount === 'number' ? options.columnCount : 3);
-
-	const rows = $derived.by(() => {
-		const cols = columnCount;
-		const result: Artwork[][] = [];
-		for (let i = 0; i < allArtworks.length; i += cols) {
-			result.push(allArtworks.slice(i, i + cols));
-		}
-		return result;
-	});
 
 	async function loadMore(): Promise<void> {
 		if (isLoading || !pageInfo.hasMore || !pageInfo.nextCursor) return;
@@ -105,9 +92,6 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 	return {
 		get allArtworks() {
 			return allArtworks;
-		},
-		get rows() {
-			return rows;
 		},
 		get hasMore() {
 			return pageInfo.hasMore;
