@@ -3,7 +3,8 @@
 	import { goto, invalidateAll, pushState, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
-	import { gsap } from '$lib/client/gsap';
+	import { fade } from 'svelte/transition';
+	import { prefersReducedMotion } from 'svelte/motion';
 	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
 	import { getGalleryLayoutContext } from '$lib/features/gallery-exploration/gallery-layout-context';
 	import { onMount } from 'svelte';
@@ -205,13 +206,13 @@
 	let adultContentPreferenceOverride = $state<boolean | null>(null);
 	let isSavingAdultContentPreference = $state(false);
 	let selectedArtwork = $state<Artwork | null>(null);
+	let isHydratingDetail = $state(false);
 	let detailErrorMessage = $state<string | null>(null);
 	const enteredFromHome = browser ? $page.url?.searchParams?.get('from') === 'home' : false;
-	let entryFadeOpacity = $state(enteredFromHome ? 1 : 0);
 	let showEntryFade = $state(enteredFromHome);
-	let exitFadeOpacity = $state(0);
 	let showExitFade = $state(false);
 	let isExitingToHome = $state(false);
+	const fadeDuration = $derived(prefersReducedMotion.current ? 0 : 250);
 	let isRefreshingGallery = $state(false);
 	let detailOrigin = $state<GalleryDetailHistoryState['source'] | null>(null);
 	let didCreateLocalDetailHistoryEntry = $state(false);
@@ -247,6 +248,17 @@
 		const requestSequence = ++detailLoadSequence;
 		detailErrorMessage = null;
 
+		// Open the panel instantly with the room copy of the artwork; the full
+		// detail (fresh votes, comments) hydrates in place once fetched.
+		if (selectedArtwork?.id !== historyState.artworkId) {
+			const roomArtwork = artworks.find((candidate) => candidate.id === historyState.artworkId);
+			if (roomArtwork) {
+				selectedArtwork = roomArtwork;
+				detailOrigin = historyState.source;
+			}
+		}
+		isHydratingDetail = true;
+
 		try {
 			const nextArtwork = await loadArtworkDetail(historyState.artworkId);
 			if (requestSequence !== detailLoadSequence) return;
@@ -271,6 +283,10 @@
 				// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
 				replaceState(currentGalleryUrl, clearGalleryDetailHistoryState($page.state));
 			}
+		} finally {
+			if (requestSequence === detailLoadSequence) {
+				isHydratingDetail = false;
+			}
 		}
 	};
 
@@ -291,6 +307,7 @@
 	const closeArtworkDetail = () => {
 		detailErrorMessage = null;
 		detailLoadSequence += 1;
+		isHydratingDetail = false;
 
 		const currentHistoryState = readGalleryDetailHistoryState($page.state);
 
@@ -438,6 +455,7 @@
 
 		if (currentHistoryState && currentHistoryState.roomId !== roomId) {
 			detailLoadSequence += 1;
+			isHydratingDetail = false;
 			didCreateLocalDetailHistoryEntry = false;
 			selectedArtwork = null;
 			detailOrigin = null;
@@ -448,6 +466,7 @@
 
 		if (!currentHistoryState) {
 			detailLoadSequence += 1;
+			isHydratingDetail = false;
 			didCreateLocalDetailHistoryEntry = false;
 
 			if (selectedArtwork || detailOrigin) {
@@ -477,21 +496,12 @@
 		if (isExitingToHome) return;
 		isExitingToHome = true;
 		showExitFade = true;
+	};
 
-		const fade = { opacity: 0 };
-		gsap.to(fade, {
-			opacity: 1,
-			duration: 0.25,
-			ease: 'power2.in',
-			onUpdate: () => {
-				exitFadeOpacity = fade.opacity;
-			},
-			onComplete: () => {
-				const url = `${resolve('/')}?from=gallery`;
-				// eslint-disable-next-line svelte/no-navigation-without-resolve -- URL is already resolved and extended with query params
-				void goto(url);
-			}
-		});
+	const completeExitToHome = () => {
+		const url = `${resolve('/')}?from=gallery`;
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- URL is already resolved and extended with query params
+		void goto(url);
 	};
 
 	const refreshGallery = async () => {
@@ -522,19 +532,8 @@
 			replaceState(resolve('/gallery/[room]', { room: roomId }), window.history.state);
 		}
 
-		const fade = { opacity: 1 };
-		gsap.to(fade, {
-			opacity: 0,
-			duration: 0.25,
-			delay: 0,
-			ease: 'power2.out',
-			onUpdate: () => {
-				entryFadeOpacity = fade.opacity;
-			},
-			onComplete: () => {
-				showEntryFade = false;
-			}
-		});
+		// Dropping the flag removes the overlay; its outro fade reveals the room.
+		showEntryFade = false;
 	});
 
 	// --- Empty state ---
@@ -569,6 +568,7 @@
 		galleryLayout.panelBindings.set({
 			adultContentEnabled: adultContentAllowed,
 			artwork: selectedArtwork,
+			isHydratingDetail,
 			onAdultContentToggle: updateAdultContentPreference,
 			onArtworkChange: syncArtwork,
 			onArtworkPatch: patchArtwork,
@@ -706,14 +706,15 @@
 
 {#if showEntryFade}
 	<div
-		class="pointer-events-none fixed inset-0 z-[100]"
-		style={`background-color: #6e6e6e; opacity: ${entryFadeOpacity};`}
+		class="pointer-events-none fixed inset-0 z-[100] bg-[#6e6e6e]"
+		out:fade={{ duration: fadeDuration }}
 	></div>
 {/if}
 
 {#if showExitFade}
 	<div
-		class="pointer-events-none fixed inset-0 z-[100]"
-		style={`background-color: #6e6e6e; opacity: ${exitFadeOpacity};`}
+		class="pointer-events-none fixed inset-0 z-[100] bg-[#6e6e6e]"
+		in:fade={{ duration: fadeDuration }}
+		onintroend={completeExitToHome}
 	></div>
 {/if}

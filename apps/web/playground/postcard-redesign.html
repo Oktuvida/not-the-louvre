@@ -1,0 +1,1431 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Postcard redesign — not the louvre playground</title>
+		<!--
+	PLAYGROUND ONLY — not shipped.
+	Design sandbox for the ArtworkDetailPanel postcard. The wall pattern and the
+	sticker-button backgrounds are verbatim ports of museum-canvas.ts so the
+	aesthetic here is 1:1 with the real assets.
+
+	Port notes (preserve-3d gotchas learned the hard way):
+	- No `filter:` / blur on anything inside the card (paint stains use
+	  radial-gradients instead of blur, unlike PolaroidCard).
+	- The washi-tape flip buttons are in-flow; their torn ends use clip-path.
+	  If clip-path ghosts through backface-visibility when ported, swap the
+	  torn ends for straight ends — the rest survives.
+-->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Caveat:wght@500;600;700&display=swap"
+			rel="stylesheet"
+		/>
+		<style>
+			:root {
+				--ink: #2d2420;
+				--ink-soft: #5d4e37;
+				--ink-faint: #8a6c52;
+				--paper: #f8f4ed;
+				--paper-back: #f6efe2;
+				--photo-border: #d6cfc5;
+				--postal-ink: #4a4663;
+				--stamp-red: #a8403a;
+				--stamp-blue: #3f5e8c;
+				--ruled: rgba(141, 110, 78, 0.3);
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				margin: 0;
+				min-height: 100vh;
+				display: grid;
+				place-items: center;
+				padding: 72px 20px 48px;
+				background-color: #252018;
+				font-family: 'Fredoka', sans-serif;
+				color: var(--ink);
+			}
+
+			/* Same fixed light/shadow gradients as GalleryLayoutFrame */
+			.wall-light {
+				position: fixed;
+				inset: 0;
+				pointer-events: none;
+				background:
+					radial-gradient(
+						circle at 86% 12%,
+						rgba(255, 247, 214, 0.34) 0%,
+						rgba(255, 243, 201, 0.18) 18%,
+						rgba(255, 241, 196, 0.06) 36%,
+						transparent 58%
+					),
+					linear-gradient(
+						180deg,
+						transparent 0%,
+						transparent 58%,
+						rgba(46, 28, 11, 0.14) 78%,
+						rgba(20, 12, 6, 0.28) 100%
+					),
+					radial-gradient(
+						circle at 12% 92%,
+						rgba(18, 10, 4, 0.34) 0%,
+						rgba(18, 10, 4, 0.22) 26%,
+						rgba(18, 10, 4, 0.08) 46%,
+						transparent 66%
+					);
+			}
+
+			/* ── playground toolbar (not part of the design) ────────────── */
+			.toolbar {
+				position: fixed;
+				top: 14px;
+				left: 14px;
+				z-index: 50;
+				display: flex;
+				gap: 8px;
+				flex-wrap: wrap;
+			}
+
+			.toolbar button {
+				font:
+					600 12px 'Fredoka',
+					sans-serif;
+				letter-spacing: 0.06em;
+				color: var(--paper);
+				background: rgba(45, 36, 32, 0.92);
+				border: 1.5px solid rgba(248, 244, 237, 0.28);
+				border-radius: 999px;
+				padding: 7px 14px;
+				cursor: pointer;
+			}
+
+			.toolbar button[aria-pressed='true'] {
+				border-color: #f4c430;
+				color: #f4c430;
+			}
+
+			/* ── 3D scene ───────────────────────────────────────────────── */
+			.scene {
+				perspective: 1600px;
+			}
+
+			.postcard {
+				display: grid;
+				transform-style: preserve-3d;
+				transition: transform 650ms cubic-bezier(0.45, 0.05, 0.25, 1);
+				rotate: -0.6deg;
+			}
+
+			.postcard.is-flipped {
+				transform: rotateY(180deg);
+			}
+
+			.postcard.is-lifting {
+				animation: postcard-lift 650ms cubic-bezier(0.45, 0.05, 0.25, 1);
+			}
+
+			@keyframes postcard-lift {
+				0% {
+					scale: 1;
+				}
+				50% {
+					scale: 1.045;
+				}
+				100% {
+					scale: 1;
+				}
+			}
+
+			.postcard-face {
+				grid-area: 1 / 1;
+				width: clamp(19rem, 92vw, 26rem);
+				backface-visibility: hidden;
+				display: flex;
+				flex-direction: column;
+				border-radius: 3px;
+				/* Polaroid language: paper + hard offset shadow, no ink outline */
+				background: var(--paper);
+				box-shadow:
+					4px 6px 16px rgba(0, 0, 0, 0.32),
+					1px 2px 4px rgba(0, 0, 0, 0.18);
+			}
+
+			.face-back {
+				transform: rotateY(180deg);
+				background: var(--paper-back);
+				overflow: hidden; /* airmail strips hug the rounded corners */
+			}
+
+			/* flat side-by-side mode for design iteration */
+			.stage.flat .scene {
+				perspective: none;
+			}
+			.stage.flat .postcard {
+				display: flex;
+				gap: 36px;
+				rotate: 0deg;
+				transform: none !important;
+			}
+			.stage.flat .postcard-face {
+				transform: none;
+			}
+
+			/* paper grain on both faces */
+			.grain {
+				position: absolute;
+				inset: 0;
+				border-radius: inherit;
+				pointer-events: none;
+				opacity: 0.5;
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.30 0 0 0 0 0.24 0 0 0 0 0.18 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+			}
+
+			/* faint paint stains — radial gradients, NOT filter:blur (port-safe) */
+			.stain {
+				position: absolute;
+				pointer-events: none;
+				border-radius: 50%;
+			}
+
+			/* ═══════════════════ FRONT ═══════════════════ */
+			.face-front {
+				position: relative;
+				padding: 14px 14px 12px;
+			}
+
+			.photo-wrap {
+				position: relative;
+			}
+
+			.photo {
+				aspect-ratio: 1;
+				border: 1px solid var(--photo-border);
+				background: #ece4d8;
+				overflow: hidden;
+			}
+
+			.photo svg {
+				display: block;
+				width: 100%;
+				height: 100%;
+			}
+
+			/* masking tape holding the photo onto the card — straight from PolaroidCard */
+			.tape {
+				position: absolute;
+				z-index: 3;
+				height: 17px;
+				width: 52px;
+				background: rgba(255, 255, 240, 0.55);
+				border: 1px solid rgba(200, 190, 170, 0.3);
+				box-shadow: 0 1px 2px rgba(45, 36, 32, 0.08);
+				pointer-events: none;
+			}
+
+			.tape-tl {
+				top: -8px;
+				left: 14px;
+				rotate: -7deg;
+			}
+			.tape-tr {
+				top: -7px;
+				right: 12px;
+				rotate: 9deg;
+			}
+
+			.report-btn {
+				position: absolute;
+				top: 10px;
+				right: 10px;
+				z-index: 4;
+				display: grid;
+				place-items: center;
+				width: 34px;
+				height: 34px;
+				border-radius: 999px;
+				border: 2px solid var(--ink);
+				background: rgba(248, 240, 225, 0.96);
+				color: var(--ink);
+				cursor: pointer;
+				box-shadow: 1px 2px 0 rgba(45, 36, 32, 0.25);
+			}
+
+			.report-btn svg {
+				width: 14px;
+				height: 14px;
+			}
+
+			/* caption — giant polaroid caption */
+			.caption {
+				display: flex;
+				align-items: flex-start;
+				gap: 10px;
+				padding: 10px 4px 2px;
+			}
+
+			.avatar {
+				width: 36px;
+				height: 36px;
+				flex-shrink: 0;
+				border-radius: 999px;
+				border: 2.5px solid var(--ink);
+				background: linear-gradient(135deg, #c4b5a0, #a89680);
+				box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.15);
+			}
+
+			.caption-text {
+				min-width: 0;
+				flex: 1;
+			}
+
+			.title {
+				margin: 0;
+				font:
+					600 1.65rem/1.05 'Caveat',
+					cursive;
+				color: var(--ink);
+			}
+
+			.meta {
+				margin: 2px 0 0;
+				font:
+					600 0.62rem 'Fredoka',
+					sans-serif;
+				letter-spacing: 0.16em;
+				text-transform: uppercase;
+				color: var(--ink-faint);
+			}
+
+			.signature-block {
+				flex-shrink: 0;
+				text-align: right;
+				display: flex;
+				flex-direction: column;
+				align-items: flex-end;
+				gap: 1px;
+			}
+
+			.signature {
+				font:
+					600 1.45rem/1 'Caveat',
+					cursive;
+				color: #6b4226;
+				rotate: -2deg;
+			}
+
+			.score {
+				font:
+					500 0.85rem 'Fredoka',
+					sans-serif;
+				color: var(--ink-faint);
+			}
+
+			/* ── sticker action row — real GameButton backgrounds ───────── */
+			.actions {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 12px 2px 4px;
+			}
+
+			.sticker {
+				position: relative;
+				border: 0;
+				background: none transparent center / 100% 100% no-repeat;
+				height: 46px;
+				padding: 0 16px;
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				gap: 6px;
+				font:
+					700 13px 'Fredoka',
+					sans-serif;
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+				cursor: pointer;
+				text-shadow: 0 1px 0 rgba(255, 255, 255, 0.14);
+				transition: transform 0.15s ease;
+				white-space: nowrap;
+			}
+
+			.sticker svg {
+				width: 16px;
+				height: 16px;
+				flex-shrink: 0;
+			}
+
+			.sticker:hover {
+				transform: translateY(-3px) rotate(0.8deg) !important;
+			}
+			.sticker:active {
+				transform: translateY(1px) scale(0.97) !important;
+			}
+
+			.sticker.square {
+				width: 46px;
+				padding: 0;
+			}
+
+			.actions .spacer {
+				flex: 1;
+			}
+
+			/* hand-applied: every sticker sits a little crooked */
+			.s-up {
+				transform: rotate(-1.3deg);
+			}
+			.s-down {
+				transform: rotate(0.9deg);
+			}
+			.s-fork {
+				transform: rotate(-0.7deg);
+			}
+			.s-dl {
+				transform: rotate(1.4deg);
+			}
+
+			/* ── front footer: edge print + the comments tape ───────────── */
+			.front-footer {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 10px;
+				padding: 10px 4px 2px;
+			}
+
+			.edge-print {
+				font:
+					500 0.56rem 'Fredoka',
+					sans-serif;
+				letter-spacing: 0.22em;
+				text-transform: uppercase;
+				color: rgba(138, 108, 82, 0.75);
+			}
+
+			/* washi tape, with writing on it — THE comments affordance */
+			.flip-tape {
+				position: relative;
+				border: 0;
+				cursor: pointer;
+				display: inline-flex;
+				align-items: center;
+				gap: 7px;
+				padding: 9px 20px 9px 16px;
+				font:
+					600 0.78rem 'Fredoka',
+					sans-serif;
+				letter-spacing: 0.05em;
+				color: #4a3a2c;
+				background:
+					repeating-linear-gradient(
+						115deg,
+						rgba(212, 131, 74, 0.13) 0 9px,
+						rgba(212, 131, 74, 0) 9px 18px
+					),
+					rgba(255, 248, 230, 0.94);
+				box-shadow: 1px 2.5px 5px rgba(45, 36, 32, 0.22);
+				rotate: -2.5deg;
+				margin-right: -6px; /* overhangs the card edge like real tape */
+				clip-path: polygon(
+					1.6% 0%,
+					98.4% 3%,
+					96.8% 15%,
+					99.6% 30%,
+					97.4% 46%,
+					99.8% 63%,
+					97.2% 79%,
+					99.2% 100%,
+					2.4% 97%,
+					3.6% 83%,
+					0.6% 69%,
+					2.8% 53%,
+					0.3% 37%,
+					2.6% 21%,
+					0.8% 9%
+				);
+				transition:
+					translate 0.15s ease,
+					box-shadow 0.15s ease;
+				-webkit-tap-highlight-color: transparent;
+			}
+
+			.flip-tape:hover,
+			.flip-tape:focus-visible {
+				translate: 0 -2px;
+				box-shadow: 2px 4px 7px rgba(45, 36, 32, 0.28);
+			}
+
+			.flip-tape::after {
+				/* generous invisible hit area */
+				content: '';
+				position: absolute;
+				inset: -8px;
+			}
+
+			.flip-tape .count {
+				display: inline-grid;
+				place-items: center;
+				min-width: 21px;
+				height: 21px;
+				padding: 0 5px;
+				border-radius: 999px;
+				border: 2px solid #4a3a2c;
+				background: var(--paper);
+				font-size: 0.72rem;
+				font-weight: 700;
+			}
+
+			.flip-tape .doodle-arrow {
+				width: 30px;
+				height: 18px;
+			}
+
+			.flip-tape-back {
+				rotate: 2deg;
+				margin-right: 0;
+				background:
+					repeating-linear-gradient(
+						115deg,
+						rgba(113, 145, 127, 0.15) 0 9px,
+						rgba(113, 145, 127, 0) 9px 18px
+					),
+					rgba(246, 250, 244, 0.94);
+			}
+
+			/* ═══════════════════ BACK ═══════════════════ */
+			.face-back {
+				position: relative;
+			}
+
+			.airmail {
+				flex-shrink: 0;
+				height: 9px;
+				opacity: 0.8;
+				background: repeating-linear-gradient(
+					-45deg,
+					rgba(200, 79, 79, 0.5) 0 13px,
+					transparent 13px 25px,
+					rgba(74, 127, 181, 0.5) 25px 38px,
+					transparent 38px 50px
+				);
+			}
+
+			.back-header {
+				flex-shrink: 0;
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				padding: 12px 18px 8px;
+			}
+
+			.back-header .rule {
+				flex: 1;
+				height: 1px;
+				background: rgba(141, 110, 78, 0.4);
+			}
+
+			.back-header h2 {
+				margin: 0;
+				font:
+					600 0.78rem 'Fredoka',
+					sans-serif;
+				letter-spacing: 0.45em;
+				text-indent: 0.45em;
+				color: var(--ink-soft);
+				text-transform: uppercase;
+			}
+
+			.back-grid {
+				flex: 1;
+				min-height: 0;
+				display: grid;
+				grid-template-columns: 1.55fr 1px 0.95fr;
+				gap: 0 14px;
+				padding: 2px 18px 12px;
+			}
+
+			.back-divider {
+				background: linear-gradient(
+					180deg,
+					rgba(141, 110, 78, 0.1),
+					rgba(141, 110, 78, 0.45) 18%,
+					rgba(141, 110, 78, 0.45) 82%,
+					rgba(141, 110, 78, 0.1)
+				);
+			}
+
+			/* ── correspondence side ── */
+			.correspondence {
+				min-width: 0;
+				min-height: 0;
+				display: flex;
+				flex-direction: column;
+			}
+
+			.vb-label {
+				flex-shrink: 0;
+				margin: 0 0 4px;
+				font:
+					700 0.62rem 'Fredoka',
+					sans-serif;
+				letter-spacing: 0.2em;
+				text-transform: uppercase;
+				color: var(--ink-faint);
+			}
+
+			.guestbook {
+				flex: 1;
+				min-height: 0;
+				overflow-y: auto;
+				overscroll-behavior: contain;
+				padding-right: 6px;
+				/* ruled lines that scroll WITH the entries */
+				background: repeating-linear-gradient(transparent 0 25px, var(--ruled) 25px 26px);
+				background-attachment: local;
+			}
+
+			.gb-entry {
+				margin: 0;
+				font:
+					500 1.12rem/26px 'Caveat',
+					cursive;
+				color: #3f3329;
+				overflow-wrap: break-word;
+			}
+
+			.gb-author {
+				font-size: 0.95rem;
+				color: var(--ink-faint);
+				white-space: nowrap;
+			}
+
+			.gb-empty {
+				margin: 0;
+				font:
+					500 1.12rem/26px 'Caveat',
+					cursive;
+				color: var(--ink-faint);
+			}
+
+			.comment-form {
+				flex-shrink: 0;
+				display: flex;
+				align-items: flex-end;
+				gap: 8px;
+				padding-top: 10px;
+			}
+
+			/* writing directly on the card, not a UI pill */
+			.comment-form input {
+				flex: 1;
+				min-width: 0;
+				border: 0;
+				border-bottom: 2px solid rgba(93, 78, 55, 0.4);
+				background: transparent;
+				padding: 2px 2px 3px;
+				font:
+					600 1.15rem 'Caveat',
+					cursive;
+				color: var(--ink);
+				outline: none;
+			}
+
+			.comment-form input:focus {
+				border-bottom-color: var(--ink-soft);
+			}
+			.comment-form input::placeholder {
+				color: rgba(138, 108, 82, 0.65);
+			}
+
+			.comment-form .sticker {
+				height: 38px;
+				padding: 0 14px;
+				font-size: 11px;
+				transform: rotate(1.2deg);
+			}
+
+			/* ── address side ── */
+			.address-col {
+				min-width: 0;
+				display: flex;
+				flex-direction: column;
+			}
+
+			.stamp-cluster {
+				position: relative;
+				flex-shrink: 0;
+				height: 96px;
+			}
+
+			.stamp {
+				position: absolute;
+				top: 2px;
+				right: 0;
+				width: 66px;
+				padding: 5px;
+				rotate: 2.5deg;
+				/* perforated edge */
+				background-color: #fdfbf7;
+				background-image: radial-gradient(circle at 4px 4px, rgba(0, 0, 0, 0) 2.4px, #fdfbf7 2.6px);
+				background-size: 8px 8px;
+				background-position: -4px -4px;
+				box-shadow: 1px 2px 4px rgba(45, 36, 32, 0.22);
+			}
+
+			.stamp svg {
+				display: block;
+				width: 100%;
+				aspect-ratio: 1;
+			}
+
+			.stamp .stamp-value {
+				position: absolute;
+				bottom: 7px;
+				right: 7px;
+				font:
+					700 0.6rem 'Fredoka',
+					sans-serif;
+				color: rgba(253, 251, 247, 0.95);
+				text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+			}
+
+			.postmark {
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+				pointer-events: none;
+				color: var(--postal-ink);
+				rotate: -3deg;
+			}
+
+			.address-lines {
+				margin-block: auto;
+				padding-top: 10px;
+			}
+
+			.address-line {
+				display: flex;
+				align-items: baseline;
+				gap: 6px;
+				border-bottom: 1.5px dotted rgba(141, 110, 78, 0.55);
+				padding: 3px 2px 1px;
+				font:
+					600 1.25rem/1.3 'Caveat',
+					cursive;
+				color: #3f3329;
+			}
+
+			.address-line .field {
+				font:
+					700 0.6rem 'Fredoka',
+					sans-serif;
+				letter-spacing: 0.14em;
+				text-transform: uppercase;
+				color: var(--ink-faint);
+			}
+
+			.address-line.blank {
+				height: 34px;
+			}
+
+			/* rubber ink stamps */
+			.ink-stamps {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				padding: 14px 2px 12px;
+			}
+
+			.ink-stamp {
+				font:
+					700 0.66rem 'Fredoka',
+					sans-serif;
+				letter-spacing: 0.14em;
+				text-transform: uppercase;
+				border: 2.5px solid currentColor;
+				border-radius: 5px;
+				padding: 4px 9px;
+				opacity: 0.78;
+				/* uneven rubber-stamp inking */
+				mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='40'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0.55'/%3E%3C/filter%3E%3Crect width='90' height='40' filter='url(%23m)'/%3E%3C/svg%3E");
+			}
+
+			.ink-star {
+				color: var(--stamp-red);
+				rotate: -4deg;
+			}
+			.ink-forks {
+				color: var(--stamp-blue);
+				rotate: 2.5deg;
+			}
+
+			.back-return {
+				display: flex;
+				justify-content: flex-end;
+				padding-bottom: 4px;
+			}
+
+			@media (max-width: 480px) {
+				.back-grid {
+					grid-template-columns: 1fr;
+					gap: 10px 0;
+				}
+				.back-divider {
+					display: none;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="wall-light"></div>
+
+		<div class="toolbar" aria-label="Playground controls">
+			<button type="button" id="ctl-flip">Flip</button>
+			<button type="button" id="ctl-flat" aria-pressed="false">Side by side</button>
+			<button type="button" id="ctl-empty" aria-pressed="false">Empty book</button>
+		</div>
+
+		<!-- demo artwork, used full-size on the front and tiny as the stamp -->
+		<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+			<symbol id="demo-art" viewBox="0 0 480 480" preserveAspectRatio="xMidYMid slice">
+				<rect width="480" height="480" fill="#f3dfae" />
+				<rect y="0" width="480" height="150" fill="#f7e6bd" />
+				<rect y="110" width="480" height="90" fill="#f0cf90" />
+				<circle cx="350" cy="120" r="58" fill="#f4c430" />
+				<circle
+					cx="350"
+					cy="120"
+					r="70"
+					fill="none"
+					stroke="#e8a832"
+					stroke-width="5"
+					stroke-dasharray="2 16"
+					stroke-linecap="round"
+				/>
+				<ellipse cx="120" cy="86" rx="58" ry="17" fill="#fbf2da" opacity="0.9" />
+				<ellipse cx="170" cy="100" rx="40" ry="13" fill="#fbf2da" opacity="0.75" />
+				<path d="M0 230 Q 90 160 200 215 T 480 200 V 300 H 0 Z" fill="#9fae8e" />
+				<path d="M0 268 Q 140 205 270 258 T 480 248 V 330 H 0 Z" fill="#71917f" />
+				<path d="M0 318 H 480 V 480 H 0 Z" fill="#4a7fb5" />
+				<path
+					d="M0 330 q 40 -8 80 0 t 80 0 t 80 0 t 80 0 t 80 0 t 80 0"
+					stroke="#6f9cc9"
+					stroke-width="7"
+					fill="none"
+					stroke-linecap="round"
+				/>
+				<path
+					d="M30 392 q 50 -10 100 0 t 100 0"
+					stroke="#6f9cc9"
+					stroke-width="6"
+					fill="none"
+					stroke-linecap="round"
+					opacity="0.7"
+				/>
+				<path
+					d="M250 448 q 60 -12 120 0"
+					stroke="#3d6ea0"
+					stroke-width="6"
+					fill="none"
+					stroke-linecap="round"
+					opacity="0.6"
+				/>
+				<!-- the little boat -->
+				<path d="M310 372 q 28 16 56 0 l -8 16 q -20 8 -40 0 Z" fill="#2d2420" />
+				<path d="M338 318 V 370" stroke="#2d2420" stroke-width="4" />
+				<path d="M338 322 q 30 14 0 42" fill="#fbf7f0" stroke="#2d2420" stroke-width="3" />
+				<path d="M338 326 q -22 12 0 34" fill="#f4c430" stroke="#2d2420" stroke-width="3" />
+			</symbol>
+		</svg>
+
+		<div class="stage" id="stage">
+			<div class="scene">
+				<div class="postcard" id="postcard">
+					<!-- ════════ FRONT ════════ -->
+					<section class="postcard-face face-front">
+						<div class="grain"></div>
+						<div
+							class="stain"
+							style="
+								width: 54px;
+								height: 42px;
+								right: -8px;
+								bottom: 120px;
+								background: radial-gradient(
+									closest-side,
+									rgba(74, 127, 181, 0.12),
+									transparent 72%
+								);
+							"
+						></div>
+						<div
+							class="stain"
+							style="
+								width: 38px;
+								height: 34px;
+								left: -4px;
+								top: 40%;
+								background: radial-gradient(
+									closest-side,
+									rgba(244, 196, 48, 0.16),
+									transparent 72%
+								);
+							"
+						></div>
+
+						<div class="photo-wrap">
+							<span class="tape tape-tl"></span>
+							<span class="tape tape-tr"></span>
+							<button type="button" class="report-btn" aria-label="Report artwork">
+								<svg viewBox="0 0 24 24" aria-hidden="true">
+									<path
+										fill="currentColor"
+										d="M6 3a1 1 0 0 1 1 1v1h8.6l.2-.4A1.8 1.8 0 0 1 17.4 3H20a1 1 0 1 1 0 2h-2.6a.2.2 0 0 0-.18.11l-.48.95a1 1 0 0 1-.9.54H7v13a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1Z"
+									/>
+									<path
+										fill="currentColor"
+										d="M8 7h9.38a1.5 1.5 0 0 1 1.34.83l.94 1.87a1.5 1.5 0 0 1-.02 1.38l-.91 1.73a1.5 1.5 0 0 1-1.33.79H8z"
+									/>
+								</svg>
+							</button>
+							<div class="photo">
+								<svg aria-label="Sunset Over the Seine"><use href="#demo-art" /></svg>
+							</div>
+						</div>
+
+						<div class="caption">
+							<div class="avatar"></div>
+							<div class="caption-text">
+								<h2 class="title">Sunset Over the Seine</h2>
+								<p class="meta">2026 · gallery post</p>
+							</div>
+							<div class="signature-block">
+								<span class="signature">by jai3</span>
+								<span class="score">⭐ 4</span>
+							</div>
+						</div>
+
+						<div class="actions">
+							<button type="button" class="sticker s-up" data-variant="secondary">👍 12</button>
+							<button type="button" class="sticker s-down" data-variant="danger">👎 3</button>
+							<span class="spacer"></span>
+							<button type="button" class="sticker s-fork" data-variant="primary">
+								<svg
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.4"
+									stroke-linecap="round"
+									aria-hidden="true"
+								>
+									<circle cx="6" cy="5" r="2.4" />
+									<circle cx="18" cy="5" r="2.4" />
+									<circle cx="12" cy="19" r="2.4" />
+									<path d="M6 7.5v2A3.5 3.5 0 0 0 9.5 13h5A3.5 3.5 0 0 0 18 9.5v-2M12 13v3.5" />
+								</svg>
+								Fork
+							</button>
+							<button
+								type="button"
+								class="sticker square s-dl"
+								data-variant="accent"
+								aria-label="Download artwork"
+							>
+								<svg
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.6"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d="M12 4v11m0 0 5-5m-5 5-5-5M4 20h16" />
+								</svg>
+							</button>
+						</div>
+
+						<div class="front-footer">
+							<span class="edge-print">Not the Louvre · Gallery Post</span>
+							<button type="button" class="flip-tape" data-flip aria-label="Read the comments">
+								💬 <span class="count">3</span> comments
+								<svg
+									class="doodle-arrow"
+									viewBox="0 0 34 20"
+									fill="none"
+									stroke="#4a3a2c"
+									stroke-width="2.2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d="M2 15 Q 14 2 28 8" />
+									<path d="M22 4.5 28 8l-6.5 4" />
+								</svg>
+							</button>
+						</div>
+					</section>
+
+					<!-- ════════ BACK ════════ -->
+					<section class="postcard-face face-back">
+						<div class="grain"></div>
+						<div
+							class="stain"
+							style="
+								width: 46px;
+								height: 40px;
+								left: 32%;
+								bottom: 30px;
+								background: radial-gradient(
+									closest-side,
+									rgba(113, 145, 127, 0.13),
+									transparent 72%
+								);
+							"
+						></div>
+
+						<div class="airmail"></div>
+
+						<header class="back-header">
+							<span class="rule"></span>
+							<h2>Post Card</h2>
+							<span class="rule"></span>
+						</header>
+
+						<div class="back-grid">
+							<div class="correspondence">
+								<p class="vb-label">Visitor's Book</p>
+
+								<div class="guestbook" id="guestbook">
+									<p class="gb-entry">
+										This belongs in an actual museum, the light is gorgeous
+										<span class="gb-author">— mona_lisa_fan</span>
+									</p>
+									<p class="gb-entry">
+										the little boat!! 🛶 <span class="gb-author">— visitor_22</span>
+									</p>
+									<p class="gb-entry">
+										Forked it to add a dragon, hope you don't mind
+										<span class="gb-author">— dragon_dealer</span>
+									</p>
+									<p class="gb-empty" hidden>
+										The visitor's book is empty — be the first to sign it.
+									</p>
+								</div>
+
+								<form class="comment-form" onsubmit="return false;">
+									<input
+										type="text"
+										placeholder="Sign the visitor's book…"
+										aria-label="Write a comment"
+									/>
+									<button type="submit" class="sticker" data-variant="accent">Send</button>
+								</form>
+							</div>
+
+							<div class="back-divider"></div>
+
+							<div class="address-col">
+								<div class="stamp-cluster">
+									<div class="stamp">
+										<svg aria-hidden="true"><use href="#demo-art" /></svg>
+										<span class="stamp-value">4★</span>
+									</div>
+									<svg class="postmark" viewBox="0 0 220 96" aria-hidden="true">
+										<defs>
+											<path id="pm-top" d="M 16 48 A 32 32 0 1 1 80 48" />
+											<path id="pm-bottom" d="M 19 48 A 29 29 0 1 0 77 48" />
+										</defs>
+										<g stroke="currentColor" fill="none" opacity="0.62">
+											<circle cx="48" cy="48" r="40" stroke-width="2" />
+											<circle cx="48" cy="48" r="22" stroke-width="1.2" />
+											<path
+												d="M86 30 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
+												stroke-width="2.4"
+											/>
+											<path
+												d="M86 44 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
+												stroke-width="2.4"
+											/>
+											<path
+												d="M86 58 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
+												stroke-width="2.4"
+											/>
+											<path
+												d="M86 72 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
+												stroke-width="2.4"
+											/>
+										</g>
+										<g
+											fill="currentColor"
+											opacity="0.68"
+											font-family="Fredoka, sans-serif"
+											font-weight="600"
+										>
+											<text font-size="8.4" letter-spacing="1.6">
+												<textPath href="#pm-top" startOffset="8%">NOT THE LOUVRE</textPath>
+											</text>
+											<text font-size="8.4" letter-spacing="2">
+												<textPath href="#pm-bottom" startOffset="14%">GALLERY POST</textPath>
+											</text>
+											<text x="48" y="46" font-size="9.5" font-weight="700" text-anchor="middle">
+												JUN 11
+											</text>
+											<text x="48" y="57" font-size="9.5" font-weight="700" text-anchor="middle">
+												2026
+											</text>
+										</g>
+									</svg>
+								</div>
+
+								<div class="address-lines">
+									<div class="address-line">
+										<span class="field">To:</span> every gallery visitor
+									</div>
+									<div class="address-line"><span class="field">From:</span> jai3</div>
+									<div class="address-line blank"></div>
+								</div>
+
+								<div class="ink-stamps">
+									<span class="ink-stamp ink-star">⭐ 4</span>
+									<span class="ink-stamp ink-forks">2 Forks</span>
+								</div>
+
+								<div class="back-return">
+									<button
+										type="button"
+										class="flip-tape flip-tape-back"
+										data-flip
+										aria-label="Show the artwork"
+									>
+										<svg
+											class="doodle-arrow"
+											viewBox="0 0 34 20"
+											fill="none"
+											stroke="#3c4f42"
+											stroke-width="2.2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											style="scale: -1 1"
+										>
+											<path d="M2 15 Q 14 2 28 8" />
+											<path d="M22 4.5 28 8l-6.5 4" />
+										</svg>
+										🖼 the artwork
+									</button>
+								</div>
+							</div>
+						</div>
+
+						<div class="airmail"></div>
+					</section>
+				</div>
+			</div>
+		</div>
+
+		<script>
+			/* ════════════════════════════════════════════════════════════════
+   Verbatim ports from museum-canvas.ts so the playground matches
+   the real assets 1:1.
+   ════════════════════════════════════════════════════════════════ */
+
+			const WALL_TILE = 512;
+
+			const WINDOW_COLORS = { sA: [198, 182, 152] };
+
+			const STICKER_COLORS = {
+				ink: [47, 36, 28],
+				paper: [251, 247, 240],
+				primary: [212, 131, 74],
+				secondary: [113, 145, 127],
+				accent: [217, 176, 123],
+				danger: [162, 77, 73]
+			};
+
+			const PAINT_STAIN_COLORS = [
+				[244, 196, 48],
+				[212, 149, 108],
+				[139, 157, 145],
+				[200, 79, 79],
+				[212, 131, 74],
+				[217, 176, 123]
+			];
+
+			const STICKER_TAPE_TINTS = {
+				primary: [255, 250, 230],
+				secondary: [240, 245, 242],
+				accent: [255, 250, 235],
+				danger: [250, 235, 233],
+				ghost: [245, 240, 232]
+			};
+
+			const STICKER_TEXT_COLORS = {
+				accent: '#2f241c',
+				danger: '#fdfbf7',
+				ghost: '#2f241c',
+				primary: '#2f241c',
+				secondary: '#fdfbf7'
+			};
+
+			const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+			function makeRng(seed) {
+				return () => {
+					seed = (seed * 16807) % 2147483647;
+					return (seed & 0x7fffffff) / 2147483647;
+				};
+			}
+
+			/* ── wall pattern (createMuseumWallPatternUrl) ── */
+			function createMuseumWallPatternUrl() {
+				let seed = 91827;
+				const rng = () => {
+					seed = (seed * 16807) % 2147483647;
+					return (seed & 0x7fffffff) / 2147483647;
+				};
+
+				const baseFill = '#6c5e4b';
+				const mortarFill = '#5a4938';
+				const brickOutline = '#7b6852';
+				const rowHeights = [68, 60, 72, 56];
+				const mortar = 3;
+				const brickWidth = 128;
+				const parts = [
+					`<svg xmlns="http://www.w3.org/2000/svg" width="${WALL_TILE}" height="${WALL_TILE}" viewBox="0 0 ${WALL_TILE} ${WALL_TILE}" shape-rendering="geometricPrecision">`,
+					`<rect width="${WALL_TILE}" height="${WALL_TILE}" fill="${baseFill}"/>`
+				];
+
+				let y = 0;
+				let rowIndex = 0;
+				while (y < WALL_TILE) {
+					const rowHeight = rowHeights[rowIndex % rowHeights.length];
+					const brickHeight = rowHeight - mortar;
+					const offset = rowIndex % 2 === 0 ? 0 : brickWidth / 2;
+
+					for (let col = -1; col <= Math.ceil(WALL_TILE / brickWidth) + 1; col += 1) {
+						const widthVariance = 0.94 + rng() * 0.12;
+						const currentBrickWidth = Math.round(brickWidth * widthVariance);
+						const x = Math.round(col * brickWidth + offset - (currentBrickWidth - brickWidth) / 2);
+						if (x + currentBrickWidth < 0 || x > WALL_TILE) continue;
+
+						const tint = 0.9 + rng() * 0.14;
+						const [r, g, b] = WINDOW_COLORS.sA;
+						const fill = `rgb(${Math.trunc(r * tint)},${Math.trunc(g * tint)},${Math.trunc(b * tint)})`;
+						const bevel = 6;
+						parts.push(
+							`<rect x="${x}" y="${y}" width="${currentBrickWidth}" height="${brickHeight}" rx="2" fill="${fill}" stroke="${brickOutline}" stroke-opacity="0.32"/>`,
+							`<path d="M ${x} ${y} H ${x + currentBrickWidth} L ${x + currentBrickWidth - bevel} ${y + bevel + 2} H ${x + bevel} Z" fill="rgba(255,248,225,0.16)"/>`,
+							`<path d="M ${x} ${y + brickHeight} H ${x + currentBrickWidth} L ${x + currentBrickWidth - bevel} ${y + brickHeight - bevel} H ${x + bevel} Z" fill="rgba(0,0,0,0.14)"/>`
+						);
+
+						const crackCount = 1 + (rng() > 0.62 ? 1 : 0);
+						for (let crackIndex = 0; crackIndex < crackCount; crackIndex += 1) {
+							const crackX1 = Math.round(x + bevel + rng() * (currentBrickWidth - bevel * 3));
+							const crackY1 = Math.round(y + bevel + rng() * (brickHeight - bevel * 3));
+							const crackX2 = Math.round(crackX1 + (rng() - 0.5) * 28);
+							const crackY2 = Math.round(crackY1 + (rng() - 0.5) * 18);
+							parts.push(
+								`<path d="M ${crackX1} ${crackY1} L ${crackX2} ${crackY2}" stroke="rgba(108,94,70,${0.14 + rng() * 0.08})" stroke-width="${(0.5 + rng() * 0.8).toFixed(2)}" stroke-linecap="round"/>`
+							);
+						}
+
+						if (rng() > 0.72) {
+							const stainX = Math.round(x + bevel + rng() * (currentBrickWidth - bevel * 4));
+							const stainY = Math.round(y + bevel + rng() * (brickHeight - bevel * 4));
+							const stainWidth = Math.round(12 + rng() * 22);
+							const stainHeight = Math.round(8 + rng() * 14);
+							parts.push(
+								`<ellipse cx="${stainX + stainWidth / 2}" cy="${stainY + stainHeight / 2}" rx="${stainWidth / 2}" ry="${stainHeight / 2}" fill="rgba(140,124,96,${0.08 + rng() * 0.08})"/>`
+							);
+						}
+					}
+
+					const mortarY = y + rowHeight - mortar;
+					parts.push(
+						`<rect x="0" y="${mortarY}" width="${WALL_TILE}" height="${mortar}" fill="${mortarFill}" fill-opacity="0.7"/>`,
+						`<line x1="0" y1="${mortarY - 0.5}" x2="${WALL_TILE}" y2="${mortarY - 0.5}" stroke="rgba(255,248,225,0.08)" stroke-width="0.5"/>`,
+						`<line x1="0" y1="${mortarY + mortar}" x2="${WALL_TILE}" y2="${mortarY + mortar}" stroke="rgba(0,0,0,0.06)" stroke-width="1"/>`
+					);
+
+					y += rowHeight;
+					rowIndex += 1;
+				}
+
+				seed = 44219;
+				for (let i = 0; i < 92; i += 1) {
+					const sx = Math.round(rng() * WALL_TILE);
+					const sy = Math.round(rng() * WALL_TILE);
+					const sr = (0.35 + rng() * 1.2).toFixed(2);
+					parts.push(
+						`<circle cx="${sx}" cy="${sy}" r="${sr}" fill="rgba(255,248,225,${0.04 + rng() * 0.06})"/>`
+					);
+				}
+
+				parts.push('</svg>');
+				return `data:image/svg+xml,${encodeURIComponent(parts.join(''))}`;
+			}
+
+			/* ── sticker background (createStickerBackgroundUrl) ── */
+			function createStickerBackgroundUrl(width, height, variant = 'primary') {
+				const bandColor = variant === 'ghost' ? STICKER_COLORS.paper : STICKER_COLORS[variant];
+				const tapeColor = STICKER_TAPE_TINTS[variant];
+				const rng = makeRng(99887 + width * 7 + height * 13 + (variant.charCodeAt(0) || 0) * 31);
+				const bandMargin = Math.round(height * 0.1);
+				const tapeWidth = Math.round(Math.max(16, width * 0.12));
+				const tapeHeight = Math.round(Math.max(20, height * 0.35));
+				const parts = [
+					`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" fill="none" shape-rendering="geometricPrecision">`,
+					'<defs>',
+					'<filter id="sticker-shadow" x="-10%" y="-20%" width="140%" height="160%">',
+					'<feDropShadow dx="1" dy="3" stdDeviation="3" flood-color="rgba(47,36,28,0.12)"/>',
+					'</filter>',
+					'<linearGradient id="sticker-hi" x1="0" y1="0" x2="0" y2="1">',
+					'<stop offset="0%" stop-color="rgba(255,255,255,0.22)"/>',
+					'<stop offset="100%" stop-color="rgba(255,255,255,0)"/>',
+					'</linearGradient>',
+					'<linearGradient id="sticker-lo" x1="0" y1="0" x2="0" y2="1">',
+					'<stop offset="0%" stop-color="rgba(0,0,0,0)"/>',
+					'<stop offset="100%" stop-color="rgba(0,0,0,0.06)"/>',
+					'</linearGradient>',
+					'</defs>',
+					`<rect x="3" y="3" width="${Math.max(0, width - 6)}" height="${Math.max(0, height - 6)}" rx="2" fill="rgba(0,0,0,0)" filter="url(#sticker-shadow)"/>`,
+					`<rect x="2" y="2" width="${Math.max(0, width - 4)}" height="${Math.max(0, height - 4)}" rx="2" fill="${rgb(STICKER_COLORS.paper)}"/>`,
+					`<rect x="${2 + bandMargin}" y="${2 + bandMargin}" width="${Math.max(0, width - 4 - bandMargin * 2)}" height="${Math.max(0, height - 4 - bandMargin * 2)}" rx="1" fill="${rgb(bandColor, 0.82)}"/>`,
+					`<rect x="${2 + bandMargin}" y="${2 + bandMargin}" width="${Math.max(0, width - 4 - bandMargin * 2)}" height="${Math.max(0, Math.round(height * 0.3))}" rx="1" fill="url(#sticker-hi)"/>`,
+					`<rect x="${2 + bandMargin}" y="${Math.round(height * 0.7)}" width="${Math.max(0, width - 4 - bandMargin * 2)}" height="${Math.max(0, Math.ceil(height * 0.3))}" rx="1" fill="url(#sticker-lo)"/>`
+				];
+
+				for (let x = 6; x < width - 6; x += 4 + rng() * 6) {
+					if (rng() > 0.6) {
+						const size = 1 + rng() * 2;
+						const bottomY = height - 2 - rng();
+						parts.push(
+							`<rect x="${x.toFixed(2)}" y="1" width="${size.toFixed(2)}" height="${(1 + rng()).toFixed(2)}" fill="${rgb(STICKER_COLORS.paper)}"/>`,
+							`<rect x="${x.toFixed(2)}" y="${bottomY.toFixed(2)}" width="${size.toFixed(2)}" height="${(1 + rng()).toFixed(2)}" fill="${rgb(STICKER_COLORS.paper)}"/>`
+						);
+					}
+				}
+
+				for (let y = 6; y < height - 6; y += 4 + rng() * 6) {
+					if (rng() > 0.7) {
+						const size = 1 + rng() * 1.5;
+						const edgeWidth = 1 + rng();
+						parts.push(
+							`<rect x="1" y="${y.toFixed(2)}" width="${edgeWidth.toFixed(2)}" height="${size.toFixed(2)}" fill="${rgb(STICKER_COLORS.paper)}"/>`,
+							`<rect x="${(width - 2 - rng()).toFixed(2)}" y="${y.toFixed(2)}" width="${(1 + rng()).toFixed(2)}" height="${size.toFixed(2)}" fill="${rgb(STICKER_COLORS.paper)}"/>`
+						);
+					}
+				}
+
+				parts.push(
+					`<rect x="${(6 - tapeWidth / 2).toFixed(2)}" y="${(5 - tapeHeight / 2).toFixed(2)}" width="${tapeWidth}" height="${tapeHeight}" fill="${rgb(tapeColor, 0.46)}" stroke="rgba(0,0,0,0.05)" stroke-width="0.5" transform="rotate(-10 6 5)"/>`,
+					`<line x1="${(6 - tapeWidth / 2 + 2).toFixed(2)}" y1="${(5 - tapeHeight * 0.1).toFixed(2)}" x2="${(6 + tapeWidth / 2 - 2).toFixed(2)}" y2="${(5 + tapeHeight * 0.05).toFixed(2)}" stroke="rgba(255,255,255,0.12)" stroke-width="1" transform="rotate(-10 6 5)"/>`,
+					`<rect x="${(width - 6 - tapeWidth / 2).toFixed(2)}" y="${(height - 5 - tapeHeight / 2).toFixed(2)}" width="${tapeWidth}" height="${tapeHeight}" fill="${rgb(tapeColor, 0.44)}" stroke="rgba(0,0,0,0.05)" stroke-width="0.5" transform="rotate(10 ${width - 6} ${height - 5})"/>`,
+					`<line x1="${(width - 6 - tapeWidth / 2 + 2).toFixed(2)}" y1="${(height - 5 + tapeHeight * 0.08).toFixed(2)}" x2="${(width - 6 + tapeWidth / 2 - 2).toFixed(2)}" y2="${(height - 5 - tapeHeight * 0.06).toFixed(2)}" stroke="rgba(255,255,255,0.10)" stroke-width="1" transform="rotate(10 ${width - 6} ${height - 5})"/>`
+				);
+
+				for (let index = 0; index < 3; index += 1) {
+					const color = PAINT_STAIN_COLORS[Math.floor(rng() * PAINT_STAIN_COLORS.length)];
+					const centerX = rng() * width;
+					const centerY = rng() * height;
+					const radius = 2 + rng() * 8;
+					const alpha = 0.06 + rng() * 0.1;
+					parts.push(
+						`<ellipse cx="${centerX.toFixed(2)}" cy="${centerY.toFixed(2)}" rx="${radius.toFixed(2)}" ry="${(radius * (0.5 + rng() * 0.7)).toFixed(2)}" transform="rotate(${(rng() * 180).toFixed(2)} ${centerX.toFixed(2)} ${centerY.toFixed(2)})" fill="${rgb(color, alpha)}"/>`
+					);
+					if (rng() > 0.5) {
+						const dripX = centerX + (rng() - 0.5) * radius * 3;
+						const dripY = centerY + rng() * radius * 2;
+						parts.push(
+							`<ellipse cx="${dripX.toFixed(2)}" cy="${dripY.toFixed(2)}" rx="${(radius * 0.25).toFixed(2)}" ry="${(radius * 0.4).toFixed(2)}" transform="rotate(${(rng() * 180).toFixed(2)} ${dripX.toFixed(2)} ${dripY.toFixed(2)})" fill="${rgb(color, alpha * 0.6)}"/>`
+						);
+					}
+				}
+
+				if (rng() > 0.35) {
+					const centerX = width * 0.55 + rng() * width * 0.3;
+					const centerY = height * 0.25 + rng() * height * 0.5;
+					const radius = 5 + rng() * 7;
+					parts.push(
+						`<circle cx="${centerX.toFixed(2)}" cy="${centerY.toFixed(2)}" r="${radius.toFixed(2)}" stroke="rgba(140,110,70,0.06)" stroke-width="${(1.2 + rng() * 0.8).toFixed(2)}" stroke-dasharray="${(radius * 4.8).toFixed(2)} ${(radius * 1.2).toFixed(2)}" fill="none"/>`
+					);
+				}
+
+				for (let index = 0; index < 48; index += 1) {
+					const x = rng() * width;
+					const y = rng() * height;
+					const radius = 0.35 + rng() * 0.8;
+					parts.push(
+						`<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${radius.toFixed(2)}" fill="rgba(255,255,255,${(0.02 + rng() * 0.035).toFixed(3)})"/>`
+					);
+				}
+
+				parts.push('</svg>');
+				return `data:image/svg+xml,${encodeURIComponent(parts.join(''))}`;
+			}
+
+			/* ════════ playground wiring ════════ */
+
+			document.body.style.backgroundImage = `url('${createMuseumWallPatternUrl()}')`;
+			document.body.style.backgroundSize = `${WALL_TILE}px ${WALL_TILE}px`;
+
+			function applyStickers() {
+				document.querySelectorAll('.sticker').forEach((btn) => {
+					const w = Math.round(btn.offsetWidth);
+					const h = Math.round(btn.offsetHeight);
+					if (!w || !h) return;
+					const variant = btn.dataset.variant || 'primary';
+					btn.style.backgroundImage = `url("${createStickerBackgroundUrl(w, h, variant)}")`;
+					btn.style.color = STICKER_TEXT_COLORS[variant];
+				});
+			}
+
+			const postcard = document.getElementById('postcard');
+			const stage = document.getElementById('stage');
+
+			let isFlipped = false;
+			function flip() {
+				isFlipped = !isFlipped;
+				postcard.classList.toggle('is-flipped', isFlipped);
+				postcard.classList.remove('is-lifting');
+				void postcard.offsetWidth;
+				postcard.classList.add('is-lifting');
+				setTimeout(() => postcard.classList.remove('is-lifting'), 660);
+			}
+
+			document.querySelectorAll('[data-flip]').forEach((b) => b.addEventListener('click', flip));
+			document.getElementById('ctl-flip').addEventListener('click', flip);
+
+			document.getElementById('ctl-flat').addEventListener('click', (e) => {
+				const pressed = e.currentTarget.getAttribute('aria-pressed') === 'true';
+				e.currentTarget.setAttribute('aria-pressed', String(!pressed));
+				stage.classList.toggle('flat', !pressed);
+				requestAnimationFrame(applyStickers);
+			});
+
+			document.getElementById('ctl-empty').addEventListener('click', (e) => {
+				const pressed = e.currentTarget.getAttribute('aria-pressed') === 'true';
+				e.currentTarget.setAttribute('aria-pressed', String(!pressed));
+				const empty = !pressed;
+				document.querySelectorAll('.gb-entry').forEach((el) => (el.hidden = empty));
+				document.querySelector('.gb-empty').hidden = !empty;
+				document.querySelector('.flip-tape .count').textContent = empty ? '0' : '3';
+			});
+
+			if (document.fonts && document.fonts.ready) {
+				document.fonts.ready.then(applyStickers);
+			}
+			applyStickers();
+			window.addEventListener('resize', () => requestAnimationFrame(applyStickers));
+		</script>
+	</body>
+</html>
