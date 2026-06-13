@@ -2,12 +2,14 @@ import { mkdir, rm, symlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import process from 'node:process';
 import {
-	DEFAULT_BUILD_DIR,
-	ensureBuildManifestExcludesRoutePrefix,
-	ensureBuildOutput,
+	DEFAULT_CLOUDFLARE_BUILD_DIR,
+	DEFAULT_CLOUDFLARE_MANIFEST_PATH,
+	ensureManifestFileExcludesRoutePrefix,
 	ensureServerDependencyBundled,
 	ensureServerWasmAsset,
+	ensureServerWasmModuleExternalized,
 	ensureServerWasmReferenced,
+	ensureWorkerBuildOutput,
 	syncGeneratedServerWasmAsset,
 	syncProductionRoutes
 } from '../src/lib/server/deploy/build';
@@ -19,7 +21,9 @@ const generatedSourceDirectory = resolve(projectRoot, '.generated/production-src
 const targetRoutesDirectory = resolve(generatedSourceDirectory, 'routes');
 const generatedLibDirectory = resolve(generatedSourceDirectory, 'lib');
 const sourceLibDirectory = resolve(projectRoot, 'src/lib');
-const buildDirectory = resolve(projectRoot, DEFAULT_BUILD_DIR);
+const cloudflareBuildDirectory = resolve(projectRoot, DEFAULT_CLOUDFLARE_BUILD_DIR);
+const cloudflareManifestPath = resolve(projectRoot, DEFAULT_CLOUDFLARE_MANIFEST_PATH);
+const svelteKitOutputDirectory = resolve(projectRoot, '.svelte-kit/output');
 const generatedServerWasmPath = resolve(
 	projectRoot,
 	'../../packages/stroke-json-runtime/generated/wasm/server/stroke_json_wasm_bg.wasm'
@@ -58,15 +62,23 @@ try {
 		throw new Error(`vite build failed with exit code ${exitCode}`);
 	}
 
-	await ensureBuildOutput(buildDirectory);
-	await ensureServerDependencyBundled(buildDirectory, 'gsap');
-	await ensureServerDependencyBundled(buildDirectory, '@not-the-louvre/stroke-json-runtime/server');
-	await ensureBuildManifestExcludesRoutePrefix(buildDirectory, '/demo');
-	await syncGeneratedServerWasmAsset(buildDirectory, generatedServerWasmPath);
-	await ensureServerWasmAsset(buildDirectory);
-	await ensureServerWasmReferenced(buildDirectory);
+	await ensureWorkerBuildOutput(cloudflareBuildDirectory);
+	await ensureServerDependencyBundled(svelteKitOutputDirectory, 'gsap');
+	await ensureServerDependencyBundled(
+		svelteKitOutputDirectory,
+		'@not-the-louvre/stroke-json-runtime/server'
+	);
+	await ensureManifestFileExcludesRoutePrefix(cloudflareManifestPath, '/demo');
+	await ensureServerWasmModuleExternalized(svelteKitOutputDirectory);
+	// `vite preview` still serves the SSR output with Node, which loads the wasm
+	// from disk relative to the emitted chunks.
+	await syncGeneratedServerWasmAsset(svelteKitOutputDirectory, generatedServerWasmPath);
+	await ensureServerWasmAsset(svelteKitOutputDirectory);
+	await ensureServerWasmReferenced(svelteKitOutputDirectory);
 
-	process.stdout.write(`Validated adapter-node build output at ${buildDirectory}\n`);
+	process.stdout.write(
+		`Validated adapter-cloudflare build output at ${cloudflareBuildDirectory}\n`
+	);
 } finally {
 	await rm(generatedSourceDirectory, { force: true, recursive: true });
 }

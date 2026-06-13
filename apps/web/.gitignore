@@ -11,3 +11,5 @@ vite.config.ts.timestamp-*
 .env.*
 !.env.example
 !.env.test
+.wrangler
+.dev.vars
