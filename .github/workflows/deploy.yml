@@ -33,8 +33,18 @@ jobs:
       # packages/stroke-json-runtime/generated, so no Rust toolchain is needed
       # here. `bun run build` smoke-tests that artifact, then runs the SvelteKit
       # adapter-cloudflare build into apps/web/.svelte-kit/cloudflare.
+      #
+      # SvelteKit's postbuild `analyse` step imports the server modules, and
+      # better-auth validates its secret when its instance is constructed at
+      # module load. These placeholders only let that import succeed — the real
+      # values are Cloudflare Worker secrets read at runtime via
+      # `$env/dynamic/private`. DATABASE_URL is not needed: the DB connection is
+      # created lazily on first request, not at import.
       - name: Build
         run: bun run build
+        env:
+          BETTER_AUTH_SECRET: build-time-placeholder-not-used-at-runtime
+          ORIGIN: https://build.invalid
 
       - name: Deploy with Wrangler
         uses: cloudflare/wrangler-action@v3
