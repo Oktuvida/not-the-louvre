@@ -26,7 +26,7 @@
 		context?: GalleryLayoutContext;
 	} = $props();
 
-	const galleryLayout = context ?? createGalleryLayoutContext();
+	const galleryLayout = (() => context ?? createGalleryLayoutContext())();
 	setGalleryLayoutContext(galleryLayout);
 	const museumWallPatternUrl = createMuseumWallPatternUrl();
 	const panelBindings = galleryLayout.panelBindings;
