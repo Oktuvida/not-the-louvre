@@ -4,14 +4,17 @@ import postgres from 'postgres';
 import * as schema from './schema';
 import { env } from '$env/dynamic/private';
 
-if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
-
 type DbConnection = {
 	client: ReturnType<typeof postgres>;
 	db: PostgresJsDatabase<typeof schema>;
 };
 
 const createDbConnection = (): DbConnection => {
+	// Validated here rather than at module load so importing this module stays
+	// side-effect-free (SvelteKit's postbuild `analyse` step imports server
+	// modules without runtime env present).
+	if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
+
 	const client = postgres(env.DATABASE_URL);
 
 	return { client, db: drizzle(client, { schema }) };
