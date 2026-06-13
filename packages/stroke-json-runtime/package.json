@@ -8,6 +8,7 @@
 		".": "./src/index.ts",
 		"./browser": "./src/browser.ts",
 		"./server": "./src/server.ts",
+		"./server.wasm": "./generated/wasm/server/stroke_json_wasm_bg.wasm",
 		"./worker": "./src/worker.ts"
 	}
 }
