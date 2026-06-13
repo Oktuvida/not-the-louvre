@@ -1,4 +1,4 @@
-import adapter from '@sveltejs/adapter-node';
+import adapter from '@sveltejs/adapter-cloudflare';
 import { relative, sep } from 'node:path';
 
 const routesDirectory = process.env.SVELTEKIT_ROUTES_DIR ?? 'src/routes';

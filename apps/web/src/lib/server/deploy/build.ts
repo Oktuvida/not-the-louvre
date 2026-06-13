@@ -2,6 +2,13 @@ import { access, copyFile, cp, mkdir, readdir, readFile, rm } from 'node:fs/prom
 import { dirname, join, relative, resolve } from 'node:path';
 
 export const DEFAULT_BUILD_DIR = 'build';
+export const DEFAULT_CLOUDFLARE_BUILD_DIR = join('.svelte-kit', 'cloudflare');
+export const DEFAULT_CLOUDFLARE_MANIFEST_PATH = join(
+	'.svelte-kit',
+	'cloudflare-tmp',
+	'manifest.js'
+);
+export const SERVER_WASM_IMPORT_SPECIFIER = '@not-the-louvre/stroke-json-runtime/server.wasm';
 export const GENERATED_SERVER_WASM_RELATIVE_PATH = join(
 	'generated',
 	'wasm',
@@ -64,6 +71,39 @@ export const ensureBuildOutput = async (buildDirectory: string) => {
 	return entryPoint;
 };
 
+export const ensureWorkerBuildOutput = async (cloudflareBuildDirectory: string) => {
+	const workerEntryPoint = join(cloudflareBuildDirectory, '_worker.js');
+
+	try {
+		await access(workerEntryPoint);
+	} catch {
+		throw new Error(
+			`Expected adapter-cloudflare build output at ${cloudflareBuildDirectory} (missing _worker.js)`
+		);
+	}
+
+	return workerEntryPoint;
+};
+
+// The Workers runtime forbids compiling WASM from bytes, so the SSR output must
+// keep the stroke-json wasm as an external module import for wrangler to bundle.
+export const ensureServerWasmModuleExternalized = async (buildDirectory: string) => {
+	const serverDirectory = join(buildDirectory, 'server');
+	const serverFiles = await collectJavaScriptFiles(serverDirectory);
+
+	for (const serverFile of serverFiles) {
+		const contents = await readFile(serverFile, 'utf8');
+
+		if (contents.includes(SERVER_WASM_IMPORT_SPECIFIER)) {
+			return serverFile;
+		}
+	}
+
+	throw new Error(
+		`Expected SSR build to keep an external import of ${SERVER_WASM_IMPORT_SPECIFIER} under ${serverDirectory}`
+	);
+};
+
 export const ensureServerWasmAsset = async (buildDirectory: string) => {
 	const wasmAssetPath = join(buildDirectory, 'server', GENERATED_SERVER_WASM_RELATIVE_PATH);
 
@@ -104,11 +144,10 @@ export const syncGeneratedServerWasmAsset = async (
 	return targetWasmPath;
 };
 
-export const ensureBuildManifestExcludesRoutePrefix = async (
-	buildDirectory: string,
+export const ensureManifestFileExcludesRoutePrefix = async (
+	manifestPath: string,
 	routePrefix: string
 ) => {
-	const manifestPath = join(buildDirectory, 'server', 'manifest.js');
 	const manifestContents = await readFile(manifestPath, 'utf8');
 	const escapedRoutePrefix = routePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	const routePattern = new RegExp(`id:\\s+['"]${escapedRoutePrefix}(?:/|['"])`, 'u');
@@ -119,6 +158,12 @@ export const ensureBuildManifestExcludesRoutePrefix = async (
 		);
 	}
 };
+
+export const ensureBuildManifestExcludesRoutePrefix = (
+	buildDirectory: string,
+	routePrefix: string
+) =>
+	ensureManifestFileExcludesRoutePrefix(join(buildDirectory, 'server', 'manifest.js'), routePrefix);
 
 export const syncProductionRoutes = async (
 	sourceRoutesDirectory: string,

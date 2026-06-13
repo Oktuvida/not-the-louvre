@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import initStrokeJsonServerWasm, {
 	compact_document_losslessly_with_report,
 	decode_canonical_document,
@@ -31,14 +30,34 @@ import {
 	toStrokeJsonRuntimeError
 } from './internal';
 
-const loadDefaultServerBindings = async (): Promise<StrokeJsonBindings> => {
+// Cloudflare Workers forbid compiling WASM from bytes at runtime, so there the
+// binary must arrive as a WebAssembly.Module import resolved by the bundler.
+const runningInCloudflareWorkers =
+	typeof caches !== 'undefined' &&
+	(caches as unknown as { default?: unknown }).default !== undefined;
+
+const loadServerWasmModule = async (): Promise<WebAssembly.Module | Uint8Array> => {
+	if (runningInCloudflareWorkers) {
+		const { default: wasmModule } = (await import(
+			'@not-the-louvre/stroke-json-runtime/server.wasm'
+		)) as unknown as { default: WebAssembly.Module };
+
+		return wasmModule;
+	}
+
+	const { readFile } = await import('node:fs/promises');
 	const wasmUrl = new URL('../generated/wasm/server/stroke_json_wasm_bg.wasm', import.meta.url);
-	const wasmBytes = new Uint8Array(await readFile(wasmUrl));
+
+	return new Uint8Array(await readFile(wasmUrl));
+};
+
+const loadDefaultServerBindings = async (): Promise<StrokeJsonBindings> => {
+	const wasmModule = await loadServerWasmModule();
 
 	if (typeof initSync === 'function') {
-		initSync({ module: wasmBytes });
+		initSync({ module: wasmModule });
 	} else {
-		await initStrokeJsonServerWasm({ module_or_path: wasmBytes });
+		await initStrokeJsonServerWasm({ module_or_path: wasmModule });
 	}
 
 	return {
