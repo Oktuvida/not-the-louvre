@@ -23,6 +23,13 @@ const strokeJsonRuntimeRoot = resolve(workspaceRoot, 'packages/stroke-json-runti
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+	build: {
+		rollupOptions: {
+			// .wasm imports stay external so wrangler bundles them as
+			// WebAssembly.Module entries (workerd forbids compiling from bytes).
+			external: (id) => id.endsWith('.wasm')
+		}
+	},
 	server: {
 		fs: {
 			allow: [workspaceRoot, strokeJsonRuntimeRoot]

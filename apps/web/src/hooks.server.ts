@@ -2,6 +2,7 @@ import { json, type Handle } from '@sveltejs/kit';
 import { building } from '$app/environment';
 import { auth } from '$lib/server/auth';
 import { resolveSessionContext } from '$lib/server/auth/service';
+import { runWithRequestDbConnection } from '$lib/server/db';
 import { logSecurityEvent } from '$lib/server/security/logging';
 import { getTrustedOriginDecision } from '$lib/server/security/trusted-origin';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
@@ -49,4 +50,5 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 	return svelteKitHandler({ event, resolve, auth, building });
 };
 
-export const handle: Handle = handleBetterAuth;
+export const handle: Handle = (input) =>
+	runWithRequestDbConnection(async () => handleBetterAuth(input));

@@ -4,10 +4,13 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
 	ensureServerWasmAsset,
+	ensureServerWasmModuleExternalized,
 	ensureServerWasmReferenced,
 	ensureBuildManifestExcludesRoutePrefix,
 	ensureBuildOutput,
 	ensureServerDependencyBundled,
+	ensureWorkerBuildOutput,
+	SERVER_WASM_IMPORT_SPECIFIER,
 	syncGeneratedServerWasmAsset,
 	syncProductionRoutes
 } from './build';
@@ -153,6 +156,50 @@ describe('ensureBuildOutput', () => {
 		);
 
 		await expect(ensureServerWasmReferenced(buildDir)).resolves.toContain('_runtime.js');
+	});
+});
+
+describe('ensureWorkerBuildOutput', () => {
+	it('returns the worker entrypoint when the adapter-cloudflare output exists', async () => {
+		const buildDir = join(tmpdir(), `ntl-cf-build-${crypto.randomUUID()}`);
+		await mkdir(buildDir, { recursive: true });
+		await writeFile(join(buildDir, '_worker.js'), 'export default { fetch: () => {} };');
+
+		await expect(ensureWorkerBuildOutput(buildDir)).resolves.toBe(join(buildDir, '_worker.js'));
+	});
+
+	it('throws when the worker entrypoint is missing', async () => {
+		const buildDir = join(tmpdir(), `ntl-cf-build-${crypto.randomUUID()}`);
+		await mkdir(buildDir, { recursive: true });
+
+		await expect(ensureWorkerBuildOutput(buildDir)).rejects.toThrow(
+			'Expected adapter-cloudflare build output at'
+		);
+	});
+});
+
+describe('ensureServerWasmModuleExternalized', () => {
+	it('passes when a server chunk imports the wasm module specifier', async () => {
+		const buildDir = join(tmpdir(), `ntl-cf-wasm-${crypto.randomUUID()}`);
+		const serverDir = join(buildDir, 'server', 'chunks');
+		await mkdir(serverDir, { recursive: true });
+		await writeFile(
+			join(serverDir, '_runtime.js'),
+			`const wasmModule = await import('${SERVER_WASM_IMPORT_SPECIFIER}');\nexport { wasmModule };`
+		);
+
+		await expect(ensureServerWasmModuleExternalized(buildDir)).resolves.toContain('_runtime.js');
+	});
+
+	it('throws when no server chunk references the wasm module specifier', async () => {
+		const buildDir = join(tmpdir(), `ntl-cf-wasm-${crypto.randomUUID()}`);
+		const serverDir = join(buildDir, 'server', 'chunks');
+		await mkdir(serverDir, { recursive: true });
+		await writeFile(join(serverDir, '_page.js'), 'export const noop = true;');
+
+		await expect(ensureServerWasmModuleExternalized(buildDir)).rejects.toThrow(
+			'Expected SSR build to keep an external import of'
+		);
 	});
 });
 
