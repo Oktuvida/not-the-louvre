@@ -924,7 +924,13 @@
 	}
 
 	.postcard-front {
+		z-index: 2;
 		padding: 14px 14px 10px;
+		transform: translateZ(0.1px);
+	}
+
+	.postcard.is-flipped .postcard-front {
+		z-index: 1;
 	}
 
 	.postcard-back {
@@ -932,10 +938,15 @@
 		 * front's box and a long visitor's book scrolls instead of growing it. */
 		position: absolute;
 		inset: 0;
-		transform: rotateY(180deg);
+		z-index: 1;
+		transform: rotateY(180deg) translateZ(0.1px);
 		background-color: #f6efe2;
 		/* airmail strips hug the corners */
 		overflow: hidden;
+	}
+
+	.postcard.is-flipped .postcard-back {
+		z-index: 2;
 	}
 
 	/* Faint paint stains, like the polaroid cards carry. Radial gradients on
