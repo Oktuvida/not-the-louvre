@@ -65,8 +65,14 @@ scoped to a `production` environment:
 | `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID                                        |
 
 The deploy job needs neither Rust nor a database: the stroke-json WASM is
-committed under `packages/stroke-json-runtime/generated`, and the SvelteKit build
-reads runtime env lazily (`$env/dynamic/private`), so it builds without secrets.
+committed under `packages/stroke-json-runtime/generated`, and the database
+connection is created lazily on the first request rather than at import.
+
+One caveat: SvelteKit's postbuild `analyse` step imports the server modules, and
+better-auth validates its secret when its instance is constructed at module
+load. The deploy workflow therefore passes throwaway `BETTER_AUTH_SECRET` and
+`ORIGIN` values **for the build step only** — they are never used at runtime,
+where the real values come from the Worker secrets above.
 
 ## Local preview against the Worker runtime
 
