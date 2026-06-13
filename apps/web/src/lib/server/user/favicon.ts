@@ -1,29 +1,29 @@
-import sharp from 'sharp';
+import {
+	applyRoundedRectAlpha,
+	coverResize,
+	cropCenter,
+	decodeImage,
+	encodePng,
+	sniffImageFormat
+} from '$lib/server/media/codecs';
 
 const FAVICON_SIZE = 64;
 const FAVICON_RADIUS = 18;
 const FAVICON_ZOOM_FACTOR = 1.22;
 
-const buildRoundedMaskSvg = (size: number, radius: number) =>
-	`
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-	<rect width="${size}" height="${size}" rx="${radius}" ry="${radius}" fill="#ffffff" />
-</svg>`.trim();
-
 export const renderAvatarFaviconPng = async (input: Buffer | Uint8Array | ArrayBuffer) => {
-	const zoomedSize = Math.ceil(FAVICON_SIZE * FAVICON_ZOOM_FACTOR);
-	const overflow = Math.floor((zoomedSize - FAVICON_SIZE) / 2);
-	const roundedMask = Buffer.from(buildRoundedMaskSvg(FAVICON_SIZE, FAVICON_RADIUS));
+	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+	const format = sniffImageFormat(bytes);
 
-	return sharp(input, { animated: false })
-		.resize(zoomedSize, zoomedSize, { fit: 'cover', position: 'centre' })
-		.extract({
-			height: FAVICON_SIZE,
-			left: overflow,
-			top: overflow,
-			width: FAVICON_SIZE
-		})
-		.composite([{ blend: 'dest-in', input: roundedMask }])
-		.png()
-		.toBuffer();
+	if (!format) {
+		throw new Error('Avatar media has an unsupported image format');
+	}
+
+	const zoomedSize = Math.ceil(FAVICON_SIZE * FAVICON_ZOOM_FACTOR);
+	const decoded = await decodeImage(bytes, format);
+	const zoomed = await coverResize(decoded, { height: zoomedSize, width: zoomedSize });
+	const cropped = cropCenter(zoomed, FAVICON_SIZE, FAVICON_SIZE);
+	const rounded = applyRoundedRectAlpha(cropped, FAVICON_RADIUS);
+
+	return encodePng(rounded);
 };

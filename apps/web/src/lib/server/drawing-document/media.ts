@@ -1,17 +1,17 @@
-import sharp from 'sharp';
 import {
 	assertDrawingDocumentWithinLimits,
 	type DrawingDocument
 } from '$lib/features/stroke-json/document';
 import { drawingDocumentToSvg } from '$lib/features/stroke-json/svg';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import {
 	ARTWORK_MEDIA_CONTENT_TYPE,
 	ARTWORK_MEDIA_HEIGHT,
 	ARTWORK_MEDIA_MAX_BYTES,
 	ARTWORK_MEDIA_WIDTH
 } from '$lib/server/artwork/config';
+import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import type { SanitizedMedia } from '$lib/server/artwork/types';
+import { encodeAvif, renderSvgToRaster, type AvifEncodeSettings } from '$lib/server/media/codecs';
 import {
 	AVATAR_MEDIA_CONTENT_TYPE,
 	AVATAR_MEDIA_HEIGHT,
@@ -19,27 +19,23 @@ import {
 	AVATAR_MEDIA_WIDTH
 } from '$lib/server/user/config';
 
-const ARTWORK_CANONICAL_AVIF_ATTEMPTS = [
-	{ chromaSubsampling: '4:2:0', effort: 4, quality: 70 },
-	{ chromaSubsampling: '4:2:0', effort: 4, quality: 55 },
-	{ chromaSubsampling: '4:2:0', effort: 4, quality: 42 },
-	{ chromaSubsampling: '4:2:0', effort: 4, quality: 32 }
-] as const;
+const ARTWORK_CANONICAL_AVIF_ATTEMPTS: ReadonlyArray<AvifEncodeSettings> = [
+	{ chromaSubsampling: '4:2:0', quality: 70 },
+	{ chromaSubsampling: '4:2:0', quality: 55 },
+	{ chromaSubsampling: '4:2:0', quality: 42 },
+	{ chromaSubsampling: '4:2:0', quality: 32 }
+];
 
-const AVATAR_CANONICAL_AVIF_ATTEMPTS = [
-	{ chromaSubsampling: '4:4:4', effort: 4, quality: 90 },
-	{ chromaSubsampling: '4:4:4', effort: 4, quality: 75 },
-	{ chromaSubsampling: '4:2:0', effort: 4, quality: 60 }
-] as const;
+const AVATAR_CANONICAL_AVIF_ATTEMPTS: ReadonlyArray<AvifEncodeSettings> = [
+	{ chromaSubsampling: '4:4:4', quality: 90 },
+	{ chromaSubsampling: '4:4:4', quality: 75 },
+	{ chromaSubsampling: '4:2:0', quality: 60 }
+];
 
 const renderDocumentToAvif = async (
 	document: DrawingDocument,
 	options: {
-		attempts: ReadonlyArray<{
-			chromaSubsampling: '4:2:0' | '4:4:4';
-			effort: number;
-			quality: number;
-		}>;
+		attempts: ReadonlyArray<AvifEncodeSettings>;
 		contentType: string;
 		height: number;
 		kind: DrawingDocument['kind'];
@@ -58,17 +54,16 @@ const renderDocumentToAvif = async (
 	}
 
 	assertDrawingDocumentWithinLimits(document);
-	const svgBuffer = Buffer.from(drawingDocumentToSvg(document));
+
+	// The generated SVG paints an opaque background rect, so the raster needs
+	// no extra flattening before encoding.
+	const raster = await renderSvgToRaster(drawingDocumentToSvg(document), {
+		height: options.height,
+		width: options.width
+	});
 
 	for (const avifOptions of options.attempts) {
-		const outputBuffer = await sharp(svgBuffer, { density: 144 })
-			.resize(options.width, options.height, {
-				background: document.background,
-				fit: 'fill'
-			})
-			.flatten({ background: document.background })
-			.avif(avifOptions)
-			.toBuffer();
+		const outputBuffer = await encodeAvif(raster, avifOptions);
 
 		if (outputBuffer.byteLength <= options.maxBytes) {
 			return {
