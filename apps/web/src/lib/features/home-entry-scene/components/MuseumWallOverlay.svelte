@@ -108,23 +108,18 @@
 			? { frameVisualElement, overlayElement, wallSceneElement, wallTextureElement }
 			: null;
 
-	const updateWillChange = (active: boolean) => {
-		const elements = wallElements();
-		if (!elements) {
-			return;
-		}
-
-		applyMuseumWallWillChange(elements, active);
-	};
-
 	const resetWallStyles = () => {
 		const elements = wallElements();
 		if (!elements) {
 			return;
 		}
 
+		// Keep will-change:transform on the wall scene so its compositor layer (and
+		// its full-resolution raster) survives between the open/close animations.
+		// Toggling it off destroys the layer; Chrome then recreates it at the ~14x
+		// zoomed scale when the close starts and only rasters the visible centre,
+		// so shrinking reveals un-rastered wall edges as white/checkerboard patches.
 		resetWallZoom(elements);
-		applyMuseumWallWillChange(elements, false);
 	};
 
 	const updateMeasurements = () => {
@@ -233,7 +228,10 @@
 				const zoom = playWallZoomIn(elements, zoomGeometry);
 				zoom.finished
 					.then(() => {
-						updateWillChange(false);
+						// Intentionally keep will-change:transform active here. Removing it
+						// destroys the wall's compositor layer; the close animation would then
+						// recreate it at the zoomed-in scale and re-raster from scratch,
+						// producing checkerboard patches (see resetWallStyles).
 						dispatch('TRANSITION_DONE');
 					})
 					.catch(() => {

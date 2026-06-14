@@ -8,7 +8,7 @@
 	data-testid="studio-scene-fallback"
 >
 	<div
-		class="max-w-[18rem] rounded-[1.8rem] border-4 border-[var(--color-ink)] bg-[linear-gradient(180deg,_rgba(251,247,240,0.92),_rgba(232,219,201,0.96))] px-5 py-4 text-[var(--color-ink)] shadow-[var(--shadow-card)] backdrop-blur-sm"
+		class="max-w-[18rem] rounded-[1.8rem] border-4 border-[var(--color-ink)] bg-[linear-gradient(180deg,_rgba(251,247,240,0.92),_rgba(232,219,201,0.96))] px-5 py-4 text-[var(--color-ink)] shadow-[var(--shadow-card)]"
 	>
 		<p class="text-xs font-semibold tracking-[0.24em] text-[color:rgba(38,26,18,0.72)] uppercase">
 			{failed ? 'Scene preview paused' : 'Scene preview loading'}
