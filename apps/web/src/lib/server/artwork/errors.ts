@@ -64,7 +64,8 @@ const describeError = (error: unknown): Record<string, string> => {
 	}
 
 	const described: Record<string, string> = {
-		message: error.message,
+		// Truncated: drizzle error messages embed full query params (user data).
+		message: truncateDetail(error.message),
 		name: error.name
 	};
 
