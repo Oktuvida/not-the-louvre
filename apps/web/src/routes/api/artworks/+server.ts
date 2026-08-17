@@ -2,11 +2,13 @@ import { json } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
 import type { RequestHandler } from './$types';
 import { auth } from '$lib/server/auth';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError, logArtworkFlowFailure } from '$lib/server/artwork/errors';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';
 
-const toErrorResponse = (error: unknown) => {
+const toErrorResponse = (error: unknown, scope: string) => {
+	logArtworkFlowFailure(scope, error);
+
 	if (error instanceof ArtworkFlowError) {
 		return json({ code: error.code, message: error.message }, { status: error.status });
 	}
@@ -41,7 +43,7 @@ export const POST: RequestHandler = async (event) => {
 
 		return json({ artwork }, { status: 201 });
 	} catch (error) {
-		return toErrorResponse(error);
+		return toErrorResponse(error, 'artwork publish');
 	}
 };
 
@@ -65,6 +67,6 @@ export const GET: RequestHandler = async (event) => {
 		const discovery = await listArtworkDiscovery(discoveryRequest, { user: event.locals.user });
 		return json(discovery);
 	} catch (error) {
-		return toErrorResponse(error);
+		return toErrorResponse(error, 'artwork discovery');
 	}
 };

@@ -30,8 +30,20 @@ export class ArtworkFlowError extends Error {
 			| 'PUBLISH_FAILED'
 			| 'RATE_LIMITED'
 			| 'STORAGE_FAILED'
-			| 'UNAUTHENTICATED'
+			| 'UNAUTHENTICATED',
+		options?: ErrorOptions
 	) {
-		super(message);
+		super(message, options);
 	}
 }
+
+export const logArtworkFlowFailure = (scope: string, error: unknown) => {
+	const status = error instanceof ArtworkFlowError ? error.status : 500;
+	if (status < 500) return;
+
+	console.error(`[artwork] ${scope} failed (status ${status})`, error);
+	// Workers Logs does not serialize the cause chain, so surface it explicitly.
+	if (error instanceof Error && error.cause !== undefined) {
+		console.error(`[artwork] ${scope} failure cause`, error.cause);
+	}
+};
