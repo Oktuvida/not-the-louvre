@@ -478,7 +478,9 @@ export const publishArtwork = async (
 			throw error;
 		}
 
-		throw new ArtworkFlowError(500, 'Artwork publish failed', 'PUBLISH_FAILED');
+		throw new ArtworkFlowError(500, 'Artwork publish failed', 'PUBLISH_FAILED', {
+			cause: error
+		});
 	}
 };
 

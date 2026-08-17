@@ -3,11 +3,13 @@ import { getIp } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/features/stroke-json/runtime.server';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError, logArtworkFlowFailure } from '$lib/server/artwork/errors';
 import { getArtworkDetail } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';
 
 const toFailure = (errorValue: unknown, fallback: string) => {
+	logArtworkFlowFailure('publish action', errorValue);
+
 	if (
 		errorValue instanceof ArtworkFlowError ||
 		(typeof errorValue === 'object' &&
