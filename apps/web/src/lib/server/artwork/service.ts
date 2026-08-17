@@ -277,6 +277,34 @@ const recordPublishAttempt = async (
 	}
 };
 
+const isConnectionClosedError = (error: unknown): boolean => {
+	let current: unknown = error;
+	while (current instanceof Error) {
+		if ((current as { code?: unknown }).code === 'CONNECTION_CLOSED') {
+			return true;
+		}
+		current = current.cause;
+	}
+
+	return false;
+};
+
+// On Workers the request-scoped database socket can be closed while it sits
+// idle through the render and upload phase. A CONNECTION_CLOSED write never
+// reached Postgres, so a single retry on a fresh connection is safe.
+const retryOnConnectionClosed = async <T>(run: () => Promise<T>): Promise<T> => {
+	try {
+		return await run();
+	} catch (error) {
+		if (!isConnectionClosedError(error)) {
+			throw error;
+		}
+
+		console.warn(JSON.stringify({ category: 'artwork', event: 'insert_retry_connection_closed' }));
+		return run();
+	}
+};
+
 const getArtworkOrThrow = async (artworkId: string, repository: ArtworkRepository) => {
 	const artwork = await repository.findArtworkById(artworkId);
 	if (!artwork) {
@@ -445,25 +473,27 @@ export const publishArtwork = async (
 	await storage.upload(storageKey, media.file);
 
 	try {
-		const artwork = await repository.createArtwork({
-			authorId: actor.user.id,
-			commentCount: 0,
-			createdAt: now,
-			drawingDocument,
-			drawingVersion,
-			forkCount: 0,
-			id: artworkId,
-			isNsfw: Boolean(input.isNsfw),
-			mediaContentType: media.contentType,
-			mediaSizeBytes: media.sizeBytes,
-			nsfwLabeledAt: input.isNsfw ? now : null,
-			nsfwSource: input.isNsfw ? 'creator' : null,
-			parentId: parentArtworkId,
-			score: 0,
-			storageKey,
-			title,
-			updatedAt: now
-		});
+		const artwork = await retryOnConnectionClosed(() =>
+			repository.createArtwork({
+				authorId: actor.user.id,
+				commentCount: 0,
+				createdAt: now,
+				drawingDocument,
+				drawingVersion,
+				forkCount: 0,
+				id: artworkId,
+				isNsfw: Boolean(input.isNsfw),
+				mediaContentType: media.contentType,
+				mediaSizeBytes: media.sizeBytes,
+				nsfwLabeledAt: input.isNsfw ? now : null,
+				nsfwSource: input.isNsfw ? 'creator' : null,
+				parentId: parentArtworkId,
+				score: 0,
+				storageKey,
+				title,
+				updatedAt: now
+			})
+		);
 
 		await recordPublishAttempt(actor, repository, now, nextId);
 		return artwork;
