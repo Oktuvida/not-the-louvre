@@ -1062,6 +1062,55 @@ describe('artwork service', () => {
 		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
 	});
 
+	it('retries the artwork insert once when the connection closed mid-write', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage } = createStorage();
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
+
+		const connectionClosed = Object.assign(new Error('Failed query: insert into artworks'), {
+			cause: Object.assign(new Error('write CONNECTION_CLOSED host:5432'), {
+				code: 'CONNECTION_CLOSED'
+			})
+		});
+		vi.mocked(repository.createArtwork).mockRejectedValueOnce(connectionClosed);
+
+		const result = await publishArtwork(
+			{
+				media,
+				title: 'Retry me'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				repository,
+				storage
+			}
+		);
+
+		expect(result.id).toBe('artwork-1');
+		expect(repository.createArtwork).toHaveBeenCalledTimes(2);
+	});
+
 	it('allows only the author to update an artwork title', async () => {
 		const { publishArtwork, updateArtworkTitle } = await import('./service');
 		const { repository } = createRepository();
