@@ -15,7 +15,9 @@ const createDbConnection = (): DbConnection => {
 	// modules without runtime env present).
 	if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
-	const client = postgres(env.DATABASE_URL);
+	// Supavisor's transaction-mode pooler requires prepare: false, and with
+	// per-request connections prepared statements are never reused anyway.
+	const client = postgres(env.DATABASE_URL, { prepare: false });
 
 	return { client, db: drizzle(client, { schema }) };
 };
