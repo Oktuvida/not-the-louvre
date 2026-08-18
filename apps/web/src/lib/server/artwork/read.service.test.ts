@@ -105,6 +105,26 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 	const rateLimits = new Map<string, PublishRateLimitRecord>();
 
 	const repository: ArtworkRepository = {
+		appendArtworkDrawingDocumentChunk: async (id, chunk, expectedLength, updatedAt) => {
+			const current = artworks.get(id);
+			if (!current) return false;
+			const existing = current.drawingDocument ?? '';
+			if (existing.length !== expectedLength) return false;
+			artworks.set(id, { ...current, drawingDocument: existing + chunk, updatedAt });
+			return true;
+		},
+		finalizeArtworkDrawingDocument: async (id, version, expectedTotalLength, updatedAt) => {
+			const current = artworks.get(id);
+			if (!current) return null;
+			if ((current.drawingDocument ?? '').length !== expectedTotalLength) return null;
+			const next = { ...current, drawingVersion: version, updatedAt };
+			artworks.set(id, next);
+			return next;
+		},
+		findArtworkDrawingDocumentLength: async (id) => {
+			const current = artworks.get(id);
+			return current ? (current.drawingDocument ?? '').length : null;
+		},
 		createContentReport: async () => {
 			throw new Error('not implemented in read tests');
 		},
@@ -1094,6 +1114,42 @@ describe('artwork read service', () => {
 			}
 		});
 		expect(detail).not.toHaveProperty('storageKey');
+	});
+
+	it('hides a drawing document whose chunked write never finalized a version', async () => {
+		const { getArtworkDetail } = await import('./read.service');
+		const artworks = new Map<string, ArtworkRecord>();
+		const profiles = createProfiles();
+		const { repository } = createWriteRepository(artworks);
+		const readRepository = createReadRepository(artworks, profiles);
+		const { storage } = createStorage();
+
+		await publishArtwork(
+			{ media: createAvifFile(), title: 'Partial doc' },
+			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
+			asWriteDeps(repository, storage, {
+				generateId: () => 'artwork-102',
+				now: () => new Date('2026-03-26T12:00:00.000Z')
+			})
+		);
+
+		const storedArtwork = artworks.get('artwork-102');
+		if (!storedArtwork) {
+			throw new Error('Expected seeded artwork record to exist');
+		}
+
+		// A crash mid-chunked-write leaves a document without a version.
+		storedArtwork.drawingDocument = 'partial-compressed-docum';
+		storedArtwork.drawingVersion = null;
+
+		const detail = await getArtworkDetail(
+			'artwork-102',
+			asViewer(profiles.get('user-1')!),
+			asReadDeps(readRepository)
+		);
+
+		expect(detail.drawingDocument).toBeNull();
+		expect(detail.drawingVersion).toBeNull();
 	});
 
 	it('returns parent attribution and direct child fork summaries for fork-aware detail reads', async () => {

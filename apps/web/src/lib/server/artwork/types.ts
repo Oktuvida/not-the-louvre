@@ -332,8 +332,21 @@ export type UpdateEngagementRateLimitInput = Partial<
 };
 
 export type ArtworkRepository = {
+	appendArtworkDrawingDocumentChunk(
+		id: string,
+		chunk: string,
+		expectedLength: number,
+		updatedAt: Date
+	): Promise<boolean>;
 	createComment(input: CreateArtworkCommentInput): Promise<ArtworkCommentView | null>;
 	createArtwork(input: CreateArtworkInput): Promise<ArtworkRecord>;
+	finalizeArtworkDrawingDocument(
+		id: string,
+		version: number,
+		expectedTotalLength: number,
+		updatedAt: Date
+	): Promise<ArtworkRecord | null>;
+	findArtworkDrawingDocumentLength(id: string): Promise<number | null>;
 	createContentReport(input: CreateContentReportInput): Promise<ContentReportRecord>;
 	createEngagementRateLimit(
 		input: CreateEngagementRateLimitInput

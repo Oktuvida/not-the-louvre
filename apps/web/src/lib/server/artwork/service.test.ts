@@ -80,6 +80,30 @@ const createRepository = () => {
 	>();
 
 	const repository: ArtworkRepository = {
+		appendArtworkDrawingDocumentChunk: vi.fn(
+			async (id: string, chunk: string, expectedLength: number, updatedAt: Date) => {
+				const current = artworks.get(id);
+				if (!current) return false;
+				const existing = current.drawingDocument ?? '';
+				if (existing.length !== expectedLength) return false;
+				artworks.set(id, { ...current, drawingDocument: existing + chunk, updatedAt });
+				return true;
+			}
+		),
+		finalizeArtworkDrawingDocument: vi.fn(
+			async (id: string, version: number, expectedTotalLength: number, updatedAt: Date) => {
+				const current = artworks.get(id);
+				if (!current) return null;
+				if ((current.drawingDocument ?? '').length !== expectedTotalLength) return null;
+				const next = { ...current, drawingVersion: version, updatedAt };
+				artworks.set(id, next);
+				return next;
+			}
+		),
+		findArtworkDrawingDocumentLength: vi.fn(async (id: string) => {
+			const current = artworks.get(id);
+			return current ? (current.drawingDocument ?? '').length : null;
+		}),
 		createContentReport: vi.fn(async (input) => {
 			const record: ContentReportRecord = { ...input };
 			reports.set(record.id, record);
@@ -1441,6 +1465,255 @@ describe('artwork service', () => {
 			)
 		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
 
+		expect(deletes).toEqual([]);
+	});
+
+	it('writes the drawing document in multiple chunks and finalizes with the version', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage } = createStorage();
+		const drawingDocument = JSON.stringify({
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [
+						[48, 48] as [number, number],
+						[320, 320] as [number, number],
+						[540, 220] as [number, number]
+					],
+					size: 12
+				}
+			]
+		});
+
+		const result = await publishArtwork(
+			{
+				drawingDocument,
+				title: 'Chunked Vector'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{
+				drawingDocumentChunkChars: 16,
+				generateId: () => 'artwork-1',
+				repository,
+				sleep: async () => {},
+				storage
+			}
+		);
+
+		const storedDocument = artworks.get('artwork-1')!.drawingDocument!;
+		expect(vi.mocked(repository.createArtwork).mock.calls[0]![0].drawingDocument).toBeNull();
+		expect(repository.appendArtworkDrawingDocumentChunk).toHaveBeenCalledTimes(
+			Math.ceil(storedDocument.length / 16)
+		);
+		expect(result.drawingVersion).toBe(2);
+		expect(decodeCompressedDrawingDocument(storedDocument)).toBe(
+			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
+		);
+		expect(decodeCompressedDrawingDocument(result.drawingDocument!)).toBe(
+			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
+		);
+	});
+
+	it('resumes chunk appends after a lost-ack append via the length read-back', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage } = createStorage();
+		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
+
+		const append = vi.mocked(repository.appendArtworkDrawingDocumentChunk);
+		const applyChunk = append.getMockImplementation()!;
+		append.mockImplementationOnce(async (id, chunk, expectedLength, updatedAt) => {
+			// The append committed, but the socket died before the ack arrived.
+			await applyChunk(id, chunk, expectedLength, updatedAt);
+			throw createConnectionClosedError();
+		});
+
+		const result = await publishArtwork(
+			{
+				drawingDocument,
+				title: 'Resumed chunks'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{
+				drawingDocumentChunkChars: 16,
+				generateId: () => 'artwork-1',
+				repository,
+				sleep: async () => {},
+				storage
+			}
+		);
+
+		expect(result.drawingVersion).toBe(2);
+		expect(decodeCompressedDrawingDocument(artworks.get('artwork-1')!.drawingDocument!)).toBe(
+			decodeCompressedDrawingDocument(result.drawingDocument!)
+		);
+	});
+
+	it('keeps the chunk ladder alive when the length read-back itself fails', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage } = createStorage();
+		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
+
+		vi.mocked(repository.appendArtworkDrawingDocumentChunk).mockRejectedValueOnce(
+			createConnectionClosedError()
+		);
+		vi.mocked(repository.findArtworkDrawingDocumentLength).mockRejectedValueOnce(
+			Object.assign(new Error('write CONNECT_TIMEOUT host:5432'), { code: 'CONNECT_TIMEOUT' })
+		);
+
+		const result = await publishArtwork(
+			{
+				drawingDocument,
+				title: 'Read-back hiccup'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				repository,
+				sleep: async () => {},
+				storage
+			}
+		);
+
+		expect(result.drawingVersion).toBe(2);
+		expect(artworks.get('artwork-1')?.drawingVersion).toBe(2);
+	});
+
+	it('recovers a finalize whose commit lost its ack', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage } = createStorage();
+		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
+
+		const finalize = vi.mocked(repository.finalizeArtworkDrawingDocument);
+		const commitFinalize = finalize.getMockImplementation()!;
+		finalize.mockImplementation(async (id, version, expectedTotalLength, updatedAt) => {
+			// Every finalize attempt commits but the ack never arrives.
+			await commitFinalize(id, version, expectedTotalLength, updatedAt);
+			throw createConnectionClosedError();
+		});
+
+		const result = await publishArtwork(
+			{
+				drawingDocument,
+				title: 'Finalize lost ack'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				repository,
+				sleep: async () => {},
+				storage
+			}
+		);
+
+		expect(result.drawingVersion).toBe(2);
+		expect(artworks.get('artwork-1')?.drawingVersion).toBe(2);
+	});
+
+	it('keeps the publish successful without a document when chunk writing fails', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { deletes, storage } = createStorage();
+		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
+
+		vi.mocked(repository.appendArtworkDrawingDocumentChunk).mockResolvedValue(false);
+
+		const result = await publishArtwork(
+			{
+				drawingDocument,
+				title: 'Doc-less survivor'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				repository,
+				sleep: async () => {},
+				storage
+			}
+		);
+
+		expect(result.id).toBe('artwork-1');
+		expect(result.drawingDocument).toBeNull();
+		expect(artworks.get('artwork-1')?.drawingVersion).toBeNull();
 		expect(deletes).toEqual([]);
 	});
 
