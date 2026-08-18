@@ -10,8 +10,17 @@
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"
 	},
+	// Mirrors the dashboard state so deploys don't flip logging: persisted
+	// Workers Logs on (incident forensics depend on them), traces off.
 	"observability": {
-		"enabled": true
+		"enabled": false,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"persist": true,
+			"invocation_logs": true
+		}
 	}
 	// AVIF encoding in WASM can take several seconds of CPU per upload. The
 	// Workers paid plan defaults to 30s CPU per request which is enough; on the

@@ -137,7 +137,9 @@ const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 const toDetail = (record: ArtworkReadRecord): ArtworkDetail => ({
 	...toFeedCard(record),
 	childForks: (record.childForks ?? []).map(toChildForkSummary),
-	drawingDocument: record.drawingDocument ?? null,
+	// A document without a version never completed its chunked write; expose
+	// it as absent so decoders never see a partial gzip stream.
+	drawingDocument: record.drawingVersion != null ? (record.drawingDocument ?? null) : null,
 	drawingVersion: record.drawingVersion ?? null,
 	mediaContentType: record.mediaContentType,
 	mediaSizeBytes: record.mediaSizeBytes,

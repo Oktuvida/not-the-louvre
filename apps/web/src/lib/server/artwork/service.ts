@@ -85,6 +85,7 @@ type ModerateCommentInput = {
 };
 
 type ServiceDependencies = {
+	drawingDocumentChunkChars?: number;
 	generateId?: () => string;
 	now?: () => Date;
 	randomSuffix?: () => number;
@@ -97,7 +98,15 @@ type ServiceDependencies = {
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+// Supavisor kills sessions that receive a large Bind in one message: a
+// 99,684-char document died deterministically (2026-08-18) while 50,380 chars
+// succeeded historically, so the kill threshold sits somewhere in between.
+// 16 KiB chunks stay far below both bounds. Multiple of 4 so an interrupted
+// write still ends on a base64 boundary.
+const DRAWING_DOCUMENT_CHUNK_CHARS = 16384;
+
 const getDependencies = (dependencies: ServiceDependencies = {}) => ({
+	drawingDocumentChunkChars: dependencies.drawingDocumentChunkChars ?? DRAWING_DOCUMENT_CHUNK_CHARS,
 	generateId: dependencies.generateId ?? generateId,
 	now: dependencies.now ?? (() => new Date()),
 	randomSuffix: dependencies.randomSuffix ?? (() => Math.floor(Math.random() * 10000)),
@@ -395,6 +404,174 @@ const insertWithConnectionRetries = async <T>(
 	}
 };
 
+const errorCode = (error: unknown): string | null => {
+	let current: unknown = error;
+	while (current instanceof Error) {
+		const code = (current as { code?: unknown }).code;
+		if (typeof code === 'string') {
+			return code;
+		}
+		current = current.cause;
+	}
+
+	return null;
+};
+
+// Appends one chunk with the delayed-retry ladder. An ambiguous connection
+// failure (or a guard mismatch after one) is resolved by reading the stored
+// length back: advanced by exactly this chunk means the lost-ack append
+// landed; unchanged means it never applied and the next attempt is safe. A
+// read-back that itself fails leaves the question open for the next rung
+// instead of aborting the write.
+const appendDrawingDocumentChunk = async (
+	repository: ArtworkRepository,
+	artworkId: string,
+	chunk: string,
+	chunkIndex: number,
+	expectedLength: number,
+	now: Date,
+	sleep: (ms: number) => Promise<void>
+): Promise<boolean> => {
+	for (let attempt = 0; attempt <= INSERT_RETRY_DELAYS_MS.length; attempt += 1) {
+		if (attempt > 0) {
+			await sleep(INSERT_RETRY_DELAYS_MS[attempt - 1]!);
+		}
+
+		let appendError: unknown;
+		try {
+			if (
+				await repository.appendArtworkDrawingDocumentChunk(artworkId, chunk, expectedLength, now)
+			) {
+				return true;
+			}
+		} catch (error) {
+			if (!isRetryableConnectionError(error)) {
+				throw error;
+			}
+			appendError = error;
+		}
+
+		console.warn(
+			JSON.stringify({
+				artworkId,
+				attempt,
+				category: 'artwork',
+				chunkChars: chunk.length,
+				chunkIndex,
+				code: appendError ? (errorCode(appendError) ?? 'UNKNOWN') : 'GUARD_MISMATCH',
+				event: 'drawing_document_chunk_retry'
+			})
+		);
+
+		try {
+			const storedLength = await repository.findArtworkDrawingDocumentLength(artworkId);
+			if (storedLength === expectedLength + chunk.length) {
+				return true;
+			}
+			if (storedLength !== expectedLength) {
+				// null (row gone) or a length this writer never produced.
+				return false;
+			}
+		} catch {
+			// Unresolved; the next rung retries the append, whose guard makes a
+			// duplicate delivery harmless either way.
+		}
+	}
+
+	return false;
+};
+
+const writeDrawingDocumentInChunks = async (
+	repository: ArtworkRepository,
+	artworkId: string,
+	documentBase64: string,
+	version: number,
+	chunkChars: number,
+	now: Date,
+	sleep: (ms: number) => Promise<void>
+) => {
+	let chunkCount = 0;
+	for (let offset = 0; offset < documentBase64.length; offset += chunkChars) {
+		const chunk = documentBase64.slice(offset, offset + chunkChars);
+		if (
+			!(await appendDrawingDocumentChunk(
+				repository,
+				artworkId,
+				chunk,
+				chunkCount,
+				offset,
+				now,
+				sleep
+			))
+		) {
+			return null;
+		}
+		chunkCount += 1;
+	}
+
+	const logWritten = () =>
+		console.log(
+			JSON.stringify({
+				artworkId,
+				category: 'artwork',
+				chunkCount,
+				drawingDocumentChars: documentBase64.length,
+				event: 'drawing_document_written'
+			})
+		);
+
+	// Setting drawing_version marks the document complete; readers treat a
+	// document without a version as absent. Idempotent under retry: after a
+	// committed run the length guard still matches and rewrites the same
+	// version.
+	for (let attempt = 0; attempt <= INSERT_RETRY_DELAYS_MS.length; attempt += 1) {
+		if (attempt > 0) {
+			await sleep(INSERT_RETRY_DELAYS_MS[attempt - 1]!);
+		}
+
+		try {
+			const finalized = await repository.finalizeArtworkDrawingDocument(
+				artworkId,
+				version,
+				documentBase64.length,
+				now
+			);
+			if (finalized) {
+				logWritten();
+			}
+			return finalized;
+		} catch (error) {
+			if (!isRetryableConnectionError(error)) {
+				throw error;
+			}
+			console.warn(
+				JSON.stringify({
+					artworkId,
+					attempt,
+					category: 'artwork',
+					code: errorCode(error) ?? 'UNKNOWN',
+					event: 'drawing_document_finalize_retry'
+				})
+			);
+		}
+	}
+
+	// Ladder exhausted on ambiguous failures: the last finalize may have
+	// committed with only the ack lost, so read the row back before reporting
+	// the document as failed.
+	try {
+		const committed = await repository.findArtworkById(artworkId);
+		if (committed?.drawingVersion === version) {
+			logWritten();
+			return committed;
+		}
+	} catch {
+		// unresolved; report as failed and leave the versionless doc inert
+	}
+
+	return null;
+};
+
 const getArtworkOrThrow = async (artworkId: string, repository: ArtworkRepository) => {
 	const artwork = await repository.findArtworkById(artworkId);
 	if (!artwork) {
@@ -506,6 +683,7 @@ export const publishArtwork = async (
 ) => {
 	const actor = requireActor(context);
 	const {
+		drawingDocumentChunkChars,
 		generateId: nextId,
 		now: getNow,
 		randomSuffix,
@@ -563,14 +741,17 @@ export const publishArtwork = async (
 
 	await storage.upload(storageKey, media.file);
 
+	// The row is inserted without the drawing document so the INSERT's Bind
+	// stays small — Supavisor drops sessions that receive the full document in
+	// one message. The document follows in chunked appends below.
 	const outcome = await insertWithConnectionRetries(
 		() =>
 			repository.createArtwork({
 				authorId: actor.user.id,
 				commentCount: 0,
 				createdAt: now,
-				drawingDocument,
-				drawingVersion,
+				drawingDocument: null,
+				drawingVersion: null,
 				forkCount: 0,
 				id: artworkId,
 				isNsfw: Boolean(input.isNsfw),
@@ -625,11 +806,49 @@ export const publishArtwork = async (
 		});
 	}
 
-	const artwork = outcome.artwork;
+	let artwork = outcome.artwork;
 
-	// The artwork row is committed past this point: rate-limit bookkeeping must
-	// not fail the publish, and above all must not delete the committed
-	// artwork's media from storage.
+	// The artwork row is committed past this point: the drawing document and
+	// the rate-limit bookkeeping must not fail the publish, and above all must
+	// not delete the committed artwork's media from storage. A failed document
+	// write degrades to a doc-less artwork (it renders but cannot seed forks);
+	// readers ignore documents whose drawing_version was never set.
+	if (drawingDocument) {
+		try {
+			const finalized = await writeDrawingDocumentInChunks(
+				repository,
+				artworkId,
+				drawingDocument,
+				drawingVersion!,
+				drawingDocumentChunkChars,
+				now,
+				sleep
+			);
+			if (finalized) {
+				artwork = finalized;
+			} else {
+				console.error(
+					JSON.stringify({
+						artworkId,
+						category: 'artwork',
+						drawingDocumentChars: drawingDocument.length,
+						event: 'drawing_document_write_failed'
+					})
+				);
+			}
+		} catch (error) {
+			console.error(
+				JSON.stringify({
+					artworkId,
+					category: 'artwork',
+					drawingDocumentChars: drawingDocument.length,
+					event: 'drawing_document_write_failed'
+				})
+			);
+			logArtworkFlowFailure('drawing document write', error);
+		}
+	}
+
 	try {
 		await recordPublishAttempt(actor, repository, now, nextId);
 	} catch (error) {
