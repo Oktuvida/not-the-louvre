@@ -15,9 +15,13 @@ const createDbConnection = (): DbConnection => {
 	// modules without runtime env present).
 	if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
-	// Supavisor's transaction-mode pooler requires prepare: false, and with
-	// per-request connections prepared statements are never reused anyway.
-	const client = postgres(env.DATABASE_URL, { prepare: false });
+	// Production connects through Supabase's Supavisor pooler (session mode,
+	// :5432). prepare: false keeps the client compatible with transaction mode
+	// too, and with per-request connections prepared statements are never
+	// reused anyway. connect_timeout keeps a connection that dies during
+	// startup from silently redialing for postgres.js's 30s default before
+	// surfacing CONNECT_TIMEOUT.
+	const client = postgres(env.DATABASE_URL, { connect_timeout: 10, prepare: false });
 
 	return { client, db: drizzle(client, { schema }) };
 };
