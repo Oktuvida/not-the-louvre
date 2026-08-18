@@ -7,7 +7,7 @@ import {
 	ARTWORK_VOTE_RATE_LIMIT,
 	CONTENT_REPORT_DETAILS_MAX_LENGTH
 } from './config';
-import { ArtworkFlowError } from './errors';
+import { ArtworkFlowError, logArtworkFlowFailure } from './errors';
 import { artworkRepository } from './repository';
 import { supabaseArtworkStorage } from './storage';
 import { checkTextModeration } from '$lib/server/moderation/service';
@@ -91,8 +91,11 @@ type ServiceDependencies = {
 	repository?: ArtworkRepository;
 	renderDrawingDocumentMedia?: typeof createArtworkDrawingDocumentMedia;
 	sanitizeMedia?: (file: File) => Promise<SanitizedMedia>;
+	sleep?: (ms: number) => Promise<void>;
 	storage?: ArtworkStorage;
 };
+
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	generateId: dependencies.generateId ?? generateId,
@@ -102,6 +105,7 @@ const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	renderDrawingDocumentMedia:
 		dependencies.renderDrawingDocumentMedia ?? createArtworkDrawingDocumentMedia,
 	sanitizeMedia: dependencies.sanitizeMedia ?? sanitizeArtworkMedia,
+	sleep: dependencies.sleep ?? defaultSleep,
 	storage: dependencies.storage ?? supabaseArtworkStorage
 });
 
@@ -277,10 +281,10 @@ const recordPublishAttempt = async (
 	}
 };
 
-const isConnectionClosedError = (error: unknown): boolean => {
+const hasErrorCode = (error: unknown, code: string): boolean => {
 	let current: unknown = error;
 	while (current instanceof Error) {
-		if ((current as { code?: unknown }).code === 'CONNECTION_CLOSED') {
+		if ((current as { code?: unknown }).code === code) {
 			return true;
 		}
 		current = current.cause;
@@ -289,19 +293,105 @@ const isConnectionClosedError = (error: unknown): boolean => {
 	return false;
 };
 
-// On Workers the request-scoped database socket can be closed while it sits
-// idle through the render and upload phase. A CONNECTION_CLOSED write never
-// reached Postgres, so a single retry on a fresh connection is safe.
-const retryOnConnectionClosed = async <T>(run: () => Promise<T>): Promise<T> => {
-	try {
-		return await run();
-	} catch (error) {
-		if (!isConnectionClosedError(error)) {
-			throw error;
+const isConnectionClosedError = (error: unknown) => hasErrorCode(error, 'CONNECTION_CLOSED');
+
+// A redial that cannot complete (pooler restarting) surfaces CONNECT_TIMEOUT
+// now that connect_timeout is set on the client; the next delayed attempt
+// should still run. Unlike CONNECTION_CLOSED it is unambiguous: the query
+// never reached Postgres.
+const isRetryableConnectionError = (error: unknown) =>
+	isConnectionClosedError(error) || hasErrorCode(error, 'CONNECT_TIMEOUT');
+
+// Postgres unique_violation. After a closed-mid-query attempt it means that
+// attempt actually committed before the socket died and only the ack was lost.
+const isUniqueViolation = (error: unknown) => hasErrorCode(error, '23505');
+
+// CONNECTION_CLOSED means the pooler dropped the session while the insert was
+// in flight, which an immediate reissue cannot outrun (prod evidence: the
+// zero-delay retry failed identically), so retries back off. A closed-mid-query
+// insert is ambiguous — it may have committed with only the ack lost — so every
+// ambiguous exit re-reads the row (the id is generated per request, so a found
+// row or a unique violation can only be this request's own insert) and the
+// result reports whether the uploaded media may belong to a committed row.
+const INSERT_RETRY_DELAYS_MS = [500, 2000];
+
+const insertWithConnectionRetries = async <T>(
+	run: () => Promise<T>,
+	options: {
+		readBackCommittedRow: () => Promise<T | null>;
+		sleep: (ms: number) => Promise<void>;
+	}
+): Promise<{ artwork: T } | { error: unknown; mayHaveCommitted: boolean }> => {
+	const readBack = async () => {
+		try {
+			return await options.readBackCommittedRow();
+		} catch {
+			await options.sleep(1000);
+			return options.readBackCommittedRow();
+		}
+	};
+
+	const recovered = (artwork: T) => {
+		console.warn(JSON.stringify({ category: 'artwork', event: 'insert_recovered_from_lost_ack' }));
+		return { artwork };
+	};
+
+	let lastError: unknown;
+	let sawAmbiguousClose = false;
+
+	for (let attempt = 0; attempt <= INSERT_RETRY_DELAYS_MS.length; attempt += 1) {
+		if (attempt > 0) {
+			const delayMs = INSERT_RETRY_DELAYS_MS[attempt - 1]!;
+			console.warn(
+				JSON.stringify({
+					attempt,
+					category: 'artwork',
+					delayMs,
+					event: 'insert_retry_connection_closed'
+				})
+			);
+			await options.sleep(delayMs);
 		}
 
-		console.warn(JSON.stringify({ category: 'artwork', event: 'insert_retry_connection_closed' }));
-		return run();
+		try {
+			return { artwork: await run() };
+		} catch (error) {
+			if (sawAmbiguousClose && isUniqueViolation(error)) {
+				// An earlier ambiguous attempt actually committed.
+				try {
+					const committed = await readBack();
+					if (committed) {
+						return recovered(committed);
+					}
+				} catch {
+					// proven committed but unreadable; fall through
+				}
+				return { error, mayHaveCommitted: true };
+			}
+
+			if (!isRetryableConnectionError(error)) {
+				return { error, mayHaveCommitted: false };
+			}
+			sawAmbiguousClose ||= isConnectionClosedError(error);
+			lastError = error;
+		}
+	}
+
+	if (!sawAmbiguousClose) {
+		return { error: lastError, mayHaveCommitted: false };
+	}
+
+	// Retries exhausted after at least one closed-mid-query attempt; the last
+	// such attempt may have committed, so resolve the ambiguity before the
+	// caller decides whether the uploaded media can be cleaned up.
+	try {
+		const committed = await readBack();
+		if (committed) {
+			return recovered(committed);
+		}
+		return { error: lastError, mayHaveCommitted: false };
+	} catch {
+		return { error: lastError, mayHaveCommitted: true };
 	}
 };
 
@@ -422,6 +512,7 @@ export const publishArtwork = async (
 		repository,
 		renderDrawingDocumentMedia,
 		sanitizeMedia,
+		sleep,
 		storage
 	} = getDependencies(dependencies);
 	const now = getNow();
@@ -472,8 +563,8 @@ export const publishArtwork = async (
 
 	await storage.upload(storageKey, media.file);
 
-	try {
-		const artwork = await retryOnConnectionClosed(() =>
+	const outcome = await insertWithConnectionRetries(
+		() =>
 			repository.createArtwork({
 				authorId: actor.user.id,
 				commentCount: 0,
@@ -492,26 +583,60 @@ export const publishArtwork = async (
 				storageKey,
 				title,
 				updatedAt: now
+			}),
+		{
+			readBackCommittedRow: () => repository.findArtworkById(artworkId),
+			sleep
+		}
+	);
+
+	if ('error' in outcome) {
+		// Payload sizes discriminate a size-triggered pooler abort from pooler
+		// health issues; the content itself stays out of the logs.
+		console.error(
+			JSON.stringify({
+				artworkId,
+				category: 'artwork',
+				drawingDocumentChars: drawingDocument?.length ?? 0,
+				event: 'publish_persist_failed',
+				hasParent: Boolean(parentArtworkId),
+				mayHaveCommitted: outcome.mayHaveCommitted,
+				mediaContentType: media.contentType,
+				mediaSizeBytes: media.sizeBytes
 			})
 		);
 
-		await recordPublishAttempt(actor, repository, now, nextId);
-		return artwork;
-	} catch (error) {
-		try {
-			await storage.delete(storageKey);
-		} catch {
-			// best effort cleanup after a partial publish failure
+		// An orphaned storage object is recoverable; a committed artwork row
+		// pointing at deleted media is not.
+		if (!outcome.mayHaveCommitted) {
+			try {
+				await storage.delete(storageKey);
+			} catch {
+				// best effort cleanup after a partial publish failure
+			}
 		}
 
-		if (error instanceof ArtworkFlowError) {
-			throw error;
+		if (outcome.error instanceof ArtworkFlowError) {
+			throw outcome.error;
 		}
 
 		throw new ArtworkFlowError(500, 'Artwork publish failed', 'PUBLISH_FAILED', {
-			cause: error
+			cause: outcome.error
 		});
 	}
+
+	const artwork = outcome.artwork;
+
+	// The artwork row is committed past this point: rate-limit bookkeeping must
+	// not fail the publish, and above all must not delete the committed
+	// artwork's media from storage.
+	try {
+		await recordPublishAttempt(actor, repository, now, nextId);
+	} catch (error) {
+		logArtworkFlowFailure('publish rate limit record', error);
+	}
+
+	return artwork;
 };
 
 export const updateArtworkTitle = async (

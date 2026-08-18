@@ -54,6 +54,13 @@ vi.mock('$lib/features/stroke-json/runtime.server', () => ({
 const createUnsupportedImageFile = (size = 128) =>
 	new File([new Uint8Array(size)], 'artwork.gif', { type: 'image/gif' });
 
+const createConnectionClosedError = () =>
+	Object.assign(new Error('Failed query: insert into artworks'), {
+		cause: Object.assign(new Error('write CONNECTION_CLOSED host:5432'), {
+			code: 'CONNECTION_CLOSED'
+		})
+	});
+
 const createRepository = () => {
 	const artworks = new Map<string, ArtworkRecord>();
 	const reports = new Map<string, ContentReportRecord>();
@@ -1062,7 +1069,7 @@ describe('artwork service', () => {
 		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
 	});
 
-	it('retries the artwork insert once when the connection closed mid-write', async () => {
+	it('retries the artwork insert with backoff when the connection closed mid-write', async () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { storage } = createStorage();
@@ -1072,12 +1079,8 @@ describe('artwork service', () => {
 			width: ARTWORK_MEDIA_WIDTH
 		});
 
-		const connectionClosed = Object.assign(new Error('Failed query: insert into artworks'), {
-			cause: Object.assign(new Error('write CONNECTION_CLOSED host:5432'), {
-				code: 'CONNECTION_CLOSED'
-			})
-		});
-		vi.mocked(repository.createArtwork).mockRejectedValueOnce(connectionClosed);
+		vi.mocked(repository.createArtwork).mockRejectedValueOnce(createConnectionClosedError());
+		const sleeps: number[] = [];
 
 		const result = await publishArtwork(
 			{
@@ -1103,12 +1106,389 @@ describe('artwork service', () => {
 			{
 				generateId: () => 'artwork-1',
 				repository,
+				sleep: async (ms: number) => {
+					sleeps.push(ms);
+				},
 				storage
 			}
 		);
 
 		expect(result.id).toBe('artwork-1');
 		expect(repository.createArtwork).toHaveBeenCalledTimes(2);
+		expect(sleeps).toEqual([500]);
+	});
+
+	it('gives up after exhausting delayed retries and cleans up the uploaded media', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { deletes, storage } = createStorage();
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
+
+		vi.mocked(repository.createArtwork).mockRejectedValue(createConnectionClosedError());
+		const sleeps: number[] = [];
+
+		await expect(
+			publishArtwork(
+				{
+					media,
+					title: 'Never lands'
+				},
+				{
+					ipAddress: '127.0.0.1',
+					user: {
+						id: 'user-1',
+						authUserId: 'user-1',
+						nickname: 'artist_1',
+						role: 'user',
+						avatarUrl: null,
+						name: 'artist_1',
+						email: 'artist_1@not-the-louvre.local',
+						emailVerified: true,
+						image: null,
+						createdAt: new Date(),
+						updatedAt: new Date()
+					}
+				},
+				{
+					generateId: () => 'artwork-1',
+					repository,
+					sleep: async (ms: number) => {
+						sleeps.push(ms);
+					},
+					storage
+				}
+			)
+		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
+
+		expect(repository.createArtwork).toHaveBeenCalledTimes(3);
+		expect(sleeps).toEqual([500, 2000]);
+		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
+	});
+
+	it('recovers via read-back when the final retry committed but the ack was lost', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { deletes, storage } = createStorage();
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
+
+		const insert = vi.mocked(repository.createArtwork);
+		const commitRow = insert.getMockImplementation()!;
+		insert
+			.mockRejectedValueOnce(createConnectionClosedError())
+			.mockRejectedValueOnce(createConnectionClosedError())
+			.mockImplementationOnce(async (input) => {
+				// The last attempt committed, but the socket died before the ack.
+				await commitRow(input);
+				throw createConnectionClosedError();
+			});
+
+		const result = await publishArtwork(
+			{
+				media,
+				title: 'Committed on the last try'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				repository,
+				sleep: async () => {},
+				storage
+			}
+		);
+
+		expect(result.id).toBe('artwork-1');
+		expect(repository.createArtwork).toHaveBeenCalledTimes(3);
+		expect(deletes).toEqual([]);
+	});
+
+	it('treats a unique violation on the first attempt as a genuine failure and cleans up', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { deletes, storage } = createStorage();
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
+
+		vi.mocked(repository.createArtwork).mockRejectedValueOnce(
+			Object.assign(new Error('duplicate key value violates unique constraint "artworks_pkey"'), {
+				code: '23505'
+			})
+		);
+
+		await expect(
+			publishArtwork(
+				{
+					media,
+					title: 'Genuine duplicate'
+				},
+				{
+					ipAddress: '127.0.0.1',
+					user: {
+						id: 'user-1',
+						authUserId: 'user-1',
+						nickname: 'artist_1',
+						role: 'user',
+						avatarUrl: null,
+						name: 'artist_1',
+						email: 'artist_1@not-the-louvre.local',
+						emailVerified: true,
+						image: null,
+						createdAt: new Date(),
+						updatedAt: new Date()
+					}
+				},
+				{
+					generateId: () => 'artwork-1',
+					repository,
+					sleep: async () => {},
+					storage
+				}
+			)
+		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
+
+		expect(repository.createArtwork).toHaveBeenCalledTimes(1);
+		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
+	});
+
+	it('keeps retrying when a redial fails with CONNECT_TIMEOUT mid-ladder', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { deletes, storage } = createStorage();
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
+
+		vi.mocked(repository.createArtwork)
+			.mockRejectedValueOnce(createConnectionClosedError())
+			.mockRejectedValueOnce(
+				Object.assign(new Error('write CONNECT_TIMEOUT host:5432'), { code: 'CONNECT_TIMEOUT' })
+			);
+		const sleeps: number[] = [];
+
+		const result = await publishArtwork(
+			{
+				media,
+				title: 'Through the outage'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				repository,
+				sleep: async (ms: number) => {
+					sleeps.push(ms);
+				},
+				storage
+			}
+		);
+
+		expect(result.id).toBe('artwork-1');
+		expect(repository.createArtwork).toHaveBeenCalledTimes(3);
+		expect(sleeps).toEqual([500, 2000]);
+		expect(deletes).toEqual([]);
+	});
+
+	it('recovers the committed artwork when a retry hits a unique violation after a lost ack', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { deletes, storage } = createStorage();
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
+
+		const insert = vi.mocked(repository.createArtwork);
+		const commitRow = insert.getMockImplementation()!;
+		insert
+			.mockImplementationOnce(async (input) => {
+				// The insert committed, but the socket died before the ack arrived.
+				await commitRow(input);
+				throw createConnectionClosedError();
+			})
+			.mockImplementationOnce(async () => {
+				throw Object.assign(new Error('Failed query: insert into artworks'), {
+					cause: Object.assign(
+						new Error('duplicate key value violates unique constraint "artworks_pkey"'),
+						{ code: '23505' }
+					)
+				});
+			});
+
+		const result = await publishArtwork(
+			{
+				media,
+				title: 'Committed after all'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				repository,
+				sleep: async () => {},
+				storage
+			}
+		);
+
+		expect(result.id).toBe('artwork-1');
+		expect(repository.createArtwork).toHaveBeenCalledTimes(2);
+		expect(repository.findArtworkById).toHaveBeenCalledWith('artwork-1');
+		expect(deletes).toEqual([]);
+	});
+
+	it('preserves stored media when a unique violation proves the insert committed but recovery fails', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { deletes, storage } = createStorage();
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
+
+		vi.mocked(repository.createArtwork)
+			.mockRejectedValueOnce(createConnectionClosedError())
+			.mockRejectedValueOnce(
+				Object.assign(new Error('duplicate key value violates unique constraint "artworks_pkey"'), {
+					code: '23505'
+				})
+			);
+		vi.mocked(repository.findArtworkById).mockRejectedValueOnce(createConnectionClosedError());
+
+		await expect(
+			publishArtwork(
+				{
+					media,
+					title: 'Committed but unreadable'
+				},
+				{
+					ipAddress: '127.0.0.1',
+					user: {
+						id: 'user-1',
+						authUserId: 'user-1',
+						nickname: 'artist_1',
+						role: 'user',
+						avatarUrl: null,
+						name: 'artist_1',
+						email: 'artist_1@not-the-louvre.local',
+						emailVerified: true,
+						image: null,
+						createdAt: new Date(),
+						updatedAt: new Date()
+					}
+				},
+				{
+					generateId: () => 'artwork-1',
+					repository,
+					sleep: async () => {},
+					storage
+				}
+			)
+		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
+
+		expect(deletes).toEqual([]);
+	});
+
+	it('keeps a committed publish successful when rate limit bookkeeping fails afterwards', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { deletes, storage } = createStorage();
+		const media = await createAvifTestFile({
+			height: ARTWORK_MEDIA_HEIGHT,
+			name: 'artwork.avif',
+			width: ARTWORK_MEDIA_WIDTH
+		});
+
+		vi.mocked(repository.createPublishRateLimit).mockRejectedValueOnce(
+			createConnectionClosedError()
+		);
+
+		const result = await publishArtwork(
+			{
+				media,
+				title: 'Still published'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: new Date(),
+					updatedAt: new Date()
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				repository,
+				storage
+			}
+		);
+
+		expect(result.id).toBe('artwork-1');
+		expect(artworks.get('artwork-1')).toBeDefined();
+		expect(deletes).toEqual([]);
 	});
 
 	it('allows only the author to update an artwork title', async () => {
