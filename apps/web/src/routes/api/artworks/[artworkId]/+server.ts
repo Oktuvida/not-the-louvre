@@ -12,6 +12,14 @@ const toErrorResponse = (error: unknown) => {
 	return json({ code: 'PUBLISH_FAILED', message: 'Artwork request failed' }, { status: 500 });
 };
 
+// The gallery client renders from the media endpoint; the drawing document
+// (up to hundreds of KiB) only serves the server-side /draw fork loader, so
+// it stays off the wire while the response keeps its shape.
+const withoutDrawingDocument = <T extends { drawingDocument?: string | null }>(artwork: T) => ({
+	...artwork,
+	drawingDocument: null
+});
+
 export const PATCH: RequestHandler = async (event) => {
 	try {
 		const body = (await event.request.json()) as { title?: string };
@@ -23,7 +31,7 @@ export const PATCH: RequestHandler = async (event) => {
 			{ user: event.locals.user }
 		);
 
-		return json({ artwork });
+		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
 		return toErrorResponse(error);
 	}
@@ -36,7 +44,7 @@ export const DELETE: RequestHandler = async (event) => {
 			{ user: event.locals.user }
 		);
 
-		return json({ artwork });
+		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
 		return toErrorResponse(error);
 	}
@@ -45,7 +53,7 @@ export const DELETE: RequestHandler = async (event) => {
 export const GET: RequestHandler = async (event) => {
 	try {
 		const artwork = await getArtworkDetail(event.params.artworkId, { user: event.locals.user });
-		return json({ artwork });
+		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
 		return toErrorResponse(error);
 	}
