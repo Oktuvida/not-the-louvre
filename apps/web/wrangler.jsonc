@@ -12,14 +12,12 @@
 	},
 	// Hyperdrive terminates Postgres at the local colo over warm pooled
 	// connections, turning each request's fresh dial (~1s of TCP+TLS+auth
-	// per navigation) into a local connect. The config must be created in
-	// the SAME Cloudflare account that owns this worker (the CI deploy
-	// account), and the CI API token needs the "Workers Hyperdrive: Edit"
-	// permission:
-	//   wrangler hyperdrive create not-the-louvre-db --connection-string="<production DATABASE_URL>"
-	// Paste the returned id below and uncomment. The app falls back to
-	// dialing DATABASE_URL directly while this binding is absent.
-	// "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<hyperdrive-config-id>" }],
+	// per navigation) into a local connect. The config lives in the same
+	// Cloudflare account as this worker (created via the dashboard:
+	// Storage & Databases → Hyperdrive), and the CI API token needs the
+	// "Workers Hyperdrive: Edit" permission to deploy this binding. The app
+	// falls back to dialing DATABASE_URL directly if the binding is removed.
+	"hyperdrive": [{ "binding": "HYPERDRIVE", "id": "ccf1b83470444d9bade76d5b8599c921" }],
 	// Mirrors the dashboard state so deploys don't flip logging: persisted
 	// Workers Logs on (incident forensics depend on them), traces off.
 	"observability": {
