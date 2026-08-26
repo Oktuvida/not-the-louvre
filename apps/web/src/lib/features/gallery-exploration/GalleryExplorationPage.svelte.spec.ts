@@ -446,7 +446,7 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByText('💬 7')).toBeVisible();
 	});
 
-	it('keeps hall-of-fame podium hero eager and lets the virtualizer drive ranked card loading', async () => {
+	it('prioritizes the hall-of-fame podium and lets the virtualizer drive ranked card loading', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
@@ -460,7 +460,12 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByAltText('Champion')).toHaveAttribute('loading', 'eager');
-		await expect.element(page.getByAltText('Champion')).toHaveAttribute('decoding', 'sync');
+		await expect.element(page.getByAltText('Champion')).toHaveAttribute('decoding', 'async');
+		await expect.element(page.getByAltText('Champion')).toHaveAttribute('fetchpriority', 'high');
+		// The whole podium sits above the fold, so all three medalists fetch
+		// eagerly at high priority instead of lazy-loading below the hero.
+		await expect.element(page.getByAltText('Runner Up')).toHaveAttribute('loading', 'eager');
+		await expect.element(page.getByAltText('Runner Up')).toHaveAttribute('fetchpriority', 'high');
 		// Ranked cards are mounted by the window virtualizer only when near the
 		// viewport, so they load eagerly once mounted instead of double-deferring.
 		await expect.element(page.getByAltText('Gallery Favorite')).toHaveAttribute('loading', 'eager');

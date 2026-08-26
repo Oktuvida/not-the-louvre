@@ -8,7 +8,8 @@
 		blurred = false,
 		ariaLabel = undefined,
 		loading = 'lazy',
-		decoding = 'async'
+		decoding = 'async',
+		fetchpriority = 'auto'
 	}: {
 		src: string;
 		alt: string;
@@ -17,6 +18,7 @@
 		ariaLabel?: string;
 		loading?: 'eager' | 'lazy';
 		decoding?: 'async' | 'sync';
+		fetchpriority?: 'auto' | 'high' | 'low';
 	} = $props();
 
 	let imageElement = $state<HTMLImageElement>();
@@ -37,6 +39,7 @@
 		{alt}
 		{loading}
 		{decoding}
+		{fetchpriority}
 		onload={() => {
 			isLoaded = true;
 		}}
