@@ -60,7 +60,8 @@ describe('GET /api/users/[userId]/favicon', () => {
 		const { GET } = await import('./+server');
 		const response = await GET({
 			locals: {},
-			params: { userId: 'user-1' }
+			params: { userId: 'user-1' },
+			request: new Request('https://gallery.test/api/users/user-1/favicon')
 		} as never);
 
 		expect(response.status).toBe(200);
@@ -94,7 +95,8 @@ describe('GET /api/users/[userId]/favicon', () => {
 		const { GET } = await import('./+server');
 		const response = await GET({
 			locals: {},
-			params: { userId: 'user-1' }
+			params: { userId: 'user-1' },
+			request: new Request('https://gallery.test/api/users/user-1/favicon')
 		} as never);
 
 		expect(response.status).toBe(404);
@@ -109,7 +111,8 @@ describe('GET /api/users/[userId]/favicon', () => {
 		const { GET } = await import('./+server');
 		const response = await GET({
 			locals: {},
-			params: { userId: 'user-1' }
+			params: { userId: 'user-1' },
+			request: new Request('https://gallery.test/api/users/user-1/favicon')
 		} as never);
 
 		expect(response.status).toBe(404);
