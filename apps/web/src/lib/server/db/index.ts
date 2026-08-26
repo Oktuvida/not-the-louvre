@@ -9,11 +9,13 @@ type DbConnection = {
 	db: PostgresJsDatabase<typeof schema>;
 };
 
-const createDbConnection = (): DbConnection => {
+const createDbConnection = (connectionString?: string): DbConnection => {
+	const databaseUrl = connectionString || env.DATABASE_URL;
+
 	// Validated here rather than at module load so importing this module stays
 	// side-effect-free (SvelteKit's postbuild `analyse` step imports server
 	// modules without runtime env present).
-	if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
+	if (!databaseUrl) throw new Error('DATABASE_URL is not set');
 
 	// Production connects through Supabase's Supavisor pooler (session mode,
 	// :5432). prepare: false keeps the client compatible with transaction mode
@@ -21,7 +23,7 @@ const createDbConnection = (): DbConnection => {
 	// reused anyway. connect_timeout keeps a connection that dies during
 	// startup from silently redialing for postgres.js's 30s default before
 	// surfacing CONNECT_TIMEOUT.
-	const client = postgres(env.DATABASE_URL, { connect_timeout: 10, prepare: false });
+	const client = postgres(databaseUrl, { connect_timeout: 10, prepare: false });
 
 	return { client, db: drizzle(client, { schema }) };
 };
@@ -50,12 +52,19 @@ const resolveConnection = (): DbConnection => {
 	return processConnection;
 };
 
-export const runWithRequestDbConnection = async <T>(fn: () => Promise<T>): Promise<T> => {
+// Each request's fresh dial crosses to Supavisor (TCP + TLS + auth, around a
+// second per navigation) unless a Hyperdrive connection string is provided:
+// Hyperdrive terminates Postgres at the local colo over warm pooled origin
+// connections, so per-request connections stay correct on Workers and cheap.
+export const runWithRequestDbConnection = async <T>(
+	fn: () => Promise<T>,
+	options: { connectionString?: string } = {}
+): Promise<T> => {
 	if (!runningInCloudflareWorkers) {
 		return fn();
 	}
 
-	const connection = createDbConnection();
+	const connection = createDbConnection(options.connectionString);
 
 	try {
 		return await requestScopedConnection.run(connection, fn);

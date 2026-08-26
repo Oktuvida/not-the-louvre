@@ -28,6 +28,7 @@ declare global {
 		interface Platform {
 			caches?: CacheStorage & { default: Cache };
 			context?: { waitUntil(promise: Promise<unknown>): void };
+			env?: { HYPERDRIVE?: { connectionString: string } };
 		}
 	}
 }
