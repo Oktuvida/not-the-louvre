@@ -26,11 +26,21 @@ if (!databaseUrl || !storageBaseUrl || !storageKeySecret) {
 
 const sql = postgres(databaseUrl, { connect_timeout: 10, max: 1, prepare: false });
 
+// Preflight: list the buckets this key can see. A service-role key lists all
+// buckets; an anon/publishable key sees none of the private ones, and private
+// buckets it cannot see surface as "Bucket not found" on object reads.
+const bucketsResponse = await fetch(`${storageBaseUrl}/storage/v1/bucket`, {
+	headers: { authorization: `Bearer ${storageKeySecret}`, apikey: storageKeySecret }
+});
+const bucketsBody = await bucketsResponse.text().catch(() => '');
+console.log(`preflight: bucket list (${bucketsResponse.status}): ${bucketsBody.slice(0, 400)}`);
+console.log(`preflight: using bucket "${storageBucket}" at ${storageBaseUrl}`);
+
 const fetchStorageObject = async (storageKey: string) => {
 	const encodedKey = encodeURIComponent(storageKey).replace(/%2F/g, '/');
 	const response = await fetch(
 		`${storageBaseUrl}/storage/v1/object/${storageBucket}/${encodedKey}`,
-		{ headers: { authorization: `Bearer ${storageKeySecret}` } }
+		{ headers: { authorization: `Bearer ${storageKeySecret}`, apikey: storageKeySecret } }
 	);
 
 	if (!response.ok) {
