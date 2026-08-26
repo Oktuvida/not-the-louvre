@@ -40,39 +40,16 @@
 	 * pops in late. Instead, a small viewport-fixed layer (rasterized once)
 	 * is bound to the scroll position with a CSS scroll-driven animation that
 	 * loops every 512px — the pattern's tile size — so it moves 1:1 with the
-	 * content entirely on the compositor. The only JavaScript is keeping the
-	 * iteration count in sync with the document height (one cheap update when
-	 * virtualized content grows, inside ResizeObserver so it lands in the
-	 * same frame as the scroll range change).
+	 * content entirely on the compositor. A fixed animation-range paired with
+	 * a matching iteration count makes that mapping independent of the
+	 * document height: virtualized rows mounting or re-measuring while
+	 * artworks load no longer nudge the wall (the previous JS-synced
+	 * iteration count raced those height changes by a frame and the wall
+	 * visibly bobbed a few pixels).
 	 *
 	 * Browsers without scroll-timeline support get a static fixed wall.
 	 */
 	const PATTERN_TILE = 512;
-
-	let wallLayerElement = $state<HTMLDivElement>();
-
-	$effect(() => {
-		const layer = wallLayerElement;
-		if (!layer) return;
-
-		const updateIterations = () => {
-			const scrollRange = Math.max(
-				document.documentElement.scrollHeight - window.innerHeight,
-				PATTERN_TILE
-			);
-			layer.style.setProperty('--wall-iterations', `${scrollRange / PATTERN_TILE}`);
-		};
-
-		updateIterations();
-		const observer = new ResizeObserver(updateIterations);
-		observer.observe(document.documentElement);
-		window.addEventListener('resize', updateIterations);
-
-		return () => {
-			observer.disconnect();
-			window.removeEventListener('resize', updateIterations);
-		};
-	});
 </script>
 
 <div
@@ -83,7 +60,6 @@
 	<!-- The wall: a single small fixed layer whose translateY is bound to the
 	     scroll position on the compositor (see script comment). -->
 	<div
-		bind:this={wallLayerElement}
 		class="wall-layer"
 		data-testid="gallery-wall-bricks"
 		style={`background-image: url('${museumWallPatternUrl}'); background-size: ${PATTERN_TILE}px ${PATTERN_TILE}px; background-repeat: repeat;`}
@@ -207,13 +183,16 @@
 		}
 	}
 
-	@supports (animation-timeline: scroll()) {
+	@supports (animation-timeline: scroll()) and (animation-range: 0px 512px) {
 		.wall-layer {
 			animation: museum-wall-scroll 1s linear;
 			animation-timeline: scroll(root);
-			/* One iteration per 512px of scroll range = exact 1:1 motion with
-			 * the content. Kept in sync with the document height from script. */
-			animation-iteration-count: var(--wall-iterations, 1);
+			/* A fixed 1024-tile range with one iteration per tile resolves to
+			 * translateY(-(scrollY mod 512)) at every scroll position, for any
+			 * document height — no resync needed when content grows. 524288px
+			 * outlasts any realistic page. */
+			animation-range: 0px 524288px;
+			animation-iteration-count: 1024;
 			will-change: transform;
 		}
 	}
