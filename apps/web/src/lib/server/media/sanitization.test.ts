@@ -1,11 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeAvatarMedia } from './sanitization';
+import { sanitizeArtworkMedia, sanitizeAvatarMedia } from './sanitization';
 import {
+	createAvifTestFile,
 	createJpegTestFile,
 	createMalformedWebpFile,
 	createWebpTestFile,
 	fileToBytes
 } from './test-helpers';
+
+describe('sanitizeArtworkMedia', () => {
+	it('produces a tiny blurred-preview data URI alongside the canonical AVIF', async () => {
+		const input = await createAvifTestFile({
+			height: 768,
+			name: 'artwork.avif',
+			pattern: 'blocks',
+			width: 768
+		});
+
+		const result = await sanitizeArtworkMedia(input);
+
+		expect(result.contentType).toBe('image/avif');
+		expect(result.placeholder).toMatch(/^data:image\/png;base64,/);
+		// The placeholder rides every feed row, so it must stay small.
+		expect(result.placeholder!.length).toBeLessThan(4000);
+	});
+});
 
 describe('sanitizeAvatarMedia', () => {
 	it('accepts canonical WebP uploads and re-encodes them as AVIF', async () => {

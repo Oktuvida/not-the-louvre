@@ -108,6 +108,9 @@ export const artworks = appSchema.table(
 		storageKey: text('storage_key').notNull(),
 		mediaContentType: text('media_content_type').notNull(),
 		mediaSizeBytes: integer('media_size_bytes').notNull(),
+		// Tiny blurred preview (data URI, ~24px PNG) shown while the full
+		// media downloads; null for artworks published before the column.
+		mediaPlaceholder: text('media_placeholder'),
 		isNsfw: boolean('is_nsfw').notNull().default(false),
 		nsfwSource: artworkNsfwSource('nsfw_source'),
 		nsfwLabeledAt: timestamp('nsfw_labeled_at'),

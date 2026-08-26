@@ -184,6 +184,7 @@
 									<NsfwImage
 										src={artwork.imageUrl}
 										alt={artwork.title}
+										placeholder={artwork.imagePlaceholder}
 										blurred={isPodiumBlurred(artwork)}
 										ariaLabel={viewerId
 											? 'Sensitive artwork, click to reveal'

@@ -756,6 +756,7 @@ export const publishArtwork = async (
 				id: artworkId,
 				isNsfw: Boolean(input.isNsfw),
 				mediaContentType: media.contentType,
+				mediaPlaceholder: media.placeholder ?? null,
 				mediaSizeBytes: media.sizeBytes,
 				nsfwLabeledAt: input.isNsfw ? now : null,
 				nsfwSource: input.isNsfw ? 'creator' : null,
