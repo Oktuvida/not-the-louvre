@@ -1,6 +1,10 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import { createArtworkAccumulator } from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
+	import {
+		ARTWORK_VIEW_TRANSITION_NAME,
+		artworkTransitionSourceId
+	} from '$lib/features/gallery-exploration/artwork-view-transition';
 	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
 	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
 	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
@@ -120,7 +124,12 @@
 						onSelect(leadArtwork);
 					}}
 				>
-					<div class="relative aspect-square w-full">
+					<div
+						class="relative aspect-square w-full"
+						style:view-transition-name={$artworkTransitionSourceId === leadArtwork.id
+							? ARTWORK_VIEW_TRANSITION_NAME
+							: undefined}
+					>
 						<NsfwImage
 							src={leadArtwork.imageUrl}
 							alt={leadArtwork.title}
