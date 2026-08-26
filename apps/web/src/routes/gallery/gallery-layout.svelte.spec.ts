@@ -29,6 +29,7 @@ const { pageStore, setPageData } = vi.hoisted(() => {
 });
 
 vi.mock('$app/stores', () => ({
+	navigating: { subscribe: (run: (value: null) => void) => (run(null), () => {}) },
 	page: pageStore
 }));
 

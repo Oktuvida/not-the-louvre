@@ -110,6 +110,7 @@ vi.mock('$app/navigation', async (importOriginal) => {
 });
 
 vi.mock('$app/stores', () => ({
+	navigating: { subscribe: (run: (value: null) => void) => (run(null), () => {}) },
 	page: pageStore
 }));
 
