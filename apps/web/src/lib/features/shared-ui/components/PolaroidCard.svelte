@@ -1,6 +1,10 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import { hashString } from '$lib/features/artwork-presentation/model/frame';
+	import {
+		ARTWORK_VIEW_TRANSITION_NAME,
+		artworkTransitionSourceId
+	} from '$lib/features/gallery-exploration/artwork-view-transition';
 	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
 
 	let {
@@ -108,7 +112,12 @@
 		{/if}
 
 		<!-- Image area -->
-		<div class="relative aspect-square overflow-hidden border border-[#d6cfc5]">
+		<div
+			class="relative aspect-square overflow-hidden border border-[#d6cfc5]"
+			style:view-transition-name={$artworkTransitionSourceId === artwork.id
+				? ARTWORK_VIEW_TRANSITION_NAME
+				: undefined}
+		>
 			{#if isFork}
 				<div
 					class="absolute top-3 left-3 z-10 rounded-full border-2 border-[#2d2420] bg-[#f7d58a] px-3 py-1 text-[0.65rem] font-black tracking-[0.18em] text-[#2d2420] uppercase shadow-md"
