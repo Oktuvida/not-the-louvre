@@ -10,13 +10,14 @@
  *   bun run scripts/backfill-media-placeholders.ts
  */
 import postgres from 'postgres';
+import { ARTWORK_STORAGE_BUCKET } from '../src/lib/server/artwork/config';
 import { decodeImage } from '../src/lib/server/media/codecs';
 import { encodeArtworkMediaPlaceholder } from '../src/lib/server/media/sanitization';
 
 const databaseUrl = process.env.DATABASE_URL;
 const storageBaseUrl = process.env.SUPABASE_PUBLIC_URL;
 const storageKeySecret = process.env.SUPABASE_SECRET_KEY || process.env.SERVICE_ROLE_KEY;
-const storageBucket = process.env.ARTWORK_STORAGE_BUCKET || 'artwork-media';
+const storageBucket = process.env.ARTWORK_STORAGE_BUCKET || ARTWORK_STORAGE_BUCKET;
 
 if (!databaseUrl || !storageBaseUrl || !storageKeySecret) {
 	console.error('Missing DATABASE_URL, SUPABASE_PUBLIC_URL, or SUPABASE_SECRET_KEY');
@@ -33,7 +34,8 @@ const fetchStorageObject = async (storageKey: string) => {
 	);
 
 	if (!response.ok) {
-		throw new Error(`storage fetch failed (${response.status})`);
+		const body = await response.text().catch(() => '');
+		throw new Error(`storage fetch failed (${response.status}) ${body.slice(0, 120)}`);
 	}
 
 	return new Uint8Array(await response.arrayBuffer());
