@@ -68,12 +68,13 @@ const rankedCursorWhere = (
 	);
 };
 
-const baseSelect = {
+// The discovery feeds render from the media endpoint, never from the drawing
+// document, so their select keeps the multi-hundred-KiB documents out of the
+// per-row pooler round-trip. Detail reads keep them for the /draw fork loader.
+const discoverySelect = {
 	id: artworks.id,
 	authorId: artworks.authorId,
 	title: artworks.title,
-	drawingDocument: artworks.drawingDocument,
-	drawingVersion: artworks.drawingVersion,
 	storageKey: artworks.storageKey,
 	mediaContentType: artworks.mediaContentType,
 	mediaSizeBytes: artworks.mediaSizeBytes,
@@ -88,6 +89,12 @@ const baseSelect = {
 	updatedAt: artworks.updatedAt,
 	authorNickname: users.nickname,
 	authorAvatarUrl: users.avatarUrl
+};
+
+const baseSelect = {
+	...discoverySelect,
+	drawingDocument: artworks.drawingDocument,
+	drawingVersion: artworks.drawingVersion
 };
 
 const voteCountSql = (value: 'down' | 'up') =>
@@ -109,11 +116,20 @@ const viewerVoteSql = (viewer: { isModerator: boolean; userId: string | null }) 
 		)`
 		: sql<null>`null`;
 
-const buildBaseSelect = (viewer: { isModerator: boolean; userId: string | null }) => ({
-	...baseSelect,
+const engagementSelect = (viewer: { isModerator: boolean; userId: string | null }) => ({
 	downvotes: voteCountSql('down').as('downvotes'),
 	upvotes: voteCountSql('up').as('upvotes'),
 	viewerVote: viewerVoteSql(viewer).as('viewerVote')
+});
+
+const buildBaseSelect = (viewer: { isModerator: boolean; userId: string | null }) => ({
+	...baseSelect,
+	...engagementSelect(viewer)
+});
+
+const buildDiscoverySelect = (viewer: { isModerator: boolean; userId: string | null }) => ({
+	...discoverySelect,
+	...engagementSelect(viewer)
 });
 
 type ArtworkReadRow = {
@@ -196,11 +212,11 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	updatedAt: row.updatedAt
 });
 
-const buildRankedBaseSelect = (
+const buildRankedDiscoverySelect = (
 	viewer: { isModerator: boolean; userId: string | null },
 	rankingExpression: ReturnType<typeof sql<number>>
 ) => ({
-	...buildBaseSelect(viewer),
+	...buildDiscoverySelect(viewer),
 	rankingValue: rankingExpression.as('rankingValue')
 });
 
@@ -247,7 +263,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 	async listRecentArtworks(input: ListRecentArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
 		const rows = await db
-			.select(buildBaseSelect(viewer))
+			.select(buildDiscoverySelect(viewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(
@@ -266,7 +282,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 		const viewer = defaultViewer(input.viewer);
 		const rankingExpression = hotRankingSql(input.now);
 		const rows = await db
-			.select(buildRankedBaseSelect(viewer, rankingExpression))
+			.select(buildRankedDiscoverySelect(viewer, rankingExpression))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(
@@ -285,7 +301,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 		const rankingExpression = sql<number>`${artworks.score}::double precision`;
 		const windowStart = getTopWindowStart(input.now, input.window);
 		const rows = await db
-			.select(buildRankedBaseSelect(viewer, rankingExpression))
+			.select(buildRankedDiscoverySelect(viewer, rankingExpression))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(
@@ -368,7 +384,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 	async findRandomArtwork(viewer) {
 		const activeViewer = defaultViewer(viewer);
 		const rows = await db
-			.select(buildBaseSelect(activeViewer))
+			.select(buildDiscoverySelect(activeViewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(artworkVisibilityWhere())
