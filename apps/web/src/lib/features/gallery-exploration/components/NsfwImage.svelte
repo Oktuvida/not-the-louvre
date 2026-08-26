@@ -57,7 +57,7 @@
 			isLoaded = true;
 		}}
 		aria-label={blurred ? ariaLabel : undefined}
-		class={`h-full w-full object-cover transition duration-200 ${blurred ? BLUR_CLASSES : ''} ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+		class={`relative h-full w-full object-cover transition duration-200 ${blurred ? BLUR_CLASSES : ''} ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
 	/>
 	{#if blurred}
 		<div
