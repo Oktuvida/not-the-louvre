@@ -2,6 +2,19 @@
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import AmbientAudioController from '$lib/features/ambient-audio/AmbientAudioController.svelte';
+	// Self-hosted fonts (same families and weights the Google Fonts link
+	// used to serve) — bundled woff2, no render-blocking third-party CSS.
+	import '@fontsource/baloo-2/400.css';
+	import '@fontsource/baloo-2/500.css';
+	import '@fontsource/baloo-2/600.css';
+	import '@fontsource/baloo-2/700.css';
+	import '@fontsource/baloo-2/800.css';
+	import '@fontsource/caveat/400.css';
+	import '@fontsource/caveat/700.css';
+	import '@fontsource/fredoka/400.css';
+	import '@fontsource/fredoka/500.css';
+	import '@fontsource/fredoka/600.css';
+	import '@fontsource/fredoka/700.css';
 	import './layout.css';
 	import type { LayoutProps } from './$types';
 	import { faviconUpdateEventName } from '$lib/favicon';
