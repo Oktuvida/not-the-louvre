@@ -188,8 +188,9 @@
 										ariaLabel={viewerId
 											? 'Sensitive artwork, click to reveal'
 											: 'Sensitive artwork'}
-										loading={position === 1 ? 'eager' : 'lazy'}
-										decoding={position === 1 ? 'sync' : 'async'}
+										loading="eager"
+										decoding="async"
+										fetchpriority="high"
 										className="h-full w-full object-cover"
 									/>
 								</div>

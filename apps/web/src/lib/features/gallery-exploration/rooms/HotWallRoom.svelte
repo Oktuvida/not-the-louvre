@@ -127,6 +127,8 @@
 							blurred={isLeadBlurred(leadArtwork)}
 							ariaLabel={viewerId ? 'Sensitive artwork, click to reveal' : 'Sensitive artwork'}
 							className="h-full w-full object-cover"
+							loading="eager"
+							fetchpriority="high"
 						/>
 					</div>
 					<div
