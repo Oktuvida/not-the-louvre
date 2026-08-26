@@ -23,24 +23,24 @@ describe('getBrowserRealtimeClient', () => {
 		}));
 	});
 
-	it('reuses the same browser client for the same Supabase credentials', () => {
-		const first = getBrowserRealtimeClient('https://example.supabase.co', 'anon-key');
-		const second = getBrowserRealtimeClient('https://example.supabase.co', 'anon-key');
+	it('reuses the same browser client for the same Supabase credentials', async () => {
+		const first = await getBrowserRealtimeClient('https://example.supabase.co', 'anon-key');
+		const second = await getBrowserRealtimeClient('https://example.supabase.co', 'anon-key');
 
 		expect(first).toBe(second);
 		expect(createClient).toHaveBeenCalledTimes(1);
 	});
 
-	it('creates a separate client when the Supabase credentials differ', () => {
-		const first = getBrowserRealtimeClient('https://example.supabase.co', 'anon-key');
-		const second = getBrowserRealtimeClient('https://other.supabase.co', 'anon-key');
+	it('creates a separate client when the Supabase credentials differ', async () => {
+		const first = await getBrowserRealtimeClient('https://example.supabase.co', 'anon-key');
+		const second = await getBrowserRealtimeClient('https://other.supabase.co', 'anon-key');
 
 		expect(first).not.toBe(second);
 		expect(createClient).toHaveBeenCalledTimes(2);
 	});
 
-	it('disables browser auth persistence for realtime-only clients', () => {
-		getBrowserRealtimeClient('https://example.supabase.co', 'anon-key');
+	it('disables browser auth persistence for realtime-only clients', async () => {
+		await getBrowserRealtimeClient('https://example.supabase.co', 'anon-key');
 
 		expect(createClient).toHaveBeenCalledWith('https://example.supabase.co', 'anon-key', {
 			auth: {

@@ -1,13 +1,38 @@
-import {
-	buildBaselineProfanityMatcher,
-	buildPhraseMatcher
-} from '$lib/shared/moderation/text-policy';
 import type { TextContentChecker, TextFilterContext } from './types';
 
-type MatcherMap = Record<TextFilterContext, ReturnType<typeof buildPhraseMatcher>>;
+// The text-policy module carries the full profanity wordlist, so it loads on
+// the first validation instead of riding in every page's entry chunk.
+type TextPolicyModule = typeof import('$lib/shared/moderation/text-policy');
+type PhraseMatcher = ReturnType<TextPolicyModule['buildPhraseMatcher']>;
+type MatcherMap = Record<TextFilterContext, PhraseMatcher>;
 
+let textPolicyModulePromise: Promise<TextPolicyModule> | null = null;
+let baselineMatcherPromise: Promise<PhraseMatcher> | null = null;
 let matcherPromise: Promise<MatcherMap> | null = null;
-const baselineMatcher = buildBaselineProfanityMatcher();
+
+const getTextPolicyModule = () => {
+	if (!textPolicyModulePromise) {
+		textPolicyModulePromise = import('$lib/shared/moderation/text-policy').catch((error) => {
+			textPolicyModulePromise = null;
+			throw error;
+		});
+	}
+
+	return textPolicyModulePromise;
+};
+
+const getBaselineMatcher = () => {
+	if (!baselineMatcherPromise) {
+		baselineMatcherPromise = getTextPolicyModule()
+			.then((textPolicy) => textPolicy.buildBaselineProfanityMatcher())
+			.catch((error) => {
+				baselineMatcherPromise = null;
+				throw error;
+			});
+	}
+
+	return baselineMatcherPromise;
+};
 
 const blockedMessages: Record<TextFilterContext, string> = {
 	artwork_title: 'Choose a different artwork title.',
@@ -19,6 +44,8 @@ const shouldBypassClientContentFilters = () =>
 	typeof window !== 'undefined' && Boolean(window.__ntlBypassClientContentFilters);
 
 const createMatchers = async (): Promise<MatcherMap> => {
+	const { buildPhraseMatcher } = await getTextPolicyModule();
+
 	try {
 		const response = await fetch('/api/moderation/text-policy', {
 			headers: { accept: 'application/json' }
@@ -64,14 +91,16 @@ export const checkTextContent: TextContentChecker = async (value, context) => {
 		return { status: 'allowed' };
 	}
 
-	if (baselineMatcher.hasMatch(value)) {
-		return {
-			message: blockedMessages[context],
-			status: 'blocked'
-		};
-	}
-
 	try {
+		const baselineMatcher = await getBaselineMatcher();
+
+		if (baselineMatcher.hasMatch(value)) {
+			return {
+				message: blockedMessages[context],
+				status: 'blocked'
+			};
+		}
+
 		const matcher = (await getMatchers())[context];
 		if (!matcher.hasMatch(value)) {
 			return { status: 'allowed' };

@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createRealtimeAttemptController } from '$lib/features/realtime/attempt-controller';
 
 export type RealtimeSubscriptionOptions = {
-	getRealtimeClient: () => SupabaseClient;
+	getRealtimeClient: () => SupabaseClient | Promise<SupabaseClient>;
 	fetchToken: () => Promise<string | null>;
 	viewerId: string;
 	onRefresh: (artworkId: string) => void;
@@ -36,7 +36,7 @@ export const createRealtimeSubscription = (options: RealtimeSubscriptionOptions)
 				return;
 			}
 
-			const supabase = options.getRealtimeClient();
+			const supabase = await options.getRealtimeClient();
 			await supabase.realtime.setAuth(token);
 
 			if (!attemptController.isCurrent(attempt.id)) {

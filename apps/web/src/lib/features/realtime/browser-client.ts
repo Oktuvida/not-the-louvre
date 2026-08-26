@@ -1,6 +1,6 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-const browserRealtimeClients = new Map<string, SupabaseClient>();
+const browserRealtimeClients = new Map<string, Promise<SupabaseClient>>();
 
 const realtimeAuthOptions = {
 	auth: {
@@ -12,7 +12,15 @@ const realtimeAuthOptions = {
 
 const toClientKey = (url: string, anonKey: string) => `${url}::${anonKey}`;
 
-export const getBrowserRealtimeClient = (url: string, anonKey: string) => {
+// supabase-js loads on demand so pages that never start a realtime
+// subscription (anonymous gallery visits) never download it.
+const createBrowserRealtimeClient = async (url: string, anonKey: string) => {
+	const { createClient } = await import('@supabase/supabase-js');
+
+	return createClient(url, anonKey, realtimeAuthOptions);
+};
+
+export const getBrowserRealtimeClient = (url: string, anonKey: string): Promise<SupabaseClient> => {
 	const clientKey = toClientKey(url, anonKey);
 	const existingClient = browserRealtimeClients.get(clientKey);
 
@@ -20,7 +28,11 @@ export const getBrowserRealtimeClient = (url: string, anonKey: string) => {
 		return existingClient;
 	}
 
-	const client = createClient(url, anonKey, realtimeAuthOptions);
+	const client = createBrowserRealtimeClient(url, anonKey).catch((error) => {
+		browserRealtimeClients.delete(clientKey);
+		throw error;
+	});
+
 	browserRealtimeClients.set(clientKey, client);
 	return client;
 };
