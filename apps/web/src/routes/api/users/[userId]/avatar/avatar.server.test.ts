@@ -77,7 +77,8 @@ describe('GET /api/users/[userId]/avatar', () => {
 		const { GET } = await import('./+server');
 		const response = await GET({
 			locals: {},
-			params: { userId: 'user-1' }
+			params: { userId: 'user-1' },
+			request: new Request('https://gallery.test/api/users/user-1/avatar')
 		} as never);
 
 		expect(response.status).toBe(200);
@@ -92,7 +93,8 @@ describe('GET /api/users/[userId]/avatar', () => {
 		const { GET } = await import('./+server');
 		const response = await GET({
 			locals: {},
-			params: { userId: 'user-1' }
+			params: { userId: 'user-1' },
+			request: new Request('https://gallery.test/api/users/user-1/avatar')
 		} as never);
 
 		expect(response.status).toBe(404);
@@ -106,7 +108,8 @@ describe('GET /api/users/[userId]/avatar', () => {
 		const { GET } = await import('./+server');
 		const response = await GET({
 			locals: {},
-			params: { userId: 'user-1' }
+			params: { userId: 'user-1' },
+			request: new Request('https://gallery.test/api/users/user-1/avatar')
 		} as never);
 
 		expect(response.status).toBe(404);
@@ -119,7 +122,8 @@ describe('GET /api/users/[userId]/avatar', () => {
 		const { GET } = await import('./+server');
 		const response = await GET({
 			locals: {},
-			params: { userId: 'unknown-user' }
+			params: { userId: 'unknown-user' },
+			request: new Request('https://gallery.test/api/users/unknown-user/avatar')
 		} as never);
 
 		expect(response.status).toBe(404);
@@ -134,7 +138,8 @@ describe('GET /api/users/[userId]/avatar', () => {
 		const { GET } = await import('./+server');
 		const response = await GET({
 			locals: {},
-			params: { userId: 'user-1' }
+			params: { userId: 'user-1' },
+			request: new Request('https://gallery.test/api/users/user-1/avatar')
 		} as never);
 
 		expect(response.status).toBe(404);
@@ -143,6 +148,43 @@ describe('GET /api/users/[userId]/avatar', () => {
 			code: 'NOT_FOUND',
 			message: 'Avatar not found'
 		});
+	});
+	it('answers matching if-none-match revalidations without touching storage', async () => {
+		mocked.findUserById.mockResolvedValue(makeUserRecord({ avatarUrl: 'avatars/user-1.avif' }));
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: {},
+			params: { userId: 'user-1' },
+			request: new Request('https://gallery.test/api/users/user-1/avatar', {
+				headers: {
+					'if-none-match': `"avatars/user-1.avif:${new Date('2026-01-01T00:00:00.000Z').getTime()}"`
+				}
+			})
+		} as never);
+
+		expect(response.status).toBe(304);
+		expect(mocked.streamAvatarStorageObject).not.toHaveBeenCalled();
+	});
+
+	it('serves avatars from the edge cache without touching the database', async () => {
+		const cachedResponse = new Response(new Uint8Array([9]), { status: 200 });
+		const edgeCache = {
+			delete: vi.fn(async () => true),
+			match: vi.fn(async () => cachedResponse),
+			put: vi.fn(async () => undefined)
+		};
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: {},
+			params: { userId: 'user-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			request: new Request('https://gallery.test/api/users/user-1/avatar')
+		} as never);
+
+		expect(response).toBe(cachedResponse);
+		expect(mocked.findUserById).not.toHaveBeenCalled();
 	});
 });
 
@@ -169,6 +211,36 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		expect(response.status).toBe(200);
 		const json = await response.json();
 		expect(json.avatarUrl).toBe(`/api/users/${updated.id}/avatar?v=${updated.updatedAt.getTime()}`);
+	});
+
+	it('purges the local edge cache entries after an upload', async () => {
+		const updated = makeUserRecord({ avatarUrl: 'avatars/user-1.avif' });
+		mocked.avatarService.uploadAvatar.mockResolvedValue(updated);
+
+		const formData = new FormData();
+		formData.append(
+			'drawingDocument',
+			serializeDrawingDocument(createEmptyDrawingDocument('avatar'))
+		);
+		const edgeCache = {
+			delete: vi.fn(async () => true),
+			match: vi.fn(async () => undefined),
+			put: vi.fn(async () => undefined)
+		};
+		const waitUntil = vi.fn();
+
+		const { PUT } = await import('./+server');
+		const response = await PUT({
+			locals: { user: makeLocalUser() },
+			params: { userId: 'user-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			request: new Request('http://localhost', { method: 'PUT', body: formData }),
+			url: new URL('http://localhost/api/users/user-1/avatar')
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(edgeCache.delete).toHaveBeenCalledWith('http://localhost/api/users/user-1/avatar');
+		expect(edgeCache.delete).toHaveBeenCalledWith('http://localhost/api/users/user-1/favicon');
 	});
 
 	it('returns 400 JSON when the file field is missing', async () => {
