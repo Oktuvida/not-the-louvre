@@ -25,7 +25,10 @@ declare global {
 				source: 'external' | 'local-room-selection';
 			};
 		}
-		// interface Platform {}
+		interface Platform {
+			caches?: CacheStorage & { default: Cache };
+			context?: { waitUntil(promise: Promise<unknown>): void };
+		}
 	}
 }
 
