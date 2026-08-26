@@ -292,9 +292,29 @@
 		isSubmittingVote = true;
 		actionError = null;
 
+		const previousArtwork = artwork;
+		const method = artwork.viewerVote === value ? 'DELETE' : 'POST';
+		const currentVote = artwork.viewerVote;
+		const nextVote = method === 'DELETE' ? null : value;
+		const upvotes = artwork.upvotes + (currentVote === 'up' ? -1 : 0) + (nextVote === 'up' ? 1 : 0);
+		const downvotes =
+			artwork.downvotes + (currentVote === 'down' ? -1 : 0) + (nextVote === 'down' ? 1 : 0);
+
+		// Optimistic: the tap lands instantly; the authoritative score reconciles
+		// below, or the snapshot rolls back if the server rejects the vote.
+		syncArtwork({
+			...previousArtwork,
+			downvotes,
+			score:
+				previousArtwork.score +
+				(upvotes - previousArtwork.upvotes) -
+				(downvotes - previousArtwork.downvotes),
+			upvotes,
+			viewerVote: nextVote
+		});
+
 		try {
-			const method = artwork.viewerVote === value ? 'DELETE' : 'POST';
-			const response = await fetch(`/api/artworks/${artwork.id}/vote`, {
+			const response = await fetch(`/api/artworks/${previousArtwork.id}/vote`, {
 				body: method === 'POST' ? JSON.stringify({ value }) : undefined,
 				headers: method === 'POST' ? { 'content-type': 'application/json' } : undefined,
 				method
@@ -306,21 +326,12 @@
 			}
 
 			const payload = (await response.json()) as { artwork: { score: number } };
-			const currentVote = artwork.viewerVote;
-			const nextVote = method === 'DELETE' ? null : value;
-			const upvotes =
-				artwork.upvotes + (currentVote === 'up' ? -1 : 0) + (nextVote === 'up' ? 1 : 0);
-			const downvotes =
-				artwork.downvotes + (currentVote === 'down' ? -1 : 0) + (nextVote === 'down' ? 1 : 0);
 
-			syncArtwork({
-				...artwork,
-				downvotes,
-				score: payload.artwork.score,
-				upvotes,
-				viewerVote: nextVote
-			});
+			if (artwork && artwork.id === previousArtwork.id) {
+				syncArtwork({ ...artwork, score: payload.artwork.score });
+			}
 		} catch (error) {
+			syncArtwork(previousArtwork);
 			actionError = error instanceof Error ? error.message : 'Vote failed';
 		} finally {
 			isSubmittingVote = false;
