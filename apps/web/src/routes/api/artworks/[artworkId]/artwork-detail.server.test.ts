@@ -102,19 +102,105 @@ describe('artwork detail endpoints', () => {
 		});
 		mocked.streamArtworkStorageObject.mockResolvedValue(
 			new Response(new Uint8Array([1, 2, 3]), {
-				headers: { 'content-type': 'application/octet-stream' },
+				headers: { 'content-length': '3', 'content-type': 'application/octet-stream' },
 				status: 200
 			})
 		);
 
 		const { GET } = await import('./media/+server');
-		const response = await GET({ locals: {}, params: { artworkId: 'artwork-1' } } as never);
+		const response = await GET({
+			locals: {},
+			params: { artworkId: 'artwork-1' },
+			request: new Request('https://gallery.test/api/artworks/artwork-1/media')
+		} as never);
 
 		expect(response.status).toBe(200);
-		expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+		expect(response.headers.get('cache-control')).toBe(
+			'public, max-age=31536000, immutable, s-maxage=3600'
+		);
 		expect(response.headers.get('content-type')).toBe('image/avif');
+		expect(response.headers.get('content-length')).toBe('3');
+		expect(response.headers.get('etag')).toBe('"artworks/user-1/artwork-1.avif"');
 		expect(mocked.streamArtworkStorageObject).toHaveBeenCalledWith(
 			'artworks/user-1/artwork-1.avif'
 		);
+	});
+
+	it('answers matching if-none-match revalidations without touching storage', async () => {
+		mocked.getArtworkMedia.mockResolvedValue({
+			id: 'artwork-1',
+			mediaContentType: 'image/avif',
+			storageKey: 'artworks/user-1/artwork-1.avif'
+		});
+
+		const { GET } = await import('./media/+server');
+		const response = await GET({
+			locals: {},
+			params: { artworkId: 'artwork-1' },
+			request: new Request('https://gallery.test/api/artworks/artwork-1/media', {
+				headers: { 'if-none-match': '"artworks/user-1/artwork-1.avif"' }
+			})
+		} as never);
+
+		expect(response.status).toBe(304);
+		expect(response.headers.get('etag')).toBe('"artworks/user-1/artwork-1.avif"');
+		expect(mocked.streamArtworkStorageObject).not.toHaveBeenCalled();
+	});
+
+	it('serves media from the edge cache without touching the database', async () => {
+		const cachedResponse = new Response(new Uint8Array([9]), {
+			headers: { etag: '"artworks/user-1/artwork-1.avif"' },
+			status: 200
+		});
+		const edgeCache = {
+			match: vi.fn(async () => cachedResponse),
+			put: vi.fn(async () => undefined)
+		};
+
+		const { GET } = await import('./media/+server');
+		const response = await GET({
+			locals: {},
+			params: { artworkId: 'artwork-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			request: new Request('https://gallery.test/api/artworks/artwork-1/media')
+		} as never);
+
+		expect(response).toBe(cachedResponse);
+		expect(mocked.getArtworkMedia).not.toHaveBeenCalled();
+		expect(mocked.streamArtworkStorageObject).not.toHaveBeenCalled();
+	});
+
+	it('stores fresh media responses in the edge cache', async () => {
+		mocked.getArtworkMedia.mockResolvedValue({
+			id: 'artwork-1',
+			mediaContentType: 'image/avif',
+			storageKey: 'artworks/user-1/artwork-1.avif'
+		});
+		mocked.streamArtworkStorageObject.mockResolvedValue(
+			new Response(new Uint8Array([1, 2, 3]), {
+				headers: { 'content-type': 'application/octet-stream' },
+				status: 200
+			})
+		);
+		const edgeCache = {
+			match: vi.fn(async () => undefined),
+			put: vi.fn(async () => undefined)
+		};
+		const waitUntil = vi.fn();
+
+		const { GET } = await import('./media/+server');
+		const response = await GET({
+			locals: {},
+			params: { artworkId: 'artwork-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			request: new Request('https://gallery.test/api/artworks/artwork-1/media')
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(edgeCache.put).toHaveBeenCalledWith(
+			'https://gallery.test/api/artworks/artwork-1/media',
+			expect.any(Response)
+		);
+		expect(waitUntil).toHaveBeenCalledTimes(1);
 	});
 });
