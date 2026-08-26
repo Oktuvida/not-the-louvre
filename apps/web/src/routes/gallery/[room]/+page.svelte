@@ -26,4 +26,13 @@
 		room={data.room}
 		roomId={data.roomId}
 	/>
+{:catch}
+	<GalleryExplorationPage
+		artworks={[]}
+		emptyStateMessage="The gallery could not load right now — refresh to try again."
+		realtimeConfig={data.realtimeConfig}
+		viewer={data.viewer}
+		room={data.room}
+		roomId={data.roomId}
+	/>
 {/await}
