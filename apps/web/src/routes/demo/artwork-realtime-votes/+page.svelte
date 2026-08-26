@@ -143,7 +143,7 @@
 				return;
 			}
 
-			const supabase = getBrowserRealtimeClient(
+			const supabase = await getBrowserRealtimeClient(
 				data.realtimeConfig.url,
 				data.realtimeConfig.anonKey
 			);
