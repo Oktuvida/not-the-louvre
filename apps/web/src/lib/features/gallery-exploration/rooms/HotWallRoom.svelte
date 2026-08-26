@@ -124,6 +124,7 @@
 						<NsfwImage
 							src={leadArtwork.imageUrl}
 							alt={leadArtwork.title}
+							placeholder={leadArtwork.imagePlaceholder}
 							blurred={isLeadBlurred(leadArtwork)}
 							ariaLabel={viewerId ? 'Sensitive artwork, click to reveal' : 'Sensitive artwork'}
 							className="h-full w-full object-cover"

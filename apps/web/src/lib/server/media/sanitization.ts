@@ -10,11 +10,13 @@ import {
 	containOnBackground,
 	decodeImage,
 	encodeAvif,
+	encodePng,
 	hasAvifMagicBytes,
 	hasWebpMagicBytes,
 	isAnimatedImage,
 	mimeTypeForImageFormat,
 	parseHexColor,
+	resizeImage,
 	sniffImageFormat,
 	type AvifEncodeSettings,
 	type RawImage
@@ -143,13 +145,28 @@ const decodeStillImage = async (
 
 const encodeCanonicalAvif = async (image: RawImage) => encodeAvif(image, CANONICAL_AVIF_OPTIONS);
 
-const encodeCanonicalArtworkAvif = async (image: RawImage) => {
-	const contained = await containOnBackground(image, {
+// 24px is enough for a blurred preview and keeps the PNG data URI in the
+// low hundreds of bytes, small enough to ride every feed row.
+const ARTWORK_PLACEHOLDER_SIZE = 24;
+
+const containArtworkOnCanvas = (image: RawImage) =>
+	containOnBackground(image, {
 		background: ARTWORK_CANVAS_BACKGROUND,
 		height: artworkProfile.height,
 		width: artworkProfile.width
 	});
 
+export const encodeArtworkMediaPlaceholder = async (contained: RawImage) => {
+	const tiny = await resizeImage(contained, {
+		height: ARTWORK_PLACEHOLDER_SIZE,
+		width: ARTWORK_PLACEHOLDER_SIZE
+	});
+	const pngBuffer = await encodePng(tiny);
+
+	return `data:image/png;base64,${Buffer.from(pngBuffer).toString('base64')}`;
+};
+
+const encodeContainedArtworkAvif = async (contained: RawImage) => {
 	for (const avifOptions of ARTWORK_CANONICAL_AVIF_ATTEMPTS) {
 		const outputBuffer = await encodeAvif(contained, avifOptions);
 
@@ -239,7 +256,7 @@ export const sanitizeAvifUpload = async (
 		expectInput: hasAvifMagicBytes
 	});
 
-export const sanitizeArtworkMedia = async (file: File) => {
+export const sanitizeArtworkMedia = async (file: File): Promise<SanitizedMedia> => {
 	if (!ARTWORK_SOURCE_CONTENT_TYPES.has(file.type)) {
 		throw new ArtworkFlowError(
 			400,
@@ -248,10 +265,22 @@ export const sanitizeArtworkMedia = async (file: File) => {
 		);
 	}
 
+	// The placeholder is derived from the same contained frame the canonical
+	// AVIF encodes, so its colors always match the final media.
+	let placeholder: string | null = null;
+
+	const encodeArtworkWithPlaceholder = async (image: RawImage) => {
+		const contained = await containArtworkOnCanvas(image);
+		placeholder = await encodeArtworkMediaPlaceholder(contained);
+		return encodeContainedArtworkAvif(contained);
+	};
+
 	if (file.type === artworkProfile.contentType) {
-		return sanitizeAvifUpload(file, artworkProfile, {
-			encodeOutput: encodeCanonicalArtworkAvif
+		const sanitized = await sanitizeAvifUpload(file, artworkProfile, {
+			encodeOutput: encodeArtworkWithPlaceholder
 		});
+
+		return { ...sanitized, placeholder };
 	}
 
 	if (file.size > artworkProfile.maxBytes) {
@@ -264,7 +293,7 @@ export const sanitizeArtworkMedia = async (file: File) => {
 	let outputBuffer: Uint8Array;
 
 	try {
-		outputBuffer = await encodeCanonicalArtworkAvif(image);
+		outputBuffer = await encodeArtworkWithPlaceholder(image);
 	} catch (error) {
 		if (error instanceof ArtworkFlowError) {
 			throw error;
@@ -273,7 +302,7 @@ export const sanitizeArtworkMedia = async (file: File) => {
 		throw invalidContentError(artworkProfile);
 	}
 
-	return toSanitizedMedia(outputBuffer, artworkProfile);
+	return { ...toSanitizedMedia(outputBuffer, artworkProfile), placeholder };
 };
 
 export const sanitizeAvatarMedia = (file: File) =>

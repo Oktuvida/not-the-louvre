@@ -1,0 +1,1 @@
+ALTER TABLE "app"."artworks" ADD COLUMN "media_placeholder" text;

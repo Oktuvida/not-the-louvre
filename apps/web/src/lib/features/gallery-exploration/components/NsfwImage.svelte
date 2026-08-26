@@ -9,7 +9,8 @@
 		ariaLabel = undefined,
 		loading = 'lazy',
 		decoding = 'async',
-		fetchpriority = 'auto'
+		fetchpriority = 'auto',
+		placeholder = null
 	}: {
 		src: string;
 		alt: string;
@@ -19,6 +20,7 @@
 		loading?: 'eager' | 'lazy';
 		decoding?: 'async' | 'sync';
 		fetchpriority?: 'auto' | 'high' | 'low';
+		placeholder?: string | null;
 	} = $props();
 
 	let imageElement = $state<HTMLImageElement>();
@@ -33,6 +35,17 @@
 </script>
 
 <div class={`relative h-full w-full bg-[#ece4d8] ${className}`}>
+	{#if placeholder}
+		<!-- Blurred tiny preview stays mounted beneath the real image; the
+		     slight scale hides the blur's soft edges at the frame border. -->
+		<img
+			src={placeholder}
+			alt=""
+			aria-hidden="true"
+			draggable="false"
+			class={`absolute inset-0 h-full w-full scale-[1.06] object-cover blur-md ${blurred ? BLUR_CLASSES : ''}`}
+		/>
+	{/if}
 	<img
 		bind:this={imageElement}
 		{src}

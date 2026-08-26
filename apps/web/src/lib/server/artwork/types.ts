@@ -12,6 +12,7 @@ export type ArtworkRecord = {
 	isHidden?: boolean;
 	isNsfw: boolean;
 	mediaContentType: string;
+	mediaPlaceholder?: string | null;
 	mediaSizeBytes: number;
 	nsfwLabeledAt?: Date | null;
 	nsfwSource?: 'creator' | 'moderator' | null;
@@ -37,6 +38,7 @@ export type ArtworkFeedCard = {
 	id: string;
 	isNsfw: boolean;
 	lineage: ArtworkLineageSummary;
+	mediaPlaceholder?: string | null;
 	mediaUrl: string;
 	score: number;
 	title: string;
@@ -258,6 +260,7 @@ export type SanitizedMedia = {
 	contentType: string;
 	file: File;
 	height: number;
+	placeholder?: string | null;
 	sizeBytes: number;
 	width: number;
 };

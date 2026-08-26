@@ -24,6 +24,7 @@ const baseArtwork = (
 	forkCount: artwork.forkCount,
 	id: artwork.id,
 	imageUrl: artwork.mediaUrl,
+	imagePlaceholder: artwork.mediaPlaceholder ?? null,
 	isNsfw: artwork.isNsfw,
 	lineage: artwork.lineage,
 	score: artwork.score,

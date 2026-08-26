@@ -77,6 +77,7 @@ const discoverySelect = {
 	title: artworks.title,
 	storageKey: artworks.storageKey,
 	mediaContentType: artworks.mediaContentType,
+	mediaPlaceholder: artworks.mediaPlaceholder,
 	mediaSizeBytes: artworks.mediaSizeBytes,
 	isHidden: artworks.isHidden,
 	isNsfw: artworks.isNsfw,
@@ -144,6 +145,7 @@ type ArtworkReadRow = {
 	drawingDocument?: string | null;
 	drawingVersion?: number | null;
 	mediaContentType: string;
+	mediaPlaceholder?: string | null;
 	mediaSizeBytes: number;
 	commentCount: number;
 	forkCount: number;
@@ -196,6 +198,7 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	drawingDocument: row.drawingDocument ?? null,
 	drawingVersion: row.drawingVersion ?? null,
 	mediaContentType: row.mediaContentType,
+	mediaPlaceholder: row.mediaPlaceholder ?? null,
 	mediaSizeBytes: row.mediaSizeBytes,
 	parentAuthorAvatarUrl: row.parentAuthorAvatarUrl ?? null,
 	parentAuthorId: row.parentAuthorId ?? null,
