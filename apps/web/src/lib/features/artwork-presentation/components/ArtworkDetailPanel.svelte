@@ -10,7 +10,6 @@
 		type TextContentChecker
 	} from '$lib/client/content-filter';
 	import { resolve } from '$app/paths';
-	import { ARTWORK_VIEW_TRANSITION_NAME } from '$lib/features/gallery-exploration/artwork-view-transition';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
 
@@ -482,10 +481,7 @@
 										/>
 									</div>
 								{/if}
-								<div
-									class="postcard-photo border border-[#d6cfc5]"
-									style:view-transition-name={ARTWORK_VIEW_TRANSITION_NAME}
-								>
+								<div class="postcard-photo border border-[#d6cfc5]">
 									<img
 										class={`h-full w-full object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
 										src={artwork.imageUrl}

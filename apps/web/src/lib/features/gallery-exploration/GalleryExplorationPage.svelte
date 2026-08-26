@@ -5,10 +5,6 @@
 	import { resolve } from '$app/paths';
 	import { fade } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import {
-		closeWithArtworkTransition,
-		openWithArtworkTransition
-	} from '$lib/features/gallery-exploration/artwork-view-transition';
 	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
 	import { getGalleryLayoutContext } from '$lib/features/gallery-exploration/gallery-layout-context';
 	import { onMount } from 'svelte';
@@ -24,7 +20,6 @@
 	} from '$lib/features/gallery-exploration/model/rooms';
 	import { createRealtimeSubscription } from '$lib/features/gallery-exploration/use-realtime-subscription.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
-	import RoomLoadingSkeleton from '$lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
 	import HallOfFameRoom from '$lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
 	import HotWallRoom from '$lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
 	import MysteryRoom from '$lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
@@ -68,7 +63,6 @@
 		artworks: routeArtworks,
 		discovery: routeDiscovery = { pageInfo: { hasMore: false, nextCursor: null }, request: null },
 		emptyStateMessage = null,
-		isRoomLoading = false,
 		loadMoreArtworks = async (request: {
 			authorId: string | null;
 			cursor: string;
@@ -180,7 +174,6 @@
 			} | null;
 		};
 		emptyStateMessage?: string | null;
-		isRoomLoading?: boolean;
 		fetchRandomArtwork?: () => Promise<Artwork>;
 		loadMoreArtworks?: (request: {
 			authorId: string | null;
@@ -260,10 +253,8 @@
 		if (selectedArtwork?.id !== historyState.artworkId) {
 			const roomArtwork = artworks.find((candidate) => candidate.id === historyState.artworkId);
 			if (roomArtwork) {
-				await openWithArtworkTransition(roomArtwork.id, () => {
-					selectedArtwork = roomArtwork;
-					detailOrigin = historyState.source;
-				});
+				selectedArtwork = roomArtwork;
+				detailOrigin = historyState.source;
 			}
 		}
 		isHydratingDetail = true;
@@ -336,10 +327,8 @@
 			replaceState(currentGalleryUrl, clearGalleryDetailHistoryState($page.state));
 		}
 
-		closeWithArtworkTransition(selectedArtwork?.id ?? null, () => {
-			selectedArtwork = null;
-			detailOrigin = null;
-		});
+		selectedArtwork = null;
+		detailOrigin = null;
 	};
 
 	const syncArtwork = (nextArtwork: Artwork) => {
@@ -481,10 +470,8 @@
 			didCreateLocalDetailHistoryEntry = false;
 
 			if (selectedArtwork || detailOrigin) {
-				closeWithArtworkTransition(selectedArtwork?.id ?? null, () => {
-					selectedArtwork = null;
-					detailOrigin = null;
-				});
+				selectedArtwork = null;
+				detailOrigin = null;
 			}
 
 			return;
@@ -665,9 +652,7 @@
 				</div>
 			{/if}
 
-			{#if isRoomLoading}
-				<RoomLoadingSkeleton />
-			{:else if showEmptyState}
+			{#if showEmptyState}
 				<div
 					class="rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
 				>

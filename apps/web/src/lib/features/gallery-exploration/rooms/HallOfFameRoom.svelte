@@ -1,10 +1,6 @@
 <script lang="ts">
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import {
-		ARTWORK_VIEW_TRANSITION_NAME,
-		artworkTransitionSourceId
-	} from '$lib/features/gallery-exploration/artwork-view-transition';
 	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
 	import { createArtworkAccumulator } from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
 	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
@@ -184,12 +180,7 @@
 								openingClass="h-full"
 								testId={`podium-frame-${position}`}
 							>
-								<div
-									class="relative h-full w-full"
-									style:view-transition-name={$artworkTransitionSourceId === artwork.id
-										? ARTWORK_VIEW_TRANSITION_NAME
-										: undefined}
-								>
+								<div class="relative h-full w-full">
 									<NsfwImage
 										src={artwork.imageUrl}
 										alt={artwork.title}
