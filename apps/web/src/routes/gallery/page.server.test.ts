@@ -42,16 +42,23 @@ describe('gallery root route', () => {
 			locals: {},
 			url: new URL('http://localhost/gallery')
 		} as never)) as {
-			artworks: Array<Record<string, unknown>>;
-			emptyStateMessage: string | null;
+			lazy: { roomContent: Promise<Record<string, unknown>> };
 			roomId: string;
+		};
+
+		// The shell resolves without waiting for discovery; the room content
+		// streams from the nested promise.
+		expect(result).toMatchObject({ roomId: 'hall-of-fame', viewer: null });
+
+		const roomContent = (await result.lazy.roomContent) as {
+			artworks: Array<Record<string, unknown>>;
 		};
 
 		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
 			{ cursor: null, limit: 12, sort: 'top', window: 'all' },
 			{ user: undefined }
 		);
-		expect(result).toMatchObject({
+		expect(roomContent).toMatchObject({
 			discovery: {
 				pageInfo: { hasMore: false, nextCursor: null },
 				request: {
@@ -61,11 +68,9 @@ describe('gallery root route', () => {
 					window: 'all'
 				}
 			},
-			emptyStateMessage: null,
-			roomId: 'hall-of-fame',
-			viewer: null
+			emptyStateMessage: null
 		});
-		expect(result.artworks).toHaveLength(1);
+		expect(roomContent.artworks).toHaveLength(1);
 	});
 
 	it('returns an honest empty state when no artworks are discoverable', async () => {
@@ -76,16 +81,19 @@ describe('gallery root route', () => {
 			locals: {},
 			url: new URL('http://localhost/gallery')
 		} as never)) as {
-			artworks: Array<Record<string, unknown>>;
-			emptyStateMessage: string | null;
+			lazy: { roomContent: Promise<Record<string, unknown>> };
 			roomId: string;
 		};
 
-		expect(result).toMatchObject({
-			emptyStateMessage: 'No artworks have reached this gallery room yet.',
-			roomId: 'hall-of-fame',
-			viewer: null
+		expect(result).toMatchObject({ roomId: 'hall-of-fame', viewer: null });
+
+		const roomContent = (await result.lazy.roomContent) as {
+			artworks: Array<Record<string, unknown>>;
+		};
+
+		expect(roomContent).toMatchObject({
+			emptyStateMessage: 'No artworks have reached this gallery room yet.'
 		});
-		expect(result.artworks).toEqual([]);
+		expect(roomContent.artworks).toEqual([]);
 	});
 });
