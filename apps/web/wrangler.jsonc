@@ -11,12 +11,15 @@
 		"directory": ".svelte-kit/cloudflare"
 	},
 	// Hyperdrive terminates Postgres at the local colo over warm pooled
-	// connections to Supavisor, turning each request's fresh dial (~1s of
-	// TCP+TLS+auth per navigation) into a local connect. Managed with
+	// connections, turning each request's fresh dial (~1s of TCP+TLS+auth
+	// per navigation) into a local connect. The config must be created in
+	// the SAME Cloudflare account that owns this worker (the CI deploy
+	// account), and the CI API token needs the "Workers Hyperdrive: Edit"
+	// permission:
 	//   wrangler hyperdrive create not-the-louvre-db --connection-string="<production DATABASE_URL>"
-	// The app falls back to dialing DATABASE_URL directly if this binding
-	// is removed.
-	"hyperdrive": [{ "binding": "HYPERDRIVE", "id": "cb73c5da6df14c78a7bbfcbf3ccc5d45" }],
+	// Paste the returned id below and uncomment. The app falls back to
+	// dialing DATABASE_URL directly while this binding is absent.
+	// "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<hyperdrive-config-id>" }],
 	// Mirrors the dashboard state so deploys don't flip logging: persisted
 	// Workers Logs on (incident forensics depend on them), traces off.
 	"observability": {
