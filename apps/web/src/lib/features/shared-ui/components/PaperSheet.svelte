@@ -5,7 +5,7 @@
 	/*
 	 * One sheet of museum paper.
 	 *
-	 * The same three declarations — `#fbf7f0`, a 3px radius and the two-layer
+	 * The same three declarations — `var(--color-paper)`, a 3px radius and the two-layer
 	 * shadow — used to be typed out in four component stylesheets, each with its
 	 * own copy of the paper-grain data URI. They drifted, visibly: the tool tray
 	 * sat under a shadow 12% lighter than the auth sheet a click away.

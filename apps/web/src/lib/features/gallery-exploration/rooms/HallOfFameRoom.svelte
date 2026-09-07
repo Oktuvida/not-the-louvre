@@ -257,7 +257,7 @@
 			),
 			var(--banner-bg);
 		color: var(--banner-ink);
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.68rem;
 		font-weight: 700;
 		letter-spacing: 0.18em;
@@ -271,7 +271,7 @@
 	.podium-plaque {
 		rotate: var(--plaque-tilt, -0.7deg);
 		padding: 5px;
-		border-radius: 4px;
+		border-radius: var(--radius-chip);
 		border: 1px solid #2c1d0e;
 		background: linear-gradient(135deg, #4a3522 0%, #3a2817 55%, #2e1f10 100%);
 		box-shadow:
@@ -286,7 +286,7 @@
 		max-width: 16rem;
 		padding: 0.7rem 1.4rem 0.65rem;
 		text-align: center;
-		border-radius: 2px;
+		border-radius: var(--radius-hairline);
 		border: 1px solid var(--plate-border);
 		background:
 			repeating-linear-gradient(
@@ -346,7 +346,7 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.84rem;
 		font-weight: 700;
 		letter-spacing: 0.1em;
@@ -383,7 +383,7 @@
 
 	.plaque-score {
 		margin-top: 0.3rem;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.62rem;
 		font-weight: 700;
 		letter-spacing: 0.16em;

@@ -87,13 +87,13 @@
 		align-items: center;
 		justify-content: center;
 		border-radius: 50%;
-		background: #fdfbf7;
+		background: var(--color-paper-bright);
 		border: 2.5px solid var(--ros-dark);
 		box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.1);
 	}
 
 	.rosette-center span {
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: var(--ros-font);
 		font-weight: 700;
 		line-height: 1;

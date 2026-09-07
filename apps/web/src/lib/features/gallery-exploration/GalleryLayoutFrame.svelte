@@ -59,7 +59,7 @@
 <div
 	class="relative min-h-screen"
 	data-testid="gallery-room-shell"
-	style="background-color: #252018;"
+	style="background-color: var(--color-wall);"
 >
 	<!-- The wall: a single small fixed layer whose translateY is bound to the
 	     scroll position on the compositor (see script comment). -->
@@ -68,20 +68,10 @@
 		data-testid="gallery-wall-bricks"
 		style={`background-image: url('${museumWallPatternUrl}'); background-size: ${PATTERN_TILE}px ${PATTERN_TILE}px; background-repeat: repeat;`}
 	></div>
-	<div
-		class="pointer-events-none fixed inset-0 z-[1] bg-[radial-gradient(circle_at_86%_12%,rgba(255,247,214,0.34)_0%,rgba(255,243,201,0.18)_18%,rgba(255,241,196,0.06)_36%,transparent_58%)]"
-	></div>
-	<div
-		class="pointer-events-none fixed inset-0 z-[1] bg-[linear-gradient(180deg,transparent_0%,transparent_58%,rgba(46,28,11,0.14)_78%,rgba(20,12,6,0.28)_100%)]"
-	></div>
-	<div
-		class="pointer-events-none fixed inset-0 z-[1] bg-[radial-gradient(circle_at_12%_92%,rgba(18,10,4,0.34)_0%,rgba(18,10,4,0.22)_26%,rgba(18,10,4,0.08)_46%,transparent_66%)]"
-	></div>
-	<div
-		class="pointer-events-none fixed inset-0 z-[1] bg-[radial-gradient(circle_at_center,transparent_0%,transparent_42%,rgba(12,9,7,0.08)_66%,rgba(12,9,7,0.2)_100%)]"
-	></div>
+	<!-- The room's light: one layer carrying all four gradients (see .gallery-atmosphere). -->
+	<div class="gallery-atmosphere" aria-hidden="true"></div>
 
-	<AmbientParticleOverlay className="z-[5] opacity-90" />
+	<AmbientParticleOverlay className="z-5 opacity-90" />
 
 	<div
 		class="pointer-events-none sticky top-0 z-40 px-3 pt-3 md:px-8 md:pt-6"
@@ -178,7 +168,7 @@
 	 * flash bright against the dark museum wall, so while a gallery shell is
 	 * mounted the canvas matches the wall and late tiles become invisible. */
 	:global(body:has([data-testid='gallery-room-shell'])) {
-		background: #252018;
+		background: var(--color-wall);
 	}
 
 	/* All wall geometry and behavior lives in component CSS on purpose:
@@ -194,7 +184,59 @@
 		height: calc(100lvh + 512px);
 		z-index: 0;
 		pointer-events: none;
-		background-color: #252018;
+		background-color: var(--color-wall);
+	}
+
+	/* The room's light, in one element.
+	 *
+	 * These four gradients used to be four sibling `fixed inset-0` divs, identical
+	 * in position, size, stacking level and pointer behaviour and differing only
+	 * in their `background` — four viewport-sized paint records over a window
+	 * scrolled grid, forced apart only because Tailwind arbitrary values cannot
+	 * comma-compose.
+	 *
+	 * The order is REVERSED against the old DOM order on purpose: stacked
+	 * siblings paint last-on-top, a background list paints FIRST-on-top. So the
+	 * centre falloff (formerly the last div) leads the list and the warm
+	 * top-right radial (formerly the first) closes it. No background-color: the
+	 * wall pattern below has to stay visible.
+	 *
+	 * Deliberately no `will-change`/`transform`: promoting this layer would cost
+	 * more than the four unpromoted divs it replaces. */
+	.gallery-atmosphere {
+		position: fixed;
+		inset: 0;
+		z-index: 1;
+		pointer-events: none;
+		background:
+			radial-gradient(
+				circle at center,
+				transparent 0%,
+				transparent 42%,
+				rgba(12, 9, 7, 0.08) 66%,
+				rgba(12, 9, 7, 0.2) 100%
+			),
+			radial-gradient(
+				circle at 12% 92%,
+				rgba(18, 10, 4, 0.34) 0%,
+				rgba(18, 10, 4, 0.22) 26%,
+				rgba(18, 10, 4, 0.08) 46%,
+				transparent 66%
+			),
+			linear-gradient(
+				180deg,
+				transparent 0%,
+				transparent 58%,
+				rgba(46, 28, 11, 0.14) 78%,
+				rgba(20, 12, 6, 0.28) 100%
+			),
+			radial-gradient(
+				circle at 86% 12%,
+				rgba(255, 247, 214, 0.34) 0%,
+				rgba(255, 243, 201, 0.18) 18%,
+				rgba(255, 241, 196, 0.06) 36%,
+				transparent 58%
+			);
 	}
 
 	@keyframes museum-wall-scroll {
@@ -217,6 +259,21 @@
 			animation-range: 0px 524288px;
 			animation-iteration-count: 1024;
 			will-change: transform;
+		}
+
+		/* Scroll-driven animations are not covered by the global reduced-motion
+		 * reset in routes/layout.css in any useful way: their progress comes from
+		 * the scroll range, not from `animation-duration`, and forcing
+		 * `animation-iteration-count: 1` would stretch one 512px tile shift across
+		 * the whole 524288px range instead of stopping it. Cancel it outright
+		 * here, which lands exactly on the documented no-scroll-timeline fallback:
+		 * a static fixed wall. The compositor hint goes with it — there is nothing
+		 * left to composite. */
+		@media (prefers-reduced-motion: reduce) {
+			.wall-layer {
+				animation: none;
+				will-change: auto;
+			}
 		}
 	}
 </style>

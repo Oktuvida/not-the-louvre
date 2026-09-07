@@ -8,12 +8,12 @@
 
 <!-- Game Title -->
 <div
-	class="absolute top-16 left-1/2 z-20 -translate-x-1/2 transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)]"
+	class="absolute top-16 left-1/2 z-20 -translate-x-1/2 transition-all duration-700 ease-in"
 	class:-translate-y-[calc(100%+6rem)]={isExiting}
 	class:opacity-0={isExiting}
 >
 	<h1
-		class="font-display text-center text-7xl font-black tracking-tight text-[#2d2420]"
+		class="text-center font-display text-7xl font-black tracking-tight text-ink-warm"
 		style="text-shadow: 4px 4px 0px #e8b896, 8px 8px 0px rgba(45, 36, 32, 0.2);"
 	>
 		NOT THE LOUVRE
@@ -21,7 +21,7 @@
 	<p
 		class="relative mx-auto mt-3 w-fit rotate-[-1.5deg] px-8 py-2 text-center text-xl text-[#4a3a30] italic"
 		style="
-    font-family: 'Baloo 2', sans-serif;
+    font-family: var(--font-body);
     background:
       repeating-linear-gradient(
         90deg,
@@ -50,10 +50,10 @@
 </div>
 <!-- Footer tagline -->
 <div
-	class="pointer-events-none absolute bottom-6 left-1/2 z-20 -translate-x-1/2 text-sm text-[#f7eadf] italic transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)]"
+	class="pointer-events-none absolute bottom-6 left-1/2 z-20 -translate-x-1/2 text-sm text-wall-text italic transition-all duration-700 ease-in"
 	class:translate-y-[calc(100%+3rem)]={isExiting}
 	class:opacity-0={isExiting}
-	style="font-family: 'Baloo 2', sans-serif; letter-spacing: 0.01em; text-shadow: 0 1px 1px rgba(45,36,32,.7), 0 2px 8px rgba(45,36,32,.35);"
+	style="font-family: var(--font-body); letter-spacing: 0.01em; text-shadow: 0 1px 1px rgba(45,36,32,.7), 0 2px 8px rgba(45,36,32,.35);"
 >
 	A social art studio where your doodles compete for glory
 </div>

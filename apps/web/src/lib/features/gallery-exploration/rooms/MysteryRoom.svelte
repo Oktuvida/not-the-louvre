@@ -148,8 +148,8 @@
 	{/if}
 
 	<div
-		class="pointer-events-none absolute -bottom-4 left-1/2 z-20 w-full max-w-[16rem] -translate-x-1/2 text-center text-xs text-[#f7eadf] italic transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:-bottom-7 md:max-w-none md:text-sm"
-		style="font-family: 'Baloo 2', sans-serif; letter-spacing: 0.01em; text-shadow: 0 1px 1px rgba(45,36,32,.7), 0 2px 8px rgba(45,36,32,.35);"
+		class="pointer-events-none absolute -bottom-4 left-1/2 z-20 w-full max-w-[16rem] -translate-x-1/2 text-center text-xs text-wall-text italic transition-all duration-700 ease-in md:-bottom-7 md:max-w-none md:text-sm"
+		style="font-family: var(--font-body); letter-spacing: 0.01em; text-shadow: 0 1px 1px rgba(45,36,32,.7), 0 2px 8px rgba(45,36,32,.35);"
 	>
 		Discover a random masterpiece… hopefully
 	</div>

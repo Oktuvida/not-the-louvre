@@ -31,7 +31,7 @@
 
 <button
 	bind:this={element}
-	class={`washi-tape ${className}`.trim()}
+	class={`washi-tape focus-ring ${className}`.trim()}
 	style={`rotate: ${rotate};`}
 	{type}
 	{...rest}
@@ -45,7 +45,7 @@
 		border: 0;
 		padding: 9px 18px;
 		font-weight: 700;
-		color: #5d4e37;
+		color: var(--color-olive);
 		cursor: pointer;
 		background: repeating-linear-gradient(
 			-45deg,
@@ -71,10 +71,5 @@
 
 	.washi-tape:hover {
 		translate: 0 -2px;
-	}
-
-	.washi-tape:focus-visible {
-		outline: 3px solid var(--focus-ring-color, #4ecdc4);
-		outline-offset: 2px;
 	}
 </style>

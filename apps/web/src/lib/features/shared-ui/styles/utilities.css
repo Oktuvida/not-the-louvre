@@ -1,11 +1,10 @@
-.font-display {
-	font-family: var(--font-display);
-}
-
-.font-body {
-	font-family: var(--font-body);
-}
-
+/*
+ * `.font-display` and `.font-body` used to be hand-written here because
+ * Tailwind knew nothing about the brand faces. `--font-display` / `--font-body`
+ * are theme variables now, so Tailwind generates both utilities itself (and
+ * `font-hand` with them); a second copy in this file would just be a second
+ * place to keep in step.
+ */
 .border-3 {
 	border-width: 3px;
 }
@@ -34,6 +33,15 @@
 	filter: blur(10px);
 }
 
+/*
+ * `--paper-noise-blend` exists for one call site: the postcard faces, which
+ * live inside a `preserve-3d` flip with `backface-visibility: hidden`. A
+ * non-`normal` blend mode groups and flattens its stacking context exactly the
+ * way `filter` does, which is the failure this component has already been
+ * bitten by twice (see the two comments in ArtworkDetailPanel). Everywhere
+ * else the default multiply is what draws the grain, so the default is
+ * `multiply` and nothing but the postcard has to know the variable exists.
+ */
 .paper-noise::before {
 	content: '';
 	position: absolute;
@@ -42,7 +50,7 @@
 	opacity: 0.16;
 	background-image: radial-gradient(rgb(47 36 28 / 0.16) 0.7px, transparent 0.7px);
 	background-size: 12px 12px;
-	mix-blend-mode: multiply;
+	mix-blend-mode: var(--paper-noise-blend, multiply);
 }
 
 /*
@@ -61,7 +69,7 @@
 .paper-sheet {
 	position: relative;
 	border-radius: 3px;
-	background-color: #fbf7f0;
+	background-color: var(--color-paper);
 	box-shadow:
 		4px 6px 16px rgba(0, 0, 0, 0.32),
 		1px 2px 4px rgba(0, 0, 0, 0.18);

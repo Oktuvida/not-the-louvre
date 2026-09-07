@@ -172,7 +172,7 @@
 					{#each reportReasons as reason (reason.value)}
 						<button
 							type="button"
-							class="reason-button"
+							class="reason-button focus-ring"
 							disabled={isBusy}
 							onclick={(event) => handleReportReasonClick(event, reason.value)}
 						>
@@ -211,7 +211,7 @@
 					{#if artwork.isHidden}
 						<button
 							type="button"
-							class="reason-button"
+							class="reason-button focus-ring"
 							aria-label="Unhide artwork"
 							disabled={isBusy}
 							onclick={(event) => {
@@ -224,7 +224,7 @@
 					{:else}
 						<button
 							type="button"
-							class="reason-button"
+							class="reason-button focus-ring"
 							aria-label="Hide artwork"
 							disabled={isBusy}
 							onclick={(event) => {
@@ -238,7 +238,7 @@
 					{#if artwork.isNsfw}
 						<button
 							type="button"
-							class="reason-button"
+							class="reason-button focus-ring"
 							aria-label="Clear artwork NSFW"
 							disabled={isBusy}
 							onclick={(event) => {
@@ -251,7 +251,7 @@
 					{:else}
 						<button
 							type="button"
-							class="reason-button"
+							class="reason-button focus-ring"
 							aria-label="Mark artwork NSFW"
 							disabled={isBusy}
 							onclick={(event) => {
@@ -263,7 +263,7 @@
 						</button>
 					{/if}
 					<a
-						class="reason-button mod-ops-link"
+						class="reason-button mod-ops-link focus-ring"
 						href={resolve('/admin')}
 						onclick={(event) => event.stopPropagation()}
 					>
@@ -310,7 +310,7 @@
 	 */
 	.action-row :global(.action-button) {
 		padding: 8px 13px;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.68rem;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
@@ -350,9 +350,9 @@
 		display: grid;
 		gap: 0.2rem;
 		padding: 0.55rem;
-		border: 1px solid #d6cfc5;
-		border-radius: 2px;
-		background: #fdfbf7;
+		border: 1px solid var(--color-hairline);
+		border-radius: var(--radius-hairline);
+		background: var(--color-paper-bright);
 		box-shadow:
 			3px 4px 12px rgba(0, 0, 0, 0.24),
 			1px 1px 3px rgba(0, 0, 0, 0.12);
@@ -379,29 +379,27 @@
 	}
 
 	.reason-button {
+		/* Negative: the ring is drawn inside the row because the menu that holds
+		   these buttons clips its overflow. */
+		--focus-ring-offset: -1px;
 		width: 100%;
 		border: 0;
-		border-radius: 2px;
+		border-radius: var(--radius-hairline);
 		background: transparent;
 		padding: 0.38rem 0.5rem;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.66rem;
 		font-weight: 700;
 		letter-spacing: 0.07em;
 		text-transform: uppercase;
 		text-align: left;
-		color: #2f241c;
+		color: var(--color-ink);
 		cursor: pointer;
 		box-shadow: none;
 	}
 
 	.reason-button:hover {
 		background: rgba(212, 131, 74, 0.16);
-	}
-
-	.reason-button:focus-visible {
-		outline: 3px solid #4ecdc4;
-		outline-offset: -1px;
 	}
 
 	.action-row :global(.action-button:disabled),
@@ -413,22 +411,22 @@
 	.mod-heading {
 		margin: 0;
 		padding: 0 0.5rem;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.58rem;
 		font-weight: 700;
 		letter-spacing: 0.2em;
 		text-transform: uppercase;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 	}
 
 	/* the artwork's paperwork status, pencilled in by the mod on duty */
 	.mod-status {
 		margin: 0 0 0.25rem;
 		padding: 0 0.5rem;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.02rem;
 		font-weight: 600;
-		color: #5d4e37;
+		color: var(--color-olive);
 		rotate: -0.6deg;
 	}
 
@@ -438,7 +436,7 @@
 		border-top: 1px dashed rgba(141, 110, 78, 0.4);
 		padding-top: 0.45rem;
 		text-decoration: none;
-		color: #6b5a45;
+		color: var(--color-bark);
 	}
 
 	/* a slip of paper so the confirmation reads over any artwork */
@@ -449,10 +447,10 @@
 		background: rgba(253, 251, 247, 0.95);
 		box-shadow: 1px 2px 5px rgba(45, 36, 32, 0.2);
 		rotate: -1deg;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 0.98rem;
 		font-weight: 700;
-		color: #2d2420;
+		color: var(--color-ink-warm);
 	}
 
 	.safety-actions.compact .status {
@@ -460,7 +458,7 @@
 	}
 
 	.status[data-tone='error'] {
-		color: #8f3720;
+		color: var(--color-rust);
 	}
 
 	.status[data-tone='success'] {

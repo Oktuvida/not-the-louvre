@@ -28,7 +28,12 @@ describe('ArtworkDetailPanel postcard flip styles', () => {
 			source.indexOf('.postcard-actions :global(.sticker-btn.vote-cast)')
 		);
 
-		expect(sendOverride).toContain('transform: none !important;');
+		// No importance override: every rule that could move this button lives in
+		// a cascade layer (StickerControl in `components`, the press feedback in
+		// `base`, Tailwind's in `utilities`) and this scoped rule is unlayered, so
+		// it already outranks all of them. The repo-wide guard for that lives in
+		// shared-ui/styles/css-hygiene.test.ts.
+		expect(sendOverride).toContain('transform: none;');
 		expect(sendOverride).toContain('rotate: var(--sticker-rotate, 0deg);');
 		expect(sendOverride).toContain('scale: 1;');
 	});

@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
 // The paper is a global utility, which the browser project does not load for a
 // component under test; the tray's own sheet is what this spec is checking.
-import '$lib/features/shared-ui/styles/utilities.css';
+import '../../../../routes/layout.css';
 import DrawingToolTray from './DrawingToolTray.svelte';
 
 describe('DrawingToolTray', () => {

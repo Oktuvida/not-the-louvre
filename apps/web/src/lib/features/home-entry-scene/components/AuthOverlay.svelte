@@ -6,6 +6,7 @@
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
 	} from '$lib/client/content-filter';
+	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
 	import { parseEditableDrawingDocumentV2 } from '$lib/features/stroke-json/document';
 	import {
 		NICKNAME_PATTERN,
@@ -454,14 +455,27 @@
 		if (!backdropElement || !overlayElement) return;
 		gsap.killTweensOf(backdropElement);
 		gsap.killTweensOf(overlayElement);
+		/*
+		 * GSAP tweens are JS, so the global `@media (prefers-reduced-motion)`
+		 * reset in routes/layout.css cannot reach them. Zero duration rather than
+		 * a `gsap.set` branch: the tween still runs and still completes in order,
+		 * it just lands on the same end state in one tick.
+		 */
+		const reducedMotion = prefersReducedMotion();
+
 		if (isInteractive) {
-			gsap.to(backdropElement, { duration: 0.34, ease: 'power2.out', opacity: 1 });
-			gsap.to(overlayElement, { duration: 0.34, ease: 'power2.out', opacity: 1, scale: 1 });
+			const duration = reducedMotion ? 0 : 0.34;
+			gsap.to(backdropElement, { duration, ease: 'power2.out', opacity: 1 });
+			gsap.to(overlayElement, { duration, ease: 'power2.out', opacity: 1, scale: 1 });
 			return;
 		}
 
 		if (entryState === 'transitioning-out') {
-			gsap.to(backdropElement, { duration: 0.24, ease: 'power2.in', opacity: 0 });
+			gsap.to(backdropElement, {
+				duration: reducedMotion ? 0 : 0.24,
+				ease: 'power2.in',
+				opacity: 0
+			});
 			return;
 		}
 
@@ -522,7 +536,7 @@
 <div
 	bind:this={backdropElement}
 	data-testid="auth-overlay"
-	class={`absolute inset-0 z-[40] overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,240,214,0.24),rgba(24,15,8,0.58))] px-4 py-6 opacity-0 md:px-6 md:py-10 ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
+	class={`absolute inset-0 z-40 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,240,214,0.24),rgba(24,15,8,0.58))] px-4 py-6 opacity-0 md:px-6 md:py-10 ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
 	aria-hidden={!isInteractive}
 >
 	<div class="flex min-h-full w-full items-center justify-center">
@@ -547,14 +561,12 @@
 				<div class={`auth-sheet-inner paper-grain relative pl-8 md:pl-11 ${contentClassName}`}>
 					<div class="flex items-start justify-between gap-4">
 						<div class="space-y-2">
-							<p
-								class="font-display text-xs font-semibold tracking-[0.28em] text-[var(--color-muted)] uppercase"
-							>
+							<p class="font-display text-xs font-semibold tracking-[0.28em] text-muted uppercase">
 								Studio Access
 							</p>
 							<h2
 								id={AUTH_SHEET_TITLE_ID}
-								class="font-display text-2xl tracking-[0.06em] text-[var(--color-ink)] uppercase md:text-3xl"
+								class="font-display text-2xl tracking-[0.06em] text-ink uppercase md:text-3xl"
 							>
 								{view === 'signup-account'
 									? 'Draw yourself'
@@ -604,14 +616,14 @@
 							<div class="mb-4 space-y-2">
 								{#if rateLimitError}
 									<div
-										class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
+										class="rounded-2xl border-2 border-danger bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-danger"
 									>
 										{rateLimitError}
 									</div>
 								{/if}
 								{#if formError}
 									<div
-										class="rounded-[1rem] border-2 border-[var(--color-danger)] bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-[var(--color-danger)]"
+										class="rounded-2xl border-2 border-danger bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-danger"
 									>
 										{formError}
 									</div>
@@ -652,11 +664,11 @@
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
 										<span
-											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>Nickname</span
 										>
 										{#if nicknameError}
-											<p class="text-right text-xs text-[var(--color-danger)]">{nicknameError}</p>
+											<p class="text-right text-xs text-danger">{nicknameError}</p>
 										{/if}
 									</div>
 									<input
@@ -665,18 +677,18 @@
 										name="nickname"
 										type="text"
 										placeholder="artist_123"
-										class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 									/>
 								</label>
 
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
 										<span
-											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>Password</span
 										>
 										{#if passwordError}
-											<p class="text-right text-xs text-[var(--color-danger)]">{passwordError}</p>
+											<p class="text-right text-xs text-danger">{passwordError}</p>
 										{/if}
 									</div>
 									<input
@@ -685,7 +697,7 @@
 										name="password"
 										type="password"
 										placeholder="Enter your password"
-										class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 									/>
 								</label>
 
@@ -725,14 +737,14 @@
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
 										<span
-											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>Nickname</span
 										>
 										{#if nicknameError}
-											<p class="text-right text-xs text-[var(--color-danger)]">{nicknameError}</p>
+											<p class="text-right text-xs text-danger">{nicknameError}</p>
 										{:else if availabilityMessage}
 											<p
-												class={`text-right text-xs ${availabilityState === 'taken' ? 'text-[var(--color-danger)]' : availabilityState === 'available' ? 'text-[var(--color-secondary)]' : 'text-[var(--color-muted)]'}`}
+												class={`text-right text-xs ${availabilityState === 'taken' ? 'text-danger' : availabilityState === 'available' ? 'text-secondary' : 'text-muted'}`}
 											>
 												{availabilityMessage}
 											</p>
@@ -744,18 +756,18 @@
 										name="nickname"
 										type="text"
 										placeholder="artist_123"
-										class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 									/>
 								</label>
 
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
 										<span
-											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>Password</span
 										>
 										{#if passwordError}
-											<p class="text-right text-xs text-[var(--color-danger)]">{passwordError}</p>
+											<p class="text-right text-xs text-danger">{passwordError}</p>
 										{/if}
 									</div>
 									<input
@@ -764,16 +776,14 @@
 										name="password"
 										type="password"
 										placeholder="Enter your password"
-										class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 									/>
 								</label>
 
 								<div
 									class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between"
 								>
-									<p
-										class="font-display text-xs tracking-[0.18em] text-[var(--color-muted)] uppercase"
-									>
+									<p class="font-display text-xs tracking-[0.18em] text-muted uppercase">
 										Step 1: claim your wall
 									</p>
 
@@ -800,11 +810,11 @@
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
 										<span
-											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>Nickname</span
 										>
 										{#if nicknameError}
-											<p class="text-right text-xs text-[var(--color-danger)]">{nicknameError}</p>
+											<p class="text-right text-xs text-danger">{nicknameError}</p>
 										{/if}
 									</div>
 									<input
@@ -813,13 +823,13 @@
 										name="nickname"
 										type="text"
 										placeholder="artist_123"
-										class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 									/>
 								</label>
 
 								<label class="block space-y-2">
 									<span
-										class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+										class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 										>Recovery Key</span
 									>
 									<input
@@ -828,21 +838,21 @@
 										name="recoveryKey"
 										type="text"
 										placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-										class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 									/>
 								</label>
-								{#if recoveryKeyError}<p class="text-sm text-[var(--color-danger)]">
+								{#if recoveryKeyError}<p class="text-sm text-danger">
 										{recoveryKeyError}
 									</p>{/if}
 
 								<label class="block space-y-2">
 									<div class="flex items-start justify-between gap-3">
 										<span
-											class="font-display text-xs font-semibold tracking-[0.18em] text-[var(--color-muted)] uppercase"
+											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>New Password</span
 										>
 										{#if newPasswordError}
-											<p class="text-right text-xs text-[var(--color-danger)]">
+											<p class="text-right text-xs text-danger">
 												{newPasswordError}
 											</p>
 										{/if}
@@ -853,7 +863,7 @@
 										name="newPassword"
 										type="password"
 										placeholder="Choose a new password"
-										class="font-body w-full rounded-[1rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper-deep)] px-4 py-3 text-base text-[var(--color-ink)] transition outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
 									/>
 								</label>
 
@@ -881,23 +891,19 @@
 								</div>
 							</form>
 						{:else if view === 'signup-success' || view === 'recover-success'}
-							<div
-								class="space-y-4 rounded-[1.4rem] border-2 border-[var(--color-accent)] bg-[var(--color-paper)] p-5"
-							>
-								<p
-									class="font-display text-sm tracking-[0.18em] text-[var(--color-muted)] uppercase"
-								>
+							<div class="space-y-4 rounded-sheet border-2 border-accent bg-paper p-5">
+								<p class="font-display text-sm tracking-[0.18em] text-muted uppercase">
 									One-time key
 								</p>
 								<div class="relative">
 									<p
-										class="rounded-[1rem] border-2 border-[var(--color-ink)] bg-[var(--color-ink)] px-4 py-4 pr-16 font-mono text-sm break-all text-[var(--color-paper-deep)] select-all"
+										class="rounded-2xl border-2 border-ink bg-ink px-4 py-4 pr-16 font-mono text-sm break-all text-paper-deep select-all"
 									>
 										{oneTimeKey}
 									</p>
 									<button
 										type="button"
-										class="absolute top-1/2 right-3 -translate-y-1/2 rounded-lg border border-[rgb(255_255_255_/_0.2)] bg-[rgb(255_255_255_/_0.1)] px-2 py-1.5 text-xs text-[var(--color-paper-deep)] transition hover:bg-[rgb(255_255_255_/_0.2)] active:scale-95"
+										class="absolute top-1/2 right-3 -translate-y-1/2 rounded-lg border border-[rgb(255_255_255_/_0.2)] bg-[rgb(255_255_255_/_0.1)] px-2 py-1.5 text-xs text-paper-deep transition hover:bg-[rgb(255_255_255_/_0.2)] active:scale-95"
 										onclick={async () => {
 											try {
 												await navigator.clipboard.writeText(oneTimeKey);
@@ -909,7 +915,7 @@
 										Copy
 									</button>
 								</div>
-								<p class="text-sm text-[var(--color-muted)]">
+								<p class="text-sm text-muted">
 									{view === 'signup-success'
 										? 'Store this recovery key now. It will not be shown again after you continue.'
 										: 'Your password was reset and your old recovery key is now invalid. Store this replacement key now.'}
@@ -976,10 +982,10 @@
 	}
 
 	.auth-sheet-subtitle {
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.3rem;
 		font-weight: 600;
-		color: #6b5a45;
+		color: var(--color-bark);
 		rotate: -0.4deg;
 	}
 </style>

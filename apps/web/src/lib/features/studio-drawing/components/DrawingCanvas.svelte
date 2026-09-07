@@ -402,7 +402,7 @@
 		width={768}
 		height={768}
 		class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
-		style="background: #fdfbf7; touch-action: none;"
+		style="background: var(--color-paper-bright); touch-action: none;"
 		aria-disabled={!interactive}
 		data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
 		draggable="false"
@@ -431,11 +431,11 @@
 
 	{#if statusMessage}
 		<div
-			class={`absolute -bottom-8 left-1/2 flex -translate-x-1/2 items-center gap-2 text-sm italic ${statusTone === 'error' ? 'text-[#8f3720]' : 'text-[#6b625a]'}`}
-			style="font-family: 'Baloo 2', sans-serif;"
+			class={`absolute -bottom-8 left-1/2 flex -translate-x-1/2 items-center gap-2 text-sm italic ${statusTone === 'error' ? 'text-rust' : 'text-ink-faint'}`}
+			style="font-family: var(--font-body);"
 		>
 			<div
-				class={`h-2 w-2 rounded-full ${statusTone === 'error' ? 'bg-[#c84f4f]' : 'bg-[#8b9d91]'}`}
+				class={`h-2 w-2 rounded-full ${statusTone === 'error' ? 'bg-danger-bright' : 'bg-sage'}`}
 			></div>
 			{statusMessage}
 		</div>

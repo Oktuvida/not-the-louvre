@@ -49,11 +49,11 @@
 				{#each podiumBlocks as block, index (index)}
 					<div class="flex animate-pulse flex-col items-center gap-5">
 						<div class="mb-5 flex flex-col items-center gap-3">
-							<div class={`${block.medal} rounded-full bg-[#e8ddd0]`}></div>
-							<div class="h-6 w-32 rounded bg-[#e8ddd0]"></div>
+							<div class={`${block.medal} rounded-full bg-sand`}></div>
+							<div class="h-6 w-32 rounded bg-sand"></div>
 						</div>
-						<div class={`${block.frame} rounded border border-[#d6cfc5] bg-[#ece4d8]`}></div>
-						<div class="h-16 w-44 rounded bg-[#e8ddd0]"></div>
+						<div class={`${block.frame} rounded border border-hairline bg-linen`}></div>
+						<div class="h-16 w-44 rounded bg-sand"></div>
 					</div>
 				{/each}
 			</div>
@@ -70,7 +70,7 @@
 		<div class="space-y-10">
 			<div aria-hidden="true" class="flex flex-col items-center gap-4">
 				<div
-					class="mt-12 aspect-square w-full max-w-md animate-pulse rounded-xl border border-[#d6cfc5] bg-[#ece4d8]"
+					class="mt-12 aspect-square w-full max-w-md animate-pulse rounded-xl border border-hairline bg-linen"
 				></div>
 			</div>
 
@@ -88,10 +88,10 @@
 			class="relative flex min-h-[320px] flex-col items-center justify-center gap-8 px-2 py-6 pt-28 md:min-h-[400px] md:gap-16 md:px-0 md:py-8 md:pt-55"
 		>
 			<div
-				class="h-[200px] w-full animate-pulse rounded-xl border border-[#d6cfc5] bg-[#ece4d8] md:h-[280px]"
+				class="h-[200px] w-full animate-pulse rounded-xl border border-hairline bg-linen md:h-[280px]"
 			></div>
 			<div
-				class="h-14 w-full max-w-[16rem] animate-pulse rounded-xl bg-[#e8ddd0] md:h-16 md:max-w-[20rem]"
+				class="h-14 w-full max-w-[16rem] animate-pulse rounded-xl bg-sand md:h-16 md:max-w-[20rem]"
 			></div>
 		</div>
 	{:else}

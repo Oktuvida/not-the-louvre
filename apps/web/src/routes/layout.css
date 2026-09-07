@@ -1,6 +1,167 @@
 @import 'tailwindcss';
-@import '../lib/features/shared-ui/styles/tokens.css';
 @import '../lib/features/shared-ui/styles/utilities.css';
+
+/*
+ * The design system, once.
+ *
+ * Everything the app is allowed to look like lives in this `@theme` block:
+ * colours, font stacks, radii, shadows, the z-index scale, motion and the one
+ * focus ring. It is a Tailwind 4 `@theme` rather than a plain `:root` so a
+ * single definition feeds BOTH sides of the codebase — `var(--color-ink)`
+ * inside a component's scoped `<style>` and the generated `text-ink` /
+ * `bg-paper` utilities in markup. Before this existed the palette could only
+ * reach markup as arbitrary values (`text-[#2d2420]`), which is how ~200
+ * distinct hex literals and three near-identical creams accumulated.
+ *
+ * `static` forces every variable to be emitted into `:root` even when no
+ * utility references it. That is load-bearing here: Svelte scoped `<style>`
+ * blocks are compiled by Svelte, not scanned by Tailwind, so a token that is
+ * only ever read as `var(--color-muted)` from a component would otherwise be
+ * tree-shaken out of the stylesheet.
+ *
+ * Values are deliberately unchanged from the literals they replace: this block
+ * is a rename, not a repaint. Where two near-identical values were both in use
+ * (paper vs paper-bright, ink vs ink-warm) both are kept under distinct names;
+ * collapsing them is a design decision, not a refactor.
+ */
+@theme static {
+	/* ---- Type ------------------------------------------------------------ */
+	--font-display: 'Fredoka', 'Trebuchet MS', sans-serif;
+	--font-body: 'Baloo 2', 'Trebuchet MS', sans-serif;
+	--font-hand: 'Caveat', 'Segoe Script', cursive;
+
+	/*
+	 * Tailwind's preflight resolves the document font through this variable,
+	 * so setting it here is what actually makes Baloo 2 the app's default
+	 * text face. Nothing else may declare `font-family` on html/body or the
+	 * two would fight.
+	 */
+	--default-font-family: var(--font-body);
+
+	/* ---- Paper (light surfaces, lightest first) --------------------------- */
+	--color-paper-bright: #fdfbf7;
+	--color-paper: #fbf7f0;
+	--color-paper-card: #f8f4ed;
+	--color-shell: #f5f0e8;
+	--color-wall-text: #f7eadf;
+	--color-paper-deep: #efe2d2;
+	--color-linen: #ece4d8;
+	--color-sand: #e8ddd0;
+	--color-frame-line: #e5dfd5;
+	--color-hairline: #d6cfc5;
+	--color-clay: #c4b5a6;
+	--color-panel: rgb(251 247 240 / 0.92);
+
+	/* ---- Ink (dark surfaces and text, darkest first) ---------------------- */
+	--color-wall: #252018;
+	--color-ink-warm: #2d2420;
+	--color-ink: #2f241c;
+	--color-note-ink: #3d3530;
+	--color-olive: #5d4e37;
+	--color-bark: #6b5a45;
+	--color-ink-faint: #6b625a;
+	--color-muted: #6f6257;
+	--color-muted-ink: #8a6c52;
+
+	/* ---- Brand and signals ------------------------------------------------ */
+	--color-primary: #d4834a;
+	--color-secondary: #71917f;
+	--color-accent: #d9b07b;
+	--color-sage: #8b9d91;
+	--color-gold: #f4c430;
+	--color-alert: #e74c3c;
+	--color-danger-bright: #c84f4f;
+	--color-danger: #a24d49;
+	--color-danger-deep: #a8403a;
+	--color-rust: #8f3720;
+	/* The veil that covers a page while the next one is fetched. */
+	--color-scrim: #6e6e6e;
+
+	/* ---- Radii ------------------------------------------------------------
+	 * Tailwind's own scale (xs .125 / sm .25 / md .375 / lg .5 / xl .75 /
+	 * 2xl 1 / 3xl 1.5 / 4xl 2 rem) covers the rem steps; these are the
+	 * hand-drawn ones the museum furniture actually uses. */
+	--radius-hairline: 2px;
+	--radius-chip: 4px;
+	--radius-tab: 6px;
+	--radius-panel: 8px;
+	--radius-card: 0.95rem;
+	--radius-sheet: 1.4rem;
+	--radius-pill: 999px;
+
+	/* ---- Shadows ----------------------------------------------------------
+	 * Four families: a sheet lying on the desk, a card, a small chip, and the
+	 * deep lift under a floating panel. */
+	--shadow-strong: 0 22px 55px rgb(54 34 18 / 0.18);
+	--shadow-card: 0 16px 30px rgb(58 34 19 / 0.12);
+	--shadow-sheet: 3px 4px 12px rgba(0, 0, 0, 0.22), 0 1px 3px rgba(0, 0, 0, 0.1);
+	--shadow-lift: 2px 3px 8px rgb(0 0 0 / 0.18);
+	--shadow-chip: 1px 2px 4px rgba(45, 36, 32, 0.35);
+
+	/* ---- Borders ---------------------------------------------------------- */
+	--border-frame: 6px solid #5f4735;
+
+	/* ---- Motion -----------------------------------------------------------
+	 * Four steps and two custom curves. `--ease-in` (cubic-bezier(0.4, 0, 1,
+	 * 1)), `--ease-out` and `--ease-in-out` already come from Tailwind, so the
+	 * seven hand-typed copies of that first curve just use it. */
+	--duration-press: 120ms;
+	--duration-fast: 150ms;
+	--duration-ui: 200ms;
+	--duration-flip: 650ms;
+	--ease-spring: cubic-bezier(0.34, 1.5, 0.6, 1);
+	--ease-glide: cubic-bezier(0.23, 1, 0.32, 1);
+
+	/* ---- Z-index ----------------------------------------------------------
+	 * The whole ladder of layers that escape the page: every `position: fixed`
+	 * element in the app is one of these five, bottom to top. Nothing else
+	 * belongs here — the `absolute` layers inside a scene, and the 1-6 values
+	 * inside a component's own stacking context, are geometry rather than a
+	 * global ordering, and stay as plain numbers where they are. */
+	--z-dialog: 60;
+	--z-status: 70;
+	--z-ambient: 90;
+	--z-ops: 95;
+	--z-nav-fade: 100;
+
+	/* ---- Focus ------------------------------------------------------------
+	 * One ring for the whole app. Consumed through the `focus-ring` utility
+	 * below; a control that needs a different offset (because an ancestor
+	 * clips it) overrides `--focus-ring-offset` on itself rather than
+	 * re-declaring the outline. */
+	--focus-ring-color: #4ecdc4;
+	--focus-ring-width: 3px;
+	--focus-ring-offset: 2px;
+	/* The teal loses contrast on the dark book cover; this is the intentional
+	   on-cover variant, not a stray literal. */
+	--focus-ring-on-cover: var(--color-gold);
+}
+
+/*
+ * The one keyboard focus ring.
+ *
+ * `:focus-visible` only, so a mouse press never draws it — that was already
+ * the behaviour of all twelve hand-written rings this replaces and it must
+ * stay. Offsets are per-call-site: set `--focus-ring-offset` on the element
+ * (negative values pull the ring inside a container that would clip it).
+ */
+@utility focus-ring {
+	&:focus-visible {
+		outline: var(--focus-ring-width) solid var(--focus-ring-color);
+		outline-offset: var(--focus-ring-offset);
+	}
+}
+
+/*
+ * The same ring in the gold on-cover variant, for the dark book cover where
+ * the teal would sit under 3:1 against the leather.
+ */
+@utility focus-ring-cover {
+	&:focus-visible {
+		outline: var(--focus-ring-width) solid var(--focus-ring-on-cover);
+		outline-offset: var(--focus-ring-offset);
+	}
+}
 
 /*
  * One censoring treatment for the whole app. Every surface that hides
@@ -15,13 +176,23 @@
 	--nsfw-placeholder-blur: 12px;
 }
 
-:global(html) {
+/*
+ * These base rules are deliberately NOT wrapped in `:global()`.
+ *
+ * This file is plain CSS imported from the layout's script, not a Svelte
+ * `<style>` block, so `:global(...)` is never compiled away — it shipped
+ * verbatim into the stylesheet, where it is not a valid selector, so browsers
+ * dropped every one of these rules. They had never rendered.
+ */
+html {
 	background: var(--color-ink);
 	color: var(--color-paper);
-	font-family: var(--font-body);
+	/* The document font comes from `--default-font-family` in the @theme block
+	   above, via Tailwind's preflight. Declaring it again here would be a
+	   second source of truth for the same thing. */
 }
 
-:global(body) {
+body {
 	margin: 0;
 	min-height: 100vh;
 	background:
@@ -30,51 +201,51 @@
 	color: var(--color-ink);
 }
 
-:global(*),
-:global(*::before),
-:global(*::after) {
+*,
+*::before,
+*::after {
 	box-sizing: border-box;
 }
 
-:global(a) {
+a {
 	color: inherit;
 	text-decoration: none;
 }
 
-:global(button),
-:global(input),
-:global(textarea) {
+button,
+input,
+textarea {
 	font: inherit;
 }
 
 /* Keep rapid consecutive taps as clicks instead of double-tap zoom on touch devices */
-:global(button),
-:global(a),
-:global([role='button']) {
+button,
+a,
+[role='button'] {
 	touch-action: manipulation;
 }
 
-:global(::selection) {
+::selection {
 	background: rgb(212 131 74 / 0.24);
 }
 
-:global(::-webkit-scrollbar) {
+::-webkit-scrollbar {
 	width: 12px;
 	height: 12px;
 }
 
-:global(::-webkit-scrollbar-track) {
-	background: #e5dfd5;
-	border-radius: 6px;
+::-webkit-scrollbar-track {
+	background: var(--color-frame-line);
+	border-radius: var(--radius-tab);
 }
 
-:global(::-webkit-scrollbar-thumb) {
-	background: #8b9d91;
-	border-radius: 6px;
-	border: 2px solid #e5dfd5;
+::-webkit-scrollbar-thumb {
+	background: var(--color-sage);
+	border-radius: var(--radius-tab);
+	border: 2px solid var(--color-frame-line);
 }
 
-:global(::-webkit-scrollbar-thumb:hover) {
+::-webkit-scrollbar-thumb:hover {
 	background: #6b8e7f;
 }
 
@@ -88,9 +259,6 @@
  * offset. Snapping every animation and transition to ~0 instead lands the
  * same end state instantly. 0.01ms rather than 0s because a 0s transition
  * does not reliably fire `transitionend`.
- *
- * These selectors are intentionally NOT wrapped in `:global()` — this file is
- * plain CSS imported from the layout script, not a Svelte `<style>` block.
  */
 @media (prefers-reduced-motion: reduce) {
 	*,

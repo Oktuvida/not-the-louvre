@@ -139,10 +139,10 @@
 	};
 </script>
 
-<div class="pointer-events-none absolute inset-0 z-[30]">
+<div class="pointer-events-none absolute inset-0 z-30">
 	{#if user}
 		<div
-			class="pointer-events-auto absolute top-4 left-4 max-w-[calc(100vw-2rem)] transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:top-8 md:left-8 md:max-w-[22rem]"
+			class="pointer-events-auto absolute top-4 left-4 max-w-[calc(100vw-2rem)] transition-all duration-700 ease-in md:top-8 md:left-8 md:max-w-[22rem]"
 			class:-translate-x-[calc(100%+3rem)]={isExiting}
 			class:opacity-0={isExiting}
 			inert={isExiting}
@@ -162,7 +162,7 @@
 		layer out of the tab order and the a11y tree while it leaves.
 	-->
 	<div
-		class="pointer-events-auto absolute top-4 right-4 hidden transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:top-8 md:right-8 md:block"
+		class="pointer-events-auto absolute top-4 right-4 hidden transition-all duration-700 ease-in md:top-8 md:right-8 md:block"
 		class:translate-x-[calc(100%+3rem)]={isExiting}
 		class:opacity-0={isExiting}
 		data-testid="home-preview-stack"
@@ -195,10 +195,10 @@
 								/>
 								{#if blurred}
 									<div
-										class="nsfw-scrim absolute inset-0 flex flex-col items-center justify-center border-2 border-dashed border-[#2d2420] px-2 text-center text-[#fdfbf7]"
+										class="nsfw-scrim absolute inset-0 flex flex-col items-center justify-center border-2 border-dashed border-ink-warm px-2 text-center text-paper-bright"
 									>
 										<span
-											class="rounded-full border-2 border-[#fdfbf7] px-2 py-0.5 text-xs font-black"
+											class="rounded-full border-2 border-paper-bright px-2 py-0.5 text-xs font-black"
 											>18+</span
 										>
 										<span class="mt-2 max-w-[5rem] text-[0.7rem] font-semibold uppercase"
@@ -238,17 +238,17 @@
 						{#if user}
 							<button
 								type="button"
-								class="w-full rounded-[0.95rem] border-3 border-[#2d2420] bg-[#fff7d4] px-4 py-2 text-sm font-black text-[#2d2420] shadow-[2px_3px_0_rgba(45,36,32,0.18)] transition duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+								class="w-full rounded-card border-3 border-ink-warm bg-[#fff7d4] px-4 py-2 text-sm font-black text-ink-warm shadow-[2px_3px_0_rgba(45,36,32,0.18)] transition duration-200 hover:-translate-y-0.5 disabled:opacity-60"
 								disabled={isSavingAdultContentPreference}
 								onclick={() => updateAdultContentPreference(!adultContentAllowed)}
 							>
 								{adultContentAllowed ? 'Hide 18+ artworks' : 'Reveal 18+ artworks'}
 							</button>
 						{:else}
-							<p class="text-xs font-semibold text-[#8f3720]">Sign in to reveal 18+ artworks.</p>
+							<p class="text-xs font-semibold text-rust">Sign in to reveal 18+ artworks.</p>
 						{/if}
 						{#if adultContentError}
-							<p class="mt-2 text-xs font-semibold text-[#8f3720]">{adultContentError}</p>
+							<p class="mt-2 text-xs font-semibold text-rust">{adultContentError}</p>
 						{/if}
 					</PostItNote>
 				</div>
@@ -257,7 +257,7 @@
 	</div>
 
 	<div
-		class="pointer-events-auto absolute right-4 bottom-6 left-4 flex items-stretch justify-center transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:right-auto md:bottom-20 md:left-16 md:translate-x-0 md:items-start"
+		class="pointer-events-auto absolute right-4 bottom-6 left-4 flex items-stretch justify-center transition-all duration-700 ease-in md:right-auto md:bottom-20 md:left-16 md:translate-x-0 md:items-start"
 		class:translate-y-[calc(100%+6rem)]={isExiting}
 		class:opacity-0={isExiting}
 		inert={isExiting}
@@ -405,12 +405,12 @@
 
 	.avatar-sheet-title {
 		margin: 0;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 1.3rem;
 		font-weight: 700;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
-		color: #2f241c;
+		color: var(--color-ink);
 	}
 
 	/* How long and how crooked this swipe is; the paint is `.paint-swipe`. */

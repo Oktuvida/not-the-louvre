@@ -107,7 +107,7 @@
 	onkeydown={handleKeydown}
 >
 	<div
-		class="polaroid relative bg-[#f8f4ed] p-[8px] pb-0 shadow-[3px_4px_12px_rgba(0,0,0,0.22),0_1px_3px_rgba(0,0,0,0.1)] transition duration-200 group-hover:z-[5] group-hover:scale-[1.06] group-active:scale-[0.97]"
+		class="polaroid relative bg-paper-card p-[8px] pb-0 shadow-sheet transition duration-200 group-hover:z-5 group-hover:scale-[1.06] group-active:scale-[0.97]"
 	>
 		<!-- Paint stain decoration -->
 		<div
@@ -124,19 +124,19 @@
 
 		{#if attachment === 'tape'}
 			<div
-				class={`pointer-events-none absolute z-[3] h-4 w-12 border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)] ${tapeVariant === 0 ? 'top-[-7px] left-1/2 -translate-x-1/2 -rotate-3' : tapeVariant === 1 ? 'top-[-6px] left-2 rotate-[12deg]' : 'top-[-6px] right-[6px] -rotate-[8deg]'}`}
+				class={`pointer-events-none absolute z-3 h-4 w-12 border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)] ${tapeVariant === 0 ? 'top-[-7px] left-1/2 -translate-x-1/2 -rotate-3' : tapeVariant === 1 ? 'top-[-6px] left-2 rotate-[12deg]' : 'top-[-6px] right-[6px] -rotate-[8deg]'}`}
 			></div>
 		{:else}
 			<div
-				class={`polaroid-pin pointer-events-none absolute top-[-6px] left-1/2 z-[4] h-[14px] w-[14px] -translate-x-1/2 rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)] ${pinClass}`}
+				class={`polaroid-pin pointer-events-none absolute top-[-6px] left-1/2 z-4 h-[14px] w-[14px] -translate-x-1/2 rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)] ${pinClass}`}
 			></div>
 		{/if}
 
 		<!-- Image area -->
-		<div class="relative aspect-square overflow-hidden border border-[#d6cfc5]">
+		<div class="relative aspect-square overflow-hidden border border-hairline">
 			{#if isFork}
 				<div
-					class="absolute top-3 left-3 z-10 rounded-full border-2 border-[#2d2420] bg-[#f7d58a] px-3 py-1 text-[0.65rem] font-black tracking-[0.18em] text-[#2d2420] uppercase shadow-md"
+					class="absolute top-3 left-3 z-10 rounded-full border-2 border-ink-warm bg-[#f7d58a] px-3 py-1 text-[0.65rem] font-black tracking-[0.18em] text-ink-warm uppercase shadow-md"
 				>
 					Forked
 				</div>
@@ -159,7 +159,7 @@
 		<!-- Caption area -->
 		<div class="flex items-start gap-3 px-[6px] pt-2 pb-[10px]">
 			<div
-				class="flex h-8 w-8 min-w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-[2.5px] border-[#2d2420] bg-[#e8ddd0] shadow-[1px_2px_4px_rgba(0,0,0,0.15)]"
+				class="flex h-8 w-8 min-w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-[2.5px] border-ink-warm bg-sand shadow-[1px_2px_4px_rgba(0,0,0,0.15)]"
 			>
 				{#if artwork.artistAvatar}
 					<!-- The artwork is what the visitor came for: keep the avatar out of
@@ -179,17 +179,17 @@
 
 			<div class="min-w-0 flex-1">
 				<p
-					class="truncate text-[1.05rem] leading-[1.2] font-semibold text-[#2d2420]"
-					style="font-family: 'Caveat', cursive;"
+					class="truncate text-[1.05rem] leading-[1.2] font-semibold text-ink-warm"
+					style="font-family: var(--font-hand);"
 				>
 					{artwork.title}
 				</p>
-				<p class="truncate text-[0.82rem] text-[#8a6c52]" style="font-family: 'Caveat', cursive;">
+				<p class="truncate text-[0.82rem] text-muted-ink" style="font-family: var(--font-hand);">
 					{artwork.artist}
 				</p>
 				{#if isFork}
 					<p
-						class="truncate font-['Fredoka'] text-[0.7rem] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
+						class="truncate font-display text-[0.7rem] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
 					>
 						{forkParentTitle ? `From ${forkParentTitle}` : 'Forked artwork'}
 					</p>
@@ -197,7 +197,7 @@
 			</div>
 
 			<div
-				class="shrink-0 pt-0.5 text-right font-['Fredoka'] text-[0.7rem] leading-[1.2] tracking-[0.04em] text-[#8a6c52]"
+				class="shrink-0 pt-0.5 text-right font-display text-[0.7rem] leading-[1.2] tracking-[0.04em] text-muted-ink"
 			>
 				<div data-testid={testId ? `${testId}-score` : undefined}>
 					&#11088; {artwork.score}
@@ -218,7 +218,7 @@
 	 * the old `group-hover:rotate-0` sat on the inner div, which never rotated. */
 	.polaroid-card {
 		rotate: var(--card-rotate, 0deg);
-		transition: rotate 200ms ease;
+		transition: rotate var(--duration-ui) ease;
 	}
 
 	.polaroid-card:hover {
@@ -236,7 +236,7 @@
 	}
 
 	.pin-red {
-		background: radial-gradient(circle at 4px 4px, #e74c3c, #c0392b);
+		background: radial-gradient(circle at 4px 4px, var(--color-alert), #c0392b);
 	}
 
 	.pin-green {
@@ -244,7 +244,7 @@
 	}
 
 	.pin-yellow {
-		background: radial-gradient(circle at 4px 4px, #f4c430, #d4a017);
+		background: radial-gradient(circle at 4px 4px, var(--color-gold), #d4a017);
 	}
 
 	/* Pin highlight dot */

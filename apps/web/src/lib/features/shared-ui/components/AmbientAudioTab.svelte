@@ -24,7 +24,7 @@
 		class:ambient-tab-on={enabled}
 		class:ambient-tab-off={!enabled}
 		class:ambient-tab-unavailable={playbackUnavailable}
-		class="ambient-tab"
+		class="ambient-tab focus-ring"
 		aria-label={buttonLabel}
 		onclick={onToggle}
 	>
@@ -174,6 +174,12 @@
 	}
 
 	.ambient-tab {
+		/*
+		 * Deeply negative: the tab is a wide paper flap whose visible edge sits
+		 * ~8px inside its own box, so a positive offset would draw the focus
+		 * ring out in empty space. The stroke comes from `focus-ring`.
+		 */
+		--focus-ring-offset: -8px;
 		--stroke-paint: #7f77dd;
 		--stroke-deep: #4a429f;
 		--stroke-light: #afa9ec;
@@ -196,9 +202,8 @@
 		transform: translateY(-1px) rotate(-0.5deg);
 	}
 
+	/* Round the ring to the flap's own silhouette. */
 	.ambient-tab:focus-visible {
-		outline: 3px solid var(--focus-ring-color, #4ecdc4);
-		outline-offset: -8px;
 		border-radius: 2rem;
 	}
 
@@ -252,7 +257,7 @@
 
 	/* the track name, written into the wet paint */
 	.ambient-tab-title {
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.5rem;
 		font-weight: 600;
 		line-height: 1;
@@ -269,9 +274,9 @@
 		justify-content: center;
 		padding: 0.14rem 0.32rem;
 		border: 1.5px solid currentColor;
-		border-radius: 4px;
+		border-radius: var(--radius-chip);
 		background: transparent;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.56rem;
 		font-weight: 700;
 		letter-spacing: 0.14em;

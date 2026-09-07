@@ -75,6 +75,35 @@ describe('gallery route layout', () => {
 		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
 	});
 
+	/*
+	 * The room's light used to be four sibling `fixed inset-0` divs identical in
+	 * every property but their gradient — four viewport-sized paint records over
+	 * a window-scrolled virtualized grid. One element with a four-entry
+	 * `background` paints the same pixels; the list order is reversed against
+	 * the old DOM order because siblings paint last-on-top and a background list
+	 * paints first-on-top.
+	 */
+	it('paints the room atmosphere with one layer, not four', async () => {
+		setRoom({
+			roomId: 'hall-of-fame',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		render(GalleryRouteLayoutHarness);
+
+		await expect.element(page.getByTestId('gallery-room-shell')).toBeVisible();
+
+		const atmosphere = document.querySelectorAll('.gallery-atmosphere');
+		expect(atmosphere).toHaveLength(1);
+
+		const background = getComputedStyle(atmosphere[0]).backgroundImage;
+		const gradients = background.match(/radial-gradient|linear-gradient/g) ?? [];
+		expect(gradients).toHaveLength(4);
+		// Centre falloff first (formerly the topmost sibling), warm top-right
+		// last (formerly the bottom one).
+		expect(background.indexOf('at center')).toBeLessThan(background.indexOf('at 86%'));
+	});
+
 	it('hides viewer-only room link when no viewer is available', async () => {
 		setRoom({
 			roomId: 'hall-of-fame',

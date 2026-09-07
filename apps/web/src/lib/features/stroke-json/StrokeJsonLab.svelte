@@ -973,7 +973,11 @@
 </section>
 
 <style>
-	:global(body) {
+	/* Keyed off the lab's own shell, not a bare `body`: route stylesheets are
+	 * never unlinked on client-side navigation, so a bare `:global(body)` would
+	 * keep repainting every later route for the rest of the session (see the
+	 * same note in routes/admin/+page.svelte). */
+	:global(body:has(.stroke-lab-shell)) {
 		background:
 			radial-gradient(circle at top, rgb(244 219 182 / 0.55), transparent 34%),
 			linear-gradient(180deg, #f7f1e2 0%, #e8dcc2 100%);
@@ -1057,7 +1061,7 @@
 	.segmented {
 		display: inline-flex;
 		padding: 0.25rem;
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		background: rgb(36 26 20 / 0.08);
 	}
 
@@ -1067,7 +1071,7 @@
 	.clear-button,
 	select {
 		border: 0;
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		padding: 0.7rem 1rem;
 		font: inherit;
 		color: var(--ink);
@@ -1092,7 +1096,7 @@
 	.palette button {
 		width: 2rem;
 		height: 2rem;
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		border: 2px solid rgb(36 26 20 / 0.15);
 		background: var(--swatch);
 		padding: 0;

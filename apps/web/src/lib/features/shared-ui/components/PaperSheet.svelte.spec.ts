@@ -5,7 +5,7 @@ import { render } from 'vitest-browser-svelte';
 // The paper lives in the global stylesheet, which the browser project does not
 // load for a component under test. Importing it is what lets this spec assert
 // the material itself instead of the class names that stand for it.
-import '$lib/features/shared-ui/styles/utilities.css';
+import '../../../../routes/layout.css';
 import PaperSheet from './PaperSheet.svelte';
 
 const sheetContent = (text: string) =>

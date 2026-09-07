@@ -470,11 +470,38 @@
 		top: 50%;
 		width: var(--reel-frame-size, 256px);
 		height: var(--reel-frame-size, 256px);
-		border-radius: 8px;
+		border-radius: var(--radius-panel);
 		overflow: hidden;
 		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+		background: var(--color-frame-line);
+	}
+
+	/*
+	 * The compositor hint follows the reel's state instead of living on
+	 * `.reel-frame` forever. There are `ceil(viewportWidth / frameStep) + 6`
+	 * frames on screen, and `stopped` is a genuinely still reel — no tween is
+	 * touching `transform` or `opacity` — so holding a layer per frame there is
+	 * pure GPU memory. The three moving states keep it: the idle ambient scroll,
+	 * the flick and the button spin all rewrite exactly these two properties on
+	 * every frame.
+	 */
+	.reel-container[data-reel-state='idle'] .reel-frame,
+	.reel-container[data-reel-state='free-spinning'] .reel-frame,
+	.reel-container[data-reel-state='spinning'] .reel-frame {
 		will-change: transform, opacity;
-		background: #e5dfd5;
+	}
+
+	/*
+	 * Under reduced motion the ambient idle scroll never starts and the flick
+	 * spin is refused (both bail on `prefersReducedMotion.current`), so an
+	 * `idle` reel is a still reel. Only the deliberate button spin still moves,
+	 * and it keeps its hint from the rule above.
+	 */
+	@media (prefers-reduced-motion: reduce) {
+		.reel-container[data-reel-state='idle'] .reel-frame,
+		.reel-container[data-reel-state='free-spinning'] .reel-frame {
+			will-change: auto;
+		}
 	}
 
 	.reel-frame-image {
@@ -501,17 +528,17 @@
 		align-items: center;
 		justify-content: center;
 		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
-		border-radius: 8px;
+		border-radius: var(--radius-panel);
 	}
 
 	.nsfw-badge {
 		display: inline-block;
 		padding: 4px 12px;
-		border: 2px solid #fdfbf7;
+		border: 2px solid var(--color-paper-bright);
 		border-radius: 9999px;
 		font-size: 12px;
 		font-weight: 900;
-		color: #fdfbf7;
+		color: var(--color-paper-bright);
 	}
 
 	.center-highlight {

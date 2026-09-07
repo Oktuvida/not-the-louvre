@@ -38,10 +38,10 @@
 
 	/*
 	 * One layer for every page-to-page veil. The studio's copy used to sit at
-	 * z-[9999] and the other two at z-[100]; nothing in the app renders above
+	 * z-9999 and the other two at z-100; nothing in the app renders above
 	 * z-30, so the high one only meant the three could not be told apart.
 	 */
-	const SCRIM_CLASS = 'pointer-events-none fixed inset-0 z-[100] bg-[#6e6e6e]';
+	const SCRIM_CLASS = 'pointer-events-none fixed inset-0 z-(--z-nav-fade) bg-scrim';
 
 	// The single place in the app that has to know about the motion preference
 	// for this effect: the two GSAP copies forced 400ms of scrim on visitors who

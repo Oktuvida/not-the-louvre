@@ -49,7 +49,7 @@
 	{...elementProps}
 	data-sticker-size={size}
 	data-sticker-variant={variant}
-	class={`sticker-control ${legacyClassName} ${className}`}
+	class={`sticker-control focus-ring ${legacyClassName} ${className}`}
 	style={stickerStyle}
 >
 	<!-- The sticker paper is the control's entire visual, and the element has no
@@ -98,10 +98,11 @@
 			background: none;
 			text-decoration: none;
 			padding: 0;
+			--focus-ring-offset: 3px;
 			min-width: var(--sticker-min-width, 0px);
 			min-height: var(--sticker-height);
 			padding-inline: var(--sticker-padding-x);
-			font-family: 'Fredoka', sans-serif;
+			font-family: var(--font-display);
 			font-size: var(--sticker-font-size);
 			font-weight: 700;
 			line-height: 1;
@@ -111,10 +112,10 @@
 			isolation: isolate;
 			rotate: var(--sticker-rotate, 0deg);
 			transition:
-				transform 0.15s ease,
-				rotate 0.15s ease,
-				scale 0.15s ease,
-				filter 0.15s ease;
+				transform var(--duration-fast) ease,
+				rotate var(--duration-fast) ease,
+				scale var(--duration-fast) ease,
+				filter var(--duration-fast) ease;
 		}
 
 		.sticker-control:hover {
@@ -131,10 +132,10 @@
 			transition-duration: 0.06s;
 		}
 
+		/* The stroke comes from `focus-ring`; the sticker only says how far off
+		   its tilted edge it should sit, and what shape to trace. */
 		.sticker-control:focus-visible {
-			outline: 3px solid var(--focus-ring-color, #4ecdc4);
-			outline-offset: 3px;
-			border-radius: 6px;
+			border-radius: var(--radius-tab);
 		}
 
 		.sticker-control:disabled {
@@ -179,7 +180,7 @@
 			flex-shrink: 0;
 			width: var(--sticker-icon-size);
 			height: var(--sticker-icon-size);
-			transition: transform 0.2s ease;
+			transition: transform var(--duration-ui) ease;
 		}
 
 		.sticker-control:hover .sticker-content :global(svg) {

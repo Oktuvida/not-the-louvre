@@ -78,7 +78,7 @@
 {/if}
 
 <!--
-	Both notices sit on the dark museum wall (#252018), where the stone greys they
+	Both notices sit on the dark museum wall (var(--color-wall)), where the stone greys they
 	used to wear resolved to ~2.1:1. The palette here is the wall's own paper and
 	dust tones, and the retry is the same sticker control every other action in the
 	gallery uses instead of a lone flat grey button.
@@ -88,7 +88,7 @@
 		data-testid="scroll-sentinel-error"
 		class="flex flex-col items-center gap-3 py-8 text-center"
 	>
-		<p class="wall-text text-sm text-[#f7eadf]">{error}</p>
+		<p class="wall-text text-sm text-wall-text">{error}</p>
 		<GameButton variant="secondary" size="sm" onclick={() => onRetry?.()}>
 			<span class="font-semibold">Retry</span>
 		</GameButton>
@@ -97,7 +97,7 @@
 
 {#if !hasMore && !isLoading && !error}
 	<div data-testid="scroll-sentinel-end" class="py-8 text-center">
-		<p class="wall-text text-sm text-[#c4b5a6]">You've seen it all — nothing more to show.</p>
+		<p class="wall-text text-sm text-clay">You've seen it all — nothing more to show.</p>
 	</div>
 {/if}
 
