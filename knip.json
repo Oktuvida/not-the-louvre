@@ -1,5 +1,11 @@
 {
 	"$schema": "https://unpkg.com/knip@5/schema.json",
+	"ignoreExportsUsedInFile": { "interface": true, "type": true },
+	"ignoreIssues": {
+		"apps/web/src/lib/server/db/auth.schema.ts": ["exports"],
+		"apps/web/src/lib/server/db/schema.ts": ["exports"]
+	},
+	"tags": ["-knipignore"],
 	"workspaces": {
 		".": {
 			"entry": ["scripts/**/*.ts"],

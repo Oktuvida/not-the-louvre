@@ -384,11 +384,64 @@ function makeRng(seed: number) {
 }
 
 /**
- * Create a data URL of a sticker background for use as a CSS
- * `background-image`.
+ * How much of each end of the artwork a sticker's fixed caps carry, given the
+ * tape strip's own footprint. The strip is rotated, so it reaches further
+ * sideways than its width; `tapeHeight * 0.18` is `sin(10°)` rounded up, plus
+ * room for the paper's rounded corner.
  *
- * @param width   Canvas width in pixels
- * @param height  Canvas height in pixels
+ * Exported for the spec, which asserts the caps stay fixed while the middle
+ * stretches, and needs the same number to say where each cap ends.
+ */
+export const stickerCapWidth = (width: number, height: number) => {
+	const tapeWidth = Math.round(Math.max(16, width * 0.12));
+	const tapeHeight = Math.round(Math.max(20, height * 0.35));
+
+	return Math.max(
+		1,
+		Math.min(Math.round(width / 2) - 2, Math.ceil(6 + tapeWidth / 2 + tapeHeight * 0.18 + 4))
+	);
+};
+
+/**
+ * Create a data URL of a sticker background.
+ *
+ * The control this paints is rarely exactly `width` wide. `min-width` is a
+ * floor, not a size: a longer label — the gallery header's "Join & draw", the
+ * detail panel's "Fork" — stretches the button past the preset, and the file
+ * is baked once per (size, variant) at the preset's `minWidth × height`. A
+ * single `preserveAspectRatio="none"` canvas therefore used to be squashed by
+ * whatever factor the label added, smearing the tape strips and the torn side
+ * edges horizontally while leaving them at their original height.
+ *
+ * So the artwork is emitted as three slices in one file. The root `<svg>`
+ * carries `width="100%" height="100%"` and **no** `viewBox`, which leaves it
+ * with no intrinsic size and no intrinsic aspect ratio: one user unit is one
+ * CSS pixel of whatever box the browser gives it, and nothing is scaled unless
+ * something below asks to be. The three nested viewports then each opt into
+ * exactly the scaling their contents can survive:
+ *
+ * - **the middle** keeps `preserveAspectRatio="none"` over the whole
+ *   `width × height` artwork, so the paper, the colour band and its two
+ *   gradients still fill the control exactly at any size — that part is all
+ *   axis-aligned rectangles, which is precisely what tolerates being stretched;
+ * - **the caps** map a `stickerCapWidth()`-wide window of the same artwork with
+ *   `meet`, so they scale uniformly or not at all, and are pinned to the left
+ *   (`xMin`) and right (`xMax`) edges. The tape strips and the torn left/right
+ *   edges live there and keep their shape at any control width.
+ *
+ * What still stretches is only what has no shape to lose: the flat rectangles,
+ * their 2px paper margin and `bandMargin` inset (so a 3× wide control shows a
+ * 6px margin rather than 2px), the torn ticks along the top and bottom, and the
+ * low-alpha paint stains.
+ *
+ * The old drop-shadow rect is gone rather than sliced: it was
+ * `fill="rgba(0,0,0,0)"` under `feDropShadow`, and a drop shadow is the source
+ * *alpha* blurred, so a fully transparent source cast nothing. It painted no
+ * pixels in any browser — restoring a real shadow is a design decision, not a
+ * refactor.
+ *
+ * @param width   Artwork width in pixels — the control's `min-width`
+ * @param height  Artwork height in pixels
  * @param options Sticker variant and future options
  * @returns A `data:image/svg+xml,…` string
  */
@@ -410,54 +463,52 @@ export function createStickerBackgroundUrl(
 	const bandMargin = Math.round(height * 0.1);
 	const tapeWidth = Math.round(Math.max(16, width * 0.12));
 	const tapeHeight = Math.round(Math.max(20, height * 0.35));
-	const parts = [
-		`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" fill="none" shape-rendering="geometricPrecision">`,
-		'<defs>',
-		'<filter id="sticker-shadow" x="-10%" y="-20%" width="140%" height="160%">',
-		'<feDropShadow dx="1" dy="3" stdDeviation="3" flood-color="rgba(47,36,28,0.12)"/>',
-		'</filter>',
-		'<linearGradient id="sticker-hi" x1="0" y1="0" x2="0" y2="1">',
-		'<stop offset="0%" stop-color="rgba(255,255,255,0.22)"/>',
-		'<stop offset="100%" stop-color="rgba(255,255,255,0)"/>',
-		'</linearGradient>',
-		'<linearGradient id="sticker-lo" x1="0" y1="0" x2="0" y2="1">',
-		'<stop offset="0%" stop-color="rgba(0,0,0,0)"/>',
-		'<stop offset="100%" stop-color="rgba(0,0,0,0.06)"/>',
-		'</linearGradient>',
-		'</defs>',
-		`<rect x="3" y="3" width="${Math.max(0, width - 6)}" height="${Math.max(0, height - 6)}" rx="2" fill="rgba(0,0,0,0)" filter="url(#sticker-shadow)"/>`,
-		`<rect x="2" y="2" width="${Math.max(0, width - 4)}" height="${Math.max(0, height - 4)}" rx="2" fill="${rgb(STICKER_COLORS.paper)}"/>`,
+	const capWidth = stickerCapWidth(width, height);
+
+	// Authored in one `width × height` coordinate system and then split by which
+	// scaling each shape survives, so the seeded layout below is unchanged: the
+	// rng is consumed in exactly the order it always was.
+	const stretched = [
+		`<rect class="sticker-paper" x="2" y="2" width="${Math.max(0, width - 4)}" height="${Math.max(0, height - 4)}" rx="2" fill="${rgb(STICKER_COLORS.paper)}"/>`,
 		`<rect x="${2 + bandMargin}" y="${2 + bandMargin}" width="${Math.max(0, width - 4 - bandMargin * 2)}" height="${Math.max(0, height - 4 - bandMargin * 2)}" rx="1" fill="${rgb(bandColor, 0.82)}"/>`,
 		`<rect x="${2 + bandMargin}" y="${2 + bandMargin}" width="${Math.max(0, width - 4 - bandMargin * 2)}" height="${Math.max(0, Math.round(height * 0.3))}" rx="1" fill="url(#sticker-hi)"/>`,
 		`<rect x="${2 + bandMargin}" y="${Math.round(height * 0.7)}" width="${Math.max(0, width - 4 - bandMargin * 2)}" height="${Math.max(0, Math.ceil(height * 0.3))}" rx="1" fill="url(#sticker-lo)"/>`
 	];
+	const leftCap: string[] = [];
+	const rightCap: string[] = [];
 
 	for (let x = 6; x < width - 6; x += 4 + rng() * 6) {
 		if (rng() > 0.6) {
 			const size = 1 + rng() * 2;
 			const bottomY = height - 2 - rng();
-			parts.push(
+			stretched.push(
 				`<rect x="${x.toFixed(2)}" y="1" width="${size.toFixed(2)}" height="${(1 + rng()).toFixed(2)}" fill="${rgb(STICKER_COLORS.paper)}"/>`,
 				`<rect x="${x.toFixed(2)}" y="${bottomY.toFixed(2)}" width="${size.toFixed(2)}" height="${(1 + rng()).toFixed(2)}" fill="${rgb(STICKER_COLORS.paper)}"/>`
 			);
 		}
 	}
 
+	// The side edges are 1-2px wide: stretched they read as bars, so they ride
+	// the caps, where their own end of the artwork is drawn at natural scale.
 	for (let y = 6; y < height - 6; y += 4 + rng() * 6) {
 		if (rng() > 0.7) {
 			const size = 1 + rng() * 1.5;
 			const edgeWidth = 1 + rng();
-			parts.push(
-				`<rect x="1" y="${y.toFixed(2)}" width="${edgeWidth.toFixed(2)}" height="${size.toFixed(2)}" fill="${rgb(STICKER_COLORS.paper)}"/>`,
+			leftCap.push(
+				`<rect x="1" y="${y.toFixed(2)}" width="${edgeWidth.toFixed(2)}" height="${size.toFixed(2)}" fill="${rgb(STICKER_COLORS.paper)}"/>`
+			);
+			rightCap.push(
 				`<rect x="${(width - 2 - rng()).toFixed(2)}" y="${y.toFixed(2)}" width="${(1 + rng()).toFixed(2)}" height="${size.toFixed(2)}" fill="${rgb(STICKER_COLORS.paper)}"/>`
 			);
 		}
 	}
 
-	parts.push(
-		`<rect x="${(6 - tapeWidth / 2).toFixed(2)}" y="${(5 - tapeHeight / 2).toFixed(2)}" width="${tapeWidth}" height="${tapeHeight}" fill="${rgb(tapeColor, 0.46)}" stroke="rgba(0,0,0,0.05)" stroke-width="0.5" transform="rotate(-10 ${6} ${5})"/>`,
-		`<line x1="${(6 - tapeWidth / 2 + 2).toFixed(2)}" y1="${(5 - tapeHeight * 0.1).toFixed(2)}" x2="${(6 + tapeWidth / 2 - 2).toFixed(2)}" y2="${(5 + tapeHeight * 0.05).toFixed(2)}" stroke="rgba(255,255,255,0.12)" stroke-width="1" transform="rotate(-10 ${6} ${5})"/>`,
-		`<rect x="${(width - 6 - tapeWidth / 2).toFixed(2)}" y="${(height - 5 - tapeHeight / 2).toFixed(2)}" width="${tapeWidth}" height="${tapeHeight}" fill="${rgb(tapeColor, 0.44)}" stroke="rgba(0,0,0,0.05)" stroke-width="0.5" transform="rotate(10 ${width - 6} ${height - 5})"/>`,
+	leftCap.push(
+		`<rect class="sticker-tape" x="${(6 - tapeWidth / 2).toFixed(2)}" y="${(5 - tapeHeight / 2).toFixed(2)}" width="${tapeWidth}" height="${tapeHeight}" fill="${rgb(tapeColor, 0.46)}" stroke="rgba(0,0,0,0.05)" stroke-width="0.5" transform="rotate(-10 ${6} ${5})"/>`,
+		`<line x1="${(6 - tapeWidth / 2 + 2).toFixed(2)}" y1="${(5 - tapeHeight * 0.1).toFixed(2)}" x2="${(6 + tapeWidth / 2 - 2).toFixed(2)}" y2="${(5 + tapeHeight * 0.05).toFixed(2)}" stroke="rgba(255,255,255,0.12)" stroke-width="1" transform="rotate(-10 ${6} ${5})"/>`
+	);
+	rightCap.push(
+		`<rect class="sticker-tape" x="${(width - 6 - tapeWidth / 2).toFixed(2)}" y="${(height - 5 - tapeHeight / 2).toFixed(2)}" width="${tapeWidth}" height="${tapeHeight}" fill="${rgb(tapeColor, 0.44)}" stroke="rgba(0,0,0,0.05)" stroke-width="0.5" transform="rotate(10 ${width - 6} ${height - 5})"/>`,
 		`<line x1="${(width - 6 - tapeWidth / 2 + 2).toFixed(2)}" y1="${(height - 5 + tapeHeight * 0.08).toFixed(2)}" x2="${(width - 6 + tapeWidth / 2 - 2).toFixed(2)}" y2="${(height - 5 - tapeHeight * 0.06).toFixed(2)}" stroke="rgba(255,255,255,0.10)" stroke-width="1" transform="rotate(10 ${width - 6} ${height - 5})"/>`
 	);
 
@@ -467,13 +518,13 @@ export function createStickerBackgroundUrl(
 		const centerY = rng() * height;
 		const radius = 2 + rng() * 8;
 		const alpha = 0.06 + rng() * 0.1;
-		parts.push(
+		stretched.push(
 			`<ellipse cx="${centerX.toFixed(2)}" cy="${centerY.toFixed(2)}" rx="${radius.toFixed(2)}" ry="${(radius * (0.5 + rng() * 0.7)).toFixed(2)}" transform="rotate(${(rng() * 180).toFixed(2)} ${centerX.toFixed(2)} ${centerY.toFixed(2)})" fill="${rgb(color, alpha)}"/>`
 		);
 		if (rng() > 0.5) {
 			const dripX = centerX + (rng() - 0.5) * radius * 3;
 			const dripY = centerY + rng() * radius * 2;
-			parts.push(
+			stretched.push(
 				`<ellipse cx="${dripX.toFixed(2)}" cy="${dripY.toFixed(2)}" rx="${(radius * 0.25).toFixed(2)}" ry="${(radius * 0.4).toFixed(2)}" transform="rotate(${(rng() * 180).toFixed(2)} ${dripX.toFixed(2)} ${dripY.toFixed(2)})" fill="${rgb(color, alpha * 0.6)}"/>`
 			);
 		}
@@ -483,7 +534,7 @@ export function createStickerBackgroundUrl(
 		const centerX = width * 0.55 + rng() * width * 0.3;
 		const centerY = height * 0.25 + rng() * height * 0.5;
 		const radius = 5 + rng() * 7;
-		parts.push(
+		stretched.push(
 			`<circle cx="${centerX.toFixed(2)}" cy="${centerY.toFixed(2)}" r="${radius.toFixed(2)}" stroke="rgba(140,110,70,0.06)" stroke-width="${(1.2 + rng() * 0.8).toFixed(2)}" stroke-dasharray="${(radius * 4.8).toFixed(2)} ${(radius * 1.2).toFixed(2)}" fill="none"/>`
 		);
 	}
@@ -492,12 +543,34 @@ export function createStickerBackgroundUrl(
 		const x = rng() * width;
 		const y = rng() * height;
 		const radius = 0.35 + rng() * 0.8;
-		parts.push(
+		stretched.push(
 			`<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${radius.toFixed(2)}" fill="rgba(255,255,255,${(0.02 + rng() * 0.035).toFixed(3)})"/>`
 		);
 	}
 
-	parts.push('</svg>');
+	const parts = [
+		'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="none" shape-rendering="geometricPrecision">',
+		'<defs>',
+		'<linearGradient id="sticker-hi" x1="0" y1="0" x2="0" y2="1">',
+		'<stop offset="0%" stop-color="rgba(255,255,255,0.22)"/>',
+		'<stop offset="100%" stop-color="rgba(255,255,255,0)"/>',
+		'</linearGradient>',
+		'<linearGradient id="sticker-lo" x1="0" y1="0" x2="0" y2="1">',
+		'<stop offset="0%" stop-color="rgba(0,0,0,0)"/>',
+		'<stop offset="100%" stop-color="rgba(0,0,0,0.06)"/>',
+		'</linearGradient>',
+		'</defs>',
+		`<svg x="0" y="0" width="100%" height="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">`,
+		...stretched,
+		'</svg>',
+		`<svg x="0" y="0" width="100%" height="100%" viewBox="0 0 ${capWidth} ${height}" preserveAspectRatio="xMinYMid meet">`,
+		...leftCap,
+		'</svg>',
+		`<svg x="0" y="0" width="100%" height="100%" viewBox="${width - capWidth} 0 ${capWidth} ${height}" preserveAspectRatio="xMaxYMid meet">`,
+		...rightCap,
+		'</svg>',
+		'</svg>'
+	];
 
 	const url = `data:image/svg+xml,${encodeURIComponent(parts.join(''))}`;
 	cachedStickerBackgroundUrls.set(cacheKey, url);

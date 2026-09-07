@@ -1,6 +1,13 @@
 import { relations } from 'drizzle-orm';
 import { pgSchema, text, timestamp, boolean, index } from 'drizzle-orm/pg-core';
 
+/*
+ * Generated from better-auth's schema and read by drizzle-kit's module scan,
+ * exactly like `schema.ts`: the `*Relations` objects below are never imported
+ * anywhere. `knip.json` silences `exports` for this file by path for the same
+ * reason.
+ */
+
 const betterAuthSchema = pgSchema('better_auth');
 
 export const user = betterAuthSchema.table('user', {

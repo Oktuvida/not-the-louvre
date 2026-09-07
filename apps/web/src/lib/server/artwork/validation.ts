@@ -3,7 +3,7 @@ import { ArtworkFlowError } from './errors';
 
 const trimTitle = (title: string) => title.trim();
 
-export const createUntitledArtworkTitle = (suffix: number) =>
+const createUntitledArtworkTitle = (suffix: number) =>
 	`Untitled #${String(suffix).padStart(4, '0')}`;
 
 export const normalizePublishTitle = (title: string | null | undefined, suffix: number) => {

@@ -7,7 +7,7 @@ import {
 	type DrawingStroke
 } from './document';
 
-export const RESPONSIVE_DRAWING_THRESHOLDS = {
+const RESPONSIVE_DRAWING_THRESHOLDS = {
 	maxImmediatePointCount: 1200,
 	maxImmediateStrokeCount: 64
 } as const;

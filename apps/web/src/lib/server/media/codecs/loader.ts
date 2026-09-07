@@ -1,7 +1,7 @@
 // Cloudflare Workers disallow compiling WASM from bytes at runtime, so each codec
 // module must arrive as a WebAssembly.Module import bundled by wrangler. Node has
 // no native .wasm imports, so there we read the binary from node_modules instead.
-export const runningInCloudflareWorkers =
+const runningInCloudflareWorkers =
 	typeof caches !== 'undefined' &&
 	(caches as unknown as { default?: unknown }).default !== undefined;
 

@@ -22,7 +22,7 @@ export const MUSEUM_WALL_ASSET_NAME = 'museum-wall';
 
 export const MUSEUM_WINDOW_FRAME_ASSET_NAME = 'museum-window-frame';
 
-export const generatedArtUrl = (name: string) => `/generated/${name}.${GENERATED_ART_VERSION}.svg`;
+const generatedArtUrl = (name: string) => `/generated/${name}.${GENERATED_ART_VERSION}.svg`;
 
 export const STICKER_CONTROL_SIZES: readonly StickerControlSize[] = ['hero', 'lg', 'md', 'sm'];
 

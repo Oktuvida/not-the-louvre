@@ -55,7 +55,13 @@
 	<!-- The sticker paper is the control's entire visual, and the element has no
 	     border or background of its own, so this beats the artwork thumbnails to
 	     the wire. It is one small, immutable, shared file per size+variant, so
-	     it is a cache hit on every route after the first. -->
+	     it is a cache hit on every route after the first.
+
+	     The file is baked at the preset's minWidth, and a long label makes the
+	     control wider than that. It survives the difference because the SVG has
+	     no intrinsic size and slices itself into a stretchable middle and two
+	     fixed caps (see `createStickerBackgroundUrl`), not because of anything
+	     the CSS below does. -->
 	<img
 		data-testid={backgroundTestId}
 		src={backgroundUrl}

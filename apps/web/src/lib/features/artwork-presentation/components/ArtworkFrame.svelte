@@ -188,6 +188,50 @@
 			observer.disconnect();
 		};
 	});
+
+	/*
+	 * Browser zoom (and dragging the window to a display with a different
+	 * scale factor) changes `devicePixelRatio` without changing a single CSS
+	 * box, so the ResizeObserver above never fires and the canvas keeps the
+	 * bitmap it cut for the previous ratio — visibly soft after a zoom in, and
+	 * needlessly heavy after a zoom out.
+	 *
+	 * There is no resolution-change event. The standard workaround is a media
+	 * query that only matches the ratio in force right now: it stops matching
+	 * the moment the ratio moves, and the listener is re-armed against the new
+	 * ratio from inside its own handler.
+	 */
+	$effect(() => {
+		if (typeof window.matchMedia !== 'function') {
+			return;
+		}
+
+		let pendingFrame = 0;
+		let query: MediaQueryList | null = null;
+
+		const armForCurrentRatio = () => {
+			query?.removeEventListener('change', onResolutionChange);
+			query = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+			query.addEventListener('change', onResolutionChange);
+		};
+
+		function onResolutionChange() {
+			// Re-armed before the repaint, not inside the frame callback: a second
+			// zoom step during that frame has to find a live listener.
+			armForCurrentRatio();
+			cancelAnimationFrame(pendingFrame);
+			pendingFrame = requestAnimationFrame(() => {
+				renderFrame();
+			});
+		}
+
+		armForCurrentRatio();
+
+		return () => {
+			cancelAnimationFrame(pendingFrame);
+			query?.removeEventListener('change', onResolutionChange);
+		};
+	});
 </script>
 
 <div

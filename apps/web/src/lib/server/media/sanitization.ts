@@ -111,8 +111,6 @@ const oversizedOutputError = (profile: MediaSanitizationProfile) =>
 		'MEDIA_TOO_LARGE'
 	);
 
-export { hasAvifMagicBytes, hasWebpMagicBytes };
-
 const decodeStillImage = async (
 	inputBuffer: Uint8Array,
 	expectedContentType: string,
@@ -244,7 +242,7 @@ const sanitizeDecodedImageUpload = async (
 	return toSanitizedMedia(outputBuffer, profile);
 };
 
-export const sanitizeAvifUpload = async (
+const sanitizeAvifUpload = async (
 	file: File,
 	profile: MediaSanitizationProfile,
 	options?: {

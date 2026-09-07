@@ -45,6 +45,5 @@ export const recoverSchema = z.object({
 });
 
 export type SignupInput = z.infer<typeof signupSchema>;
-export type AvailabilityInput = z.infer<typeof availabilitySchema>;
 export type SignInInput = z.infer<typeof signInSchema>;
 export type RecoverInput = z.infer<typeof recoverSchema>;

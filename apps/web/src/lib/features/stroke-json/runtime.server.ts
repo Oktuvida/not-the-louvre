@@ -10,7 +10,7 @@ import {
 	type DrawingDocumentV2
 } from './document';
 
-export const strokeJsonServerRuntime = createServerStrokeJsonRuntime();
+const strokeJsonServerRuntime = createServerStrokeJsonRuntime();
 
 export type PreparedServerStorageDrawingDocument = StrokeJsonStorageDocument & {
 	document: DrawingDocumentV2;
