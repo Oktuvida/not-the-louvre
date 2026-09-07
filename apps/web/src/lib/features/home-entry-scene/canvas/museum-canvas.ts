@@ -469,6 +469,10 @@ export function createStickerBackgroundUrl(
 	// scaling each shape survives, so the seeded layout below is unchanged: the
 	// rng is consumed in exactly the order it always was.
 	const stretched = [
+		// The lift off the wall: a soft shadow under the paper, exactly what the
+		// canvas painter drew. It rides the stretched slice so a wide control
+		// keeps one continuous shadow instead of two cap-sized stubs.
+		`<rect x="3" y="3" width="${Math.max(0, width - 6)}" height="${Math.max(0, height - 6)}" rx="2" fill="rgba(0,0,0,0)" filter="url(#sticker-shadow)"/>`,
 		`<rect class="sticker-paper" x="2" y="2" width="${Math.max(0, width - 4)}" height="${Math.max(0, height - 4)}" rx="2" fill="${rgb(STICKER_COLORS.paper)}"/>`,
 		`<rect x="${2 + bandMargin}" y="${2 + bandMargin}" width="${Math.max(0, width - 4 - bandMargin * 2)}" height="${Math.max(0, height - 4 - bandMargin * 2)}" rx="1" fill="${rgb(bandColor, 0.82)}"/>`,
 		`<rect x="${2 + bandMargin}" y="${2 + bandMargin}" width="${Math.max(0, width - 4 - bandMargin * 2)}" height="${Math.max(0, Math.round(height * 0.3))}" rx="1" fill="url(#sticker-hi)"/>`,
@@ -551,6 +555,9 @@ export function createStickerBackgroundUrl(
 	const parts = [
 		'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="none" shape-rendering="geometricPrecision">',
 		'<defs>',
+		'<filter id="sticker-shadow" x="-10%" y="-20%" width="140%" height="160%">',
+		'<feDropShadow dx="1" dy="3" stdDeviation="3" flood-color="rgba(47,36,28,0.12)"/>',
+		'</filter>',
 		'<linearGradient id="sticker-hi" x1="0" y1="0" x2="0" y2="1">',
 		'<stop offset="0%" stop-color="rgba(255,255,255,0.22)"/>',
 		'<stop offset="100%" stop-color="rgba(255,255,255,0)"/>',
