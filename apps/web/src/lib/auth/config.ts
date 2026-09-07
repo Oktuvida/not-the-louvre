@@ -1,4 +1,8 @@
-export const NICKNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
-
-export const PASSWORD_MIN_LENGTH = 8;
-export const PASSWORD_MAX_LENGTH = 128;
+// Barrel kept for the existing `$lib/auth/config` imports; the rules live in
+// the shared layer so the server validators read the same source.
+export {
+	NICKNAME_PATTERN,
+	PASSWORD_MAX_LENGTH,
+	PASSWORD_MIN_LENGTH,
+	normalizeNickname
+} from '$lib/shared/auth/credentials';

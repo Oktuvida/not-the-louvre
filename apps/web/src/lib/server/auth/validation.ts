@@ -1,23 +1,25 @@
 import { z } from 'zod';
-import { NICKNAME_PATTERN, RECOVERY_KEY_LENGTH } from './config';
+import {
+	NICKNAME_PATTERN,
+	PASSWORD_MAX_LENGTH,
+	PASSWORD_MIN_LENGTH,
+	normalizeNickname
+} from '$lib/shared/auth/credentials';
+import { RECOVERY_KEY_LENGTH } from './config';
 
-const normalizeInput = (value: string) => value.trim().toLowerCase();
-
-export const normalizeNickname = (value: string) => normalizeInput(value);
-
-export const nicknameSchema = z
+const nicknameSchema = z
 	.string()
 	.transform(normalizeNickname)
 	.refine((value: string) => NICKNAME_PATTERN.test(value), {
 		message: 'Nickname must be 3-20 chars and use only lowercase letters, numbers, or underscores'
 	});
 
-export const passwordSchema = z
+const passwordSchema = z
 	.string()
-	.min(8, 'Password must be at least 8 characters long')
-	.max(128, 'Password must be at most 128 characters long');
+	.min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters long`)
+	.max(PASSWORD_MAX_LENGTH, `Password must be at most ${PASSWORD_MAX_LENGTH} characters long`);
 
-export const recoveryKeySchema = z
+const recoveryKeySchema = z
 	.string()
 	.trim()
 	.length(RECOVERY_KEY_LENGTH, 'Recovery key must be a UUIDv4 string');

@@ -1,6 +1,10 @@
-export const galleryRoomIds = ['hall-of-fame', 'hot-wall', 'mystery', 'your-studio'] as const;
+// Room identity and hrefs are shared vocabulary (the server loaders resolve
+// route params with them); this module keeps the presentation config and
+// re-exports the vocabulary so the existing importers keep working.
+import type { GalleryRoomId } from '$lib/shared/gallery/rooms';
 
-export type GalleryRoomId = (typeof galleryRoomIds)[number];
+export { galleryRoomIds, isGalleryRoomId, roomHref } from '$lib/shared/gallery/rooms';
+export type { GalleryRoomId } from '$lib/shared/gallery/rooms';
 
 export type GalleryRoomConfig = {
 	color: string;
@@ -50,14 +54,6 @@ export const galleryRooms: GalleryRoomConfig[] = [
 		color: '#d4956c'
 	}
 ];
-
-export const isGalleryRoomId = (value: string): value is GalleryRoomId =>
-	galleryRoomIds.includes(value as GalleryRoomId);
-
-// The narrow literal union is what `GameLink`'s `href` prop accepts; without
-// the annotation the template literal widens to `string`.
-export const roomHref = (roomId: GalleryRoomId): '/gallery' | `/gallery/${GalleryRoomId}` =>
-	roomId === 'hall-of-fame' ? '/gallery' : `/gallery/${roomId}`;
 
 export const getGalleryRoom = (roomId: GalleryRoomId) =>
 	galleryRooms.find((room) => room.id === roomId) ?? galleryRooms[0]!;

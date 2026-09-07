@@ -4,7 +4,6 @@
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount, untrack } from 'svelte';
-	import { gsap } from '$lib/client/gsap';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
@@ -34,6 +33,7 @@
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
+	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
 	import DrawingCanvas from '$lib/features/studio-drawing/components/DrawingCanvas.svelte';
 	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 
@@ -205,10 +205,7 @@
 	let titleError = $state('');
 	let isExitingToHome = $state(false);
 	let showExitFade = $state(false);
-	let exitFadeOpacity = $state(0);
-	let exitFadeTween: gsap.core.Tween | null = null;
 	let forkContextHydrated = $state(false);
-	const EXIT_FADE_DURATION_S = 0.5;
 	const forkContextStorageKey = $derived(getForkContextStorageKey(user));
 	const resolveDraftKeys = (scope: string | null) => {
 		if (!user) {
@@ -482,31 +479,17 @@
 		}
 	};
 
+	/** Drops the shared page veil; PageFadeOverlay calls back when it is down. */
 	const fadeAndExitHome = () => {
 		showExitFade = true;
-
-		const fade = { opacity: 0 };
-		exitFadeTween?.kill();
-		exitFadeTween = gsap.to(fade, {
-			opacity: 1,
-			duration: EXIT_FADE_DURATION_S,
-			ease: 'power2.in',
-			onUpdate: () => {
-				exitFadeOpacity = fade.opacity;
-			},
-			onComplete: () => {
-				exitFadeTween = null;
-				void goto(resolve('/?from=studio'));
-			}
-		});
 	};
 
-	// An untracked tween whose onComplete navigates outlives the component: after
-	// an unmount mid-fade it would still pull the visitor to the home page.
-	$effect(() => () => {
-		exitFadeTween?.kill();
-		exitFadeTween = null;
-	});
+	// The veil owns the "and now navigate" moment, including dropping it when the
+	// studio is unmounted mid-fade — a stale callback would still pull a visitor
+	// who has already gone somewhere else back to the home page.
+	const completeExitToHome = () => {
+		void goto(resolve('/?from=studio'));
+	};
 
 	const publishArtwork = async () => {
 		if (!canvasRef || isPublishing || !studioUnlocked) return;
@@ -862,12 +845,7 @@
 	</main>
 </div>
 
-{#if showExitFade}
-	<div
-		class="pointer-events-none fixed inset-0 z-[9999]"
-		style={`background-color: #6e6e6e; opacity: ${exitFadeOpacity};`}
-	></div>
-{/if}
+<PageFadeOverlay direction="in" onComplete={completeExitToHome} visible={showExitFade} />
 
 <style>
 	.studio-book-frame {

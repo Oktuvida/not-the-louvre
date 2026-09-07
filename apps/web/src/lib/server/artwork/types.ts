@@ -1,4 +1,7 @@
 import type { CanonicalUser } from '$lib/server/auth/types';
+import type { ArtworkReportReason, ContentReportStatus } from '$lib/shared/content/report-reasons';
+import type { ArtworkVoteValue } from '$lib/shared/content/votes';
+import type { RateLimitPolicy } from '$lib/server/db/rate-limit';
 
 export type ArtworkRecord = {
 	authorId: string;
@@ -136,7 +139,7 @@ export type ArtworkReadRecord = ArtworkRecord & {
 	viewerVote?: ArtworkVoteValue | null;
 };
 
-export type ArtworkVoteValue = 'down' | 'up';
+export type { ArtworkVoteValue };
 
 export type ArtworkVoteRecord = {
 	artworkId: string;
@@ -158,17 +161,9 @@ export type ArtworkCommentRecord = {
 	updatedAt: Date;
 };
 
-export type ArtworkReportReason =
-	| 'spam'
-	| 'harassment'
-	| 'hate'
-	| 'sexual_content'
-	| 'violence'
-	| 'misinformation'
-	| 'copyright'
-	| 'other';
-
-export type ContentReportStatus = 'pending' | 'reviewed' | 'actioned';
+// Re-exported, not re-declared: the report vocabulary is shared with the
+// drizzle enum and the client menu ($lib/shared/content/report-reasons).
+export type { ArtworkReportReason, ContentReportStatus };
 
 export type ContentReportRecord = {
 	artworkId: string | null;
@@ -311,38 +306,17 @@ export type ArtworkVisibilityActor = {
 	userId: string | null;
 };
 
-export type CreatePublishRateLimitInput = Omit<
-	PublishRateLimitRecord,
-	'createdAt' | 'updatedAt'
-> & {
-	createdAt: Date;
-	updatedAt: Date;
+// One attempt, one statement. `id` is only used when the row does not exist
+// yet; on conflict the stored row keeps its own id.
+export type RecordRateLimitAttemptInput = {
+	actorKey: string;
+	id: string;
+	now: Date;
+	policy: RateLimitPolicy;
 };
 
-export type UpdatePublishRateLimitInput = Partial<
-	Pick<
-		PublishRateLimitRecord,
-		'attemptCount' | 'blockedUntil' | 'lastAttemptAt' | 'windowStartedAt'
-	>
-> & {
-	updatedAt: Date;
-};
-
-export type CreateEngagementRateLimitInput = Omit<
-	ArtworkEngagementRateLimitRecord,
-	'createdAt' | 'updatedAt'
-> & {
-	createdAt: Date;
-	updatedAt: Date;
-};
-
-export type UpdateEngagementRateLimitInput = Partial<
-	Pick<
-		ArtworkEngagementRateLimitRecord,
-		'attemptCount' | 'blockedUntil' | 'lastAttemptAt' | 'windowStartedAt'
-	>
-> & {
-	updatedAt: Date;
+export type RecordEngagementRateLimitAttemptInput = RecordRateLimitAttemptInput & {
+	kind: ArtworkEngagementRateLimitKind;
 };
 
 export type ArtworkRepository = {
@@ -362,10 +336,6 @@ export type ArtworkRepository = {
 	): Promise<ArtworkRecord | null>;
 	findArtworkDrawingDocumentLength(id: string): Promise<number | null>;
 	createContentReport(input: CreateContentReportInput): Promise<ContentReportRecord>;
-	createEngagementRateLimit(
-		input: CreateEngagementRateLimitInput
-	): Promise<ArtworkEngagementRateLimitRecord>;
-	createPublishRateLimit(input: CreatePublishRateLimitInput): Promise<PublishRateLimitRecord>;
 	deleteArtwork(id: string): Promise<ArtworkRecord | null>;
 	deleteComment(id: string, updatedAt: Date): Promise<ArtworkCommentRecord | null>;
 	findArtworkReportCount(artworkId: string): Promise<number>;
@@ -373,16 +343,18 @@ export type ArtworkRepository = {
 	findCommentReportCount(commentId: string): Promise<number>;
 	findArtworkById(id: string): Promise<ArtworkRecord | null>;
 	findChildForksByParentId(parentId: string): Promise<ArtworkRecord[]>;
-	findEngagementRateLimit(
-		kind: ArtworkEngagementRateLimitKind,
-		actorKey: string
-	): Promise<ArtworkEngagementRateLimitRecord | null>;
 	findPublishRateLimit(actorKey: string): Promise<PublishRateLimitRecord | null>;
 	findVoteByArtworkAndUser(artworkId: string, userId: string): Promise<ArtworkVoteRecord | null>;
 	listCommentsByArtworkId(
 		artworkId: string,
 		viewer?: ArtworkVisibilityActor
 	): Promise<ArtworkCommentView[]>;
+	recordEngagementRateLimitAttempt(
+		input: RecordEngagementRateLimitAttemptInput
+	): Promise<ArtworkEngagementRateLimitRecord>;
+	recordPublishRateLimitAttempt(
+		input: RecordRateLimitAttemptInput
+	): Promise<PublishRateLimitRecord>;
 	removeVote(
 		artworkId: string,
 		userId: string,
@@ -402,14 +374,6 @@ export type ArtworkRepository = {
 	setCommentHiddenState(id: string, input: HiddenStateUpdate): Promise<ArtworkCommentRecord | null>;
 	upsertVote(input: CreateArtworkVoteInput): Promise<ArtworkVoteMutationResult | null>;
 	updateArtworkTitle(id: string, title: string, updatedAt: Date): Promise<ArtworkRecord | null>;
-	updateEngagementRateLimit(
-		id: string,
-		input: UpdateEngagementRateLimitInput
-	): Promise<ArtworkEngagementRateLimitRecord>;
-	updatePublishRateLimit(
-		id: string,
-		input: UpdatePublishRateLimitInput
-	): Promise<PublishRateLimitRecord>;
 };
 
 export type ModerationQueueTargetType = 'artwork' | 'comment';

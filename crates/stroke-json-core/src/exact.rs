@@ -281,13 +281,7 @@ pub fn compact_document_losslessly_with_report(
     ))
 }
 
-pub fn compact_document_losslessly(
-    document_json: &[u8],
-    options: LosslessCompactionOptions,
-) -> Result<DrawingDocumentV2, StrokeJsonError> {
-    Ok(compact_document_losslessly_with_report(document_json, options)?.document)
-}
-
+// test-only oracle
 pub fn run_exact_raster_oracle(
     document_json: &[u8],
     options: LosslessCompactionOptions,

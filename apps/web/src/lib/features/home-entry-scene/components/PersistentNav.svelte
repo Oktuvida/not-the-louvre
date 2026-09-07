@@ -21,8 +21,10 @@
 	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
+	import PaperSheet from '$lib/features/shared-ui/components/PaperSheet.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
 	import VisitorBadge from '$lib/features/shared-ui/components/VisitorBadge.svelte';
+	import WashiTape from '$lib/features/shared-ui/components/WashiTape.svelte';
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
 
@@ -52,7 +54,6 @@
 	let adultContentError = $state<string | null>(null);
 	let isSavingAdultContentPreference = $state(false);
 	let isAvatarEditorOpen = $state(false);
-	let avatarEditorTrigger: HTMLElement | null = null;
 
 	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
 	const hasSensitivePreview = $derived(previewCards.some((card) => card.isNsfw));
@@ -104,10 +105,9 @@
 	};
 
 	const openAvatarEditor = () => {
-		// focusTrap moves focus into the dialog; remember where it came from so the
-		// visitor is not dumped at the top of the page when the dialog closes.
-		avatarEditorTrigger =
-			document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		// Where focus goes back to when the dialog closes is the trap's job now
+		// (`restoreFocus` below); it also covers the case this did not, where the
+		// torn-down dialog leaves focus on <body>.
 		isAvatarEditorOpen = true;
 	};
 
@@ -120,12 +120,6 @@
 		}
 
 		isAvatarEditorOpen = false;
-
-		if (avatarEditorTrigger?.isConnected) {
-			avatarEditorTrigger.focus();
-		}
-
-		avatarEditorTrigger = null;
 	};
 
 	const saveAvatar = async (drawingDocument: string) => {
@@ -332,7 +326,7 @@
 		aria-modal="true"
 		aria-label="Edit your avatar"
 		tabindex="-1"
-		use:focusTrap={{ autoFocus: true }}
+		use:focusTrap={{ autoFocus: true, restoreFocus: true }}
 		onclick={closeAvatarEditor}
 		onkeydown={(event) => {
 			if (event.key === 'Escape') closeAvatarEditor();
@@ -344,19 +338,20 @@
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 		>
-			<div
-				class="avatar-sheet max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto md:max-h-[calc(100dvh-4rem)]"
+			<PaperSheet
+				class="max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto md:max-h-[calc(100dvh-4rem)]"
+				grain={false}
 			>
-				<div class="avatar-sheet-inner relative p-4 pl-9 md:p-8 md:pl-12">
+				<div class="avatar-sheet-inner paper-grain relative p-4 pl-9 md:p-8 md:pl-12">
 					<div class="mb-3 flex items-start justify-between gap-4">
 						<div>
 							<h2 class="avatar-sheet-title">Redraw your avatar</h2>
-							<span class="avatar-sheet-swipe" aria-hidden="true"></span>
+							<span class="paint-swipe avatar-sheet-swipe" aria-hidden="true"></span>
 						</div>
-						<button type="button" class="avatar-tape-close" onclick={closeAvatarEditor}>
+						<WashiTape onclick={closeAvatarEditor}>
 							<span class="sr-only">Close</span>
 							<X aria-hidden="true" />
-						</button>
+						</WashiTape>
 					</div>
 					<AvatarSketchpad
 						clearMode="blank"
@@ -368,7 +363,7 @@
 						submitLabel="Done"
 					/>
 				</div>
-			</div>
+			</PaperSheet>
 		</div>
 	</div>
 {/if}
@@ -387,23 +382,6 @@
 
 	.nsfw-scrim {
 		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
-	}
-
-	.avatar-sheet {
-		background-color: #fbf7f0;
-		border-radius: 3px;
-		box-shadow:
-			4px 6px 16px rgba(0, 0, 0, 0.32),
-			1px 2px 4px rgba(0, 0, 0, 0.18);
-	}
-
-	/* per-pixel paper noise */
-	.avatar-sheet-inner::before {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-		pointer-events: none;
 	}
 
 	/* torn-out spiral perforations along the left edge */
@@ -435,54 +413,11 @@
 		color: #2f241c;
 	}
 
-	/* a swipe of paint under the title */
+	/* How long and how crooked this swipe is; the paint is `.paint-swipe`. */
 	.avatar-sheet-swipe {
-		display: block;
 		width: 150px;
 		height: 7px;
 		margin-top: 4px;
 		rotate: -0.8deg;
-		border-radius: 4px 7px 5px 8px;
-		background: linear-gradient(90deg, rgba(212, 131, 74, 0.75), rgba(212, 131, 74, 0.25) 92%);
-	}
-
-	/* washi-tape close, same species as the postcard flip tape */
-	.avatar-tape-close {
-		flex-shrink: 0;
-		border: 0;
-		padding: 9px 18px;
-		font-weight: 700;
-		color: #5d4e37;
-		cursor: pointer;
-		rotate: 2.4deg;
-		background: repeating-linear-gradient(
-			-45deg,
-			rgba(228, 214, 186, 0.92) 0 10px,
-			rgba(240, 230, 207, 0.92) 10px 20px
-		);
-		box-shadow: 0 2px 5px rgba(45, 36, 32, 0.22);
-		/* torn tape ends — drop this line if it ghosts */
-		clip-path: polygon(
-			3% 0%,
-			97% 2%,
-			100% 26%,
-			98% 52%,
-			100% 78%,
-			96% 100%,
-			4% 98%,
-			0% 70%,
-			2% 44%,
-			0% 22%
-		);
-		transition: translate 140ms ease;
-	}
-
-	.avatar-tape-close:hover {
-		translate: 0 -2px;
-	}
-
-	.avatar-tape-close:focus-visible {
-		outline: 3px solid #4ecdc4;
-		outline-offset: 2px;
 	}
 </style>

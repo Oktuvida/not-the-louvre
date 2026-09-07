@@ -1,7 +1,7 @@
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { assertNotBanned } from '$lib/server/auth/guards';
-import type { CanonicalUser } from '$lib/server/auth/types';
-import type { ProductRole } from '$lib/server/auth/types';
+import type { CanonicalUser, ProductRole } from '$lib/server/auth/types';
+import { resolveUserAvatarUrl } from '$lib/shared/user/avatar-url';
 import { userRepository as defaultRepository } from './repository';
 import type { UserRecord, UserRepository } from './types';
 
@@ -12,9 +12,6 @@ type AdminContext = {
 type AdminDependencies = {
 	repository?: UserRepository;
 };
-
-const resolveAvatarUrl = (userId: string, storageKey: string | null) =>
-	storageKey ? `/api/users/${userId}/avatar` : null;
 
 type PublicUserProfile = {
 	avatarIsHidden: boolean;
@@ -32,7 +29,7 @@ type PublicUserProfile = {
 const toPublicProfile = (record: UserRecord): PublicUserProfile => ({
 	avatarIsHidden: record.avatarIsHidden,
 	avatarIsNsfw: record.avatarIsNsfw,
-	avatarUrl: record.avatarIsHidden ? null : resolveAvatarUrl(record.id, record.avatarUrl),
+	avatarUrl: record.avatarIsHidden ? null : resolveUserAvatarUrl(record.id, record.avatarUrl),
 	banReason: record.banReason,
 	bannedAt: record.bannedAt,
 	createdAt: record.createdAt,

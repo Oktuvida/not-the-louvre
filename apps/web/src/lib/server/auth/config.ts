@@ -1,4 +1,6 @@
-export const NICKNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
+// One nickname rule for both sides; re-exported so the existing
+// `$lib/server/auth/config` importers keep working.
+export { NICKNAME_PATTERN } from '$lib/shared/auth/credentials';
 
 export const AUTH_RATE_LIMITS = {
 	login: {

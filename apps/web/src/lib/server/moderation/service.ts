@@ -1,6 +1,7 @@
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { assertNotBanned } from '$lib/server/auth/guards';
 import type { CanonicalUser } from '$lib/server/auth/types';
+import { TEXT_MODERATION_BLOCKED_MESSAGES } from '$lib/shared/moderation/messages';
 import {
 	buildBaselineProfanityMatcher,
 	buildPhraseMatcher,
@@ -42,12 +43,6 @@ type UpdateViewerContentPreferencesInput = {
 
 const POLICY_CONTEXTS: TextModerationContext[] = ['nickname', 'comment', 'artwork_title'];
 const baselineMatcher = buildBaselineProfanityMatcher();
-
-const blockedMessages: Record<TextModerationContext, string> = {
-	artwork_title: 'Choose a different artwork title.',
-	comment: 'This comment breaks the gallery rules.',
-	nickname: 'Choose a different nickname.'
-};
 
 const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	now: dependencies.now ?? (() => new Date()),
@@ -192,7 +187,7 @@ export const checkTextModeration = async (
 ) => {
 	if (baselineMatcher.hasMatch(value)) {
 		return {
-			message: blockedMessages[context],
+			message: TEXT_MODERATION_BLOCKED_MESSAGES[context],
 			status: 'blocked' as const
 		};
 	}
@@ -206,7 +201,7 @@ export const checkTextModeration = async (
 	}
 
 	return {
-		message: blockedMessages[context],
+		message: TEXT_MODERATION_BLOCKED_MESSAGES[context],
 		status: 'blocked' as const
 	};
 };

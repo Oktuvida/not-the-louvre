@@ -17,6 +17,7 @@
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
 	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import WashiTape from '$lib/features/shared-ui/components/WashiTape.svelte';
 	import type {
 		EntryFlowEvent,
 		EntryFlowState
@@ -528,14 +529,18 @@
 		>
 			<div
 				bind:this={authSheetElement}
-				class={`auth-sheet relative ${panelClassName} ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
+				class={`paper-sheet ${panelClassName} ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
 				role={isInteractive ? 'dialog' : undefined}
 				aria-modal={isInteractive ? 'true' : undefined}
 				aria-labelledby={isInteractive ? AUTH_SHEET_TITLE_ID : undefined}
 				tabindex="-1"
 				use:focusTrap={{ enabled: isInteractive }}
 			>
-				<div class={`auth-sheet-inner relative pl-8 md:pl-11 ${contentClassName}`}>
+				<!--
+						The sheet scrolls, so the paper grain rides the inner element with
+						the content instead of being clipped to the box.
+					-->
+				<div class={`auth-sheet-inner paper-grain relative pl-8 md:pl-11 ${contentClassName}`}>
 					<div class="flex items-start justify-between gap-4">
 						<div class="space-y-2">
 							<p
@@ -559,7 +564,7 @@
 													? 'Replacement key'
 													: 'Welcome back'}
 							</h2>
-							<span class="auth-sheet-swipe" aria-hidden="true"></span>
+							<span class="paint-swipe auth-sheet-swipe" aria-hidden="true"></span>
 							<p class="auth-sheet-subtitle max-w-2xl">
 								{view === 'login'
 									? 'The room missed you. Probably.'
@@ -570,9 +575,7 @@
 											: 'One more step and you are in.'}
 							</p>
 						</div>
-						<button
-							type="button"
-							class="auth-tape-close"
+						<WashiTape
 							onclick={() => {
 								if (view === 'signup-avatar') {
 									onAvatarDismiss?.();
@@ -585,7 +588,7 @@
 						>
 							<span class="sr-only">Close</span>
 							<span aria-hidden="true">✕</span>
-						</button>
+						</WashiTape>
 					</div>
 
 					<div
@@ -941,23 +944,6 @@
 </div>
 
 <style>
-	.auth-sheet {
-		background-color: #fbf7f0;
-		border-radius: 3px;
-		box-shadow:
-			4px 6px 16px rgba(0, 0, 0, 0.32),
-			1px 2px 4px rgba(0, 0, 0, 0.18);
-	}
-
-	/* per-pixel paper noise */
-	.auth-sheet-inner::before {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-		pointer-events: none;
-	}
-
 	/* torn-out spiral perforations along the left edge */
 	.auth-sheet-inner::after {
 		content: '';
@@ -977,15 +963,12 @@
 		pointer-events: none;
 	}
 
-	/* a swipe of paint under the view title */
+	/* How long and how crooked this swipe is; the paint is `.paint-swipe`. */
 	.auth-sheet-swipe {
-		display: block;
 		width: 150px;
 		height: 7px;
 		margin-top: 2px;
 		rotate: -0.8deg;
-		border-radius: 4px 7px 5px 8px;
-		background: linear-gradient(90deg, rgba(212, 131, 74, 0.75), rgba(212, 131, 74, 0.25) 92%);
 	}
 
 	.auth-sheet-subtitle {
@@ -994,45 +977,5 @@
 		font-weight: 600;
 		color: #6b5a45;
 		rotate: -0.4deg;
-	}
-
-	/* washi-tape close, same species as the postcard flip tape */
-	.auth-tape-close {
-		flex-shrink: 0;
-		border: 0;
-		padding: 9px 18px;
-		font-weight: 700;
-		color: #5d4e37;
-		cursor: pointer;
-		rotate: 2.4deg;
-		background: repeating-linear-gradient(
-			-45deg,
-			rgba(228, 214, 186, 0.92) 0 10px,
-			rgba(240, 230, 207, 0.92) 10px 20px
-		);
-		box-shadow: 0 2px 5px rgba(45, 36, 32, 0.22);
-		/* torn tape ends — drop this line if it ghosts */
-		clip-path: polygon(
-			3% 0%,
-			97% 2%,
-			100% 26%,
-			98% 52%,
-			100% 78%,
-			96% 100%,
-			4% 98%,
-			0% 70%,
-			2% 44%,
-			0% 22%
-		);
-		transition: translate 140ms ease;
-	}
-
-	.auth-tape-close:hover {
-		translate: 0 -2px;
-	}
-
-	.auth-tape-close:focus-visible {
-		outline: 3px solid #4ecdc4;
-		outline-offset: 2px;
 	}
 </style>

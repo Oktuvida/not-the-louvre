@@ -5,6 +5,7 @@ import {
 	getTextModerationSnapshot,
 	updateTextModerationPolicies
 } from '$lib/server/moderation/service';
+import type { TextModerationContext } from '$lib/shared/moderation/text-policy';
 
 // The public snapshot at /api/moderation/text-policy is stored in the colo
 // cache, so an admin edit has to drop the local copy or the admin keeps reading
@@ -51,9 +52,11 @@ export const GET: RequestHandler = async (event) => {
 export const PUT: RequestHandler = async (event) => {
 	try {
 		const body = (await event.request.json()) as {
+			// The same context vocabulary the policy table and the filter speak,
+			// so a new context does not need a fourth hand-written union.
 			policies?: Partial<
 				Record<
-					'nickname' | 'comment' | 'artwork_title',
+					TextModerationContext,
 					{ allowlist: string[]; blocklist: string[]; expectedVersion: number }
 				>
 			>;

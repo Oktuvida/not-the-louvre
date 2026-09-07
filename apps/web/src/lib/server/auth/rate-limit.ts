@@ -1,7 +1,13 @@
 import { and, eq } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 import { db } from '$lib/server/db';
-import { authRateLimits, type authAttemptKind } from '$lib/server/db/schema';
+import {
+	isRateLimitBlocked,
+	rateLimitAttemptSet,
+	rateLimitFirstAttemptBlockedUntil,
+	type RateLimitPolicy
+} from '$lib/server/db/rate-limit';
+import { authRateLimits } from '$lib/server/db/schema';
 import { AUTH_RATE_LIMITS } from './config';
 
 type AttemptKind = keyof typeof AUTH_RATE_LIMITS;
@@ -12,68 +18,26 @@ export class AuthRateLimitError extends Error {
 	}
 }
 
-type AuthRateLimitRecord = typeof authRateLimits.$inferSelect;
-
 const getNow = () => new Date();
 
 const getActorKey = (kind: AttemptKind, identifier: string, ipAddress: string | null) =>
 	`${kind}:${identifier}:${ipAddress ?? 'unknown'}`;
 
+// Auth blocks run from the failure that tripped them, not from the start of
+// the counting window.
+const getPolicy = (kind: AttemptKind): RateLimitPolicy => ({
+	blockAnchor: 'attempt',
+	blockMs: AUTH_RATE_LIMITS[kind].blockMs,
+	maxAttempts: AUTH_RATE_LIMITS[kind].maxFailures,
+	windowMs: AUTH_RATE_LIMITS[kind].windowMs
+});
+
 const findRateLimit = async (kind: AttemptKind, actorKey: string) => {
 	const record = await db.query.authRateLimits.findFirst({
-		where: and(
-			eq(authRateLimits.kind, kind as (typeof authAttemptKind.enumValues)[number]),
-			eq(authRateLimits.actorKey, actorKey)
-		)
+		where: and(eq(authRateLimits.kind, kind), eq(authRateLimits.actorKey, actorKey))
 	});
 
 	return record ?? null;
-};
-
-const upsertRateLimit = async (
-	record: AuthRateLimitRecord | null,
-	kind: AttemptKind,
-	actorKey: string,
-	data: Partial<AuthRateLimitRecord>
-) => {
-	if (!record) {
-		await db.insert(authRateLimits).values({
-			id: generateId(),
-			kind,
-			actorKey,
-			attemptCount: data.attemptCount ?? 0,
-			windowStartedAt: data.windowStartedAt ?? getNow(),
-			lastAttemptAt: data.lastAttemptAt ?? getNow(),
-			blockedUntil: data.blockedUntil ?? null
-		});
-		return;
-	}
-
-	await db
-		.update(authRateLimits)
-		.set({
-			attemptCount: data.attemptCount ?? record.attemptCount,
-			windowStartedAt: data.windowStartedAt ?? record.windowStartedAt,
-			lastAttemptAt: data.lastAttemptAt ?? record.lastAttemptAt,
-			blockedUntil: data.blockedUntil ?? record.blockedUntil,
-			updatedAt: getNow()
-		})
-		.where(eq(authRateLimits.id, record.id));
-};
-
-const clearRateLimit = async (record: AuthRateLimitRecord | null) => {
-	if (!record) return;
-
-	await db
-		.update(authRateLimits)
-		.set({
-			attemptCount: 0,
-			windowStartedAt: getNow(),
-			lastAttemptAt: getNow(),
-			blockedUntil: null,
-			updatedAt: getNow()
-		})
-		.where(eq(authRateLimits.id, record.id));
 };
 
 export const assertRateLimit = async (
@@ -81,15 +45,12 @@ export const assertRateLimit = async (
 	identifier: string,
 	ipAddress: string | null
 ) => {
-	const actorKey = getActorKey(kind, identifier, ipAddress);
-	const record = await findRateLimit(kind, actorKey);
+	const record = await findRateLimit(kind, getActorKey(kind, identifier, ipAddress));
 	const now = getNow();
 
 	if (record?.blockedUntil && record.blockedUntil > now) {
 		throw new AuthRateLimitError(record.blockedUntil);
 	}
-
-	return { actorKey, record };
 };
 
 export const recordFailure = async (
@@ -97,29 +58,33 @@ export const recordFailure = async (
 	identifier: string,
 	ipAddress: string | null
 ) => {
-	const { actorKey, record } = await assertRateLimit(kind, identifier, ipAddress);
-	const config = AUTH_RATE_LIMITS[kind];
+	const policy = getPolicy(kind);
 	const now = getNow();
-	const windowStartedAt =
-		record && now.getTime() - record.windowStartedAt.getTime() <= config.windowMs
-			? record.windowStartedAt
-			: now;
-	const attemptCount =
-		record && now.getTime() - record.windowStartedAt.getTime() <= config.windowMs
-			? record.attemptCount + 1
-			: 1;
-	const blockedUntil =
-		attemptCount >= config.maxFailures ? new Date(now.getTime() + config.blockMs) : null;
 
-	await upsertRateLimit(record, kind, actorKey, {
-		attemptCount,
-		windowStartedAt,
-		lastAttemptAt: now,
-		blockedUntil
-	});
+	// One statement counts the failure and decides the block, so parallel
+	// guesses against the same account are counted against the same row
+	// instead of each reading the same pre-attempt count.
+	const [record] = await db
+		.insert(authRateLimits)
+		.values({
+			actorKey: getActorKey(kind, identifier, ipAddress),
+			attemptCount: 1,
+			blockedUntil: rateLimitFirstAttemptBlockedUntil(policy, now),
+			createdAt: now,
+			id: generateId(),
+			kind,
+			lastAttemptAt: now,
+			updatedAt: now,
+			windowStartedAt: now
+		})
+		.onConflictDoUpdate({
+			target: [authRateLimits.kind, authRateLimits.actorKey],
+			set: rateLimitAttemptSet(authRateLimits, policy)
+		})
+		.returning();
 
-	if (blockedUntil) {
-		throw new AuthRateLimitError(blockedUntil);
+	if (record?.blockedUntil && isRateLimitBlocked(record, now)) {
+		throw new AuthRateLimitError(record.blockedUntil);
 	}
 };
 
@@ -128,7 +93,23 @@ export const recordSuccess = async (
 	identifier: string,
 	ipAddress: string | null
 ) => {
-	const actorKey = getActorKey(kind, identifier, ipAddress);
-	const record = await findRateLimit(kind, actorKey);
-	await clearRateLimit(record);
+	const now = getNow();
+
+	// No read first: an actor with no row has nothing to clear, so the update
+	// simply matches nothing.
+	await db
+		.update(authRateLimits)
+		.set({
+			attemptCount: 0,
+			blockedUntil: null,
+			lastAttemptAt: now,
+			updatedAt: now,
+			windowStartedAt: now
+		})
+		.where(
+			and(
+				eq(authRateLimits.kind, kind),
+				eq(authRateLimits.actorKey, getActorKey(kind, identifier, ipAddress))
+			)
+		);
 };

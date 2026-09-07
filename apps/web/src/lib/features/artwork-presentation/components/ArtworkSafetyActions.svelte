@@ -1,29 +1,21 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import {
+		ARTWORK_REPORT_REASONS,
+		ARTWORK_REPORT_REASON_LABELS,
+		type ArtworkReportReason
+	} from '$lib/shared/content/report-reasons';
+	import type { Viewer } from '$lib/shared/viewer';
 
-	type ViewerRole = 'admin' | 'moderator' | 'user';
-	type ArtworkReportReason =
-		| 'copyright'
-		| 'harassment'
-		| 'hate'
-		| 'misinformation'
-		| 'other'
-		| 'sexual_content'
-		| 'spam'
-		| 'violence';
 	type ArtworkPatch = Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>;
 
-	const reportReasons: Array<{ label: string; value: ArtworkReportReason }> = [
-		{ label: 'Spam', value: 'spam' },
-		{ label: 'Harassment', value: 'harassment' },
-		{ label: 'Hate', value: 'hate' },
-		{ label: 'Sexual content', value: 'sexual_content' },
-		{ label: 'Violence', value: 'violence' },
-		{ label: 'Misinformation', value: 'misinformation' },
-		{ label: 'Copyright', value: 'copyright' },
-		{ label: 'Other', value: 'other' }
-	];
+	// Same list the API validates against, in the same order, so a reason added
+	// to the vocabulary shows up here instead of failing as a runtime 400.
+	const reportReasons = ARTWORK_REPORT_REASONS.map((value) => ({
+		label: ARTWORK_REPORT_REASON_LABELS[value],
+		value
+	}));
 
 	let {
 		artwork,
@@ -35,7 +27,7 @@
 		artwork: Artwork;
 		compact?: boolean;
 		request?: typeof fetch;
-		viewer?: { id: string; role: ViewerRole } | null;
+		viewer?: Viewer | null;
 		onArtworkPatch?: (patch: ArtworkPatch) => void;
 	} = $props();
 

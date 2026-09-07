@@ -362,10 +362,15 @@
 </script>
 
 <div class="ops-shell">
-	<section class="hero-panel">
+	<section class="hero-panel paper-sheet paper-grain">
 		<div>
 			<p class="eyebrow">Operations dashboard</p>
-			<h1>Museum control desk</h1>
+			<!--
+				The swipe is an element rather than an `::after` so it can wear the
+				shared `.paint-swipe`; keeping it inside the h1 keeps the spacing
+				exactly where the pseudo-element had it.
+			-->
+			<h1>Museum control desk<span class="paint-swipe hero-swipe" aria-hidden="true"></span></h1>
 			<p class="lede">
 				Manage users, work through moderation signals, and tune language policy from one protected
 				surface.
@@ -432,7 +437,7 @@
 	{/if}
 
 	{#if activeTab === 'users' && data.permissions.canManageUsers}
-		<section class="panel">
+		<section class="panel paper-sheet paper-grain">
 			<div class="panel-header">
 				<div>
 					<p class="eyebrow">User administration</p>
@@ -597,7 +602,7 @@
 	{/if}
 
 	{#if activeTab === 'moderation' && data.permissions.canModerate}
-		<section class="panel">
+		<section class="panel paper-sheet paper-grain">
 			<div class="panel-header">
 				<div>
 					<p class="eyebrow">Review queue</p>
@@ -740,7 +745,7 @@
 	{/if}
 
 	{#if activeTab === 'policy' && data.permissions.canUpdateTextPolicy}
-		<section class="panel">
+		<section class="panel paper-sheet paper-grain">
 			<div class="panel-header">
 				<div>
 					<p class="eyebrow">Text moderation</p>
@@ -814,28 +819,13 @@
 		color: #2f241c;
 	}
 
-	/* ── paper sheets ── */
-
-	.hero-panel,
-	.panel {
-		position: relative;
-		border-radius: 3px;
-		background-color: #fbf7f0;
-		box-shadow:
-			4px 6px 16px rgba(0, 0, 0, 0.32),
-			1px 2px 4px rgba(0, 0, 0, 0.18);
-	}
-
-	/* per-pixel paper noise */
-	.hero-panel::before,
-	.panel::before {
-		content: '';
-		position: absolute;
-		inset: 0;
-		border-radius: inherit;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-		pointer-events: none;
-	}
+	/*
+	 * ── paper sheets ──
+	 *
+	 * The paper and its grain are `.paper-sheet` / `.paper-grain` in
+	 * `shared-ui/styles/utilities.css`, worn by the four sections above; what is
+	 * left here is how each desk sheet is laid out and pinned down.
+	 */
 
 	.hero-panel {
 		display: grid;
@@ -856,16 +846,12 @@
 		color: #2f241c;
 	}
 
-	/* a swipe of paint under the desk title */
-	.hero-panel h1::after {
-		content: '';
-		display: block;
+	/* How long and how crooked this swipe is; the paint is `.paint-swipe`. */
+	.hero-swipe {
 		width: 170px;
 		height: 7px;
 		margin-top: 6px;
 		rotate: -0.8deg;
-		border-radius: 4px 7px 5px 8px;
-		background: linear-gradient(90deg, rgba(212, 131, 74, 0.75), rgba(212, 131, 74, 0.25) 92%);
 	}
 
 	.lede {
