@@ -17,7 +17,7 @@ describe('GameLink', () => {
 
 		const linkBackground = document.querySelector('[data-testid="game-link-bg"]');
 		expect(linkBackground?.getAttribute('src')).toMatch(
-			/^\/generated\/sticker-md-secondary\.v\d+\.svg$/
+			/^\/generated\/sticker-md-secondary\.[0-9a-f]{12}\.svg$/
 		);
 	});
 

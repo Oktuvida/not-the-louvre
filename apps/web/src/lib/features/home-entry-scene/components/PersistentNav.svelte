@@ -332,11 +332,19 @@
 			if (event.key === 'Escape') closeAvatarEditor();
 		}}
 	>
+		<!--
+			The sheet swallows the events the backdrop closes on — but not Escape,
+			which is the dialog's own exit and is handled above. Focus starts inside
+			this wrapper (the trap's `autoFocus` lands on the close tape), so a blanket
+			`stopPropagation` here meant the key never reached the handler at all.
+		-->
 		<div
 			role="presentation"
 			class="w-full max-w-[52rem]"
 			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
+			onkeydown={(e) => {
+				if (e.key !== 'Escape') e.stopPropagation();
+			}}
 		>
 			<PaperSheet
 				class="max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto md:max-h-[calc(100dvh-4rem)]"

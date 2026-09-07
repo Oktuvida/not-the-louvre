@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { page } from 'vitest/browser';
 
 import RootLayoutHarness from './RootLayoutHarness.svelte';
 import { SITE_NAME } from '$lib/features/shared-ui/site-meta';
@@ -128,6 +129,80 @@ describe('root layout', () => {
 		} finally {
 			dialog.remove();
 		}
+	});
+
+	/*
+	 * On a phone the gallery header owns the top-right corner — Create Art and
+	 * Refresh, two 44px stickers — and the ambient audio tab owns the bottom
+	 * right. A fixed pill at `--z-ops` outranks both, so anywhere near them it
+	 * takes the tap: Refresh navigated to /admin.
+	 */
+	it('keeps the Ops pill out of the gallery header corner on a phone', async () => {
+		const { innerHeight, innerWidth } = window;
+
+		try {
+			await page.viewport(390, 844);
+			renderRootLayout(MODERATOR);
+
+			const pill = (document.querySelector('.ops-link') as Element).getBoundingClientRect();
+
+			// Bottom-left: the one corner neither the header nor the audio tab
+			// (bottom-right) claims.
+			expect(pill.left).toBeCloseTo(16, 0);
+			expect(pill.bottom).toBeCloseTo(844 - 16, 0);
+		} finally {
+			await page.viewport(innerWidth, innerHeight);
+		}
+	});
+
+	/*
+	 * Fontsource's per-subset entry points carry no `unicode-range`, so
+	 * importing latin and latin-ext together declared two rangeless faces for
+	 * the same family/style/weight. Last one wins over the whole of U+0-10FFFF,
+	 * which made every page fetch both files — latin-ext first, ahead of the
+	 * preloaded faces it delays.
+	 */
+	it('declares one rangeless face per family and weight', () => {
+		renderRootLayout();
+
+		const rangeless = new Map<string, number>();
+		let latinExtFaces = 0;
+
+		for (const sheet of Array.from(document.styleSheets)) {
+			let rules: CSSRuleList;
+			try {
+				rules = sheet.cssRules;
+			} catch {
+				continue;
+			}
+
+			for (const rule of Array.from(rules)) {
+				if (!(rule instanceof CSSFontFaceRule)) continue;
+
+				const family = rule.style.getPropertyValue('font-family');
+				const weight = rule.style.getPropertyValue('font-weight');
+				const range = rule.style.getPropertyValue('unicode-range').trim();
+
+				if (range === '' || range === 'U+0-10FFFF') {
+					const key = `${family}:${weight}`;
+					rangeless.set(key, (rangeless.get(key) ?? 0) + 1);
+					continue;
+				}
+
+				latinExtFaces += 1;
+				expect(range).toContain('U+100-2BA');
+				// The hand-written faces still have to point at a real file.
+				expect(rule.style.getPropertyValue('src')).toContain('latin-ext');
+			}
+		}
+
+		expect(rangeless.size).toBeGreaterThan(0);
+		for (const [face, count] of rangeless) {
+			expect(`${face} x${count}`).toBe(`${face} x1`);
+		}
+		// …and the ranged half is still declared, so accented European names
+		// keep their own faces.
+		expect(latinExtFaces).toBe(11);
 	});
 
 	it('preloads the two above-the-fold font faces with crossorigin', () => {

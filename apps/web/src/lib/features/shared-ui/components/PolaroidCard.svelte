@@ -65,6 +65,16 @@
 		onPointerIntent?.();
 	};
 
+	// Touch is the exception: `pointerdown` fires the moment a finger lands,
+	// before the browser can tell a tap from the start of a scroll, and the
+	// `pointercancel` that follows a flick cannot recall a request already sent.
+	// A phone scrolling a wall of cards would spend two uncacheable round trips
+	// per gesture, so touch waits for the panel's own request.
+	const signalPointerIntent = (event: PointerEvent) => {
+		if (event.pointerType === 'touch') return;
+		signalIntent();
+	};
+
 	// The keyboard equivalent. Space activates the button on keyup, so this is
 	// the same 80-150ms head start; Enter activates on keydown, where it costs
 	// nothing and still beats the panel's own request.
@@ -103,7 +113,7 @@
 	data-testid={testId}
 	style={`--card-rotate: ${rotation}deg;`}
 	onclick={handleClick}
-	onpointerdown={signalIntent}
+	onpointerdown={signalPointerIntent}
 	onkeydown={handleKeydown}
 >
 	<div

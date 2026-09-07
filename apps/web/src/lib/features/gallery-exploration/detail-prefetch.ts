@@ -20,6 +20,8 @@ export type DetailPrefetcher = {
 	/** Consumes a warm entry when there is one, otherwise loads normally. */
 	load: ArtworkDetailLoader;
 	clear: () => void;
+	/** How many warm details are held right now — the memory bound, for tests. */
+	readonly warmedCount: number;
 };
 
 /** Votes and comments go stale fast; a warm entry is only worth one open. */
@@ -50,11 +52,20 @@ export const createDetailPrefetcher = (
 		prefetch(artworkId: string) {
 			if (!artworkId || isDataSaverOn()) return;
 
+			// A warm entry that is never opened is only removed by `take()`, so
+			// without this sweep a session's worth of details — each with its
+			// comments — would stay reachable long past their TTL. Bound the map
+			// to one TTL window instead.
+			const now = Date.now();
+			for (const [id, entry] of warmed) {
+				if (entry.expiresAt <= now) warmed.delete(id);
+			}
+
 			const existing = warmed.get(artworkId);
-			if (existing && existing.expiresAt > Date.now()) return;
+			if (existing && existing.expiresAt > now) return;
 
 			const promise = loadArtworkDetail(artworkId);
-			warmed.set(artworkId, { expiresAt: Date.now() + ttlMs, promise });
+			warmed.set(artworkId, { expiresAt: now + ttlMs, promise });
 			// Nobody awaits a prefetch that is never opened; mark it handled so a
 			// failed warm-up cannot surface as an unhandled rejection.
 			void promise.catch(() => {
@@ -66,6 +77,9 @@ export const createDetailPrefetcher = (
 		},
 		clear() {
 			warmed.clear();
+		},
+		get warmedCount() {
+			return warmed.size;
 		}
 	};
 };

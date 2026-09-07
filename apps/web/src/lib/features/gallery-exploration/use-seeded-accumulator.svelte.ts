@@ -1,4 +1,5 @@
 import { untrack } from 'svelte';
+import { beforeNavigate } from '$app/navigation';
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 import {
 	createArtworkAccumulator,
@@ -88,8 +89,19 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Artw
 		initialPageInfo: restored ? restored.pageInfo : initialPageInfo
 	});
 
-	// Seeded from the props, not from the restored feed: a restored room must
-	// merge the fresh seed into the pages it kept instead of dropping them.
+	/*
+	 * The reconciliation baseline.
+	 *
+	 * A room mounted from the props alone can take it at construction. A
+	 * restored room cannot: the gallery page starts its `artworks` state empty
+	 * and fills it from an effect, while the room itself is built synchronously
+	 * inside the resolved `{#await}` branch — so at construction the seed is
+	 * still `[]`, and one flush later the real seed would look like a fresh
+	 * navigation and reseed the restored pages away. A restored room therefore
+	 * establishes its baseline on the first reactive run and merges the seed
+	 * into the feed it kept.
+	 */
+	let pendingRestoreMerge = restored !== null;
 	let lastSeedIdentity = seedIdentity(initialArtworks);
 	let lastPageInfoIdentity = pageInfoIdentity(initialPageInfo);
 
@@ -99,6 +111,22 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Artw
 
 		const identity = seedIdentity(artworks);
 		const nextPageInfoIdentity = watchPageInfo ? pageInfoIdentity(pageInfo) : lastPageInfoIdentity;
+
+		if (pendingRestoreMerge) {
+			// An empty seed here is the page's state before its own effect has
+			// filled it, not a room that emptied out: adopting it as the baseline
+			// would hand the reseed branch the real seed a flush later.
+			if (artworks.length === 0) return;
+
+			pendingRestoreMerge = false;
+			lastSeedIdentity = identity;
+			lastPageInfoIdentity = nextPageInfoIdentity;
+			untrack(() => {
+				// Keep the restored pages and the cursor they were fetched with.
+				accumulator.mergeSeedArtworks(transformSeed(artworks));
+			});
+			return;
+		}
 
 		if (identity !== lastSeedIdentity || nextPageInfoIdentity !== lastPageInfoIdentity) {
 			lastSeedIdentity = identity;
@@ -115,12 +143,26 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Artw
 	});
 
 	if (feedCacheKey) {
+		/*
+		 * `beforeNavigate` fires while this room still owns the scroll position.
+		 * The teardown below cannot read it: the room sits inside the gallery
+		 * layout's `{#key roomId}` block, so its destroy runs behind the block's
+		 * out-transition (~225ms) — long after SvelteKit has scrolled the window
+		 * back to the top, two ticks after the DOM update of a push navigation.
+		 * Reading `window.scrollY` there always stored 0, and a stored 0 makes
+		 * the restore a no-op.
+		 */
+		let lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
+		beforeNavigate(() => {
+			lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
+		});
+
 		// Teardown-only: hand the feed to the cache as the room leaves.
 		$effect(() => () => {
 			writeRoomFeedSnapshot(feedCacheKey, {
 				artworks: $state.snapshot(accumulator.allArtworks),
 				pageInfo: $state.snapshot(accumulator.pageInfo),
-				scrollY: typeof window === 'undefined' ? 0 : window.scrollY
+				scrollY: lastScrollY
 			});
 		});
 

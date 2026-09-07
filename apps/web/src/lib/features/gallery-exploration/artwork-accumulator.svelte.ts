@@ -30,6 +30,7 @@ export interface ArtworkAccumulator {
 	retry(): Promise<void>;
 	reseed(initialArtworks: Artwork[], initialPageInfo: GalleryPageInfo): void;
 	syncSeedArtworks(initialArtworks: Artwork[]): void;
+	mergeSeedArtworks(initialArtworks: Artwork[]): void;
 }
 
 export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): ArtworkAccumulator {
@@ -85,6 +86,24 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 		);
 	}
 
+	/*
+	 * The restore path: a room that came back from the feed cache already holds
+	 * the pages infinite scroll fetched, and the server's fresh first page has
+	 * just landed. Patch the artworks it recognises, prepend the ones published
+	 * since the snapshot was taken — and keep everything else, cursor included.
+	 */
+	function mergeSeedArtworks(initialArtworks: Artwork[]): void {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral lookup, not reactive state
+		const seedById = new Map(initialArtworks.map((artwork) => [artwork.id, artwork]));
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- ephemeral dedup, not reactive state
+		const known = new Set([...baseArtworks, ...appendedArtworks].map((artwork) => artwork.id));
+
+		baseArtworks = [
+			...initialArtworks.filter((artwork) => !known.has(artwork.id)),
+			...baseArtworks.map((artwork) => seedById.get(artwork.id) ?? artwork)
+		];
+	}
+
 	return {
 		get allArtworks() {
 			return allArtworks;
@@ -104,6 +123,7 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 		loadMore,
 		retry,
 		reseed,
-		syncSeedArtworks
+		syncSeedArtworks,
+		mergeSeedArtworks
 	};
 }

@@ -83,9 +83,12 @@
 	 * wins. Feature components that override these with `:global(.sticker-btn)`
 	 * are still unlayered, so their overrides keep winning too.
 	 *
-	 * The resting tilt is the standalone `rotate` property (not a `transform`),
-	 * so the hover/press `transform`s compose with it instead of replacing it —
-	 * which is what removed the `!important` this component used to need.
+	 * The resting tilt rides `transform: rotate(...)`, and the hover/press states
+	 * carry it forward in their own `transform`. It cannot use the standalone
+	 * `rotate` property: that is the one call sites reach for (`rotate-1`,
+	 * `hover:rotate-2`), and a utility in `@layer utilities` replaces this
+	 * layer's declaration of the same property outright — which threw away every
+	 * seeded angle and left whole rows of stickers at an identical tilt.
 	 */
 	@layer components {
 		.sticker-control {
@@ -110,7 +113,7 @@
 			text-transform: uppercase;
 			color: var(--sticker-text-color);
 			isolation: isolate;
-			rotate: var(--sticker-rotate, 0deg);
+			transform: rotate(var(--sticker-rotate, 0deg));
 			transition:
 				transform var(--duration-fast) ease,
 				rotate var(--duration-fast) ease,
@@ -119,14 +122,12 @@
 		}
 
 		.sticker-control:hover {
-			transform: translateY(-3px);
-			rotate: 0.8deg;
+			transform: translateY(-3px) rotate(calc(var(--sticker-rotate, 0deg) + 0.8deg));
 			filter: brightness(1.04);
 		}
 
 		.sticker-control:active {
-			transform: translateY(1px);
-			rotate: -0.3deg;
+			transform: translateY(1px) rotate(calc(var(--sticker-rotate, 0deg) - 0.3deg));
 			scale: 0.97;
 			filter: brightness(0.97);
 			transition-duration: 0.06s;
@@ -145,8 +146,7 @@
 		}
 
 		.sticker-control:disabled:hover {
-			transform: none;
-			rotate: var(--sticker-rotate, 0deg);
+			transform: rotate(var(--sticker-rotate, 0deg));
 			filter: grayscale(0.3);
 		}
 

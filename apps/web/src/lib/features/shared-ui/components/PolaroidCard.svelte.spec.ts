@@ -218,6 +218,32 @@ describe('PolaroidCard', () => {
 		expect(onPointerIntent).toHaveBeenCalledTimes(1);
 	});
 
+	it('does not signal intent on a touch, which may be the start of a scroll', async () => {
+		const onPointerIntent = vi.fn();
+
+		render(PolaroidCard, {
+			artwork,
+			onPointerIntent,
+			testId: 'touch-intent-card'
+		});
+
+		const card = page.getByTestId('touch-intent-card');
+		await expect.element(card).toBeVisible();
+
+		// A finger landing on a card is not yet a tap: `pointerdown` fires before
+		// the browser can tell one from a flick, and the `pointercancel` that
+		// follows cannot recall the two round trips a prefetch already sent.
+		card
+			.element()
+			.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+		expect(onPointerIntent).not.toHaveBeenCalled();
+
+		card
+			.element()
+			.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }));
+		expect(onPointerIntent).toHaveBeenCalledTimes(1);
+	});
+
 	it('signals intent on an activating keypress, and only on those keys', async () => {
 		const onPointerIntent = vi.fn();
 

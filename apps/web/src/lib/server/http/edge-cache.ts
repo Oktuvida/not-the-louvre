@@ -33,6 +33,29 @@ export const readEdgeCache = async (
 	return (await cache.match(request.url)) ?? undefined;
 };
 
+/**
+ * Every anonymous key an artwork's own state is stored under. The discovery
+ * feed is deliberately absent: its query fan-out is unbounded, so nothing can
+ * enumerate its keys and its `s-maxage` is the only bound it has.
+ */
+export const artworkDetailEdgeCacheKeys = (origin: string | URL, artworkId: string): string[] => [
+	new URL(`/api/artworks/${artworkId}`, origin).href
+];
+
+/**
+ * Drops keys the origin has just invalidated. `caches.default.delete()` only
+ * reaches the local datacenter, so this is not a global purge: it is what makes
+ * the change visible where the moderator is, and the `s-maxage` above is what
+ * bounds it everywhere else.
+ */
+export const purgeFromEdgeCache = (platform: EdgeCachePlatform, urls: string[]) => {
+	const cache = platform?.caches?.default;
+	if (!cache) return;
+
+	const purged = Promise.all(urls.map((url) => cache.delete(url))).catch(() => {});
+	platform?.context?.waitUntil(purged);
+};
+
 export const storeInEdgeCache = (
 	platform: EdgeCachePlatform,
 	request: Request,

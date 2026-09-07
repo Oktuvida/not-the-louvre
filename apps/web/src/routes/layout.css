@@ -117,11 +117,15 @@
 	 * element in the app is one of these five, bottom to top. Nothing else
 	 * belongs here — the `absolute` layers inside a scene, and the 1-6 values
 	 * inside a component's own stacking context, are geometry rather than a
-	 * global ordering, and stay as plain numbers where they are. */
+	 * global ordering, and stay as plain numbers where they are.
+	 *
+	 * Status outranks the two persistent pills: a failure notice the ambient
+	 * tab paints over is a notice nobody reads, and its dismiss button would
+	 * toggle the music instead. Only the navigation veil sits above it. */
 	--z-dialog: 60;
-	--z-status: 70;
-	--z-ambient: 90;
-	--z-ops: 95;
+	--z-ambient: 80;
+	--z-ops: 85;
+	--z-status: 96;
 	--z-nav-fade: 100;
 
 	/* ---- Focus ------------------------------------------------------------

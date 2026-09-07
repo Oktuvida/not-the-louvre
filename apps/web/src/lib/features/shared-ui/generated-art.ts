@@ -1,4 +1,5 @@
 import type { StickerVariant } from '../home-entry-scene/canvas/museum-canvas';
+import { GENERATED_ART_VERSION } from './generated-art-version';
 import type { StickerControlSize } from './sticker-controls';
 
 /*
@@ -9,13 +10,19 @@ import type { StickerControlSize } from './sticker-controls';
  * them to `static/generated/` at build time and everything references them by
  * URL, so the browser caches one copy across routes and visitors.
  *
- * The filenames carry a version segment: the assets are served with a long
- * immutable cache lifetime (see `apps/web/_headers`), so bumping this constant
- * is what makes a change to the artwork reach returning visitors.
+ * The filenames carry a version segment, and the assets are served with a
+ * year-long immutable cache lifetime (see `apps/web/_headers`). That header is
+ * only honest because the segment is a digest of the artwork itself, written
+ * by the generator: edit a builder and every URL changes with it, so a
+ * returning visitor can never be served last week's wall from their cache.
  */
-export const GENERATED_ART_VERSION = 'v1';
+export { GENERATED_ART_VERSION };
 
-const generatedArtUrl = (name: string) => `/generated/${name}.${GENERATED_ART_VERSION}.svg`;
+export const MUSEUM_WALL_ASSET_NAME = 'museum-wall';
+
+export const MUSEUM_WINDOW_FRAME_ASSET_NAME = 'museum-window-frame';
+
+export const generatedArtUrl = (name: string) => `/generated/${name}.${GENERATED_ART_VERSION}.svg`;
 
 export const STICKER_CONTROL_SIZES: readonly StickerControlSize[] = ['hero', 'lg', 'md', 'sm'];
 
@@ -27,9 +34,9 @@ export const STICKER_VARIANTS: readonly StickerVariant[] = [
 	'ghost'
 ];
 
-export const museumWallPatternAssetUrl = generatedArtUrl('museum-wall');
+export const museumWallPatternAssetUrl = generatedArtUrl(MUSEUM_WALL_ASSET_NAME);
 
-export const museumWindowFrameAssetUrl = generatedArtUrl('museum-window-frame');
+export const museumWindowFrameAssetUrl = generatedArtUrl(MUSEUM_WINDOW_FRAME_ASSET_NAME);
 
 export const stickerBackgroundAssetName = (size: StickerControlSize, variant: StickerVariant) =>
 	`sticker-${size}-${variant}`;

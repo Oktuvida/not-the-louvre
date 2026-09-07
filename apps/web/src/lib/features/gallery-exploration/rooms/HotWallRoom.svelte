@@ -51,6 +51,22 @@
 		revealedIds.update((ids) => new Set([...ids, artworkId]));
 	};
 
+	/*
+	 * The lead's own copy of PolaroidCard's intent handlers. Touch is left out
+	 * on purpose: `pointerdown` fires the moment a finger lands, before the
+	 * browser can tell a tap from the start of a scroll, and the `pointercancel`
+	 * a flick ends with cannot recall a request that already went out.
+	 */
+	const signalPointerIntent = (event: PointerEvent, artworkId: string) => {
+		if (event.pointerType === 'touch') return;
+		onPrefetch?.(artworkId);
+	};
+
+	const signalKeyboardIntent = (event: KeyboardEvent, artworkId: string) => {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		onPrefetch?.(artworkId);
+	};
+
 	const isLeadBlurred = (artwork: Artwork | null) =>
 		!!artwork &&
 		isArtworkBlurred(artwork, {
@@ -93,8 +109,8 @@
 						}
 						onSelect(leadArtwork);
 					}}
-					onkeydown={() => onPrefetch?.(leadArtwork.id)}
-					onpointerdown={() => onPrefetch?.(leadArtwork.id)}
+					onkeydown={(event) => signalKeyboardIntent(event, leadArtwork.id)}
+					onpointerdown={(event) => signalPointerIntent(event, leadArtwork.id)}
 				>
 					<div class="relative aspect-square w-full">
 						<NsfwImage

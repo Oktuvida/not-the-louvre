@@ -85,7 +85,7 @@
 		 * so a failure raised on the last click is still readable after the panel
 		 * closes; without this the panel keeps saying it itself.
 		 */
-		onNotify?: (message: string) => void;
+		onNotify?: (message: string | null) => void;
 		revealedArtworkIds?: import('svelte/store').Writable<Set<string>>;
 	} = $props();
 
@@ -102,11 +102,12 @@
 	let restoreFocusTimer: ReturnType<typeof setTimeout> | undefined;
 
 	/* One writer for the panel's transient outcomes. With a host region wired up
-	 * the panel says nothing itself, so a failure is never announced twice; a
-	 * `null` there is a no-op because the region dismisses itself. */
+	 * the panel says nothing itself, so a failure is never announced twice. The
+	 * clear travels too: a retry that succeeds has to retire the failure it
+	 * replaces instead of leaving it up for the rest of its dismissal window. */
 	const notify = (message: string | null) => {
 		if (onNotify) {
-			if (message) onNotify(message);
+			onNotify(message);
 			return;
 		}
 

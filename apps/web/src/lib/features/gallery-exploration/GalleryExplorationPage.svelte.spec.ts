@@ -119,7 +119,7 @@ vi.mock('$lib/features/realtime/browser-client', () => ({
 }));
 
 import GalleryExplorationPage from './GalleryExplorationPageLayoutHarness.svelte';
-import { clearRoomFeedCache } from './model/feed-cache';
+import { clearRoomFeedCache, writeRoomFeedSnapshot } from './model/feed-cache';
 import { getGalleryRoom } from './model/rooms';
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 
@@ -1555,6 +1555,141 @@ describe('GalleryExplorationPage', () => {
 		// One instance across the hand-off: the entry fade and the layout bindings
 		// belong to the component that is still on screen afterwards.
 		expect(document.querySelectorAll('[data-testid="gallery-room-content"]')).toHaveLength(1);
+	});
+
+	it('announces a detail failure in the status region without moving the grid', async () => {
+		const loadArtworkDetail = vi.fn(async () => {
+			throw new Error('Artwork details could not be loaded');
+		});
+
+		render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
+
+		const statusRegion = page.getByTestId('gallery-status-region');
+		await expect.element(statusRegion).toHaveTextContent('Artwork details could not be loaded');
+		// A failure is worth interrupting for — and it says so from a fixed
+		// region, so the room is not shoved down to make room for the notice.
+		await expect.element(statusRegion).toHaveAttribute('role', 'alert');
+		expect(statusRegion.element().className).toContain('fixed');
+	});
+
+	it('keeps the pages a room paged in when its streamed seed lands', async () => {
+		writeRoomFeedSnapshot('hot-wall', {
+			artworks: [
+				{ ...baseArtwork, id: 'cached-1', title: 'Cached Lead' },
+				{ ...baseArtwork, id: 'cached-2', title: 'Cached Second' },
+				{ ...baseArtwork, id: 'cached-3', title: 'Cached Third' }
+			],
+			pageInfo: { hasMore: true, nextCursor: 'cursor-9' },
+			scrollY: 0
+		});
+
+		const deferred = createDeferred<{
+			adultContentEnabled: boolean;
+			artworks: Artwork[];
+			discovery: {
+				pageInfo: { hasMore: boolean; nextCursor: string | null };
+				request: { authorId: string | null; limit: number; sort: 'hot'; window: null };
+			};
+			emptyStateMessage: string | null;
+		}>();
+
+		render(GalleryExplorationPage, {
+			room: getGalleryRoom('hot-wall'),
+			roomContent: deferred.promise,
+			roomId: 'hot-wall',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		deferred.resolve({
+			adultContentEnabled: false,
+			artworks: [{ ...baseArtwork, id: 'fresh-1', title: 'Fresh Study' }],
+			discovery: {
+				pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
+				request: { authorId: null, limit: 24, sort: 'hot', window: null }
+			},
+			emptyStateMessage: null
+		});
+
+		// The room is built inside the resolved `{#await}` branch, before the page
+		// has filled its own `artworks` state — so the seed lands one flush after
+		// the restore. It must merge into the restored feed, not replace it.
+		await expect.element(page.getByText('Fresh Study')).toBeVisible();
+		await vi.waitFor(() => {
+			expect(document.querySelector('[data-testid="hot-wall-card-cached-1"]')).not.toBeNull();
+			expect(document.querySelector('[data-testid="hot-wall-card-cached-3"]')).not.toBeNull();
+		});
+	});
+
+	it('announces the streamed room from a region that outlives the skeleton', async () => {
+		const deferred = createDeferred<{
+			adultContentEnabled: boolean;
+			artworks: Artwork[];
+			discovery: {
+				pageInfo: { hasMore: boolean; nextCursor: string | null };
+				request: { authorId: string | null; limit: number; sort: 'recent'; window: null };
+			};
+			emptyStateMessage: string | null;
+		}>();
+
+		render(GalleryExplorationPage, {
+			room: getGalleryRoom('your-studio'),
+			roomContent: deferred.promise,
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		const status = page.getByTestId('gallery-room-status');
+		await expect.element(status).toHaveTextContent('Loading artworks');
+		// The region predates its message and survives the skeleton it describes.
+		expect(
+			document.querySelector('[data-testid="room-loading-skeleton"] [role="status"]')
+		).toBeNull();
+		expect(
+			document.querySelector('[aria-busy="true"] [data-testid="room-loading-skeleton"]')
+		).not.toBeNull();
+
+		deferred.resolve({
+			adultContentEnabled: false,
+			artworks: [
+				{ ...baseArtwork, id: 'artwork-1', title: 'Streamed Study' },
+				{ ...baseArtwork, id: 'artwork-2', title: 'Second Streamed Study' }
+			],
+			discovery: {
+				pageInfo: { hasMore: false, nextCursor: null },
+				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null
+		});
+
+		// The end of the wait is announced too, from the same region.
+		await expect.element(status).toHaveTextContent('2 artworks loaded.');
+	});
+
+	it('announces a room that failed to stream as an alert', async () => {
+		const deferred = createDeferred<never>();
+		deferred.promise.catch(() => {});
+
+		render(GalleryExplorationPage, {
+			room: getGalleryRoom('hot-wall'),
+			roomContent: deferred.promise,
+			roomId: 'hot-wall',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		deferred.reject(new Error('stream failed'));
+
+		await expect.element(page.getByTestId('gallery-room-error')).toHaveAttribute('role', 'alert');
+		// One event, one announcement: the polite region stays quiet.
+		await expect.element(page.getByTestId('gallery-room-status')).toHaveTextContent('');
 	});
 
 	it('tells a hot wall failure apart from a quiet hot wall', async () => {

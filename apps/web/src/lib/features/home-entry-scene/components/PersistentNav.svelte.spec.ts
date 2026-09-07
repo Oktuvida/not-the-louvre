@@ -338,6 +338,32 @@ describe('PersistentNav', () => {
 		});
 	});
 
+	it('closes the avatar editor on Escape from inside the sheet', async () => {
+		render(PersistentNav, {
+			previewCards: topArtworks,
+			user: {
+				authUserId: 'auth-user-1',
+				email: 'artist_1@not-the-louvre.local',
+				id: 'product-user-1',
+				nickname: 'artist_1',
+				role: 'user'
+			}
+		});
+
+		await page.getByRole('button', { name: 'Edit avatar for artist_1' }).click();
+		expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+		// Focus starts on the close tape inside the sheet, whose wrapper swallows
+		// the events the backdrop closes on — Escape has to get through anyway.
+		document.activeElement?.dispatchEvent(
+			new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' })
+		);
+
+		await vi.waitFor(() => {
+			expect(document.querySelector('[role="dialog"]')).toBeNull();
+		});
+	});
+
 	it('uses a scrollable avatar editor dialog shell on small screens', async () => {
 		render(PersistentNav, {
 			previewCards: topArtworks,

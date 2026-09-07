@@ -1,4 +1,4 @@
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
@@ -58,6 +58,27 @@ describe('DrawingToolTray', () => {
 		expect(getComputedStyle(swipe as HTMLElement).backgroundImage).toContain(
 			'rgba(212, 131, 74, 0.75)'
 		);
+	});
+
+	it('draws the shared focus ring on the brush size slider', async () => {
+		render(DrawingToolTray, {});
+
+		const slider = document.querySelector<HTMLInputElement>('#brush-size');
+		expect(slider).not.toBeNull();
+
+		// A real Tab, because `:focus-visible` does not match a range input that
+		// was focused from script.
+		for (let step = 0; step < 40 && document.activeElement !== slider; step += 1) {
+			await userEvent.tab();
+		}
+		expect(document.activeElement).toBe(slider);
+
+		// The tray's scoped `outline: none` is unlayered, so it used to beat the
+		// `focus-ring` utility in `@layer utilities` no matter the specificity
+		// and the control was left with no keyboard focus indicator at all.
+		const styles = getComputedStyle(slider as HTMLInputElement);
+		expect(styles.outlineStyle).toBe('solid');
+		expect(styles.outlineWidth).toBe('3px');
 	});
 
 	it('shows the full color palette directly on mobile', async () => {

@@ -11,6 +11,10 @@
 	 * screen reader ever heard about it. This region is fixed, so it costs no
 	 * layout, and it is always in the DOM — a live region that mounts together
 	 * with its message is announced unreliably.
+	 *
+	 * `tone` drives the politeness: a failure is the assertive `role="alert"`
+	 * the panel used to raise on its own, because a vote that silently did not
+	 * land is worth interrupting for; anything else waits its turn.
 	 */
 	let {
 		message = null,
@@ -39,11 +43,17 @@
 	});
 </script>
 
+<!--
+	The offsets clear the ambient audio tab, which is `position: fixed` in the
+	bottom-right corner of every route (9.5rem x 3.6rem on phones, 17rem x 5.2rem
+	from `md` up) and hit-tests over its whole box. Outranking it is not enough:
+	a notice underneath it is unreadable even when it paints on top.
+-->
 <div
-	aria-live="polite"
-	class="pointer-events-none fixed inset-x-0 bottom-4 z-(--z-status) flex justify-center px-4 md:inset-x-auto md:right-8 md:bottom-6 md:justify-end"
+	aria-live={tone === 'error' ? 'assertive' : 'polite'}
+	class="pointer-events-none fixed inset-x-0 bottom-[5rem] z-(--z-status) flex justify-center px-4 md:inset-x-auto md:right-8 md:bottom-[7.5rem] md:justify-end"
 	data-testid={testId}
-	role="status"
+	role={tone === 'error' ? 'alert' : 'status'}
 >
 	{#if message}
 		<div

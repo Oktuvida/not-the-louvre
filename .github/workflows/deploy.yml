@@ -47,8 +47,11 @@ jobs:
       - name: Typecheck
         run: bun run --filter @not-the-louvre/web check
 
-      # Integration suites opt in through RUN_INTEGRATION=1 and are skipped here:
-      # they need the local Supabase stack.
+      # Integration suites opt in through RUN_INTEGRATION=1 and are skipped
+      # here: they need the local Supabase stack, which this runner has no way
+      # to boot. They are a release step run by hand instead —
+      # `bun run --filter @not-the-louvre/web test:integration` against a local
+      # stack, documented in AGENTS.md's quality gate.
       - name: Server unit tests
         run: bun run --filter @not-the-louvre/web test:unit:server
 
@@ -65,10 +68,12 @@ jobs:
         run: bunx playwright install --with-deps chromium
 
       # The client project runs the component specs in a headless Chromium. It
-      # is green locally; keep it non-blocking until it has been green twice on
-      # Actions, then drop `continue-on-error` to promote it into the gate.
-      - name: Client component tests (non-blocking)
-        continue-on-error: true
+      # was staged as non-blocking while EntrySceneController failed on
+      # `new WebGLRenderer`; that spec now renders StudioSceneStub instead, the
+      # suite is green, and ~4,000 lines of component tests that cannot fail a
+      # build are not a gate. A flake here is a bug to fix or one spec to
+      # quarantine — not a reason to un-gate all of them again.
+      - name: Client component tests
         run: bun run --filter @not-the-louvre/web test:unit:client
 
   deploy:
@@ -127,16 +132,18 @@ jobs:
           command: deploy
 
       # The unit and e2e suites never exercise workerd, so this is the only check
-      # that the artifact actually boots on the real runtime. Set the repository
-      # variable PRODUCTION_URL to smoke-test the custom domain instead of the
-      # workers.dev URL wrangler reports.
+      # that the artifact actually boots on the real runtime — which is why it
+      # fails closed: a run with no URL to test has verified nothing. Set the
+      # repository variable PRODUCTION_URL (e.g. https://not-the-louvre.art) to
+      # smoke-test the custom domain instead of the workers.dev URL wrangler
+      # reports; it is required once the Worker stops publishing to workers.dev.
       - name: Smoke-test the deployed worker
         env:
           SMOKE_URL: ${{ vars.PRODUCTION_URL || steps.deploy.outputs.deployment-url }}
         run: |
           if [ -z "$SMOKE_URL" ]; then
-            echo "No PRODUCTION_URL variable and no deployment URL reported; skipping smoke test."
-            exit 0
+            echo "::error::No PRODUCTION_URL repository variable and wrangler reported no deployment URL; the deploy cannot be verified."
+            exit 1
           fi
 
           for attempt in 1 2 3 4 5; do
