@@ -558,7 +558,7 @@
 		<!-- Dialog chrome: anchored to the screen so the flip never drags it around -->
 		<button
 			type="button"
-			class="fixed top-3 right-3 z-50 flex h-11 w-11 rotate-3 cursor-pointer items-center justify-center rounded-full border-3 border-[#2d2420] bg-[#fdfbf7] text-lg font-black text-[#2d2420] shadow-[3px_4px_0_rgba(45,36,32,0.4)] transition hover:-translate-y-0.5 hover:rotate-0 md:top-5 md:right-5"
+			class="fixed top-3 right-3 z-50 flex h-11 w-11 rotate-3 cursor-pointer items-center justify-center rounded-full border-3 border-ink-warm bg-paper-bright text-lg font-black text-ink-warm shadow-[3px_4px_0_rgba(45,36,32,0.4)] transition hover:-translate-y-0.5 hover:rotate-0 md:top-5 md:right-5"
 			aria-label="Dismiss details"
 			onclick={(event: MouseEvent) => {
 				event.stopPropagation();
@@ -618,7 +618,7 @@
 										/>
 									</div>
 								{/if}
-								<div class="postcard-photo border border-[#d6cfc5]">
+								<div class="postcard-photo border border-hairline">
 									<!-- The same blur-to-sharp handoff, and the same censoring radius
 									     and scrim, every grid card gets: one treatment, read from the
 									     shared `--nsfw-*` tokens. The built-in badge is switched off
@@ -637,10 +637,10 @@
 									/>
 									{#if isSensitiveBlurred}
 										<div
-											class="postcard-photo-scrim absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-[#fdfbf7]"
+											class="postcard-photo-scrim absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-paper-bright"
 										>
 											<span
-												class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
+												class="rounded-full border-2 border-paper-bright px-3 py-1 text-xs font-black"
 												>18+</span
 											>
 											<p class="mt-3 text-lg font-bold uppercase">Sensitive artwork</p>
@@ -648,7 +648,7 @@
 											{#if viewer}
 												<button
 													type="button"
-													class="mt-4 rounded-[0.95rem] border-3 border-[#fdfbf7] bg-[#d68a49] px-4 py-2 text-sm font-black text-[#2d2420]"
+													class="mt-4 rounded-card border-3 border-paper-bright bg-[#d68a49] px-4 py-2 text-sm font-black text-ink-warm"
 													disabled={isUpdatingAdultContentPreference}
 													onclick={() => updateAdultContentVisibility(true)}
 												>
@@ -675,7 +675,7 @@
 									<button
 										bind:this={avatarTriggerElement}
 										type="button"
-										class="shrink-0 cursor-zoom-in rounded-full transition outline-none hover:scale-[1.05] focus-visible:ring-2 focus-visible:ring-[#4ecdc4] focus-visible:ring-offset-2"
+										class="shrink-0 cursor-zoom-in rounded-full focus-ring transition hover:scale-[1.05]"
 										onclick={openAvatarPreview}
 										aria-label={`Expand avatar for ${artwork.artist}`}
 										data-testid="artist-avatar-trigger"
@@ -704,7 +704,7 @@
 								</div>
 								<div class="flex shrink-0 flex-col items-end gap-0.5 pr-1 text-right">
 									<p class="postcard-signature max-w-[10rem] truncate">by {artwork.artist}</p>
-									<p class="font-['Fredoka'] text-sm font-semibold text-[#8a6c52]">
+									<p class="font-display text-sm font-semibold text-muted-ink">
 										<span class="text-base leading-none">⭐</span>
 										{artwork.score}
 									</p>
@@ -757,7 +757,7 @@
 								<span class="postcard-edge-print">Not the Louvre · Gallery Post</span>
 								<button
 									type="button"
-									class="flip-tape"
+									class="flip-tape focus-ring"
 									aria-label="Read the comments"
 									onclick={toggleFlip}
 								>
@@ -943,7 +943,7 @@
 									<div class="flex justify-end pb-1">
 										<button
 											type="button"
-											class="flip-tape flip-tape-back"
+											class="flip-tape flip-tape-back focus-ring"
 											aria-label="Show the artwork"
 											onclick={toggleFlip}
 										>
@@ -988,10 +988,17 @@
 				<!-- The wax seal floats free over the whole dimmed screen: no box, no
 				     chrome. Fixed so it also covers the postcard's crooked corners and
 				     swallows every click — outside clicks close the preview, never the
-				     panel behind it. -->
+				     panel behind it.
+
+				     No `backdrop-blur` here on purpose: this layer is a descendant of
+				     the panel's own `backdrop-blur-sm` scrim, so its backdrop is the
+				     already-blurred result and a second filter would blur the blur
+				     (and pin one more full-viewport surface to the compositor while
+				     the preview is open). The extra `bg-black/65` is all the
+				     separation the seal needs. -->
 				<div
 					use:focusTrap={{ autoFocus: true }}
-					class="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+					class="fixed inset-0 z-(--z-dialog) flex items-center justify-center bg-black/65 p-4"
 					role="dialog"
 					aria-modal="true"
 					aria-label={`Expanded avatar for ${artwork.artist}`}
@@ -1030,19 +1037,19 @@
 		margin: 20px 0 0;
 		max-width: 100%;
 		overflow-wrap: anywhere;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 2.1rem;
 		font-weight: 600;
 		line-height: 1.05;
 		text-align: center;
-		color: #fdfbf7;
+		color: var(--color-paper-bright);
 		rotate: -1.5deg;
 		text-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 	}
 
 	.avatar-preview-hint {
 		margin: 8px 0 0;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.05rem;
 		font-weight: 500;
 		color: rgba(253, 251, 247, 0.6);
@@ -1056,14 +1063,15 @@
 
 	.postcard-tilt {
 		transform-style: preserve-3d;
-		transition: transform 200ms ease-out;
+		transition: transform var(--duration-ui) ease-out;
 	}
 
 	.postcard {
 		position: relative;
 		display: grid;
 		transform-style: preserve-3d;
-		transition: transform var(--flip-duration, 650ms) cubic-bezier(0.45, 0.05, 0.25, 1);
+		transition: transform var(--flip-duration, var(--duration-flip))
+			cubic-bezier(0.45, 0.05, 0.25, 1);
 	}
 
 	.postcard.is-flipped {
@@ -1072,7 +1080,7 @@
 
 	/* The card lifts slightly while it turns, like being picked up */
 	.postcard.is-lifting {
-		animation: postcard-lift var(--flip-duration, 650ms) ease-in-out;
+		animation: postcard-lift var(--flip-duration, var(--duration-flip)) ease-in-out;
 	}
 
 	@keyframes postcard-lift {
@@ -1092,6 +1100,16 @@
 	 * stock is a shade cooler than a note's, so only that stays local.
 	 */
 	.postcard-face {
+		/*
+		 * The paper grain draws with `mix-blend-mode: normal` on the postcard and
+		 * only on the postcard. A non-normal blend mode forces the same grouping
+		 * and flattening that `filter` does, inside a `preserve-3d` subtree with
+		 * `backface-visibility: hidden` — the exact combination this file already
+		 * documents as ghosting through the flip (see the two notes below). The
+		 * grain is a 0.16-alpha dot pattern over a near-white stock, where
+		 * multiply and normal are visually indistinguishable at rest.
+		 */
+		--paper-noise-blend: normal;
 		grid-area: 1 / 1;
 		/* Without an explicit minimum, the face's automatic min size is its
 		 * min-content and the artwork image's natural width blows the card
@@ -1102,7 +1120,7 @@
 		flex-direction: column;
 		backface-visibility: hidden;
 		-webkit-backface-visibility: hidden;
-		background-color: #f8f4ed;
+		background-color: var(--color-paper-card);
 	}
 
 	.postcard-front {
@@ -1190,25 +1208,25 @@
 
 	.postcard-title {
 		margin: 0;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.65rem;
 		font-weight: 600;
 		line-height: 1.05;
-		color: #2d2420;
+		color: var(--color-ink-warm);
 	}
 
 	.postcard-meta {
 		margin: 2px 0 0;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.62rem;
 		font-weight: 600;
 		letter-spacing: 0.16em;
 		text-transform: uppercase;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 	}
 
 	.postcard-signature {
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.45rem;
 		line-height: 1.1;
 		color: #6b4226;
@@ -1262,7 +1280,7 @@
 		margin: 10px 0 0;
 		min-height: 1.1rem;
 		text-align: center;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.8rem;
 		font-weight: 600;
 		color: #ffd7cb;
@@ -1280,11 +1298,11 @@
 		margin: 0;
 		align-self: center;
 		max-width: 75%;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.2rem;
 		font-weight: 600;
 		line-height: 1.1;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 		rotate: -1.2deg;
 	}
 
@@ -1306,7 +1324,7 @@
 	}
 
 	.postcard-edge-print {
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.56rem;
 		font-weight: 500;
 		letter-spacing: 0.22em;
@@ -1328,7 +1346,7 @@
 		align-items: center;
 		gap: 7px;
 		padding: 9px 20px 9px 16px;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.78rem;
 		font-weight: 600;
 		letter-spacing: 0.05em;
@@ -1363,8 +1381,8 @@
 			0.8% 9%
 		);
 		transition:
-			translate 150ms ease,
-			box-shadow 150ms ease;
+			translate var(--duration-fast) ease,
+			box-shadow var(--duration-fast) ease;
 		-webkit-tap-highlight-color: transparent;
 	}
 
@@ -1372,11 +1390,6 @@
 	.flip-tape:focus-visible {
 		translate: 0 -2px;
 		box-shadow: 2px 4px 7px rgba(45, 36, 32, 0.28);
-	}
-
-	.flip-tape:focus-visible {
-		outline: 2px solid #4ecdc4;
-		outline-offset: 2px;
 	}
 
 	/* generous invisible hit area */
@@ -1394,7 +1407,7 @@
 		padding: 0 5px;
 		border-radius: 9999px;
 		border: 2px solid #4a3a2c;
-		background: #f8f4ed;
+		background: var(--color-paper-card);
 		font-size: 0.72rem;
 		font-weight: 700;
 	}
@@ -1446,13 +1459,13 @@
 
 	.postcard-back-header p {
 		margin: 0;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.78rem;
 		font-weight: 600;
 		letter-spacing: 0.45em;
 		text-indent: 0.45em;
 		text-transform: uppercase;
-		color: #5d4e37;
+		color: var(--color-olive);
 	}
 
 	.postcard-back-rule {
@@ -1486,12 +1499,12 @@
 	.guestbook-label {
 		flex-shrink: 0;
 		margin: 0 0 4px;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.62rem;
 		font-weight: 700;
 		letter-spacing: 0.2em;
 		text-transform: uppercase;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 	}
 
 	/* Ruled guestbook: 26px line rhythm shared with the entries. The lines
@@ -1510,7 +1523,7 @@
 
 	.guestbook-entry {
 		margin: 0;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.12rem;
 		font-weight: 500;
 		line-height: 26px;
@@ -1520,12 +1533,12 @@
 
 	.guestbook-author {
 		font-size: 0.95rem;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 		white-space: nowrap;
 	}
 
 	.guestbook-empty {
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 	}
 
 	/* writing directly on the card, not a UI pill */
@@ -1536,15 +1549,15 @@
 		border-bottom: 2px solid rgba(93, 78, 55, 0.4);
 		background: transparent;
 		padding: 2px 2px 3px;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.15rem;
 		font-weight: 600;
-		color: #2d2420;
+		color: var(--color-ink-warm);
 		outline: none;
 	}
 
 	.guestbook-input:focus {
-		border-bottom-color: #5d4e37;
+		border-bottom-color: var(--color-olive);
 	}
 
 	.guestbook-input::placeholder {
@@ -1566,8 +1579,13 @@
 		/* The sticker's motion is three separate properties (transform, rotate
 		 * and the standalone scale the global `button:active` press also uses),
 		 * so all three have to be pinned or `transform: none` cancels none of it.
-		 * `--sticker-rotate` keeps the sticker's resting tilt. */
-		transform: none !important;
+		 * `--sticker-rotate` keeps the sticker's resting tilt.
+		 *
+		 * No `!important` needed: every rule that would move this button lives in
+		 * a cascade layer (`StickerControl` in `components`, the press feedback in
+		 * `base`, Tailwind's in `utilities`) and this scoped rule is unlayered, so
+		 * it outranks all of them whatever their specificity. */
+		transform: none;
 		rotate: var(--sticker-rotate, 0deg);
 		scale: 1;
 	}
@@ -1579,7 +1597,7 @@
 	}
 
 	.postcard-actions :global(.sticker-btn.vote-cast .sticker-content) {
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		box-shadow:
 			inset 0 0 0 2px rgba(45, 36, 32, 0.85),
 			inset 0 2px 5px rgba(45, 36, 32, 0.28);
@@ -1599,8 +1617,12 @@
 		width: 66px;
 		padding: 5px;
 		rotate: 2.5deg;
-		background-color: #fdfbf7;
-		background-image: radial-gradient(circle at 4px 4px, rgba(0, 0, 0, 0) 2.4px, #fdfbf7 2.6px);
+		background-color: var(--color-paper-bright);
+		background-image: radial-gradient(
+			circle at 4px 4px,
+			rgba(0, 0, 0, 0) 2.4px,
+			var(--color-paper-bright) 2.6px
+		);
 		background-size: 8px 8px;
 		background-position: -4px -4px;
 		box-shadow: 1px 2px 4px rgba(45, 36, 32, 0.22);
@@ -1617,7 +1639,7 @@
 		position: absolute;
 		right: 8px;
 		bottom: 8px;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.55rem;
 		font-weight: 700;
 		color: rgba(253, 251, 247, 0.95);
@@ -1637,7 +1659,7 @@
 	 * tracking, laid along a 32px-radius `textPath`, are the one place the hinted
 	 * default quantises advances and visibly bunches letters on the arc. */
 	.postmark-text {
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 8.4px;
 		font-weight: 600;
 		letter-spacing: 1.6px;
@@ -1646,7 +1668,7 @@
 	}
 
 	.postmark-date {
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 9.5px;
 		font-weight: 700;
 		fill: currentColor;
@@ -1665,7 +1687,7 @@
 		gap: 6px;
 		border-bottom: 1.5px dotted rgba(141, 110, 78, 0.55);
 		padding: 3px 2px 1px;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.25rem;
 		font-weight: 600;
 		line-height: 1.3;
@@ -1673,12 +1695,12 @@
 	}
 
 	.postcard-address-field {
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.6rem;
 		font-weight: 700;
 		letter-spacing: 0.14em;
 		text-transform: uppercase;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 	}
 
 	.postcard-address-blank {
@@ -1695,7 +1717,7 @@
 	/* rubber stamps with uneven inking. If the mask ever ghosts through the
 		* flip, drop the mask-image line — the rest survives. */
 	.postcard-ink-stamp {
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.66rem;
 		font-weight: 700;
 		letter-spacing: 0.14em;
@@ -1708,7 +1730,7 @@
 	}
 
 	.ink-stamp-star {
-		color: #a8403a;
+		color: var(--color-danger-deep);
 		rotate: -4deg;
 	}
 

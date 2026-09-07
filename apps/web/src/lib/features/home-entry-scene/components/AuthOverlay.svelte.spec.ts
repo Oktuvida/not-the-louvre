@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 // The paper is a global utility, which the browser project does not load for a
 // component under test; the sheet's own material is what one case below checks.
-import '$lib/features/shared-ui/styles/utilities.css';
+import '../../../../routes/layout.css';
 import AuthOverlay from './AuthOverlay.svelte';
 
 describe('AuthOverlay', () => {

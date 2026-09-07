@@ -69,12 +69,12 @@
 		data-testid="hot-wall-empty"
 	>
 		<p
-			class="font-display text-lg font-bold text-[#f7eadf]"
+			class="font-display text-lg font-bold text-wall-text"
 			style="text-shadow: 0 1px 2px rgba(45,36,32,0.5);"
 		>
 			Nothing heating up right now
 		</p>
-		<p class="max-w-sm text-sm text-[#c4b5a6]">
+		<p class="max-w-sm text-sm text-clay">
 			When artworks start climbing fast, they'll appear here on the Hot Wall.
 		</p>
 	</div>
@@ -112,12 +112,12 @@
 						class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[rgba(45,36,32,0.85)] to-transparent p-6 pt-16"
 					>
 						<div
-							class="mb-1 inline-block rounded-full bg-[#e74c3c] px-3 py-1 text-xs font-black tracking-wider text-white uppercase"
+							class="mb-1 inline-block rounded-full bg-alert px-3 py-1 text-xs font-black tracking-wider text-white uppercase"
 						>
 							Hottest right now
 						</div>
-						<h3 class="text-xl font-bold text-[#fdfbf7]">{leadArtwork.title}</h3>
-						<p class="mt-1 text-sm text-[#c4b5a6]">
+						<h3 class="text-xl font-bold text-paper-bright">{leadArtwork.title}</h3>
+						<p class="mt-1 text-sm text-clay">
 							{leadArtwork.artist} · ⭐ {leadArtwork.score}
 						</p>
 					</div>

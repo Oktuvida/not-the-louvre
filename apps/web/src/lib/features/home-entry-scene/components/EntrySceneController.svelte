@@ -175,7 +175,7 @@
 	user={navUser}
 >
 	{#if integrityFailure}
-		<div class="absolute inset-0 z-[40] flex items-center justify-center px-6 py-10">
+		<div class="absolute inset-0 z-40 flex items-center justify-center px-6 py-10">
 			<StudioPanel
 				tone="paper"
 				className="w-full max-w-[34rem] border-[#7b3b2a] bg-[rgba(255,248,240,0.98)] text-[#3f2318]"

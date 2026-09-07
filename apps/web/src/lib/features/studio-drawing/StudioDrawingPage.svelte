@@ -594,7 +594,7 @@
 		/>
 	</picture>
 
-	<AmbientParticleOverlay className="z-[5] opacity-90" />
+	<AmbientParticleOverlay className="z-5 opacity-90" />
 
 	<header
 		class="relative z-30 flex flex-shrink-0 items-start justify-between gap-4 px-4 pt-4 sm:px-6"
@@ -669,14 +669,14 @@
 							>
 								<span
 									class="nsfw-track"
-									style={`background: ${isArtworkNsfw ? '#c84f4f' : 'rgb(60 50 40 / 0.15)'};`}
+									style={`background: ${isArtworkNsfw ? 'var(--color-danger-bright)' : 'rgb(60 50 40 / 0.15)'};`}
 								>
 									<span
 										class="nsfw-dot"
 										style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
 									></span>
 								</span>
-								<span class={isArtworkNsfw ? 'font-semibold text-[#c84f4f]' : ''}
+								<span class={isArtworkNsfw ? 'font-semibold text-danger-bright' : ''}
 									>Not safe for the Louvre</span
 								>
 							</button>
@@ -789,14 +789,14 @@
 									>
 										<span
 											class="nsfw-track"
-											style={`background: ${isArtworkNsfw ? '#c84f4f' : 'rgb(60 50 40 / 0.15)'};`}
+											style={`background: ${isArtworkNsfw ? 'var(--color-danger-bright)' : 'rgb(60 50 40 / 0.15)'};`}
 										>
 											<span
 												class="nsfw-dot"
 												style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
 											></span>
 										</span>
-										<span class={isArtworkNsfw ? 'font-semibold text-[#c84f4f]' : ''}
+										<span class={isArtworkNsfw ? 'font-semibold text-danger-bright' : ''}
 											>Not safe for the Louvre</span
 										>
 									</button>
@@ -871,7 +871,7 @@
 		transform: translate(var(--book-offset-x), var(--book-offset-y)) scale(var(--book-scale))
 			rotate(var(--book-rotation));
 		transform-origin: center center;
-		transition: transform 800ms cubic-bezier(0.23, 1, 0.32, 1);
+		transition: transform 800ms var(--ease-glide);
 	}
 
 	/* Book approaches viewer when opening/open */
@@ -889,13 +889,21 @@
 		 * past its grid cell and off-screen on ~1500px viewports */
 		justify-self: start;
 		transform-origin: left center;
-		will-change: opacity, transform;
 	}
 
+	/*
+	 * The compositor hint belongs to the state that is ABOUT to move, not to the
+	 * tray forever: `.tools-stage` used to carry `will-change: opacity,
+	 * transform` for the whole life of /draw to serve one 210ms entrance. Here
+	 * it warms the layer while the tray waits off-stage; once the class flips to
+	 * `-open` the running transform/opacity animation keeps the element
+	 * promoted on its own, and when it settles the layer is released.
+	 */
 	.tools-stage-hidden {
 		opacity: 0;
 		pointer-events: none;
 		transform: translateX(10rem) rotate(10deg) scale(0.94);
+		will-change: opacity, transform;
 	}
 
 	.tools-stage-open {
@@ -996,7 +1004,7 @@
 	.cover-postit {
 		position: relative;
 		padding: 12px 12px 8px;
-		box-shadow: 2px 3px 8px rgb(0 0 0 / 0.18);
+		box-shadow: var(--shadow-lift);
 		max-width: 214px;
 	}
 
@@ -1032,7 +1040,7 @@
 	}
 
 	.postit-label {
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 0.68rem;
 		font-weight: 600;
 		letter-spacing: 0.1em;
@@ -1042,9 +1050,9 @@
 	}
 
 	.postit-fork-note {
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 0.7rem;
-		color: #3d3530;
+		color: var(--color-note-ink);
 		margin-bottom: 2px;
 	}
 
@@ -1063,9 +1071,9 @@
 		border: none;
 		border-bottom: 1.5px solid rgb(61 53 48 / 0.2);
 		padding: 3px 2px;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 0.92rem;
-		color: #3d3530;
+		color: var(--color-note-ink);
 		outline: none;
 	}
 
@@ -1075,7 +1083,7 @@
 	}
 
 	.postit-input:focus {
-		border-bottom-color: var(--color-primary, #d4834a);
+		border-bottom-color: var(--color-primary);
 	}
 
 	.postit-input:disabled {
@@ -1083,9 +1091,9 @@
 	}
 
 	.postit-error {
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 0.75rem;
-		color: #c84f4f;
+		color: var(--color-danger-bright);
 		margin-top: 2px;
 	}
 
@@ -1110,9 +1118,9 @@
 		border: none;
 		padding: 0;
 		cursor: pointer;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 0.82rem;
-		color: #3d3530;
+		color: var(--color-note-ink);
 		flex-wrap: wrap;
 	}
 
@@ -1126,8 +1134,8 @@
 		display: inline-flex;
 		width: 28px;
 		height: 16px;
-		border-radius: 8px;
-		transition: background 0.2s;
+		border-radius: var(--radius-panel);
+		transition: background var(--duration-ui);
 		flex-shrink: 0;
 	}
 
@@ -1135,10 +1143,10 @@
 		width: 12px;
 		height: 12px;
 		border-radius: 50%;
-		background: #fbf7f0;
+		background: var(--color-paper);
 		border: 1.5px solid rgb(47 36 28 / 0.25);
 		box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
-		transition: transform 0.2s;
+		transition: transform var(--duration-ui);
 	}
 
 	/* --- Publish notification post-it --- */
@@ -1148,7 +1156,7 @@
 		margin-top: 4rem;
 		padding: 14px 12px 12px;
 		background: linear-gradient(160deg, #c8e6c9 0%, #a5d6a7 100%);
-		box-shadow: 2px 3px 8px rgb(0 0 0 / 0.18);
+		box-shadow: var(--shadow-lift);
 		transform: rotate(-2deg);
 		/* The reveal has to be declared in this stylesheet: Svelte renames scoped
 		 * keyframes and only rewrites `animation` references inside the same block,
@@ -1158,16 +1166,16 @@
 	}
 
 	.publish-postit-title {
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.15rem;
 		font-weight: 700;
-		color: #3d3530;
+		color: var(--color-note-ink);
 		margin-top: 2px;
 		line-height: 2;
 	}
 
 	.publish-postit-id {
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 0.85rem;
 		color: rgb(61 53 48 / 0.45);
 		margin-top: 1px;

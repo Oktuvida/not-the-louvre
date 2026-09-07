@@ -120,11 +120,14 @@
 />
 
 {#if data.viewer && !data.viewer.isBanned && data.viewer.role !== 'user'}
-	<a class="ops-link" href={resolve('/admin')}>Ops</a>
+	<a class="ops-link focus-ring" href={resolve('/admin')}>Ops</a>
 {/if}
 
 <style>
 	.ops-link {
+		/* The ring itself comes from the `focus-ring` utility; only the offset
+		   is local, so the stroke clears the pill's own border. */
+		--focus-ring-offset: 3px;
 		position: fixed;
 		/* Stays top-right at every width: the mobile override used to move it
 		   into the bottom-right corner, straight on top of the ambient audio
@@ -134,7 +137,7 @@
 		z-index: var(--z-ops);
 		padding: 0.7rem 1rem;
 		border: 1px solid rgba(27, 33, 30, 0.18);
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		background:
 			linear-gradient(135deg, rgba(253, 248, 237, 0.96), rgba(238, 224, 199, 0.94)),
 			rgba(255, 255, 255, 0.75);
@@ -153,8 +156,13 @@
 		box-shadow: 0 18px 36px rgba(51, 43, 26, 0.22);
 	}
 
-	.ops-link:focus-visible {
-		outline: 3px solid var(--focus-ring-color, #4ecdc4);
-		outline-offset: 3px;
+	/*
+	 * Same treatment as the ambient audio tab: a fixed pill above every modal
+	 * (`--z-ops` outranks the artwork panel and the avatar preview) stays
+	 * clickable and tabbable while an `aria-modal="true"` dialog claims the
+	 * screen. Global because the dialog lives elsewhere in the tree.
+	 */
+	:global(body:has([role='dialog'][aria-modal='true'])) .ops-link {
+		display: none;
 	}
 </style>

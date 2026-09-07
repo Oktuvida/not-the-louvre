@@ -12,13 +12,19 @@ describe('PageFadeOverlay', () => {
 
 		await expect.element(scrim()).toBeInTheDocument();
 
-		// The studio used to raise its own copy to z-[9999] while the other two
-		// sat at z-[100]; every page-to-page veil is the same layer now. The
+		// The studio used to raise its own copy to z-9999 while the other two
+		// sat at z-100; every page-to-page veil is the same layer now. The
 		// utilities are asserted by name because the browser project renders
 		// components without the app's global stylesheet.
 		const classNames = scrim().element().className.split(/\s+/);
 		expect(classNames).toEqual(
-			expect.arrayContaining(['pointer-events-none', 'fixed', 'inset-0', 'z-[100]', 'bg-[#6e6e6e]'])
+			expect.arrayContaining([
+				'pointer-events-none',
+				'fixed',
+				'inset-0',
+				'z-(--z-nav-fade)',
+				'bg-scrim'
+			])
 		);
 	});
 

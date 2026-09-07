@@ -42,16 +42,16 @@
 	style={`transform: rotate(${rotation}deg); z-index: 25;`}
 >
 	<div
-		class="relative w-[280px] px-4 pt-[1.2rem] pb-4 text-[#3d3530] shadow-[2px_3px_8px_rgba(0,0,0,0.18)]"
+		class="relative w-[280px] px-4 pt-[1.2rem] pb-4 text-note-ink shadow-[2px_3px_8px_rgba(0,0,0,0.18)]"
 		style={`background:${gradient};`}
 	>
 		{#if attachment === 'tape'}
 			<div
-				class={`pointer-events-none absolute z-[3] h-[18px] w-[52px] border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)] ${tapeVariant === 0 ? 'top-[-8px] left-1/2 -translate-x-1/2 -rotate-2' : tapeVariant === 1 ? 'top-[-6px] left-[10px] rotate-[10deg]' : 'top-[-6px] right-[10px] -rotate-[6deg]'}`}
+				class={`pointer-events-none absolute z-3 h-[18px] w-[52px] border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)] ${tapeVariant === 0 ? 'top-[-8px] left-1/2 -translate-x-1/2 -rotate-2' : tapeVariant === 1 ? 'top-[-6px] left-[10px] rotate-[10deg]' : 'top-[-6px] right-[10px] -rotate-[6deg]'}`}
 			></div>
 		{:else}
 			<div
-				class="pointer-events-none absolute top-[-5px] left-1/2 z-[4] h-[14px] w-[14px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_4px_4px,#e74c3c,#c0392b)] shadow-[0_2px_4px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)]"
+				class="pointer-events-none absolute top-[-5px] left-1/2 z-4 h-[14px] w-[14px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_4px_4px,var(--color-alert),#c0392b)] shadow-[0_2px_4px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)]"
 			></div>
 		{/if}
 
@@ -72,15 +72,15 @@
 		{/if}
 
 		<p
-			class="mb-1 font-['Fredoka'] text-[0.7rem] font-bold tracking-[0.1em] text-[rgba(45,36,32,0.5)] uppercase"
+			class="mb-1 font-display text-[0.7rem] font-bold tracking-[0.1em] text-[rgba(45,36,32,0.5)] uppercase"
 		>
 			{label}
 		</p>
-		<p class="relative z-[2] text-[1.1rem] leading-[1.35]" style="font-family: 'Caveat', cursive;">
+		<p class="relative z-2 text-[1.1rem] leading-[1.35]" style="font-family: var(--font-hand);">
 			{text}
 		</p>
 		{#if children}
-			<div class="relative z-[2] mt-3">
+			<div class="relative z-2 mt-3">
 				{@render children()}
 			</div>
 		{/if}

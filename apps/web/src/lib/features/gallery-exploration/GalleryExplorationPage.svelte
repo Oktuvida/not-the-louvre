@@ -715,13 +715,13 @@
 
 {#snippet roomLoadFailure(message: string)}
 	<div
-		class="rounded-xl border-4 border-[#2d2420] bg-[#fdfbf7] p-10 text-center shadow-md"
+		class="rounded-xl border-4 border-ink-warm bg-paper-bright p-10 text-center shadow-md"
 		data-testid="gallery-room-error"
 	>
-		<p class="font-display text-2xl text-[#2d2420]">Something went wrong</p>
-		<p class="mt-3 text-[#6b625a]">{message}</p>
+		<p class="font-display text-2xl text-ink-warm">Something went wrong</p>
+		<p class="mt-3 text-ink-faint">{message}</p>
 		<button
-			class="mt-6 rounded-full border-3 border-[#2d2420] bg-[#f6df65] px-5 py-2 text-sm font-black text-[#2d2420] transition hover:-translate-y-0.5 disabled:opacity-60"
+			class="mt-6 rounded-full border-3 border-ink-warm bg-[#f6df65] px-5 py-2 text-sm font-black text-ink-warm transition hover:-translate-y-0.5 disabled:opacity-60"
 			disabled={isRefreshingGallery}
 			onclick={() => refreshGallery()}
 			type="button"
@@ -734,10 +734,10 @@
 {#snippet roomBody()}
 	{#if showEmptyState}
 		<div
-			class="rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
+			class="rounded-xl border-4 border-dashed border-olive bg-paper-bright p-10 text-center shadow-md"
 		>
-			<p class="font-display text-2xl text-[#2d2420]">{roomEmptyStateMessage}</p>
-			<p class="mt-3 text-[#6b625a]">
+			<p class="font-display text-2xl text-ink-warm">{roomEmptyStateMessage}</p>
+			<p class="mt-3 text-ink-faint">
 				{emptyStateSupportMessage}
 			</p>
 			{#if !viewer}
@@ -815,7 +815,7 @@
 			</div>
 		{:else}
 			<div
-				class="pointer-events-none mb-4 flex justify-center md:absolute md:top-5 md:-left-16 md:z-[25] md:mb-0 md:rotate-[-20deg] md:justify-start"
+				class="pointer-events-none mb-4 flex justify-center md:absolute md:top-5 md:-left-16 md:z-25 md:mb-0 md:rotate-[-20deg] md:justify-start"
 				data-testid="gallery-room-note"
 			>
 				<PostItNote
@@ -831,7 +831,7 @@
 
 		{#if showSensitiveArtworkNote}
 			<div
-				class="pointer-events-none mb-4 flex justify-center md:mb-6 md:rotate-14 md:justify-end lg:absolute lg:top-20 lg:right-0 lg:z-[26] lg:mb-0 xl:right-[max(-17.5rem,calc((80rem-100vw)/2))]"
+				class="pointer-events-none mb-4 flex justify-center md:mb-6 md:rotate-14 md:justify-end lg:absolute lg:top-20 lg:right-0 lg:z-26 lg:mb-0 xl:right-[max(-17.5rem,calc((80rem-100vw)/2))]"
 			>
 				<PostItNote
 					attachment="tape"
@@ -846,14 +846,14 @@
 					{#if viewer}
 						<button
 							type="button"
-							class="w-full rounded-[0.95rem] border-3 border-[#2d2420] bg-[#fff7d4] px-4 py-2 text-sm font-black text-[#2d2420] shadow-[2px_3px_0_rgba(45,36,32,0.18)] transition duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+							class="w-full rounded-card border-3 border-ink-warm bg-[#fff7d4] px-4 py-2 text-sm font-black text-ink-warm shadow-[2px_3px_0_rgba(45,36,32,0.18)] transition duration-200 hover:-translate-y-0.5 disabled:opacity-60"
 							disabled={isSavingAdultContentPreference}
 							onclick={() => updateAdultContentPreference(!adultContentAllowed)}
 						>
 							{adultContentAllowed ? 'Hide 18+ artworks' : 'Reveal 18+ artworks'}
 						</button>
 					{:else}
-						<p class="text-xs font-semibold text-[#8f3720]">Sign in to reveal 18+ artworks.</p>
+						<p class="text-xs font-semibold text-rust">Sign in to reveal 18+ artworks.</p>
 					{/if}
 				</PostItNote>
 			</div>

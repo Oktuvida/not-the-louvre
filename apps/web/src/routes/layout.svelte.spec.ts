@@ -37,14 +37,16 @@ const TrackingImage = class {
 	}
 };
 
-const renderRootLayout = () =>
+const renderRootLayout = (viewer: { id: string; isBanned: boolean; role: string } | null = null) =>
 	render(RootLayoutHarness, {
 		data: {
 			ambientAudioEnabled: false,
 			favicon: { href: '/favicon.svg', kind: 'sketch' },
-			viewer: null
+			viewer
 		}
 	});
+
+const MODERATOR = { id: 'viewer-1', isBanned: false, role: 'moderator' };
 
 describe('root layout', () => {
 	beforeEach(() => {
@@ -99,6 +101,33 @@ describe('root layout', () => {
 		renderRootLayout();
 
 		expect(document.title).toBe(`404 · ${SITE_NAME}`);
+	});
+
+	/*
+	 * The Ops pill is `position: fixed` on the app's top overlay layer, so it
+	 * outranks the artwork detail panel and the avatar preview. Left visible it
+	 * stays clickable and tabbable over a dimmed `aria-modal="true"` dialog,
+	 * which is exactly what that attribute promises does not happen.
+	 */
+	it('takes the Ops link out of the page while a modal dialog is open', async () => {
+		renderRootLayout(MODERATOR);
+
+		const opsLink = document.querySelector('.ops-link');
+		expect(opsLink).not.toBeNull();
+		expect(getComputedStyle(opsLink as Element).display).not.toBe('none');
+
+		const dialog = document.createElement('div');
+		dialog.setAttribute('role', 'dialog');
+		dialog.setAttribute('aria-modal', 'true');
+		document.body.append(dialog);
+
+		try {
+			await expect
+				.poll(() => getComputedStyle(document.querySelector('.ops-link') as Element).display)
+				.toBe('none');
+		} finally {
+			dialog.remove();
+		}
 	});
 
 	it('preloads the two above-the-fold font faces with crossorigin', () => {

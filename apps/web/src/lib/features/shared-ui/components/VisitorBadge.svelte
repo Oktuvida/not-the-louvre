@@ -45,32 +45,32 @@
 >
 	<!-- Tape on top (sits outside the rounded card) -->
 	<div
-		class="badge-tape pointer-events-none absolute top-[-8px] left-1/2 z-[3] h-[18px] w-[54px] -translate-x-1/2 -rotate-2 border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)]"
+		class="badge-tape pointer-events-none absolute top-[-8px] left-1/2 z-3 h-[18px] w-[54px] -translate-x-1/2 -rotate-2 border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)]"
 	></div>
 
 	<!-- Rounded card container -->
 	<div
 		class="overflow-hidden rounded-xl border-[2px] border-black/10"
-		style="box-shadow: 3px 4px 12px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.1);"
+		style="box-shadow: var(--shadow-sheet);"
 	>
 		<!-- Colored header -->
 		<div style={`background:${palette.fill};`}>
 			<p
-				class="px-4 pt-[0.55rem] pb-[0.15rem] text-center font-['Fredoka'] text-[1.15rem] font-bold tracking-[0.06em] text-[#fdfbf7] uppercase"
+				class="px-4 pt-[0.55rem] pb-[0.15rem] text-center font-display text-[1.15rem] font-bold tracking-[0.06em] text-paper-bright uppercase"
 			>
 				HELLO
 			</p>
 			<p
-				class="px-4 pb-[0.5rem] text-center font-['Fredoka'] text-[0.62rem] font-semibold tracking-[0.15em] text-[rgba(253,251,247,0.8)] uppercase"
+				class="px-4 pb-[0.5rem] text-center font-display text-[0.62rem] font-semibold tracking-[0.15em] text-[rgba(253,251,247,0.8)] uppercase"
 			>
 				MY NAME IS
 			</p>
 		</div>
 
 		<!-- White body -->
-		<div class="flex items-center gap-3 bg-[#fdfbf7] px-[1.2rem] py-[0.9rem]">
+		<div class="flex items-center gap-3 bg-paper-bright px-[1.2rem] py-[0.9rem]">
 			<div
-				class="flex h-[52px] w-[52px] min-w-[52px] shrink-0 items-center justify-center overflow-hidden rounded-full border-[3px] border-[#2d2420] bg-[#e8ddd0]"
+				class="flex h-[52px] w-[52px] min-w-[52px] shrink-0 items-center justify-center overflow-hidden rounded-full border-[3px] border-ink-warm bg-sand"
 			>
 				{#if avatarUrl && !imageFailed}
 					<img
@@ -82,14 +82,14 @@
 						}}
 					/>
 				{:else}
-					<UserRound class="h-7 w-7 text-[#8a6c52]" />
+					<UserRound class="h-7 w-7 text-muted-ink" />
 				{/if}
 			</div>
 
 			<div class="min-w-0 flex-1">
 				<p
-					class="truncate text-[1.7rem] leading-[1.1] font-bold text-[#2d2420]"
-					style="font-family: 'Caveat', cursive;"
+					class="truncate text-[1.7rem] leading-[1.1] font-bold text-ink-warm"
+					style="font-family: var(--font-hand);"
 				>
 					{nickname}
 				</p>

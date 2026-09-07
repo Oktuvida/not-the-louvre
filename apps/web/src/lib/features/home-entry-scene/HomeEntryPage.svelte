@@ -254,12 +254,12 @@
 </svelte:head>
 
 <div
-	class="relative h-screen w-full overflow-hidden bg-gradient-to-br from-[#f5f0e8] via-[#fdfbf7] to-[#e8e0d5]"
+	class="relative h-screen w-full overflow-hidden bg-gradient-to-br from-shell via-paper-bright to-[#e8e0d5]"
 >
 	<div class="absolute inset-0 flex items-center justify-center">
 		<div class="relative h-full w-full opacity-80">
 			<div
-				class="relative h-full w-full overflow-hidden border-[var(--border-frame)] bg-[radial-gradient(circle_at_50%_18%,_rgba(255,255,255,0.44),_transparent_30%),linear-gradient(180deg,_#ccb194_0%,_#8b6f57_100%)] shadow-[var(--shadow-strong)]"
+				class="relative h-full w-full overflow-hidden border-[var(--border-frame)] bg-[radial-gradient(circle_at_50%_18%,_rgba(255,255,255,0.44),_transparent_30%),linear-gradient(180deg,_#ccb194_0%,_#8b6f57_100%)] shadow-strong"
 			>
 				<div
 					aria-hidden={sceneReady}
@@ -281,7 +281,7 @@
 				{/if}
 			</div>
 			<div
-				class="bg-gradient-radial absolute inset-0 from-transparent via-transparent to-[#f5f0e8]"
+				class="bg-gradient-radial absolute inset-0 from-transparent via-transparent to-shell"
 			></div>
 		</div>
 	</div>
@@ -296,7 +296,7 @@
 	/>
 	{#if entryState === 'inside' && user}
 		<div
-			class="pointer-events-auto absolute bottom-52 left-1/2 z-[25] flex -translate-x-1/2 flex-col items-center gap-4 transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:bottom-28"
+			class="pointer-events-auto absolute bottom-52 left-1/2 z-25 flex -translate-x-1/2 flex-col items-center gap-4 transition-all duration-700 ease-in md:bottom-28"
 			class:translate-y-[120%]={isExiting}
 			class:opacity-0={isExiting}
 			inert={isExiting}

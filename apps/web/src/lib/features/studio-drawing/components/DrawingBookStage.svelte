@@ -107,7 +107,7 @@
 			<div class="book-cover">
 				<button
 					type="button"
-					class="cover-front"
+					class="cover-front focus-ring-cover"
 					onclick={onOpenRequest}
 					disabled={stageState !== 'closed'}
 					aria-label="Open sketchbook"
@@ -189,8 +189,8 @@
 		width: fit-content;
 		height: 100%;
 		border: 3px solid #1a1611;
-		border-radius: 2px;
-		background: #fbf7f0;
+		border-radius: var(--radius-hairline);
+		background: var(--color-paper);
 		box-shadow:
 			inset 0 0 0 1px rgb(255 255 255 / 0.06),
 			0 1.5rem 3rem rgb(47 36 28 / 0.2);
@@ -311,7 +311,7 @@
 	.inside-cover-text {
 		writing-mode: vertical-rl;
 		transform: rotate(180deg);
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 7px;
 		letter-spacing: 3px;
 		text-transform: uppercase;
@@ -340,7 +340,7 @@
 	.page {
 		position: relative;
 		border-radius: 0;
-		background: #fbf7f0;
+		background: var(--color-paper);
 		border-left: 1px solid rgb(30 26 20 / 0.15);
 	}
 
@@ -435,7 +435,7 @@
 		margin-top: 0;
 		padding-top: 0.65rem;
 		text-align: center;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		/* `font-size: 7` is not a length, so it was dropped while the matching
 		 * `line-height: 7` stood: a ~7-line box under the canvas, stealing height
 		 * from `.canvas-window` (flex: 1) on every viewport. */
@@ -456,17 +456,20 @@
 			inset 0 0 0 1px rgb(255 255 255 / 0.3),
 			inset -3px 0 15px rgb(0 0 0 / 0.06),
 			0 1.6rem 3rem rgb(47 36 28 / 0.3);
-		color: #fbf7f0;
+		color: var(--color-paper);
 		text-align: left;
 		transform-origin: left center;
 		transform-style: preserve-3d;
 		transition:
-			transform var(--book-open-duration) cubic-bezier(0.23, 1, 0.32, 1),
+			transform var(--book-open-duration) var(--ease-glide),
 			box-shadow var(--book-open-duration) ease;
 		z-index: 5;
 	}
 
 	.cover-front {
+		/* The cover fills its book, so the ring needs room to clear the spine
+		   and the leather edge. Colour comes from `focus-ring-cover`. */
+		--focus-ring-offset: 5px;
 		position: absolute;
 		inset: 0;
 		display: flex;
@@ -486,11 +489,6 @@
 
 	.cover-front:disabled {
 		cursor: default;
-	}
-
-	.cover-front:focus-visible {
-		outline: 3px solid #f4c430;
-		outline-offset: 5px;
 	}
 
 	.cover-front:active {
@@ -566,9 +564,9 @@
 		width: 3px;
 		height: auto;
 		transform: none;
-		background: var(--color-primary, #d4834a);
+		background: var(--color-primary);
 		border: none;
-		border-radius: 2px;
+		border-radius: var(--radius-hairline);
 		display: block;
 		box-shadow: 0 0 8px rgb(212 131 74 / 0.25);
 		pointer-events: none;
@@ -589,7 +587,7 @@
 	}
 
 	.cover-title {
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: clamp(3rem, 9vw, 4.5rem);
 		font-weight: 700;
 		letter-spacing: 6px;
@@ -606,7 +604,7 @@
 		bottom: clamp(3.5rem, 12vh, 6rem);
 		left: 50%;
 		transform: translateX(-50%);
-		background: #fbf7f0;
+		background: var(--color-paper);
 		border: 1px solid rgb(0 0 0 / 0.06);
 		border-radius: 3px;
 		box-shadow: 0 2px 6px rgb(0 0 0 / 0.1);
@@ -617,12 +615,12 @@
 	}
 
 	.cover-label-title {
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 1.3rem;
 		font-weight: 600;
 		letter-spacing: 4px;
 		text-transform: uppercase;
-		color: #2f241c;
+		color: var(--color-ink);
 		display: block;
 	}
 
@@ -634,7 +632,7 @@
 	}
 
 	.cover-label-sub {
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.35rem;
 		color: rgb(47 36 28 / 0.45);
 	}
@@ -645,7 +643,7 @@
 		left: 50%;
 		transform: translateX(-50%);
 		max-width: 20ch;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.5rem;
 		line-height: 1.5;
 		color: rgba(33, 31, 29, 0.76);

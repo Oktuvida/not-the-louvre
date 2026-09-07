@@ -772,8 +772,17 @@
 </div>
 
 <style>
-	/* The back office sits against the same dark museum wall as the gallery. */
-	:global(body) {
+	/* The back office sits against the same dark museum wall as the gallery.
+	 *
+	 * Keyed off the shell rather than a bare `body`: route stylesheets are
+	 * never unlinked on client-side navigation, so a bare `:global(body)` here
+	 * (same specificity as the base rule in routes/layout.css, but later in
+	 * source order) kept painting the home and the studio dark brown for the
+	 * rest of the session once a moderator had opened /admin. `body:has()` is
+	 * (0,1,1), so it outranks the base rule while this page is mounted and
+	 * releases it the instant it unmounts — the pattern GalleryLayoutFrame
+	 * already uses. */
+	:global(body:has(.ops-shell)) {
 		background:
 			radial-gradient(circle at 82% 8%, rgba(255, 247, 214, 0.16), transparent 46%),
 			radial-gradient(circle at 12% 94%, rgba(18, 10, 4, 0.5), transparent 60%),
@@ -784,7 +793,7 @@
 		max-width: 1200px;
 		margin: 0 auto;
 		padding: 6rem 1.25rem 4rem;
-		color: #2f241c;
+		color: var(--color-ink);
 	}
 
 	/*
@@ -805,13 +814,13 @@
 
 	.hero-panel h1 {
 		margin: 0.2rem 0 0.4rem;
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: clamp(1.9rem, 4vw, 2.9rem);
 		font-weight: 700;
 		line-height: 1.05;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		color: #2f241c;
+		color: var(--color-ink);
 	}
 
 	/* How long and how crooked this swipe is; the paint is `.paint-swipe`. */
@@ -827,7 +836,7 @@
 		margin: 0.6rem 0 0;
 		font-size: 0.96rem;
 		line-height: 1.65;
-		color: #5d4e37;
+		color: var(--color-olive);
 	}
 
 	/* the on-duty card, pinned beside the title */
@@ -837,9 +846,9 @@
 		align-content: start;
 		align-self: start;
 		padding: 1rem 1.1rem;
-		border: 1px solid #d6cfc5;
-		border-radius: 2px;
-		background: #fdfbf7;
+		border: 1px solid var(--color-hairline);
+		border-radius: var(--radius-hairline);
+		background: var(--color-paper-bright);
 		box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.16);
 		rotate: 0.8deg;
 	}
@@ -849,31 +858,31 @@
 	label span,
 	.metric-card span {
 		display: block;
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 0.62rem;
 		font-weight: 700;
 		letter-spacing: 0.2em;
 		text-transform: uppercase;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 	}
 
 	.hero-meta strong {
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.5rem;
 		font-weight: 600;
 		line-height: 1;
-		color: #2f241c;
+		color: var(--color-ink);
 		rotate: -1deg;
 	}
 
 	.eyebrow {
 		margin: 0;
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 0.66rem;
 		font-weight: 700;
 		letter-spacing: 0.22em;
 		text-transform: uppercase;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 	}
 
 	/* ── metric index cards ── */
@@ -887,10 +896,10 @@
 
 	.metric-card {
 		padding: 1rem 1.05rem;
-		border: 1px solid #d6cfc5;
+		border: 1px solid var(--color-hairline);
 		border-top: 5px solid rgba(212, 131, 74, 0.65);
-		border-radius: 2px;
-		background: #fdfbf7;
+		border-radius: var(--radius-hairline);
+		background: var(--color-paper-bright);
 		box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.18);
 	}
 
@@ -905,18 +914,18 @@
 	.metric-card strong {
 		display: block;
 		margin-top: 0.45rem;
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 2.1rem;
 		font-weight: 700;
 		line-height: 1;
-		color: #2f241c;
+		color: var(--color-ink);
 	}
 
 	.metric-card p {
 		margin: 0.5rem 0 0;
 		font-size: 0.82rem;
 		line-height: 1.5;
-		color: #6f6257;
+		color: var(--color-muted);
 	}
 
 	.accent-danger {
@@ -947,7 +956,7 @@
 		border-radius: 7px 7px 0 0;
 		padding: 0.6rem 1.15rem 0.75rem;
 		background: #ece2cd;
-		color: #6b5a45;
+		color: var(--color-bark);
 		box-shadow: none;
 		translate: 0 2px;
 	}
@@ -958,9 +967,9 @@
 	}
 
 	.tab-strip button.active {
-		background: #fbf7f0;
-		color: #2f241c;
-		border-color: #d6cfc5;
+		background: var(--color-paper);
+		color: var(--color-ink);
+		border-color: var(--color-hairline);
 		box-shadow: 0 -3px 8px rgba(0, 0, 0, 0.12);
 		translate: 0 0;
 	}
@@ -969,32 +978,32 @@
 
 	button {
 		border: 0;
-		border-radius: 2px;
+		border-radius: var(--radius-hairline);
 		padding: 0.62rem 1.05rem;
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 0.72rem;
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		cursor: pointer;
-		background: #d4834a;
-		color: #2f241c;
+		background: var(--color-primary);
+		color: var(--color-ink);
 		box-shadow: 2px 3px 0 rgba(47, 36, 28, 0.28);
 		transition:
-			translate 120ms ease,
-			box-shadow 120ms ease,
-			background 120ms ease;
+			translate var(--duration-press) ease,
+			box-shadow var(--duration-press) ease,
+			background var(--duration-press) ease;
 	}
 
 	button.secondary {
-		background: #fdfbf7;
+		background: var(--color-paper-bright);
 		border: 1.5px solid rgba(141, 110, 78, 0.5);
-		color: #5d4e37;
+		color: var(--color-olive);
 	}
 
 	button.danger {
-		background: #a24d49;
-		color: #fdfbf7;
+		background: var(--color-danger);
+		color: var(--color-paper-bright);
 	}
 
 	button:hover:enabled {
@@ -1013,9 +1022,14 @@
 		box-shadow: none;
 	}
 
+	/*
+	 * The one place the ring is applied by element rather than by the
+	 * `focus-ring` utility: the ops desk has 25 buttons and a blanket rule
+	 * cannot forget one. The values are still the single source of truth.
+	 */
 	button:focus-visible {
-		outline: 3px solid #4ecdc4;
-		outline-offset: 2px;
+		outline: var(--focus-ring-width) solid var(--focus-ring-color);
+		outline-offset: var(--focus-ring-offset);
 	}
 
 	/* ── notices: taped paper strips ── */
@@ -1024,8 +1038,8 @@
 		margin: 1rem 0;
 		padding: 0.8rem 1rem;
 		border-left: 5px solid rgba(141, 110, 78, 0.6);
-		border-radius: 2px;
-		background: #fdfbf7;
+		border-radius: var(--radius-hairline);
+		background: var(--color-paper-bright);
 		box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.2);
 		rotate: -0.2deg;
 		font-size: 0.9rem;
@@ -1033,8 +1047,8 @@
 	}
 
 	.banner[data-tone='error'] {
-		border-left-color: #a8403a;
-		color: #8f3720;
+		border-left-color: var(--color-danger-deep);
+		color: var(--color-rust);
 	}
 
 	.banner[data-tone='success'] {
@@ -1070,11 +1084,11 @@
 	.panel-header h2,
 	.entity-header h3 {
 		margin: 0.25rem 0 0;
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-weight: 700;
 		letter-spacing: 0.03em;
 		text-transform: uppercase;
-		color: #2f241c;
+		color: var(--color-ink);
 	}
 
 	.panel-header h2 {
@@ -1089,7 +1103,7 @@
 	.entity-header p,
 	.content-summary {
 		margin: 0.35rem 0 0;
-		color: #5d4e37;
+		color: var(--color-olive);
 		line-height: 1.55;
 	}
 
@@ -1104,10 +1118,10 @@
 	.queue-empty {
 		margin: 0;
 		padding: 1.2rem 0.3rem;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.25rem;
 		font-weight: 600;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 		rotate: -0.5deg;
 	}
 
@@ -1120,9 +1134,9 @@
 
 	.entity-card {
 		padding: 1.1rem 1.15rem;
-		border: 1px solid #d6cfc5;
-		border-radius: 2px;
-		background: #fdfbf7;
+		border: 1px solid var(--color-hairline);
+		border-radius: var(--radius-hairline);
+		background: var(--color-paper-bright);
 		box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.14);
 	}
 
@@ -1148,9 +1162,9 @@
 	.badge {
 		padding: 0.22rem 0.5rem;
 		border: 2px solid currentColor;
-		border-radius: 4px;
+		border-radius: var(--radius-chip);
 		background: transparent;
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 0.6rem;
 		font-weight: 700;
 		letter-spacing: 0.14em;
@@ -1174,7 +1188,7 @@
 	}
 
 	.badge.danger {
-		color: #a8403a;
+		color: var(--color-danger-deep);
 		rotate: 1.5deg;
 	}
 
@@ -1187,18 +1201,18 @@
 
 	dt {
 		margin: 0;
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 0.6rem;
 		font-weight: 700;
 		letter-spacing: 0.16em;
 		text-transform: uppercase;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 	}
 
 	dd {
 		margin: 0.2rem 0 0;
 		font-size: 0.92rem;
-		color: #2f241c;
+		color: var(--color-ink);
 		overflow-wrap: anywhere;
 	}
 
@@ -1207,13 +1221,13 @@
 		margin: 0.6rem 0 0;
 		padding: 0.55rem 0.85rem;
 		border-left: 4px solid rgba(162, 77, 73, 0.7);
-		border-radius: 2px;
+		border-radius: var(--radius-hairline);
 		background: rgba(250, 238, 234, 0.8);
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.1rem;
 		font-weight: 600;
 		line-height: 1.3;
-		color: #8f3720;
+		color: var(--color-rust);
 		rotate: -0.3deg;
 	}
 
@@ -1236,16 +1250,16 @@
 		margin-top: 0.55rem;
 		padding: 0.7rem 0.85rem;
 		border: 1.5px solid rgba(141, 110, 78, 0.45);
-		border-radius: 2px;
+		border-radius: var(--radius-hairline);
 		background: #fffdf8;
 		font: inherit;
-		color: #2f241c;
+		color: var(--color-ink);
 		resize: vertical;
 	}
 
 	textarea:focus-visible {
 		outline: none;
-		border-color: #d4834a;
+		border-color: var(--color-primary);
 		box-shadow: 0 0 0 3px rgba(212, 131, 74, 0.2);
 	}
 

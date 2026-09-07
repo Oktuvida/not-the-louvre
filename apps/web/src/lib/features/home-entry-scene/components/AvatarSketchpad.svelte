@@ -306,6 +306,8 @@
 
 		blob.animate([{ scale: '1' }, { scale: '0.88', offset: 0.4 }, { scale: '1' }], {
 			duration: 360,
+			// The Web Animations API resolves no custom properties, so the spring
+			// curve has to be spelled out here; it is `--ease-spring` by value.
 			easing: 'cubic-bezier(0.34, 1.5, 0.6, 1)'
 		});
 	};
@@ -614,7 +616,7 @@
 				{#each palette as color, index (color)}
 					<button
 						type="button"
-						class="paint-dab"
+						class="paint-dab focus-ring"
 						class:is-active={activeColor === color}
 						style={`--dab-color:${color};--dab-i:${index};`}
 						aria-pressed={activeColor === color}
@@ -643,7 +645,7 @@
 						min="0"
 						max={(BRUSH_SIZES.length - 1).toString()}
 						step="1"
-						class="brush-slider"
+						class="brush-slider focus-ring"
 						aria-label="Brush size"
 					/>
 					<div class="test-scrap-stack">
@@ -724,11 +726,11 @@
 <style>
 	.sketch-subtitle {
 		margin: 0;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.45rem;
 		font-weight: 600;
 		text-align: center;
-		color: #6b5a45;
+		color: var(--color-bark);
 		rotate: -0.4deg;
 	}
 
@@ -746,7 +748,7 @@
 		rotate: -0.3deg;
 		font-size: 0.85rem;
 		font-weight: 600;
-		color: #8f3720;
+		color: var(--color-rust);
 	}
 
 	.sketch-bench {
@@ -783,12 +785,12 @@
 
 	.rail-label {
 		margin: 0 0 10px;
-		font-family: 'Fredoka', sans-serif;
+		font-family: var(--font-display);
 		font-size: 0.62rem;
 		font-weight: 700;
 		letter-spacing: 0.22em;
 		text-transform: uppercase;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 	}
 
 	/* ── paint dabs ── */
@@ -806,6 +808,8 @@
 	}
 
 	.paint-dab {
+		/* One extra pixel of air so the ring clears the dab's paint blob. */
+		--focus-ring-offset: 3px;
 		position: relative;
 		width: 40px;
 		height: 36px;
@@ -829,7 +833,7 @@
 		background: var(--dab-color);
 		box-shadow: 1px 2px 3px rgba(45, 36, 32, 0.28);
 		transition:
-			scale 130ms cubic-bezier(0.34, 1.5, 0.6, 1),
+			scale 130ms var(--ease-spring),
 			rotate 130ms ease;
 		animation: dab-pop 320ms cubic-bezier(0.3, 1.5, 0.55, 1) both;
 		animation-delay: calc(var(--dab-i) * 16ms);
@@ -877,11 +881,6 @@
 		scale: 1.12;
 	}
 
-	.paint-dab:focus-visible {
-		outline: 3px solid #4ecdc4;
-		outline-offset: 3px;
-	}
-
 	/* selection = circled in pencil */
 	.paint-dab.is-active .dab-paint {
 		scale: 1.1;
@@ -919,7 +918,7 @@
 
 	.brush-slider::-webkit-slider-runnable-track {
 		height: 3px;
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		background: rgba(107, 74, 46, 0.4);
 	}
 
@@ -928,31 +927,26 @@
 		margin-top: -8.5px;
 		height: 20px;
 		width: 20px;
-		border: 2px solid #fdfbf7;
+		border: 2px solid var(--color-paper-bright);
 		border-radius: 48% 52% 50% 50% / 52% 48% 54% 46%;
-		background: radial-gradient(circle at 32% 28%, #c96a5b, #a8403a 55%, #6e211c);
-		box-shadow: 1px 2px 4px rgba(45, 36, 32, 0.35);
+		background: radial-gradient(circle at 32% 28%, #c96a5b, var(--color-danger-deep) 55%, #6e211c);
+		box-shadow: var(--shadow-chip);
 	}
 
 	.brush-slider::-moz-range-track {
 		height: 3px;
 		border: none;
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		background: rgba(107, 74, 46, 0.4);
 	}
 
 	.brush-slider::-moz-range-thumb {
 		height: 20px;
 		width: 20px;
-		border: 2px solid #fdfbf7;
+		border: 2px solid var(--color-paper-bright);
 		border-radius: 50%;
-		background: radial-gradient(circle at 32% 28%, #c96a5b, #a8403a 55%, #6e211c);
-		box-shadow: 1px 2px 4px rgba(45, 36, 32, 0.35);
-	}
-
-	.brush-slider:focus-visible {
-		outline: 3px solid #4ecdc4;
-		outline-offset: 2px;
+		background: radial-gradient(circle at 32% 28%, #c96a5b, var(--color-danger-deep) 55%, #6e211c);
+		box-shadow: var(--shadow-chip);
 	}
 
 	/* the test scrap: a chip of paper where the current dab size shows */
@@ -965,8 +959,8 @@
 		display: grid;
 		place-items: center;
 		padding: 5px;
-		background: #fdfbf7;
-		border: 1px solid #d6cfc5;
+		background: var(--color-paper-bright);
+		border: 1px solid var(--color-hairline);
 		box-shadow: 2px 3px 7px rgba(0, 0, 0, 0.18);
 		rotate: 3deg;
 	}
@@ -987,18 +981,18 @@
 		border-radius: 50%;
 		border: 1px solid rgba(47, 36, 28, 0.14);
 		transition:
-			width 120ms ease,
-			height 120ms ease,
-			background 120ms ease;
+			width var(--duration-press) ease,
+			height var(--duration-press) ease,
+			background var(--duration-press) ease;
 	}
 
 	.test-caption {
 		margin: 6px 0 0;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1rem;
 		font-weight: 600;
 		text-align: center;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 		rotate: 2deg;
 	}
 
@@ -1009,9 +1003,9 @@
 		width: 100%;
 		max-width: 27rem;
 		margin-inline: auto;
-		background: #fdfbf7;
+		background: var(--color-paper-bright);
 		padding: 11px;
-		border: 1px solid #d6cfc5;
+		border: 1px solid var(--color-hairline);
 		box-shadow:
 			3px 4px 12px rgba(0, 0, 0, 0.22),
 			1px 1px 3px rgba(0, 0, 0, 0.12);
@@ -1054,10 +1048,10 @@
 
 	.easel-note {
 		margin: 10px 4px 0;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.15rem;
 		font-weight: 600;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 		rotate: -1.4deg;
 	}
 
@@ -1088,7 +1082,7 @@
 		background:
 			radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.28), transparent 38%),
 			radial-gradient(circle at 70% 80%, rgba(0, 0, 0, 0.3), transparent 52%),
-			radial-gradient(circle at 50% 45%, #a8403a 0%, #6e211c 78%);
+			radial-gradient(circle at 50% 45%, var(--color-danger-deep) 0%, #6e211c 78%);
 		box-shadow:
 			2px 4px 9px rgba(20, 6, 4, 0.45),
 			inset 0 -3px 6px rgba(0, 0, 0, 0.25);
@@ -1115,7 +1109,7 @@
 
 	.seal-caption {
 		margin: 6px 0 0;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.05rem;
 		font-weight: 700;
 		color: #7a5c40;
@@ -1134,10 +1128,10 @@
 
 	.footer-note {
 		margin: 0 auto 0 0;
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.1rem;
 		font-weight: 600;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 		rotate: -1deg;
 	}
 

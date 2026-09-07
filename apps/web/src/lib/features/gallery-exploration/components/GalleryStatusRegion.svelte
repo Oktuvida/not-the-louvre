@@ -41,13 +41,13 @@
 
 <div
 	aria-live="polite"
-	class="pointer-events-none fixed inset-x-0 bottom-4 z-[70] flex justify-center px-4 md:inset-x-auto md:right-8 md:bottom-6 md:justify-end"
+	class="pointer-events-none fixed inset-x-0 bottom-4 z-(--z-status) flex justify-center px-4 md:inset-x-auto md:right-8 md:bottom-6 md:justify-end"
 	data-testid={testId}
 	role="status"
 >
 	{#if message}
 		<div
-			class={`pointer-events-auto flex max-w-md items-start gap-3 rounded-xl border-4 border-[#2d2420] px-4 py-3 shadow-[3px_4px_0_rgba(45,36,32,0.35)] ${tone === 'error' ? 'bg-[#f7d8c7] text-[#7a2e1c]' : 'bg-[#fdfbf7] text-[#2d2420]'}`}
+			class={`pointer-events-auto flex max-w-md items-start gap-3 rounded-xl border-4 border-ink-warm px-4 py-3 shadow-[3px_4px_0_rgba(45,36,32,0.35)] ${tone === 'error' ? 'bg-[#f7d8c7] text-[#7a2e1c]' : 'bg-paper-bright text-ink-warm'}`}
 			transition:fly={flyParams}
 		>
 			<p class="text-sm font-semibold">{message}</p>

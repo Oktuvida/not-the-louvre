@@ -13,7 +13,7 @@
 	);
 </script>
 
-<div class="relative flex h-screen w-full items-center justify-center overflow-hidden bg-[#f5f0e8]">
+<div class="relative flex h-screen w-full items-center justify-center overflow-hidden bg-shell">
 	<!-- Paint splotches background -->
 	<div class="pointer-events-none absolute inset-0">
 		{#each Array.from({ length: 8 }).map((__, i) => i) as index (`splotch-${index}`)}
@@ -35,17 +35,15 @@
 	<div class="z-10 px-8 text-center">
 		<!-- Giant 404 -->
 		<h1
-			class="font-display mb-4 text-[10rem] leading-none font-black text-[#2d2420]"
+			class="mb-4 font-display text-[10rem] leading-none font-black text-ink-warm"
 			style="text-shadow: 6px 6px 0px #e8b896, 12px 12px 0px rgba(45, 36, 32, 0.2);"
 		>
 			{status}
 		</h1>
 
-		<h2 class="font-display mb-6 text-4xl font-bold text-[#2d2420]">Oops! This Canvas is Blank</h2>
+		<h2 class="mb-6 font-display text-4xl font-bold text-ink-warm">Oops! This Canvas is Blank</h2>
 
-		<p
-			class="mx-auto mb-8 max-w-md [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif] text-xl text-[#6b625a] italic"
-		>
+		<p class="mx-auto mb-8 max-w-md font-body text-xl text-ink-faint italic">
 			{message}
 		</p>
 
@@ -53,7 +51,7 @@
 			<GameLink
 				href="/"
 				variant="primary"
-				className="rotate-1 border-4 px-8 py-4 shadow-xl [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif]"
+				className="rotate-1 border-4 px-8 py-4 shadow-xl font-body"
 			>
 				<House class="mr-3 h-6 w-6" />
 				<span class="text-lg">Go Home</span>
@@ -62,7 +60,7 @@
 			<GameLink
 				href="/draw"
 				variant="secondary"
-				className="-rotate-1 border-4 px-8 py-4 shadow-xl [font-family:'Baloo_2',_'Trebuchet_MS',_sans-serif]"
+				className="-rotate-1 border-4 px-8 py-4 shadow-xl font-body"
 			>
 				<Paintbrush class="mr-3 h-6 w-6" />
 				<span class="text-lg">Start Drawing</span>

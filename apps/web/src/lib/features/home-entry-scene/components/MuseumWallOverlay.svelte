@@ -275,10 +275,13 @@
 				applyMuseumWallWillChange(elements, true);
 
 				if (authOverlayElement) {
+					// Same duration collapse as the wall zoom beside it: a GSAP tween
+					// is invisible to the global reduced-motion CSS reset, so the
+					// preference has to be applied here.
 					gsap.to(authOverlayElement, {
 						opacity: 0,
 						scale: 0.95,
-						duration: 0.3,
+						duration: reducedMotion ? 0 : 0.3,
 						ease: 'power1.in'
 					});
 				}
@@ -330,10 +333,7 @@
 </script>
 
 {#if isVisible}
-	<div
-		bind:this={overlayElement}
-		class="pointer-events-none absolute inset-0 z-[20] overflow-hidden"
-	>
+	<div bind:this={overlayElement} class="pointer-events-none absolute inset-0 z-20 overflow-hidden">
 		<div
 			bind:this={wallSceneElement}
 			data-testid="museum-wall-scene"
@@ -343,12 +343,12 @@
 			<div bind:this={wallTextureElement} class="absolute inset-0">
 				<div
 					data-testid="museum-wall-slab-left"
-					class="absolute inset-0 bg-[#252018]"
+					class="absolute inset-0 bg-wall"
 					style={`background-image:url('${wallPatternUrl}');background-size:512px 512px;background-repeat:repeat;clip-path:polygon(0% 0%,100% 0%,100% ${wallOpeningBounds.top},${wallOpeningBounds.left} ${wallOpeningBounds.top},${wallOpeningBounds.left} 100%,0% 100%);`}
 				></div>
 				<div
 					data-testid="museum-wall-slab-right"
-					class="absolute inset-0 bg-[#252018]"
+					class="absolute inset-0 bg-wall"
 					style={`background-image:url('${wallPatternUrl}');background-size:512px 512px;background-repeat:repeat;clip-path:polygon(100% 0%,100% 100%,0% 100%,0% ${wallOpeningBounds.bottom},${wallOpeningBounds.right} ${wallOpeningBounds.bottom},${wallOpeningBounds.right} 0%);`}
 				></div>
 			</div>
@@ -378,12 +378,12 @@
 						data-testid="museum-wall-logo"
 						alt=""
 						draggable="false"
-						class="pointer-events-none absolute top-[15%] right-[calc(100%-4.5rem)] z-[1] w-[clamp(24rem,36vw,34rem)] -rotate-[10deg] opacity-95"
+						class="pointer-events-none absolute top-[15%] right-[calc(100%-4.5rem)] z-1 w-[clamp(24rem,36vw,34rem)] -rotate-[10deg] opacity-95"
 						style="filter: sepia(0.42) saturate(1.08) contrast(0.96) brightness(0.88) drop-shadow(0 8px 16px rgba(44, 24, 8, 0.18));"
 					/>
 					<!-- Soft shadow that anchors the logo to the wall. -->
 					<div
-						class="pointer-events-none absolute top-[36%] right-[calc(100%-2.6rem)] z-[0] h-[16rem] w-[24rem] -rotate-[9deg] bg-[radial-gradient(ellipse_at_62%_24%,rgba(26,14,6,0.2)_0%,rgba(26,14,6,0.28)_28%,rgba(26,14,6,0.16)_52%,transparent_72%)] blur-[10px]"
+						class="pointer-events-none absolute top-[36%] right-[calc(100%-2.6rem)] z-0 h-[16rem] w-[24rem] -rotate-[9deg] bg-[radial-gradient(ellipse_at_62%_24%,rgba(26,14,6,0.2)_0%,rgba(26,14,6,0.28)_28%,rgba(26,14,6,0.16)_52%,transparent_72%)] blur-[10px]"
 					></div>
 					<div
 						bind:this={frameElement}
@@ -392,7 +392,7 @@
 					>
 						<!-- Outer glow catching light on the frame edges. -->
 						<div
-							class="pointer-events-none absolute -inset-[2%] rounded-[2rem] bg-[radial-gradient(circle_at_88%_12%,rgba(255,249,226,0.34)_0%,rgba(255,243,210,0.16)_24%,transparent_56%)]"
+							class="pointer-events-none absolute -inset-[2%] rounded-4xl bg-[radial-gradient(circle_at_88%_12%,rgba(255,249,226,0.34)_0%,rgba(255,243,210,0.16)_24%,transparent_56%)]"
 						></div>
 						<!-- Broad frame shadow that gives the piece weight. -->
 						<div
@@ -404,7 +404,7 @@
 						></div>
 						<div
 							bind:this={openingElement}
-							class="absolute overflow-hidden rounded-[0.25rem] border border-[#24180e]/25 bg-[linear-gradient(180deg,rgba(255,255,255,0.16),rgba(255,255,255,0.03))] shadow-[inset_0_0_40px_rgba(26,18,12,0.28)]"
+							class="absolute overflow-hidden rounded-sm border border-[#24180e]/25 bg-[linear-gradient(180deg,rgba(255,255,255,0.16),rgba(255,255,255,0.03))] shadow-[inset_0_0_40px_rgba(26,18,12,0.28)]"
 							style={`left:${museumWindowOpening.left * 100}%;top:${museumWindowOpening.top * 100}%;width:${museumWindowOpening.width * 100}%;height:${museumWindowOpening.height * 100}%;`}
 						>
 							<!-- Reflections across the glass surface. -->
@@ -433,7 +433,7 @@
 					</div>
 
 					<!-- Entry button shown only when the visitor is outside. -->
-					<div class="pointer-events-none absolute top-full left-1/2 z-[25] -translate-x-1/2">
+					<div class="pointer-events-none absolute top-full left-1/2 z-25 -translate-x-1/2">
 						<GameButton
 							onclick={() => dispatch('COME_IN')}
 							size="hero"

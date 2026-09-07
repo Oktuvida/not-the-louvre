@@ -80,7 +80,7 @@
 	});
 </script>
 
-<div class={`relative h-full w-full bg-[#ece4d8] ${className}`}>
+<div class={`relative h-full w-full bg-linen ${className}`}>
 	{#if placeholder}
 		<!-- Blurred tiny preview stays mounted beneath the real image so a
 		     recycled card never re-decodes it; the slight scale hides the blur's
@@ -112,7 +112,8 @@
 	/>
 	{#if blurred && showScrim}
 		<div class="nsfw-scrim">
-			<span class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black">18+</span>
+			<span class="rounded-full border-2 border-paper-bright px-3 py-1 text-xs font-black">18+</span
+			>
 			<p class="mt-2 text-[0.65rem] font-semibold tracking-wide uppercase opacity-80">
 				Sensitive content
 			</p>
@@ -136,16 +137,16 @@
 		scale: 1.06;
 		filter: blur(var(--nsfw-placeholder-blur, 12px));
 		transition:
-			opacity 200ms ease,
-			filter 200ms ease;
+			opacity var(--duration-ui) ease,
+			filter var(--duration-ui) ease;
 	}
 
 	.nsfw-photo {
 		opacity: 0;
 		transition:
-			opacity 200ms ease,
-			filter 200ms ease,
-			scale 200ms ease;
+			opacity var(--duration-ui) ease,
+			filter var(--duration-ui) ease,
+			scale var(--duration-ui) ease;
 	}
 
 	.nsfw-photo.is-loaded {
@@ -173,6 +174,6 @@
 		justify-content: center;
 		pointer-events: none;
 		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
-		color: #fdfbf7;
+		color: var(--color-paper-bright);
 	}
 </style>

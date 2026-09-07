@@ -52,7 +52,7 @@
 					{#each drawingPalette as color (color)}
 						<button
 							type="button"
-							class="palette-swatch"
+							class="palette-swatch focus-ring"
 							class:active={drawingTools.activeColor === color}
 							style={`--swatch-color:${color}`}
 							onclick={() => selectColor(color)}
@@ -72,7 +72,7 @@
 				{#each drawingPalette as color (color)}
 					<button
 						type="button"
-						class="palette-swatch"
+						class="palette-swatch focus-ring"
 						class:active={drawingTools.activeColor === color}
 						style={`--swatch-color:${color}`}
 						onclick={() => selectColor(color)}
@@ -97,7 +97,7 @@
 		<div class="slider-wrapper">
 			<input
 				id="brush-size"
-				class="brush-slider"
+				class="brush-slider focus-ring"
 				type="range"
 				min="0"
 				max={brushSizeSteps.length - 1}
@@ -225,12 +225,12 @@
 	}
 
 	.tray-label {
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 0.62rem;
 		font-weight: 700;
 		letter-spacing: 0.22em;
 		text-transform: uppercase;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 		margin-bottom: 10px;
 		display: flex;
 		align-items: center;
@@ -281,11 +281,6 @@
 		cursor: pointer;
 	}
 
-	.palette-swatch:focus-visible {
-		outline: 3px solid #4ecdc4;
-		outline-offset: 2px;
-	}
-
 	.swatch-paint {
 		position: absolute;
 		inset: 1px;
@@ -293,7 +288,7 @@
 		background: var(--swatch-color);
 		box-shadow: 1px 2px 3px rgba(45, 36, 32, 0.28);
 		transition:
-			scale 130ms cubic-bezier(0.34, 1.5, 0.6, 1),
+			scale 130ms var(--ease-spring),
 			rotate 130ms ease;
 	}
 
@@ -378,7 +373,7 @@
 		background: linear-gradient(
 			90deg,
 			#d9a468 0%,
-			#d4834a var(--slider-pct, 30%),
+			var(--color-primary) var(--slider-pct, 30%),
 			rgba(107, 74, 46, 0.18) var(--slider-pct, 30%),
 			rgba(107, 74, 46, 0.12) 100%
 		);
@@ -392,26 +387,21 @@
 		margin-top: -1px;
 		width: 20px;
 		height: 20px;
-		border: 2px solid #fdfbf7;
+		border: 2px solid var(--color-paper-bright);
 		border-radius: 48% 52% 50% 50% / 52% 48% 54% 46%;
-		background: radial-gradient(circle at 32% 28%, #c96a5b, #a8403a 55%, #6e211c);
-		box-shadow: 1px 2px 4px rgba(45, 36, 32, 0.35);
+		background: radial-gradient(circle at 32% 28%, #c96a5b, var(--color-danger-deep) 55%, #6e211c);
+		box-shadow: var(--shadow-chip);
 		cursor: pointer;
 	}
 
 	.brush-slider::-moz-range-thumb {
 		width: 20px;
 		height: 20px;
-		border: 2px solid #fdfbf7;
+		border: 2px solid var(--color-paper-bright);
 		border-radius: 50%;
-		background: radial-gradient(circle at 32% 28%, #c96a5b, #a8403a 55%, #6e211c);
-		box-shadow: 1px 2px 4px rgba(45, 36, 32, 0.35);
+		background: radial-gradient(circle at 32% 28%, #c96a5b, var(--color-danger-deep) 55%, #6e211c);
+		box-shadow: var(--shadow-chip);
 		cursor: pointer;
-	}
-
-	.brush-slider:focus-visible {
-		outline: 3px solid #4ecdc4;
-		outline-offset: 2px;
 	}
 
 	/* --- Brush preview: a taped test scrap --- */
@@ -427,8 +417,8 @@
 	.test-scrap {
 		position: relative;
 		padding: 3px;
-		background: #fdfbf7;
-		border: 1px solid #d6cfc5;
+		background: var(--color-paper-bright);
+		border: 1px solid var(--color-hairline);
 		box-shadow: 2px 3px 7px rgba(0, 0, 0, 0.16);
 		rotate: 3deg;
 	}
@@ -457,15 +447,15 @@
 		border-radius: 50%;
 		border: 1px solid rgba(47, 36, 28, 0.14);
 		transition:
-			width 0.15s,
-			height 0.15s;
+			width var(--duration-fast),
+			height var(--duration-fast);
 	}
 
 	.brush-size-text {
-		font-family: 'Caveat', cursive;
+		font-family: var(--font-hand);
 		font-size: 1.05rem;
 		font-weight: 600;
-		color: #8a6c52;
+		color: var(--color-muted-ink);
 		rotate: -2deg;
 	}
 
@@ -488,7 +478,7 @@
 	.tray-edge-print {
 		margin: 14px 0 -6px;
 		text-align: center;
-		font-family: var(--font-display, 'Fredoka', sans-serif);
+		font-family: var(--font-display);
 		font-size: 0.5rem;
 		font-weight: 600;
 		letter-spacing: 0.26em;
