@@ -536,10 +536,6 @@
 	});
 </script>
 
-<svelte:head>
-	<title>Stroke JSON Lab</title>
-</svelte:head>
-
 <section class="stroke-lab-shell">
 	<div class="hero">
 		<p class="eyebrow">Research demo</p>

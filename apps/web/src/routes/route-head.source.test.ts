@@ -1,5 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { readdir, readFile } from 'node:fs/promises';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -14,6 +14,21 @@ const routesDirectory = dirname(fileURLToPath(import.meta.url));
 
 const readRouteSource = async (relativePath: string) =>
 	await readFile(join(routesDirectory, relativePath), 'utf8');
+
+const collectSvelteFiles = async (directory: string): Promise<string[]> => {
+	const entries = await readdir(directory, { withFileTypes: true });
+	const files = await Promise.all(
+		entries.map(async (entry) => {
+			const entryPath = join(directory, entry.name);
+
+			if (entry.isDirectory()) return await collectSvelteFiles(entryPath);
+
+			return entry.name.endsWith('.svelte') ? [entryPath] : [];
+		})
+	);
+
+	return files.flat();
+};
 
 describe('route document head', () => {
 	it('renders the only <title> from the root layout', async () => {
@@ -33,6 +48,30 @@ describe('route document head', () => {
 
 	it('keeps the ops dashboard out of the head', async () => {
 		const source = await readRouteSource('admin/+page.svelte');
+
+		expect(source).not.toContain('<title>');
+	});
+
+	it('keeps every demo page out of the head', async () => {
+		// The demo routes are stripped from the production build, but they run in
+		// dev and in Playwright, where the duplicate-<title> race is the same one.
+		// Each of them names itself through `meta` in its own `load` instead.
+		const demoPages = await collectSvelteFiles(join(routesDirectory, 'demo'));
+
+		expect(demoPages.length).toBeGreaterThan(0);
+
+		for (const demoPage of demoPages) {
+			const source = await readFile(demoPage, 'utf8');
+
+			expect(
+				source.includes('<title>'),
+				`${relative(routesDirectory, demoPage)} declares its own <title>`
+			).toBe(false);
+		}
+	});
+
+	it('keeps the stroke-json lab out of the head', async () => {
+		const source = await readRouteSource('../lib/features/stroke-json/StrokeJsonLab.svelte');
 
 		expect(source).not.toContain('<title>');
 	});

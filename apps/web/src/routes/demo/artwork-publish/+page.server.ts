@@ -4,6 +4,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { getArtworkDetail, listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';
+import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
 import { toActionFailure } from '$lib/server/http/errors';
 
 const toFailure = (errorValue: unknown, fallback: string) =>
@@ -34,6 +35,8 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		feed,
+		// The root layout renders the only <title>; the route names itself here.
+		meta: { title: 'Artwork Publish Demo' } satisfies RouteMeta,
 		publishedArtwork,
 		user: event.locals.user
 	};

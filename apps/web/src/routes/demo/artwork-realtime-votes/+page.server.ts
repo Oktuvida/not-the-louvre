@@ -6,6 +6,7 @@ import { auth } from '$lib/server/auth';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { getArtworkDetail } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';
+import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
 import { toActionFailure } from '$lib/server/http/errors';
 
 const toFailure = (errorValue: unknown, fallback: string) =>
@@ -45,6 +46,8 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	return {
+		// The root layout renders the only <title>; the route names itself here.
+		meta: { title: 'Artwork Realtime Vote Demo' } satisfies RouteMeta,
 		realtimeConfig: {
 			anonKey: env.PUBLIC_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || env.ANON_KEY || null,
 			url: env.PUBLIC_SUPABASE_URL || env.SUPABASE_PUBLIC_URL || null

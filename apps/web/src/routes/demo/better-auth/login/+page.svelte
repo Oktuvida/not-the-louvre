@@ -6,10 +6,6 @@
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
-<svelte:head>
-	<title>Nickname Auth Demo</title>
-</svelte:head>
-
 <nav>
 	<a href={resolve('/demo')}>Back to demo index</a>
 </nav>

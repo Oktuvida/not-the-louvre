@@ -10,7 +10,7 @@ import { resolve } from '$app/paths';
  * overlap: the route module and its data are already resolved by the time the
  * fade completes.
  */
-export const homeGalleryTarget = `${resolve('/gallery/[room]', { room: 'your-studio' })}?from=home`;
+export const homeGalleryTarget = `${resolve('/gallery/[[room]]', { room: 'your-studio' })}?from=home`;
 export const homeStudioTarget = resolve('/draw');
 
 const warmedTargets = new Set<string>();

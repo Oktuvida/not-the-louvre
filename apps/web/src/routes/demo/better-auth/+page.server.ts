@@ -2,6 +2,7 @@ import { error, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import type { PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
+import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
 
 export const load: PageServerLoad = async (event) => {
 	if (event.locals.integrityFailure) {
@@ -13,6 +14,8 @@ export const load: PageServerLoad = async (event) => {
 	}
 	return {
 		authUser: event.locals.authUser,
+		// The root layout renders the only <title>; the route names itself here.
+		meta: { title: 'Nickname Auth Demo Session' } satisfies RouteMeta,
 		user: event.locals.user,
 		recoveryKey: event.url.searchParams.get('recoveryKey') ?? undefined
 	};

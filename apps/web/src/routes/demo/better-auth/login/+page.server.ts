@@ -3,6 +3,7 @@ import type { Actions } from './$types';
 import type { PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { getIp } from 'better-auth/api';
+import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
 import { toActionFailure } from '$lib/server/http/errors';
 import {
 	getNicknameAvailability,
@@ -25,6 +26,8 @@ export const load: PageServerLoad = async (event) => {
 		throw redirect(302, '/demo/better-auth');
 	}
 	return {
+		// The root layout renders the only <title>; the route names itself here.
+		meta: { title: 'Nickname Auth Demo' } satisfies RouteMeta,
 		recoveryKey: event.url.searchParams.get('recoveryKey') ?? undefined
 	};
 };

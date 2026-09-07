@@ -31,7 +31,7 @@ describe('stroke json demo page', () => {
 
 		await expect(
 			load({ url: new URL('http://localhost/demo/stroke-json') } as never)
-		).resolves.toEqual({});
+		).resolves.toEqual({ meta: { title: 'Stroke JSON Lab' } });
 	});
 
 	it('returns 404 outside development', async () => {
@@ -57,6 +57,6 @@ describe('stroke json demo page', () => {
 
 		await expect(
 			load({ url: new URL('http://localhost/demo/stroke-json') } as never)
-		).resolves.toEqual({});
+		).resolves.toEqual({ meta: { title: 'Stroke JSON Lab' } });
 	});
 });

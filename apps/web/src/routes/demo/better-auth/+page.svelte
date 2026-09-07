@@ -5,10 +5,6 @@
 	let { data }: { data: PageServerData } = $props();
 </script>
 
-<svelte:head>
-	<title>Nickname Auth Demo Session</title>
-</svelte:head>
-
 <nav>
 	<a href={resolve('/demo')}>Back to demo index</a>
 	<a href={resolve('/demo/artwork-publish')}>Open artwork publish demo</a>

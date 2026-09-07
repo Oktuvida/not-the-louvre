@@ -31,9 +31,11 @@
 	const resolvedHref = $derived.by(() => {
 		if (href === '/') return resolve('/');
 		if (href === '/draw') return resolve('/draw');
-		if (href === '/gallery') return resolve('/gallery');
+		// `/gallery` and every room share one route node with an optional
+		// parameter; omitting it resolves to the bare `/gallery` entry point.
+		if (href === '/gallery') return resolve('/gallery/[[room]]', {});
 
-		return resolve('/gallery/[room]', { room: href.replace('/gallery/', '') });
+		return resolve('/gallery/[[room]]', { room: href.replace('/gallery/', '') });
 	});
 
 	const elementProps = $derived({ ...restProps, href: resolvedHref });

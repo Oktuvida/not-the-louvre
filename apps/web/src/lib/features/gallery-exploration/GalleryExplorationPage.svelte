@@ -305,7 +305,9 @@
 	);
 	const showSensitiveArtworkNote = $derived(hasSensitiveArtwork && roomId !== 'your-studio');
 	const currentGalleryUrl = $derived(
-		roomId === 'hall-of-fame' ? resolve('/gallery') : resolve('/gallery/[room]', { room: roomId })
+		roomId === 'hall-of-fame'
+			? resolve('/gallery/[[room]]', {})
+			: resolve('/gallery/[[room]]', { room: roomId })
 	);
 	const historyDetailState = $derived(readGalleryDetailHistoryState($page.state));
 
@@ -623,9 +625,9 @@
 		if (!enteredFromHome) return;
 
 		if (roomId === 'hall-of-fame') {
-			replaceState(resolve('/gallery'), window.history.state);
+			replaceState(resolve('/gallery/[[room]]', {}), window.history.state);
 		} else {
-			replaceState(resolve('/gallery/[room]', { room: roomId }), window.history.state);
+			replaceState(resolve('/gallery/[[room]]', { room: roomId }), window.history.state);
 		}
 	});
 
