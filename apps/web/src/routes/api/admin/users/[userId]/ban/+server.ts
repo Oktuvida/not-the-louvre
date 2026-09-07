@@ -1,6 +1,13 @@
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 import { banUser, unbanUser } from '$lib/server/user/admin.service';
+
+const BAN_UPDATE_ERROR = {
+	fallbackCode: 'BAN_UPDATE_FAILED',
+	fallbackMessage: 'Ban update failed',
+	scope: 'admin ban update'
+};
 
 export const PATCH: RequestHandler = async (event) => {
 	try {
@@ -21,12 +28,8 @@ export const PATCH: RequestHandler = async (event) => {
 			);
 		}
 
-		return new Response('Invalid ban action', { status: 400 });
+		return json({ code: 'INVALID_BAN_ACTION', message: 'Invalid ban action' }, { status: 400 });
 	} catch (error) {
-		if (error instanceof ArtworkFlowError) {
-			return new Response(error.message, { status: error.status });
-		}
-
-		return new Response('Ban update failed', { status: 500 });
+		return toApiErrorResponse(error, BAN_UPDATE_ERROR);
 	}
 };

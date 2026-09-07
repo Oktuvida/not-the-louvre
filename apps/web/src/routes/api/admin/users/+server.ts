@@ -1,6 +1,14 @@
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 import { listUsers } from '$lib/server/user/admin.service';
+
+// Answers errors as `{ code, message }` like every other JSON route; the admin
+// dashboard used to need a content-type sniff because this one spoke text.
+const USER_LISTING_ERROR = {
+	fallbackCode: 'USER_LISTING_FAILED',
+	fallbackMessage: 'User listing failed',
+	scope: 'admin user listing'
+};
 
 export const GET: RequestHandler = async (event) => {
 	try {
@@ -12,10 +20,6 @@ export const GET: RequestHandler = async (event) => {
 
 		return Response.json(page);
 	} catch (error) {
-		if (error instanceof ArtworkFlowError) {
-			return new Response(error.message, { status: error.status });
-		}
-
-		return new Response('User listing failed', { status: 500 });
+		return toApiErrorResponse(error, USER_LISTING_ERROR);
 	}
 };

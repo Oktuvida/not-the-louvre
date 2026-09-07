@@ -1,8 +1,10 @@
 import { getContext, setContext } from 'svelte';
 import { writable, type Writable } from 'svelte/store';
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Viewer as SharedViewer } from '$lib/shared/viewer';
 
-type Viewer = { id: string; role: 'admin' | 'moderator' | 'user' } | null;
+// The context stores the signed-out case too, so it keeps the nullable alias.
+type Viewer = SharedViewer | null;
 
 export type GalleryPanelBindings = {
 	adultContentEnabled: boolean;

@@ -5,8 +5,7 @@ import { auth } from '$lib/server/auth';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { avatarService } from '$lib/server/user/avatar.service';
 import { userRepository } from '$lib/server/user/repository';
-import { AuthFlowError } from '$lib/server/auth/errors';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { toActionFailure } from '$lib/server/http/errors';
 import {
 	homeSceneArtworkSlotNames,
 	toHomePreviewCards,
@@ -36,31 +35,13 @@ const HOME_SCENE_ARTWORK_SLOT_COUNT = homeSceneArtworkSlotNames.length;
 
 type HomeActionName = 'checkNickname' | 'recover' | 'saveAvatar' | 'signIn' | 'signOut' | 'signUp';
 
-const toFailure = (action: HomeActionName, error: unknown, fallback: string) => {
-	if (
-		error instanceof AuthFlowError ||
-		error instanceof ArtworkFlowError ||
-		(typeof error === 'object' &&
-			error !== null &&
-			'status' in error &&
-			'message' in error &&
-			'code' in error)
-	) {
-		const authError = error as Pick<AuthFlowError, 'code' | 'message' | 'status'>;
-
-		return fail(authError.status, {
-			action,
-			code: authError.code,
-			message: authError.message
-		});
-	}
-
-	if (error instanceof Error) {
-		return fail(500, { action, message: error.message || fallback });
-	}
-
-	return fail(500, { action, message: fallback });
-};
+// Every home action answers with the shared envelope plus its own discriminator.
+const toFailure = (action: HomeActionName, error: unknown, fallback: string) =>
+	toActionFailure(error, {
+		extra: { action },
+		fallbackMessage: fallback,
+		scope: `home ${action} action`
+	});
 
 export const load: PageServerLoad = async ({ locals, parent }) => {
 	const [topDiscovery, parentData, studioDiscovery, avatarUserRecord] = await Promise.all([

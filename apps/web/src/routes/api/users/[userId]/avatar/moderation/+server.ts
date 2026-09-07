@@ -1,7 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 import { avatarService } from '$lib/server/user/avatar.service';
+
+const AVATAR_MODERATION_ERROR = {
+	fallbackCode: 'AVATAR_MODERATION_FAILED',
+	fallbackMessage: 'Avatar moderation failed',
+	scope: 'avatar moderation'
+};
 
 export const PATCH: RequestHandler = async (event) => {
 	try {
@@ -26,10 +32,6 @@ export const PATCH: RequestHandler = async (event) => {
 			}
 		});
 	} catch (error) {
-		if (error instanceof ArtworkFlowError) {
-			return json({ code: error.code, message: error.message }, { status: error.status });
-		}
-
-		return json({ code: 'PUBLISH_FAILED', message: 'Avatar moderation failed' }, { status: 500 });
+		return toApiErrorResponse(error, AVATAR_MODERATION_ERROR);
 	}
 };

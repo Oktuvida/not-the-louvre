@@ -1,3 +1,5 @@
+import type { ArtworkVoteValue } from '$lib/shared/content/votes';
+
 export interface ArtworkComment {
 	id: string;
 	author: string;
@@ -40,5 +42,5 @@ export interface Artwork {
 	forkCount?: number;
 	lineage?: ArtworkLineage;
 	rank?: number;
-	viewerVote?: 'down' | 'up' | null;
+	viewerVote?: ArtworkVoteValue | null;
 }

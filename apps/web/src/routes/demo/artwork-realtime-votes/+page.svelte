@@ -5,12 +5,14 @@
 	import { createRealtimeAttemptController } from '$lib/features/realtime/attempt-controller';
 	import { type RealtimeChannel, type RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 	import type { ActionData, PageData } from './$types';
+	import { ApiError, apiErrorMessage, requestJson } from '$lib/client/api';
+	import type { ArtworkVoteValue } from '$lib/shared/content/votes';
 
 	type SubscriptionState = 'idle' | 'connecting' | 'subscribed' | 'errored' | 'closed';
 	type VoteRow = {
 		artwork_id: string;
 		id: string;
-		value: 'down' | 'up';
+		value: ArtworkVoteValue;
 	};
 	type ArtworkDetailResponse = {
 		artwork?: {
@@ -77,16 +79,10 @@
 	};
 
 	const reconcileTrackedArtworkScore = async (artworkId: string) => {
-		const response = await fetch(`/api/artworks/${artworkId}`, {
-			headers: { accept: 'application/json' }
-		});
-
-		if (!response.ok) {
-			return;
-		}
-
-		const payload = (await response.json()) as ArtworkDetailResponse;
-		const nextScore = payload.artwork?.score;
+		const payload = await requestJson<ArtworkDetailResponse>(`/api/artworks/${artworkId}`).catch(
+			() => null
+		);
+		const nextScore = payload?.artwork?.score;
 
 		if (typeof nextScore === 'number') {
 			reconcileTrackedScore(nextScore);
@@ -127,18 +123,22 @@
 		subscriptionState = 'connecting';
 
 		try {
-			const tokenResponse = await fetch('/api/realtime/token', {
-				headers: { accept: 'application/json' },
+			// Only a refusal from the API becomes `null`; an abort still reaches the
+			// AbortError branch below, which is what closes the subscription.
+			const tokenPayload = await requestJson<{ token: string }>('/api/realtime/token', {
 				signal: attempt.signal
+			}).catch((error: unknown) => {
+				if (error instanceof ApiError) return null;
+				throw error;
 			});
 
-			if (!tokenResponse.ok) {
+			if (!tokenPayload) {
 				subscriptionState = 'errored';
 				subscriptionError = 'Realtime token request failed';
 				return;
 			}
 
-			const { token } = (await tokenResponse.json()) as { token: string };
+			const { token } = tokenPayload;
 			if (!realtimeAttemptController.isCurrent(attempt.id)) {
 				return;
 			}
@@ -220,22 +220,19 @@
 		actionError = '';
 		actionStatus = '';
 
-		const response = await fetch(`/api/artworks/${data.trackedArtwork.id}/vote`, {
-			body: mode === 'up' ? JSON.stringify({ value: 'up' }) : undefined,
-			headers: mode === 'up' ? { 'content-type': 'application/json' } : undefined,
-			method: mode === 'up' ? 'POST' : 'DELETE'
-		});
+		try {
+			await requestJson(`/api/artworks/${data.trackedArtwork.id}/vote`, {
+				...(mode === 'up' ? { json: { value: 'up' } } : {}),
+				method: mode === 'up' ? 'POST' : 'DELETE'
+			});
 
-		actionPending = false;
-
-		if (!response.ok) {
-			const payload = (await response.json()) as { message?: string };
-			actionError = payload.message ?? 'Vote action failed';
-			return;
+			actionStatus =
+				mode === 'up' ? 'Vote action requested: upvote' : 'Vote action requested: remove';
+		} catch (error) {
+			actionError = apiErrorMessage(error, 'Vote action failed');
+		} finally {
+			actionPending = false;
 		}
-
-		actionStatus =
-			mode === 'up' ? 'Vote action requested: upvote' : 'Vote action requested: remove';
 	};
 
 	$effect(() => {

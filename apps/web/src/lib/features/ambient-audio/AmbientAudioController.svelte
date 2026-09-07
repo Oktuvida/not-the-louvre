@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
+	import { requestJson } from '$lib/client/api';
 	import AmbientAudioTab from '$lib/features/shared-ui/components/AmbientAudioTab.svelte';
 	import { ambientPlaylist, type AmbientTrack } from './playlist';
 	import {
@@ -44,9 +45,8 @@
 		}
 
 		try {
-			await fetch('/api/viewer/content-preferences', {
-				body: JSON.stringify({ ambientAudioEnabled: nextEnabled }),
-				headers: { 'content-type': 'application/json' },
+			await requestJson('/api/viewer/content-preferences', {
+				json: { ambientAudioEnabled: nextEnabled },
 				method: 'PATCH'
 			});
 		} catch {

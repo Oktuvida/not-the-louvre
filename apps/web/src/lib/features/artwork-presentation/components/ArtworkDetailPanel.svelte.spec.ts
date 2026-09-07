@@ -268,7 +268,7 @@ describe('ArtworkDetailPanel', () => {
 		await vi.waitFor(() => {
 			expect(fetchSpy).toHaveBeenNthCalledWith(1, '/api/artworks/artwork-1/moderation', {
 				body: JSON.stringify({ action: 'mark_nsfw' }),
-				headers: { 'content-type': 'application/json' },
+				headers: { accept: 'application/json', 'content-type': 'application/json' },
 				method: 'PATCH'
 			});
 			expect(onArtworkChange).toHaveBeenCalledWith(

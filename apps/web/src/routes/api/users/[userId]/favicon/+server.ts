@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { etagMatches, notModified } from '$lib/server/http/conditional';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 import { renderAvatarFaviconPng } from '$lib/server/user/favicon';
 import { userRepository } from '$lib/server/user/repository';
 import { streamAvatarStorageObject } from '$lib/server/user/storage';
@@ -10,12 +10,10 @@ import { streamAvatarStorageObject } from '$lib/server/user/storage';
 // copy also skips re-rendering the PNG, which runs on Worker CPU per request.
 const CACHE_CONTROL = 'public, max-age=300, s-maxage=3600';
 
-const toErrorResponse = (error: unknown, fallback: { code: string; message: string }) => {
-	if (error instanceof ArtworkFlowError) {
-		return json({ code: error.code, message: error.message }, { status: error.status });
-	}
-
-	return json(fallback, { status: 500 });
+const FAVICON_READ_ERROR = {
+	fallbackCode: 'AVATAR_READ_FAILED',
+	fallbackMessage: 'Avatar media read failed',
+	scope: 'avatar favicon read'
 };
 
 export const GET: RequestHandler = async (event) => {
@@ -63,9 +61,6 @@ export const GET: RequestHandler = async (event) => {
 
 		return response;
 	} catch (error) {
-		return toErrorResponse(error, {
-			code: 'AVATAR_READ_FAILED',
-			message: 'Avatar media read failed'
-		});
+		return toApiErrorResponse(error, FAVICON_READ_ERROR);
 	}
 };

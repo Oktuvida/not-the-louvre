@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { edgeCacheControl, readEdgeCache, storeInEdgeCache } from '$lib/server/http/edge-cache';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 import { getTextModerationSnapshot } from '$lib/server/moderation/service';
 
 // Three rows that only change when an admin edits a policy, fetched by the
@@ -10,15 +10,10 @@ import { getTextModerationSnapshot } from '$lib/server/moderation/service';
 const EDGE_TTL_SECONDS = 60;
 const CACHE_CONTROL = edgeCacheControl(EDGE_TTL_SECONDS, 300);
 
-const toErrorResponse = (error: unknown) => {
-	if (error instanceof ArtworkFlowError) {
-		return json({ code: error.code, message: error.message }, { status: error.status });
-	}
-
-	return json(
-		{ code: 'PUBLISH_FAILED', message: 'Moderation policy request failed' },
-		{ status: 500 }
-	);
+const POLICY_SNAPSHOT_ERROR = {
+	fallbackCode: 'POLICY_READ_FAILED',
+	fallbackMessage: 'Moderation policy request failed',
+	scope: 'moderation policy snapshot'
 };
 
 export const GET: RequestHandler = async (event) => {
@@ -34,6 +29,6 @@ export const GET: RequestHandler = async (event) => {
 
 		return response;
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, POLICY_SNAPSHOT_ERROR);
 	}
 };

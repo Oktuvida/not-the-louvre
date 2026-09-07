@@ -1293,7 +1293,7 @@ describe('GalleryExplorationPage', () => {
 
 		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
 			body: JSON.stringify({ adultContentEnabled: true }),
-			headers: { 'content-type': 'application/json' },
+			headers: { accept: 'application/json', 'content-type': 'application/json' },
 			method: 'PATCH'
 		});
 		await expect.element(page.getByRole('button', { name: /Adults only study/ })).toBeVisible();

@@ -1,8 +1,11 @@
 <script lang="ts">
 	import type { PageData, PageProps } from './$types';
+	import { requestJson } from '$lib/client/api';
+	import type { TextFilterContext } from '$lib/client/content-filter';
 
 	type TabKey = 'moderation' | 'policy' | 'users';
-	type PolicyContext = 'artwork_title' | 'comment' | 'nickname';
+	// The same three contexts the policy table and the client filter speak.
+	type PolicyContext = TextFilterContext;
 	type UsersPage = NonNullable<PageData['usersPage']>;
 	type ModerationPage = NonNullable<PageData['moderationPage']>;
 	type TextPolicySnapshot = NonNullable<PageData['textPolicy']>;
@@ -105,34 +108,6 @@
 	$effect(() => {
 		policyDrafts = createPolicyDrafts(data.textPolicy);
 	});
-
-	async function readBody(response: Response) {
-		const contentType = response.headers.get('content-type') ?? '';
-
-		if (contentType.includes('application/json')) {
-			return response.json();
-		}
-
-		return response.text();
-	}
-
-	async function requestJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
-		const response = await fetch(input, init);
-		const body = await readBody(response);
-
-		if (!response.ok) {
-			const text =
-				typeof body === 'string'
-					? body
-					: typeof body === 'object' && body && 'message' in body
-						? String(body.message)
-						: 'Request failed';
-
-			throw new Error(text);
-		}
-
-		return body as T;
-	}
 
 	function setMessage(tone: DashboardMessage['tone'], text: string) {
 		message = { text, tone };
@@ -243,8 +218,7 @@
 	async function changeUserRole(userId: string, role: 'moderator' | 'user') {
 		await withBusy(`role:${userId}:${role}`, async () => {
 			await requestJson(`/api/admin/users/${userId}`, {
-				body: JSON.stringify({ role }),
-				headers: { 'content-type': 'application/json' },
+				json: { role },
 				method: 'PATCH'
 			});
 			await refreshUsers();
@@ -255,8 +229,7 @@
 	async function submitBan(userId: string) {
 		await withBusy(`ban:${userId}`, async () => {
 			await requestJson(`/api/admin/users/${userId}/ban`, {
-				body: JSON.stringify({ action: 'ban', reason: banReasonDrafts[userId] ?? '' }),
-				headers: { 'content-type': 'application/json' },
+				json: { action: 'ban', reason: banReasonDrafts[userId] ?? '' },
 				method: 'PATCH'
 			});
 			await refreshUsers();
@@ -267,8 +240,7 @@
 	async function liftBan(userId: string) {
 		await withBusy(`unban:${userId}`, async () => {
 			await requestJson(`/api/admin/users/${userId}/ban`, {
-				body: JSON.stringify({ action: 'unban' }),
-				headers: { 'content-type': 'application/json' },
+				json: { action: 'unban' },
 				method: 'PATCH'
 			});
 			await refreshUsers();
@@ -282,8 +254,7 @@
 	) {
 		await withBusy(`avatar:${userId}:${action}`, async () => {
 			await requestJson(`/api/users/${userId}/avatar/moderation`, {
-				body: JSON.stringify({ action }),
-				headers: { 'content-type': 'application/json' },
+				json: { action },
 				method: 'PATCH'
 			});
 			await refreshUsers();
@@ -300,8 +271,7 @@
 				await requestJson(`/api/artworks/${artworkId}/moderation`, { method: 'DELETE' });
 			} else {
 				await requestJson(`/api/artworks/${artworkId}/moderation`, {
-					body: JSON.stringify({ action }),
-					headers: { 'content-type': 'application/json' },
+					json: { action },
 					method: 'PATCH'
 				});
 			}
@@ -323,8 +293,7 @@
 				});
 			} else {
 				await requestJson(`/api/artworks/${artworkId}/comments/${commentId}/moderation`, {
-					body: JSON.stringify({ action }),
-					headers: { 'content-type': 'application/json' },
+					json: { action },
 					method: 'PATCH'
 				});
 			}
@@ -350,8 +319,7 @@
 			};
 
 			const snapshot = await requestJson<TextPolicySnapshot>('/api/admin/moderation/text-policy', {
-				body: JSON.stringify(payload),
-				headers: { 'content-type': 'application/json' },
+				json: payload,
 				method: 'PUT'
 			});
 

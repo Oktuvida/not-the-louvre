@@ -4,35 +4,16 @@ import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/features/stroke-json/runtime.server';
 import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
-import { ArtworkFlowError, logArtworkFlowFailure } from '$lib/server/artwork/errors';
 import { getArtworkDetail } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';
+import { toActionFailure } from '$lib/server/http/errors';
 
-const toFailure = (errorValue: unknown, fallback: string) => {
-	logArtworkFlowFailure('publish action', errorValue);
-
-	if (
-		errorValue instanceof ArtworkFlowError ||
-		(typeof errorValue === 'object' &&
-			errorValue !== null &&
-			'status' in errorValue &&
-			'message' in errorValue &&
-			'code' in errorValue)
-	) {
-		const artworkError = errorValue as Pick<ArtworkFlowError, 'status' | 'message' | 'code'>;
-		return fail(artworkError.status, {
-			action: 'publish',
-			code: artworkError.code,
-			message: artworkError.message
-		});
-	}
-
-	if (errorValue instanceof Error) {
-		return fail(500, { action: 'publish', message: errorValue.message || fallback });
-	}
-
-	return fail(500, { action: 'publish', message: fallback });
-};
+const toFailure = (errorValue: unknown, fallback: string) =>
+	toActionFailure(errorValue, {
+		extra: { action: 'publish' },
+		fallbackMessage: fallback,
+		scope: 'publish action'
+	});
 
 /**
  * Coarse "is this a phone" read for the first paint only. Chromium sends the

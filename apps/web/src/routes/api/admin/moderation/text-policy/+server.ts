@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestEvent, RequestHandler } from './$types';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 import {
 	getTextModerationSnapshot,
 	updateTextModerationPolicies
@@ -22,15 +23,16 @@ const purgeTextPolicyEdgeCache = (event: RequestEvent) => {
 	event.platform?.context?.waitUntil(purge);
 };
 
-const toErrorResponse = (error: unknown) => {
-	if (error instanceof ArtworkFlowError) {
-		return json({ code: error.code, message: error.message }, { status: error.status });
-	}
+const POLICY_READ_ERROR = {
+	fallbackCode: 'POLICY_READ_FAILED',
+	fallbackMessage: 'Moderation policy request failed',
+	scope: 'admin moderation policy read'
+};
 
-	return json(
-		{ code: 'PUBLISH_FAILED', message: 'Moderation policy request failed' },
-		{ status: 500 }
-	);
+const POLICY_UPDATE_ERROR = {
+	fallbackCode: 'POLICY_UPDATE_FAILED',
+	fallbackMessage: 'Moderation policy update failed',
+	scope: 'admin moderation policy update'
 };
 
 export const GET: RequestHandler = async (event) => {
@@ -45,7 +47,7 @@ export const GET: RequestHandler = async (event) => {
 
 		return json(await getTextModerationSnapshot());
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, POLICY_READ_ERROR);
 	}
 };
 
@@ -70,6 +72,6 @@ export const PUT: RequestHandler = async (event) => {
 
 		return json(snapshot);
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, POLICY_UPDATE_ERROR);
 	}
 };

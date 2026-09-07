@@ -3,7 +3,7 @@ import type { Actions } from './$types';
 import type { PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { getIp } from 'better-auth/api';
-import { AuthFlowError } from '$lib/server/auth/errors';
+import { toActionFailure } from '$lib/server/http/errors';
 import {
 	getNicknameAvailability,
 	recoverAccount,
@@ -17,26 +17,8 @@ import {
 	signupSchema
 } from '$lib/server/auth/validation';
 
-const toFailure = (error: unknown, fallback: string) => {
-	if (
-		error instanceof AuthFlowError ||
-		(typeof error === 'object' &&
-			error !== null &&
-			'status' in error &&
-			'message' in error &&
-			'code' in error)
-	) {
-		const authError = error as Pick<AuthFlowError, 'status' | 'message' | 'code'>;
-
-		return fail(authError.status, { message: authError.message, code: authError.code });
-	}
-
-	if (error instanceof Error) {
-		return fail(500, { message: error.message || fallback });
-	}
-
-	return fail(500, { message: fallback });
-};
+const toFailure = (error: unknown, fallback: string) =>
+	toActionFailure(error, { fallbackMessage: fallback, scope: 'demo auth action' });
 
 export const load: PageServerLoad = async (event) => {
 	if (event.locals.user) {

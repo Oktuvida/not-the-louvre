@@ -7,7 +7,12 @@
 		type TextContentChecker
 	} from '$lib/client/content-filter';
 	import { parseEditableDrawingDocumentV2 } from '$lib/features/stroke-json/document';
-	import { NICKNAME_PATTERN, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '$lib/auth/config';
+	import {
+		NICKNAME_PATTERN,
+		PASSWORD_MAX_LENGTH,
+		PASSWORD_MIN_LENGTH,
+		normalizeNickname
+	} from '$lib/auth/config';
 	import type {
 		HomeAuthActionData,
 		HomeAuthActionForm,
@@ -110,7 +115,6 @@
 		isAvatarView ? 'space-y-5 p-6 md:p-8 lg:pl-16 lg:p-10' : 'min-h-[26rem] space-y-5 p-6 md:p-8'
 	);
 
-	const normalizeNickname = (value: string) => value.trim().toLowerCase();
 	const isValidNickname = (value: string) => NICKNAME_PATTERN.test(normalizeNickname(value));
 
 	const resetMessages = () => {
@@ -483,7 +487,7 @@
 			return;
 		}
 
-		const trimmedNickname = nickname.trim().toLowerCase();
+		const trimmedNickname = normalizeNickname(nickname);
 		const error = validateNickname(trimmedNickname);
 		if (error) {
 			availabilityState = trimmedNickname ? 'invalid' : 'idle';

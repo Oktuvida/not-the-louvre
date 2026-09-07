@@ -70,7 +70,7 @@ describe('AmbientAudioController', () => {
 		expect(window.localStorage.getItem(AMBIENT_AUDIO_ENABLED_STORAGE_KEY)).toBe('true');
 		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
 			body: JSON.stringify({ ambientAudioEnabled: true }),
-			headers: { 'content-type': 'application/json' },
+			headers: { accept: 'application/json', 'content-type': 'application/json' },
 			method: 'PATCH'
 		});
 	});
@@ -139,7 +139,7 @@ describe('AmbientAudioController', () => {
 		expect(fakeAudio.play).toHaveBeenCalledTimes(1);
 		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
 			body: JSON.stringify({ ambientAudioEnabled: true }),
-			headers: { 'content-type': 'application/json' },
+			headers: { accept: 'application/json', 'content-type': 'application/json' },
 			method: 'PATCH'
 		});
 	});

@@ -1,20 +1,30 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { getArtworkDetail } from '$lib/server/artwork/read.service';
 import { edgeCacheControl, readEdgeCache, storeInEdgeCache } from '$lib/server/http/edge-cache';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 import {
 	deleteArtwork,
 	updateArtworkTitle,
 	withoutDrawingDocument
 } from '$lib/server/artwork/service';
 
-const toErrorResponse = (error: unknown) => {
-	if (error instanceof ArtworkFlowError) {
-		return json({ code: error.code, message: error.message }, { status: error.status });
-	}
+const TITLE_UPDATE_ERROR = {
+	fallbackCode: 'ARTWORK_UPDATE_FAILED',
+	fallbackMessage: 'Artwork update failed',
+	scope: 'artwork title update'
+};
 
-	return json({ code: 'PUBLISH_FAILED', message: 'Artwork request failed' }, { status: 500 });
+const DELETE_ERROR = {
+	fallbackCode: 'ARTWORK_DELETE_FAILED',
+	fallbackMessage: 'Artwork delete failed',
+	scope: 'artwork delete'
+};
+
+const DETAIL_ERROR = {
+	fallbackCode: 'ARTWORK_DETAIL_FAILED',
+	fallbackMessage: 'Artwork detail read failed',
+	scope: 'artwork detail'
 };
 
 export const PATCH: RequestHandler = async (event) => {
@@ -30,7 +40,7 @@ export const PATCH: RequestHandler = async (event) => {
 
 		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, TITLE_UPDATE_ERROR);
 	}
 };
 
@@ -43,7 +53,7 @@ export const DELETE: RequestHandler = async (event) => {
 
 		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, DELETE_ERROR);
 	}
 };
 
@@ -83,6 +93,6 @@ export const GET: RequestHandler = async (event) => {
 
 		return response;
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, DETAIL_ERROR);
 	}
 };

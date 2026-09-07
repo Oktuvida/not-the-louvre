@@ -4,6 +4,7 @@
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
 	import { get } from 'svelte/store';
+	import { apiErrorMessage, requestJson } from '$lib/client/api';
 	import { setAdultContentEnabled } from '$lib/client/avatar-upload';
 	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
 	import { getGalleryLayoutContext } from '$lib/features/gallery-exploration/gallery-layout-context';
@@ -26,6 +27,7 @@
 		type GalleryRoomId
 	} from '$lib/features/gallery-exploration/model/rooms';
 	import { createRealtimeSubscription } from '$lib/features/gallery-exploration/use-realtime-subscription.svelte';
+	import type { Viewer } from '$lib/shared/viewer';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
@@ -41,6 +43,15 @@
 	const LOCAL_GALLERY_DETAIL_SOURCE = 'local-room-selection' as const;
 
 	const ROOM_LOAD_ERROR_MESSAGE = 'The gallery could not load right now — refresh to try again.';
+
+	/*
+	 * The house copy for a failed API call. `apiErrorMessage` prefers the
+	 * server's own `{ code, message }` when the answer really was this API
+	 * explaining itself to a visitor (a rate limit, a rejected cursor) and keeps
+	 * these strings for a 500, a proxy's HTML page or a dropped connection.
+	 */
+	const GALLERY_DISCOVERY_ERROR_MESSAGE = 'Gallery discovery could not be loaded';
+	const ARTWORK_DETAIL_ERROR_MESSAGE = 'Artwork details could not be loaded';
 
 	const isGalleryDetailHistoryState = (
 		value: App.PageState['galleryDetail'] | null | undefined
@@ -94,50 +105,46 @@
 				query.push(`window=${encodeURIComponent(request.window)}`);
 			}
 
-			const response = await fetch(`/api/artworks?${query.join('&')}`, {
-				headers: { accept: 'application/json' }
-			});
+			try {
+				const payload = await requestJson<{
+					items: Parameters<typeof toGalleryArtwork>[0][];
+					pageInfo: { hasMore: boolean; nextCursor: string | null };
+				}>(`/api/artworks?${query.join('&')}`);
 
-			if (!response.ok) {
-				throw new Error('Gallery discovery could not be loaded');
+				return {
+					artworks: payload.items.map((item) => toGalleryArtwork(item)),
+					pageInfo: payload.pageInfo
+				};
+			} catch (error) {
+				throw new Error(apiErrorMessage(error, GALLERY_DISCOVERY_ERROR_MESSAGE), {
+					cause: error
+				});
 			}
-
-			const payload = (await response.json()) as {
-				items: Parameters<typeof toGalleryArtwork>[0][];
-				pageInfo: { hasMore: boolean; nextCursor: string | null };
-			};
-
-			return {
-				artworks: payload.items.map((item) => toGalleryArtwork(item)),
-				pageInfo: payload.pageInfo
-			};
 		},
 		loadArtworkDetail = async (artworkId: string) => {
-			const [detailResponse, commentsResponse] = await Promise.all([
-				fetch(`/api/artworks/${artworkId}`),
-				fetch(`/api/artworks/${artworkId}/comments`)
+			// The comments call is best-effort: a detail without its thread is
+			// still worth showing, so only the detail's failure propagates.
+			const [payload, commentsPayload] = await Promise.all([
+				requestJson<{ artwork: Parameters<typeof toGalleryArtworkDetail>[0] }>(
+					`/api/artworks/${artworkId}`
+				).catch((error: unknown) => {
+					throw new Error(apiErrorMessage(error, ARTWORK_DETAIL_ERROR_MESSAGE), { cause: error });
+				}),
+				requestJson<{
+					comments: Array<{
+						author: { nickname: string };
+						body: string;
+						createdAt: Date | string;
+						id: string;
+					}>;
+				}>(`/api/artworks/${artworkId}/comments`).catch(() => null)
 			]);
-			if (!detailResponse.ok) {
-				throw new Error('Artwork details could not be loaded');
-			}
 
-			const payload = (await detailResponse.json()) as {
-				artwork: Parameters<typeof toGalleryArtworkDetail>[0];
-			};
 			const detail = toGalleryArtworkDetail(payload.artwork);
 
-			if (!commentsResponse.ok) {
+			if (!commentsPayload) {
 				return detail;
 			}
-
-			const commentsPayload = (await commentsResponse.json()) as {
-				comments: Array<{
-					author: { nickname: string };
-					body: string;
-					createdAt: Date | string;
-					id: string;
-				}>;
-			};
 
 			return {
 				...detail,
@@ -153,19 +160,17 @@
 			};
 		},
 		fetchRandomArtwork = async () => {
-			const response = await fetch('/api/artworks/random', {
-				headers: { accept: 'application/json' }
-			});
+			try {
+				const payload = await requestJson<{ artwork: Parameters<typeof toGalleryArtwork>[0] }>(
+					'/api/artworks/random'
+				);
 
-			if (!response.ok) {
-				throw new Error('Could not fetch a random artwork');
+				return toGalleryArtwork(payload.artwork);
+			} catch (error) {
+				throw new Error(apiErrorMessage(error, 'Could not fetch a random artwork'), {
+					cause: error
+				});
 			}
-
-			const payload = (await response.json()) as {
-				artwork: Parameters<typeof toGalleryArtwork>[0];
-			};
-
-			return toGalleryArtwork(payload.artwork);
 		},
 		room,
 		roomId,
@@ -195,7 +200,7 @@
 		realtimeConfig?: { anonKey: string | null; url: string | null };
 		room: GalleryRoomConfig;
 		roomId: GalleryRoomId;
-		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
+		viewer?: Viewer | null;
 	} = $props();
 
 	const galleryLayout = getGalleryLayoutContext();
@@ -361,8 +366,7 @@
 
 			selectedArtwork = null;
 			detailOrigin = null;
-			detailErrorMessage =
-				error instanceof Error ? error.message : 'Artwork details could not be loaded';
+			detailErrorMessage = error instanceof Error ? error.message : ARTWORK_DETAIL_ERROR_MESSAGE;
 
 			const currentHistoryState = readGalleryDetailHistoryState($page.state);
 			if (
@@ -492,13 +496,10 @@
 			? createRealtimeSubscription({
 					getRealtimeClient: () =>
 						getBrowserRealtimeClient(initialRealtimeConfig.url!, initialRealtimeConfig.anonKey!),
-					fetchToken: async () => {
-						const response = await fetch('/api/realtime/token', {
-							headers: { accept: 'application/json' }
-						});
-						if (!response.ok) return null;
-						return (await response.json()) as { expiresAt?: string; token: string };
-					},
+					fetchToken: async () =>
+						requestJson<{ expiresAt?: string; token: string }>('/api/realtime/token').catch(
+							() => null
+						),
 					viewerId: initialViewer.id,
 					onRefresh: (artworkId: string) => {
 						void refreshSelectedArtwork(artworkId);
@@ -515,8 +516,7 @@
 			}
 		} catch (error) {
 			if (selectedArtwork?.id === artworkId) {
-				detailErrorMessage =
-					error instanceof Error ? error.message : 'Artwork details could not be loaded';
+				detailErrorMessage = error instanceof Error ? error.message : ARTWORK_DETAIL_ERROR_MESSAGE;
 			}
 		}
 	};

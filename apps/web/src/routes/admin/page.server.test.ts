@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ProductRole } from '$lib/shared/viewer';
 
 const mocked = vi.hoisted(() => ({
 	getTextModerationSnapshot: vi.fn(),
@@ -30,7 +31,7 @@ vi.mock('$lib/server/user/admin.service', async () => {
 	};
 });
 
-const makeUser = (role: 'admin' | 'moderator' | 'user') => ({
+const makeUser = (role: ProductRole) => ({
 	avatarUrl: null,
 	avatarOnboardingCompletedAt: null,
 	authUserId: `auth-${role}-1`,
