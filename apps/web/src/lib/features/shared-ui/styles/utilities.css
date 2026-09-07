@@ -14,8 +14,19 @@
 	background: radial-gradient(circle, var(--tw-gradient-stops));
 }
 
-button:active {
-	transform: scale(0.98) !important;
+/*
+ * Global press feedback for every button that does not define its own.
+ *
+ * It uses the standalone `scale` property rather than `transform: scale()` so
+ * it COMPOSES with the inline `transform: rotate()` the hand-pinned cards and
+ * badges carry — a `transform` declaration here would replace their tilt and
+ * snap them straight on every tap. Living in `@layer base` also makes it lose
+ * to Tailwind utilities, so `active:scale-*` at a call site wins again.
+ */
+@layer base {
+	button:active {
+		scale: 0.98;
+	}
 }
 
 .paint-blob {

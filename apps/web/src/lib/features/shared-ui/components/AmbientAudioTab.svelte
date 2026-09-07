@@ -156,8 +156,21 @@
 		position: fixed;
 		right: 0.4rem;
 		bottom: 0.5rem;
-		z-index: 920;
+		/* Below the navigation fade overlays, above page chrome. */
+		z-index: var(--z-ambient);
 		pointer-events: none;
+	}
+
+	/*
+	 * A 17rem paint-stroke control floating over a dimmed modal — clickable and
+	 * still in the tab order — contradicts `aria-modal="true"` and reads as
+	 * unfinished. The rule has to be global because the dialog is somewhere
+	 * else entirely in the tree; `body:has()` is already relied on elsewhere in
+	 * the app. It covers the artwork detail panel, its avatar preview and the
+	 * avatar editor alike.
+	 */
+	:global(body:has([role='dialog'][aria-modal='true'])) .ambient-tab-shell {
+		display: none;
 	}
 
 	.ambient-tab {
@@ -184,7 +197,7 @@
 	}
 
 	.ambient-tab:focus-visible {
-		outline: 3px solid #4ecdc4;
+		outline: 3px solid var(--focus-ring-color, #4ecdc4);
 		outline-offset: -8px;
 		border-radius: 2rem;
 	}

@@ -16,7 +16,6 @@ const AVIF_SIGNATURE_BYTES = new Uint8Array([
 	0x6d, 0x69, 0x66, 0x31
 ]);
 
-const PNG_SIGNATURE_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const WEBP_SIGNATURE_BYTES = new Uint8Array([
 	0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50
 ]);
@@ -147,17 +146,6 @@ export const createMalformedAvifFile = (size = 128, name = 'invalid.avif') => {
 	}
 
 	return new File([bytes], name, { type: 'image/avif' });
-};
-
-export const createMalformedPngFile = (size = 128, name = 'invalid.png') => {
-	const bytes = new Uint8Array(size);
-	bytes.set(PNG_SIGNATURE_BYTES);
-
-	for (let index = PNG_SIGNATURE_BYTES.length; index < size; index += 1) {
-		bytes[index] = (index * 53) % 256;
-	}
-
-	return new File([bytes], name, { type: 'image/png' });
 };
 
 export const createMalformedWebpFile = (size = 128, name = 'invalid.webp') => {

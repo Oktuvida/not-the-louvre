@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
@@ -5,11 +6,7 @@ import { page } from 'vitest/browser';
 vi.mock('$lib/features/home-entry-scene/canvas/museum-canvas', () => ({
 	museumWindowOpening: { x: 0, y: 0, width: 100, height: 100 },
 	museumWindowAspectRatio: '16/9',
-	drawMuseumWindowFrame: vi.fn(),
 	createMuseumWallPatternUrl: () => 'data:image/png;base64,mock',
-	drawArtworkFrame: vi.fn(),
-	applyFrameWeathering: vi.fn(),
-	createArtworkFrameUrl: () => 'data:image/png;base64,mock',
 	drawStickerBackground: vi.fn(),
 	createStickerBackgroundUrl: () => 'data:image/png;base64,mock'
 }));
@@ -18,23 +15,24 @@ vi.mock('$app/environment', () => ({
 	browser: true
 }));
 
-import HallOfFameRoomHarness from './HallOfFameRoomHarness.svelte';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
+import HallOfFameRoom from './HallOfFameRoom.svelte';
+import RoomHarness from './RoomHarness.svelte';
 
-const createArtwork = (id: string, score: number, rank?: number): Artwork => ({
-	id,
-	title: `Artwork ${id}`,
-	artist: `Artist ${id}`,
-	authorId: `user-${id}`,
-	imageUrl: `https://example.com/${id}.avif`,
-	score,
-	upvotes: score,
-	downvotes: 0,
-	timestamp: Date.now(),
-	isNsfw: false,
-	comments: [],
-	rank
-});
+const createArtwork = (id: string, score: number, rank?: number) =>
+	makeArtwork({ id, rank, score, upvotes: score });
+
+type HallOfFameProps = ComponentProps<typeof HallOfFameRoom>;
+
+const renderRoom = (
+	props: Partial<HallOfFameProps> & Pick<HallOfFameProps, 'artworks' | 'pageInfo'>
+) =>
+	render(RoomHarness, {
+		props: {
+			component: HallOfFameRoom,
+			roomProps: { adultContentEnabled: false, onSelect: () => {}, ...props }
+		}
+	});
 
 describe('HallOfFameRoom', () => {
 	it('creates its own ArtworkAccumulator seeded with SSR artworks, slicing top 3 for podium', async () => {
@@ -47,7 +45,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a6', 50)
 		];
 
-		render(HallOfFameRoomHarness, {
+		renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
 		});
@@ -68,7 +66,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a6', 50)
 		];
 
-		render(HallOfFameRoomHarness, {
+		renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -93,7 +91,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a4', 70)
 		];
 
-		render(HallOfFameRoomHarness, {
+		renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
 			loadMoreArtworks
@@ -116,7 +114,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a6', 50)
 		];
 
-		const screen = render(HallOfFameRoomHarness, {
+		const screen = renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -134,8 +132,13 @@ describe('HallOfFameRoom', () => {
 		];
 
 		await screen.rerender({
-			artworks: refreshedArtworks,
-			pageInfo: { hasMore: false, nextCursor: null }
+			component: HallOfFameRoom,
+			roomProps: {
+				adultContentEnabled: false,
+				artworks: refreshedArtworks,
+				onSelect: () => {},
+				pageInfo: { hasMore: false, nextCursor: null }
+			}
 		});
 
 		// Podium should show the new top 3
@@ -155,7 +158,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a4', 70)
 		];
 
-		const { unmount } = render(HallOfFameRoomHarness, {
+		const { unmount } = renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});

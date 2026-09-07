@@ -3,7 +3,6 @@
 	import {
 		cloneDrawingDocumentV2,
 		createEmptyDrawingDocumentV2,
-		getDrawingPointWithinBounds,
 		serializeEditableDrawingDocument,
 		type DrawingDocumentV2,
 		type DrawingPoint,
@@ -19,6 +18,15 @@
 		createBufferedStroke,
 		shouldUseResponsiveDrawing
 	} from '$lib/features/stroke-json/responsive-editing';
+	import {
+		attachPointerReleaseSafetyNet,
+		ensureCommittedCacheCanvas,
+		getCanvasDrawingPoint,
+		hasLostPrimaryButton,
+		isSameDrawingRenderSignature,
+		readDrawingRenderSignature,
+		type DrawingRenderSignature
+	} from '$lib/features/studio-drawing/pointer-drawing';
 	import { drawingTools } from '$lib/features/studio-drawing/state/drawing.svelte';
 
 	let {
@@ -29,7 +37,6 @@
 		interactive = true,
 		onDocumentChange,
 		onStrokeCommitted,
-		onInitialImageSettled,
 		statusMessage = '',
 		statusTone = 'idle'
 	}: {
@@ -38,13 +45,18 @@
 		clearVersion?: number;
 		initialDrawingDocument?: DrawingDocumentV2 | null;
 		interactive?: boolean;
+		/**
+		 * Observation channel only. The studio page reads the document through
+		 * `bind:drawingDocument`; wiring both cost a second deep clone per point and
+		 * bounced a different object identity back down. Kept for the spec, which
+		 * captures every commit through it.
+		 */
 		onDocumentChange?: (document: DrawingDocumentV2) => void;
 		onStrokeCommitted?: (input: {
 			nextDocument: DrawingDocumentV2;
 			previousDocument: DrawingDocumentV2;
 			stroke: DrawingStroke;
 		}) => void | Promise<void>;
-		onInitialImageSettled?: () => void;
 		statusMessage?: string;
 		statusTone?: 'error' | 'success' | 'idle';
 	} = $props();
@@ -58,6 +70,8 @@
 	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
 	let committedCacheCanvas: HTMLCanvasElement | null = null;
 	let committedCacheDirty = true;
+	let cachedCommittedDocument: DrawingDocumentV2 | null = null;
+	let renderedSignature: DrawingRenderSignature | null = null;
 	let overlayRef: HTMLCanvasElement | null = null;
 
 	function syncOverlaySize() {
@@ -129,17 +143,24 @@
 	const renderCommittedCache = () => {
 		if (!canvasRef) return;
 
-		committedCacheCanvas ??= window.document.createElement('canvas');
-		if (
-			committedCacheCanvas.width !== canvasRef.width ||
-			committedCacheCanvas.height !== canvasRef.height
-		) {
-			committedCacheCanvas.width = canvasRef.width;
-			committedCacheCanvas.height = canvasRef.height;
-		}
+		committedCacheCanvas = ensureCommittedCacheCanvas(
+			committedCacheCanvas,
+			canvasRef.width,
+			canvasRef.height
+		);
 
 		renderDrawingDocumentToCanvas(committedCacheCanvas, drawingDocument);
+		cachedCommittedDocument = drawingDocument;
 		committedCacheDirty = false;
+	};
+
+	const markDocumentRendered = () => {
+		renderedSignature = readDrawingRenderSignature({
+			activeStroke,
+			document: drawingDocument,
+			responsive: responsiveDrawing,
+			target: canvasRef
+		});
 	};
 
 	const renderCurrentDocument = () => {
@@ -147,10 +168,15 @@
 
 		if (!responsiveDrawing) {
 			renderDrawingDocumentToCanvas(canvasRef, drawingDocument);
+			markDocumentRendered();
 			return;
 		}
 
-		if (committedCacheDirty || !committedCacheCanvas) {
+		if (
+			committedCacheDirty ||
+			!committedCacheCanvas ||
+			cachedCommittedDocument !== drawingDocument
+		) {
 			renderCommittedCache();
 		}
 
@@ -165,6 +191,8 @@
 		if (activeStroke) {
 			renderDrawingStroke(context, activeStroke);
 		}
+
+		markDocumentRendered();
 	};
 
 	const stopDrawing = () => {
@@ -177,18 +205,8 @@
 		event.preventDefault();
 	};
 
-	const getPoint = (event: PointerEvent): DrawingPoint | null => {
-		if (!canvasRef) return null;
-
-		const rect = canvasRef.getBoundingClientRect();
-		const scaleX = canvasRef.width / rect.width;
-		const scaleY = canvasRef.height / rect.height;
-
-		return getDrawingPointWithinBounds(
-			[(event.clientX - rect.left) * scaleX, (event.clientY - rect.top) * scaleY],
-			drawingDocument
-		);
-	};
+	const getPoint = (event: PointerEvent): DrawingPoint | null =>
+		canvasRef ? getCanvasDrawingPoint(canvasRef, event, drawingDocument) : null;
 
 	const appendPoint = (point: DrawingPoint) => {
 		const nextDocument = cloneDrawingDocumentV2(drawingDocument);
@@ -242,34 +260,16 @@
 		commitDrawingDocument(cloneDrawingDocumentV2(nextBaseline));
 	});
 
-	$effect(() => {
-		onInitialImageSettled?.();
-	});
-
 	onMount(() => {
 		renderCurrentDocument();
-
-		const handleWindowPointerUp = (event: PointerEvent) => {
-			finishDrawing(event);
-		};
-		const handleWindowPointerCancel = (event: PointerEvent) => {
-			finishDrawing(event);
-		};
-		const handleWindowBlur = () => {
-			finishDrawing();
-		};
 		syncOverlaySize();
 
+		const detachPointerReleaseSafetyNet = attachPointerReleaseSafetyNet(finishDrawing);
 		window.addEventListener('resize', syncOverlaySize);
-		window.addEventListener('pointerup', handleWindowPointerUp);
-		window.addEventListener('pointercancel', handleWindowPointerCancel);
-		window.addEventListener('blur', handleWindowBlur);
 
 		return () => {
+			detachPointerReleaseSafetyNet();
 			window.removeEventListener('resize', syncOverlaySize);
-			window.removeEventListener('pointerup', handleWindowPointerUp);
-			window.removeEventListener('pointercancel', handleWindowPointerCancel);
-			window.removeEventListener('blur', handleWindowBlur);
 		};
 	});
 
@@ -286,7 +286,20 @@
 		commitDrawingDocument(cloneDrawingDocumentV2(baselineDocument));
 	});
 
+	// The pointer handlers already paint synchronously, so this effect exists for
+	// the repaints nothing else covers: mount, clearVersion, a new
+	// initialDrawingDocument and the parent's post-publish reset. The signature
+	// check keeps it from painting the very same frame a second time per point.
 	$effect(() => {
+		const nextSignature = readDrawingRenderSignature({
+			activeStroke,
+			document: drawingDocument,
+			responsive: responsiveDrawing,
+			target: canvasRef
+		});
+
+		if (isSameDrawingRenderSignature(renderedSignature, nextSignature)) return;
+
 		renderCurrentDocument();
 	});
 
@@ -332,6 +345,13 @@
 		event.preventDefault();
 
 		if (!isDrawing) {
+			return;
+		}
+
+		// A mouse released outside the window delivers no pointerup here, so commit
+		// what was drawn instead of trailing ink from an unpressed button.
+		if (hasLostPrimaryButton(event)) {
+			finishDrawing(event);
 			return;
 		}
 

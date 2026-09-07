@@ -31,6 +31,8 @@
 	let playbackUnavailable = $state(false);
 	let hasUserInteractedSinceMount = $state(false);
 	let fadeToken = 0;
+	// `window.setTimeout` (browser id), matching the init handle below.
+	let pauseHandle: number | null = null;
 
 	const AMBIENT_AUDIO_VOLUME = 0.2;
 	const AMBIENT_AUDIO_FADE_IN_MS = 900;
@@ -89,16 +91,15 @@
 		return true;
 	};
 
-	const fadeVolumeTo = (
-		targetVolume: number,
-		{
-			duration,
-			onComplete
-		}: {
-			duration: number;
-			onComplete?: () => void;
+	const clearPendingPause = () => {
+		if (pauseHandle !== null) {
+			window.clearTimeout(pauseHandle);
+			pauseHandle = null;
 		}
-	) => {
+	};
+
+	/** Cosmetic volume ramp only — never the carrier of a state change. */
+	const fadeVolumeTo = (targetVolume: number, duration: number) => {
 		if (!audio) {
 			return;
 		}
@@ -118,10 +119,7 @@
 
 			if (progress < 1) {
 				requestAnimationFrame(step);
-				return;
 			}
-
-			onComplete?.();
 		};
 
 		requestAnimationFrame(step);
@@ -133,7 +131,7 @@
 		}
 
 		audio.volume = 0;
-		fadeVolumeTo(AMBIENT_AUDIO_VOLUME, { duration: AMBIENT_AUDIO_FADE_IN_MS });
+		fadeVolumeTo(AMBIENT_AUDIO_VOLUME, AMBIENT_AUDIO_FADE_IN_MS);
 	};
 
 	const fadeOutAndPause = () => {
@@ -141,17 +139,27 @@
 			return;
 		}
 
-		fadeVolumeTo(0, {
-			duration: AMBIENT_AUDIO_FADE_OUT_MS,
-			onComplete: () => {
-				if (!audio) {
-					return;
-				}
+		clearPendingPause();
+		fadeVolumeTo(0, AMBIENT_AUDIO_FADE_OUT_MS);
+		const pauseToken = fadeToken;
 
-				audio.pause();
-				audio.volume = AMBIENT_AUDIO_VOLUME;
+		/*
+		 * The pause runs off a timer, not off the fade's completion callback:
+		 * browsers stop delivering requestAnimationFrame to a hidden document, so
+		 * "hit mute, switch tabs" used to leave the track playing at whatever
+		 * volume the ramp had reached, with nothing to stop it until the tab was
+		 * focused again. Timers keep firing (throttled) in the background.
+		 */
+		pauseHandle = window.setTimeout(() => {
+			pauseHandle = null;
+
+			if (!audio || fadeToken !== pauseToken) {
+				return;
 			}
-		});
+
+			audio.pause();
+			audio.volume = AMBIENT_AUDIO_VOLUME;
+		}, AMBIENT_AUDIO_FADE_OUT_MS);
 	};
 
 	const tryPlayCurrentTrack = async ({ useFadeIn = false }: { useFadeIn?: boolean } = {}) => {
@@ -160,6 +168,10 @@
 			return false;
 		}
 
+		// A pause scheduled by a previous mute must not land on the track we are
+		// about to resume: toggling on awaits play() before fadeIn bumps the token,
+		// so the token alone cannot protect this window.
+		clearPendingPause();
 		initializing = true;
 		playbackUnavailable = false;
 
@@ -207,6 +219,7 @@
 	};
 
 	const handleToggle = async () => {
+		clearPendingPause();
 		hasUserInteractedSinceMount = true;
 		const nextEnabled = !enabled;
 		enabled = nextEnabled;
@@ -276,6 +289,7 @@
 
 		return () => {
 			window.clearTimeout(initHandle);
+			clearPendingPause();
 			fadeToken += 1;
 			if (audio) {
 				audio.pause();

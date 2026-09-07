@@ -16,7 +16,9 @@ describe('GameLink', () => {
 		await expect.element(back).toHaveAttribute('data-sticker-variant', 'ghost');
 
 		const linkBackground = document.querySelector('[data-testid="game-link-bg"]');
-		expect(linkBackground?.getAttribute('src')).toMatch(/^data:image\/(png|svg\+xml)/);
+		expect(linkBackground?.getAttribute('src')).toMatch(
+			/^\/generated\/sticker-md-secondary\.v\d+\.svg$/
+		);
 	});
 
 	it('matches the shared sticker control API for links', async () => {

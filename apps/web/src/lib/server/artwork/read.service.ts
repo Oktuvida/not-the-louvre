@@ -1,4 +1,3 @@
-import { env } from '$env/dynamic/private';
 import { assertNotBanned } from '$lib/server/auth/guards';
 import { ArtworkFlowError } from './errors';
 import { artworkReadRepository } from './read.repository';
@@ -63,9 +62,7 @@ const toAuthorSummary = (record: ArtworkReadRecord): ArtworkAuthorSummary => ({
 	nickname: record.authorNickname
 });
 
-const getMediaBasePath = () => env.PUBLIC_ARTWORK_MEDIA_BASE_PATH || '/api/artworks';
-
-export const getArtworkMediaUrl = (artworkId: string) => `${getMediaBasePath()}/${artworkId}/media`;
+const getArtworkMediaUrl = (artworkId: string) => `/api/artworks/${artworkId}/media`;
 
 const getUserAvatarUrl = (userId: string) => `/api/users/${userId}/avatar`;
 

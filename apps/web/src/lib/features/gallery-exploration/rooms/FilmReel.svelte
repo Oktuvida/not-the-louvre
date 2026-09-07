@@ -1,21 +1,36 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { gsap } from '$lib/client/gsap';
 	import { prefersReducedMotion } from 'svelte/motion';
+	import { writable, type Writable } from 'svelte/store';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
+
+	/*
+	 * gsap is 27KB gzipped and the reel is the only thing in the whole gallery
+	 * tree that uses it, so a static import made /gallery, /gallery/hot-wall and
+	 * /gallery/your-studio pay for an animation they never show. Every call site
+	 * already runs after mount behind a `browser` guard, so one memoised dynamic
+	 * import costs a microtask on the first idle cycle and nothing after that.
+	 */
+	let gsapModule: Promise<typeof import('$lib/client/gsap')> | null = null;
+	const loadGsap = () => (gsapModule ??= import('$lib/client/gsap'));
 
 	let {
 		adultContentEnabled = false,
 		artworks,
 		onIdleCycleComplete,
 		onIdleProgress,
-		onLand
+		onLand,
+		revealedArtworkIds,
+		viewerId = null
 	}: {
 		adultContentEnabled?: boolean;
 		artworks: Artwork[];
 		onIdleCycleComplete?: () => void;
 		onIdleProgress?: (fraction: number) => void;
 		onLand: (artwork: Artwork) => void;
+		revealedArtworkIds?: Writable<Set<string>>;
+		viewerId?: string | null;
 	} = $props();
 
 	let viewportEl: HTMLDivElement | undefined = $state();
@@ -24,11 +39,25 @@
 
 	const BUFFER = 3;
 	const IDLE_DURATION_PER_FRAME = 4;
+	/*
+	 * Travel is capped so the spin does not scale with the pool: at three full
+	 * cycles a 200-artwork pool would fling ~75 frames a second past the
+	 * viewport, creating and destroying a DOM node for each one.
+	 */
+	const MAX_SPIN_FRAMES = 12;
 
 	type ReelState = 'idle' | 'spinning' | 'stopped';
+	// The only thing this component ever does with a tween handle is kill it,
+	// so it needs no gsap type — which keeps the module out of the type graph
+	// as well as out of the bundle.
+	type ReelTween = { kill: () => void };
 	let reelState = $state<ReelState>('idle');
-	let idleTween: gsap.core.Tween | null = null;
+	let idleTween: ReelTween | null = null;
+	let spinTween: ReelTween | null = null;
 	let idleRestartTimer: ReturnType<typeof setTimeout> | null = null;
+
+	const fallbackRevealedIds = writable<Set<string>>(new Set());
+	const revealedIds = $derived(revealedArtworkIds ?? fallbackRevealedIds);
 
 	/*
 	 * Virtual-window approach for efficient circular scrolling.
@@ -53,6 +82,10 @@
 		return [...artworks, injected];
 	});
 
+	// A boolean, not a length: growing the pool must not tear down a running
+	// idle tween, but going from empty to non-empty must still start one.
+	const hasReelArtworks = $derived(reelArtworks.length > 0);
+
 	const reelMetrics = $derived.by(() => {
 		const width = viewportWidth || 768;
 		const isNarrow = width < 640;
@@ -70,6 +103,13 @@
 		};
 	});
 
+	/*
+	 * Only `transform` and `opacity` change per tick; the box itself (position,
+	 * offsets, size) lives in the stylesheet and is driven by a custom property
+	 * that changes once per metrics change. Rebuilding a whole `style`
+	 * attribute — including layout properties — for 9-13 elements on every one
+	 * of a four-second spin's frames was the file's own stated goal to avoid.
+	 */
 	const visibleSlots = $derived.by(() => {
 		if (!viewportEl || viewportWidth === 0 || reelArtworks.length === 0) return [];
 
@@ -82,8 +122,8 @@
 		const slots: Array<{
 			artwork: Artwork;
 			key: number;
-			x: number;
-			distFromCenter: number;
+			opacity: string;
+			transform: string;
 		}> = [];
 
 		for (let i = 0; i < totalSlots; i++) {
@@ -93,34 +133,18 @@
 
 			const x = slotIndex * frameStep - offset;
 			const frameCenterX = x + frameSize / 2;
-			const distFromCenter = Math.abs(frameCenterX - centerX) / (vpWidth / 2);
+			const distFromCenter = Math.min(Math.abs(frameCenterX - centerX) / (vpWidth / 2), 1);
 
 			slots.push({
 				artwork: reelArtworks[artworkIndex]!,
 				key: slotIndex,
-				x,
-				distFromCenter: Math.min(distFromCenter, 1)
+				opacity: (1 - distFromCenter * 0.85).toFixed(3),
+				transform: `translate3d(${x.toFixed(1)}px, -50%, 0) scale(${(1 - distFromCenter * 0.35).toFixed(3)})`
 			});
 		}
 
 		return slots;
 	});
-
-	// Transform-only styling: position and depth cues stay on the compositor,
-	// no per-frame layout or filter work. Edge depth comes from the viewport mask.
-	const getSlotStyle = (slot: { x: number; distFromCenter: number }): string => {
-		const { frameSize } = reelMetrics;
-		const d = slot.distFromCenter;
-		const scale = 1 - d * 0.35;
-		const opacity = 1 - d * 0.85;
-
-		return (
-			`position:absolute;left:0;top:50%;` +
-			`width:${frameSize}px;height:${frameSize}px;` +
-			`transform:translate3d(${slot.x.toFixed(1)}px, -50%, 0) scale(${scale.toFixed(3)});` +
-			`opacity:${opacity.toFixed(3)};`
-		);
-	};
 
 	/* Proxy object that GSAP tweens — we read .value in onUpdate */
 	const proxy = { value: 0 };
@@ -137,14 +161,19 @@
 		idleRestartTimer = setTimeout(() => {
 			idleRestartTimer = null;
 			if (reelState !== 'idle') return;
-			startIdle();
+			void startIdle();
 		}, delayMs);
 	};
 
-	const startIdle = () => {
+	const startIdle = async () => {
 		if (!browser || reelArtworks.length === 0) return;
 		// Ambient auto-scroll is decorative; honor reduced-motion users.
 		if (prefersReducedMotion.current) return;
+
+		const { gsap } = await loadGsap();
+		// The reel may have been spun or destroyed while the module loaded.
+		if (reelState !== 'idle' || reelArtworks.length === 0) return;
+
 		const { frameStep } = reelMetrics;
 		const poolSize = reelArtworks.length;
 
@@ -184,24 +213,16 @@
 		}
 	};
 
-	export const spin = () => {
-		if (reelState === 'spinning' || reelArtworks.length === 0 || !viewportEl) return;
-		const pool = reelArtworks;
+	const runSpin = async (targetIndex: number, pool: Artwork[], landOn: Artwork) => {
 		const { frameSize, frameStep } = reelMetrics;
-
-		reelState = 'spinning';
-		stopIdle();
-
-		const randomIndex = Math.floor(Math.random() * pool.length);
-
-		const vpWidth = viewportWidth || viewportEl.offsetWidth;
+		const vpWidth = viewportWidth || viewportEl?.offsetWidth || 0;
 		const centerX = vpWidth / 2;
 
 		/* We want the chosen artwork centered:
-		 *   randomIndex * FRAME_STEP - targetOffset + FRAME_SIZE/2 = centerX
-		 * Plus at least 3 full cycles of travel for the visual spin effect. */
-		const fullCycles = 3 * pool.length * frameStep;
-		const baseTarget = randomIndex * frameStep - centerX + frameSize / 2;
+		 *   targetIndex * FRAME_STEP - targetOffset + FRAME_SIZE/2 = centerX
+		 * plus a bounded run-up of full frames for the visual spin effect. */
+		const fullCycles = Math.min(3 * pool.length, MAX_SPIN_FRAMES) * frameStep;
+		const baseTarget = targetIndex * frameStep - centerX + frameSize / 2;
 
 		const minTarget = offset + fullCycles;
 		const cycleLen = pool.length * frameStep;
@@ -209,9 +230,12 @@
 		const adjustedRemainder = remainder < 0 ? remainder + cycleLen : remainder;
 		const targetOffset = minTarget + adjustedRemainder;
 
+		const { gsap } = await loadGsap();
+		if (reelState !== 'spinning') return;
+
 		proxy.value = offset;
 
-		gsap.to(proxy, {
+		spinTween = gsap.to(proxy, {
 			value: targetOffset,
 			duration: prefersReducedMotion.current ? 0.8 : 4,
 			ease: 'power4.out',
@@ -219,22 +243,33 @@
 				offset = proxy.value;
 			},
 			onComplete: () => {
+				spinTween = null;
 				reelState = 'stopped';
-				onLand(pool[randomIndex]!);
+				onLand(landOn);
 			}
 		});
 	};
 
+	export const spin = () => {
+		if (reelState === 'spinning' || reelArtworks.length === 0 || !viewportEl) return;
+		const pool = reelArtworks;
+
+		reelState = 'spinning';
+		stopIdle();
+
+		const randomIndex = Math.floor(Math.random() * pool.length);
+		void runSpin(randomIndex, pool, pool[randomIndex]!);
+	};
+
 	export const resetToIdle = () => {
 		reelState = 'idle';
-		// The $effect watching reelState + artworks.length will start the idle tween.
+		// The $effect watching reelState + hasReelArtworks will start the idle tween.
 	};
 
 	export const isSpinning = () => reelState === 'spinning';
 
 	export const spinToArtwork = (artwork: Artwork) => {
 		if (reelState === 'spinning' || reelArtworks.length === 0 || !viewportEl) return;
-		const { frameSize, frameStep } = reelMetrics;
 
 		// Check if artwork is already in the pool; otherwise append it locally
 		let targetIndex = reelArtworks.findIndex((a) => a.id === artwork.id);
@@ -249,32 +284,7 @@
 		reelState = 'spinning';
 		stopIdle();
 
-		const vpWidth = viewportWidth || viewportEl.offsetWidth;
-		const centerX = vpWidth / 2;
-
-		const fullCycles = 3 * pool.length * frameStep;
-		const baseTarget = targetIndex * frameStep - centerX + frameSize / 2;
-
-		const minTarget = offset + fullCycles;
-		const cycleLen = pool.length * frameStep;
-		const remainder = (baseTarget - minTarget) % cycleLen;
-		const adjustedRemainder = remainder < 0 ? remainder + cycleLen : remainder;
-		const targetOffset = minTarget + adjustedRemainder;
-
-		proxy.value = offset;
-
-		gsap.to(proxy, {
-			value: targetOffset,
-			duration: prefersReducedMotion.current ? 0.8 : 4,
-			ease: 'power4.out',
-			onUpdate() {
-				offset = proxy.value;
-			},
-			onComplete: () => {
-				reelState = 'stopped';
-				onLand(artwork);
-			}
-		});
+		void runSpin(targetIndex, pool, artwork);
 	};
 
 	$effect(() => {
@@ -295,7 +305,7 @@
 	});
 
 	$effect(() => {
-		if (!browser || reelArtworks.length === 0 || !viewportEl || viewportWidth === 0) return;
+		if (!browser || !hasReelArtworks || !viewportEl || viewportWidth === 0) return;
 
 		// Only start idle scrolling when the reel is in the idle state.
 		// Idle restarts are scheduled at the end of each cycle after it fires
@@ -309,6 +319,19 @@
 			stopIdle();
 		};
 	});
+
+	/*
+	 * Destroy-only teardown. The idle effect above returns early while the reel
+	 * is spinning, so its last run registers no cleanup at all — leaving the
+	 * four-second spin tween alive after the room is gone, still writing
+	 * `offset` and finally calling `onLand`, which pushes detail history for an
+	 * artwork under whatever room the visitor moved on to.
+	 */
+	$effect(() => () => {
+		stopIdle();
+		spinTween?.kill();
+		spinTween = null;
+	});
 </script>
 
 <div class="reel-container" data-reel-orientation="horizontal" data-testid="film-reel">
@@ -316,11 +339,15 @@
 		class="reel-viewport"
 		bind:this={viewportEl}
 		data-testid="film-reel-track"
-		style={`--reel-highlight-size:${reelMetrics.highlightSize}px; --reel-viewport-height:${reelMetrics.viewportHeight}px;`}
+		style={`--reel-frame-size:${reelMetrics.frameSize}px; --reel-highlight-size:${reelMetrics.highlightSize}px; --reel-viewport-height:${reelMetrics.viewportHeight}px;`}
 	>
 		{#each visibleSlots as slot (slot.key)}
-			{@const isSensitiveBlurred = slot.artwork.isNsfw && !adultContentEnabled}
-			<div class="reel-frame" style={getSlotStyle(slot)}>
+			{@const isSensitiveBlurred = isArtworkBlurred(slot.artwork, {
+				adultContentEnabled,
+				id: viewerId,
+				revealedIds: $revealedIds
+			})}
+			<div class="reel-frame" style:opacity={slot.opacity} style:transform={slot.transform}>
 				<img
 					src={slot.artwork.imageUrl}
 					alt={slot.artwork.title}
@@ -328,7 +355,6 @@
 					class:nsfw-blurred={isSensitiveBlurred}
 					width={reelMetrics.frameSize}
 					height={reelMetrics.frameSize}
-					loading="lazy"
 				/>
 				{#if isSensitiveBlurred}
 					<div class="nsfw-overlay">
@@ -363,7 +389,11 @@
 	}
 
 	.reel-frame {
-		position: relative;
+		position: absolute;
+		left: 0;
+		top: 50%;
+		width: var(--reel-frame-size, 256px);
+		height: var(--reel-frame-size, 256px);
 		border-radius: 8px;
 		overflow: hidden;
 		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);

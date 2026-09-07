@@ -5,34 +5,16 @@
 	let { data }: PageProps = $props();
 </script>
 
-{#await data.lazy.roomContent}
-	<GalleryExplorationPage
-		artworks={[]}
-		emptyStateMessage={null}
-		isRoomLoading
-		realtimeConfig={data.realtimeConfig}
-		viewer={data.viewer}
-		room={data.room}
-		roomId={data.roomId}
-	/>
-{:then roomContent}
-	<GalleryExplorationPage
-		adultContentEnabled={roomContent.adultContentEnabled}
-		artworks={roomContent.artworks}
-		discovery={roomContent.discovery}
-		emptyStateMessage={roomContent.emptyStateMessage}
-		realtimeConfig={data.realtimeConfig}
-		viewer={data.viewer}
-		room={data.room}
-		roomId={data.roomId}
-	/>
-{:catch}
-	<GalleryExplorationPage
-		artworks={[]}
-		emptyStateMessage="The gallery could not load right now — refresh to try again."
-		realtimeConfig={data.realtimeConfig}
-		viewer={data.viewer}
-		room={data.room}
-		roomId={data.roomId}
-	/>
-{/await}
+<!--
+	The streamed room payload is handed to the page rather than branched around
+	it: three separate `<GalleryExplorationPage>` instantiations meant every
+	navigation constructed the component twice and the entry fade dissolved over
+	a skeleton belonging to the instance that was about to be discarded.
+-->
+<GalleryExplorationPage
+	realtimeConfig={data.realtimeConfig}
+	room={data.room}
+	roomContent={data.lazy.roomContent}
+	roomId={data.roomId}
+	viewer={data.viewer}
+/>

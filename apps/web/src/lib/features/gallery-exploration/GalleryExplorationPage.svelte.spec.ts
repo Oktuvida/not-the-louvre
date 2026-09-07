@@ -119,6 +119,7 @@ vi.mock('$lib/features/realtime/browser-client', () => ({
 }));
 
 import GalleryExplorationPage from './GalleryExplorationPageLayoutHarness.svelte';
+import { clearRoomFeedCache } from './model/feed-cache';
 import { getGalleryRoom } from './model/rooms';
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 
@@ -142,15 +143,20 @@ const baseArtwork: Artwork = {
 
 const createDeferred = <T>() => {
 	let resolve!: (value: T) => void;
-	const promise = new Promise<T>((innerResolve) => {
+	let reject!: (reason?: unknown) => void;
+	const promise = new Promise<T>((innerResolve, innerReject) => {
 		resolve = innerResolve;
+		reject = innerReject;
 	});
 
-	return { promise, resolve };
+	return { promise, reject, resolve };
 };
 
 describe('GalleryExplorationPage', () => {
 	beforeEach(() => {
+		// The per-room feed cache is module scope on purpose (it has to survive
+		// the layout's keyed remount); tests must not inherit each other's feeds.
+		clearRoomFeedCache();
 		vi.unstubAllGlobals?.();
 		goto.mockReset();
 		getBrowserRealtimeClient.mockReset();
@@ -1476,5 +1482,190 @@ describe('GalleryExplorationPage', () => {
 		expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
 		// Reel is still visible and interactive
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+	});
+	it('reserves the podium shape while the hall of fame room streams', async () => {
+		const pending = createDeferred<never>();
+
+		render(GalleryExplorationPage, {
+			room: getGalleryRoom('hall-of-fame'),
+			roomContent: pending.promise,
+			roomId: 'hall-of-fame'
+		});
+
+		const skeleton = page.getByTestId('room-loading-skeleton');
+		await expect.element(skeleton).toBeInTheDocument();
+		await expect.element(skeleton).toHaveAttribute('data-room-skeleton', 'hall-of-fame');
+
+		// A skeleton earns its keep by reserving the shape that arrives: the
+		// podium row above the polaroid grid, not eight uniform cards.
+		expect(
+			document.querySelectorAll('[data-room-skeleton="hall-of-fame"] .animate-pulse').length
+		).toBeGreaterThan(3);
+		expect(document.querySelector('[data-testid="room-loading-skeleton-grid"]')).not.toBeNull();
+	});
+
+	it('reserves the reel shape — and no grid — while the mystery room streams', async () => {
+		const pending = createDeferred<never>();
+
+		render(GalleryExplorationPage, {
+			room: getGalleryRoom('mystery'),
+			roomContent: pending.promise,
+			roomId: 'mystery'
+		});
+
+		await expect
+			.element(page.getByTestId('room-loading-skeleton'))
+			.toHaveAttribute('data-room-skeleton', 'mystery');
+		expect(document.querySelector('[data-testid="room-loading-skeleton-grid"]')).toBeNull();
+	});
+
+	it('swaps the skeleton for the streamed room inside a single page instance', async () => {
+		const deferred = createDeferred<{
+			adultContentEnabled: boolean;
+			artworks: Artwork[];
+			discovery: {
+				pageInfo: { hasMore: boolean; nextCursor: string | null };
+				request: { authorId: string | null; limit: number; sort: 'recent'; window: null };
+			};
+			emptyStateMessage: string | null;
+		}>();
+
+		render(GalleryExplorationPage, {
+			room: getGalleryRoom('your-studio'),
+			roomContent: deferred.promise,
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByTestId('room-loading-skeleton')).toBeInTheDocument();
+		expect(document.querySelectorAll('[data-testid="gallery-room-content"]')).toHaveLength(1);
+
+		deferred.resolve({
+			adultContentEnabled: false,
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Streamed Study' }],
+			discovery: {
+				pageInfo: { hasMore: false, nextCursor: null },
+				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null
+		});
+
+		await expect.element(page.getByRole('button', { name: /Streamed Study/ })).toBeVisible();
+		await expect.element(page.getByTestId('room-loading-skeleton')).not.toBeInTheDocument();
+		// One instance across the hand-off: the entry fade and the layout bindings
+		// belong to the component that is still on screen afterwards.
+		expect(document.querySelectorAll('[data-testid="gallery-room-content"]')).toHaveLength(1);
+	});
+
+	it('tells a hot wall failure apart from a quiet hot wall', async () => {
+		invalidateAll.mockReset();
+		const deferred = createDeferred<never>();
+		deferred.promise.catch(() => {});
+
+		render(GalleryExplorationPage, {
+			room: getGalleryRoom('hot-wall'),
+			roomContent: deferred.promise,
+			roomId: 'hot-wall',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		deferred.reject(new Error('stream failed'));
+
+		await expect.element(page.getByTestId('gallery-room-error')).toBeVisible();
+		await expect.element(page.getByText('Something went wrong')).toBeVisible();
+		// Not the themed "nothing is heating up" panel, which would tell the
+		// visitor the product is empty rather than broken.
+		expect(document.querySelector('[data-testid="hot-wall-empty"]')).toBeNull();
+
+		await page.getByRole('button', { name: 'Try again' }).click();
+		await vi.waitFor(() => {
+			expect(invalidateAll).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	it('warms the artwork detail on pointerdown so the click has nothing left to fetch', async () => {
+		const loadArtworkDetail = vi.fn(async (artworkId: string) => ({
+			...baseArtwork,
+			id: artworkId,
+			title: 'Champion Study'
+		}));
+
+		render(GalleryExplorationPage, {
+			artworks: [
+				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion Study' },
+				{ ...baseArtwork, id: 'artwork-2', title: 'Runner Up Study' },
+				{ ...baseArtwork, id: 'artwork-3', title: 'Bronze Study' }
+			],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		const podium = page.getByTestId('podium-artwork-1');
+		await expect.element(podium).toBeVisible();
+
+		podium.element().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+
+		await vi.waitFor(() => {
+			expect(loadArtworkDetail).toHaveBeenCalledTimes(1);
+		});
+
+		await podium.click();
+
+		await expect
+			.element(page.getByRole('dialog', { name: 'Artwork details for Champion Study' }))
+			.toBeVisible();
+
+		// The open consumed the warm entry instead of firing a second round trip.
+		expect(loadArtworkDetail).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps the podium medal on screen while the detail hydrates', async () => {
+		const loadArtworkDetail = vi.fn(async (artworkId: string) => ({
+			...baseArtwork,
+			id: artworkId,
+			// The detail endpoint has no business returning a room position.
+			rank: undefined,
+			title: 'Champion Study'
+		}));
+
+		render(GalleryExplorationPage, {
+			artworks: [
+				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion Study' },
+				{ ...baseArtwork, id: 'artwork-2', title: 'Runner Up Study' },
+				{ ...baseArtwork, id: 'artwork-3', title: 'Bronze Study' }
+			],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByTestId('podium-artwork-1').click();
+
+		await expect
+			.element(page.getByRole('dialog', { name: 'Artwork details for Champion Study' }))
+			.toBeVisible();
+
+		await vi.waitFor(() => {
+			expect(loadArtworkDetail).toHaveBeenCalled();
+		});
+
+		await expect.element(page.getByText('\u{1F947}')).toBeVisible();
+	});
+
+	it('gives anonymous visitors a way in from the empty room', async () => {
+		render(GalleryExplorationPage, {
+			artworks: [],
+			emptyStateMessage: 'No artworks have reached this gallery room yet.',
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame',
+			viewer: null
+		});
+
+		await expect.element(page.getByRole('link', { name: /join/i }).first()).toBeVisible();
 	});
 });

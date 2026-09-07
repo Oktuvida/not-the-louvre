@@ -11,7 +11,6 @@
 		cloneDrawingDocumentV2,
 		createEmptyDrawingDocument,
 		createEmptyDrawingDocumentV2,
-		getDrawingPointWithinBounds,
 		getRenderableDrawingStrokes,
 		type DrawingDocumentV2,
 		type DrawingPoint,
@@ -25,7 +24,17 @@
 		createBufferedStroke,
 		shouldUseResponsiveDrawing
 	} from '$lib/features/stroke-json/responsive-editing';
+	import {
+		attachPointerReleaseSafetyNet,
+		ensureCommittedCacheCanvas,
+		getCanvasDrawingPoint,
+		hasLostPrimaryButton,
+		isSameDrawingRenderSignature,
+		readDrawingRenderSignature,
+		type DrawingRenderSignature
+	} from '$lib/features/studio-drawing/pointer-drawing';
 	import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
+	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 
 	const palette = drawingPalette;
@@ -112,6 +121,9 @@
 	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
 	let committedCacheCanvas: HTMLCanvasElement | null = null;
 	let committedCacheDirty = true;
+	let renderedSignature: DrawingRenderSignature | null = null;
+	let renderedSealSignature: DrawingRenderSignature | null = null;
+	let renderedSealTarget: HTMLCanvasElement | null = null;
 	let sealCanvasElement = $state<HTMLCanvasElement | null>(null);
 	let sealBlobElement = $state<HTMLDivElement | null>(null);
 
@@ -261,14 +273,11 @@
 	};
 
 	const renderCommittedCache = () => {
-		committedCacheCanvas ??= window.document.createElement('canvas');
-		if (
-			committedCacheCanvas.width !== CANVAS_WIDTH ||
-			committedCacheCanvas.height !== CANVAS_HEIGHT
-		) {
-			committedCacheCanvas.width = CANVAS_WIDTH;
-			committedCacheCanvas.height = CANVAS_HEIGHT;
-		}
+		committedCacheCanvas = ensureCommittedCacheCanvas(
+			committedCacheCanvas,
+			CANVAS_WIDTH,
+			CANVAS_HEIGHT
+		);
 
 		const context = committedCacheCanvas.getContext('2d');
 		if (!context) return;
@@ -300,11 +309,20 @@
 	const pressSealAnimation = () => {
 		const blob = sealBlobElement;
 		if (!blob) return;
-		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		if (prefersReducedMotion()) return;
 
 		blob.animate([{ scale: '1' }, { scale: '0.88', offset: 0.4 }, { scale: '1' }], {
 			duration: 360,
 			easing: 'cubic-bezier(0.34, 1.5, 0.6, 1)'
+		});
+	};
+
+	const markDocumentRendered = () => {
+		renderedSignature = readDrawingRenderSignature({
+			activeStroke,
+			document: drawingDocument,
+			responsive: responsiveDrawing,
+			target: canvasElement
 		});
 	};
 
@@ -315,6 +333,7 @@
 
 		if (!responsiveDrawing) {
 			renderCommittedDocument(context, drawingDocument);
+			markDocumentRendered();
 			return;
 		}
 
@@ -330,20 +349,12 @@
 		if (activeStroke) {
 			renderDrawingStroke(context, activeStroke);
 		}
+
+		markDocumentRendered();
 	};
 
-	const getPoint = (event: PointerEvent): DrawingPoint | null => {
-		if (!canvasElement) return null;
-
-		const rect = canvasElement.getBoundingClientRect();
-		const scaleX = canvasElement.width / rect.width;
-		const scaleY = canvasElement.height / rect.height;
-
-		return getDrawingPointWithinBounds(
-			[(event.clientX - rect.left) * scaleX, (event.clientY - rect.top) * scaleY],
-			drawingDocument
-		);
-	};
+	const getPoint = (event: PointerEvent): DrawingPoint | null =>
+		canvasElement ? getCanvasDrawingPoint(canvasElement, event, drawingDocument) : null;
 
 	const startStroke = (point: DrawingPoint) => {
 		if (responsiveDrawing) {
@@ -425,8 +436,11 @@
 
 		event.preventDefault();
 
-		if ((event.buttons & 1) === 0) {
-			stopDrawing();
+		// A mouse released outside the window delivers no pointerup here. Commit the
+		// stroke rather than dropping it, and only for mice: a stylus can report
+		// `buttons: 0` mid-stroke and would otherwise truncate the line.
+		if (hasLostPrimaryButton(event)) {
+			finishDrawing(event);
 			return;
 		}
 
@@ -547,26 +561,42 @@
 			committedCacheDirty = true;
 		}
 
-		const handleWindowPointerRelease = () => {
-			finishDrawing();
-		};
-
-		window.addEventListener('pointerup', handleWindowPointerRelease);
-		window.addEventListener('pointercancel', handleWindowPointerRelease);
-		window.addEventListener('blur', handleWindowPointerRelease);
+		const detachPointerReleaseSafetyNet = attachPointerReleaseSafetyNet(finishDrawing);
 
 		renderCurrentDocument();
 
 		return () => {
 			draftLoadCancelled = true;
-			window.removeEventListener('pointerup', handleWindowPointerRelease);
-			window.removeEventListener('pointercancel', handleWindowPointerRelease);
-			window.removeEventListener('blur', handleWindowPointerRelease);
+			detachPointerReleaseSafetyNet();
 		};
 	});
 
+	// The pointer handlers already paint the pad synchronously, so this effect only
+	// covers the repaints nothing else does (mount, draft hydration, a cleared pad)
+	// and skips the duplicate paint of the very same frame. The seal preview is
+	// driven from here alone, so it keeps refreshing on every change.
 	$effect(() => {
-		renderCurrentDocument();
+		const nextSignature = readDrawingRenderSignature({
+			activeStroke,
+			document: drawingDocument,
+			responsive: responsiveDrawing,
+			target: canvasElement
+		});
+		const nextSealTarget = sealCanvasElement;
+
+		if (!isSameDrawingRenderSignature(renderedSignature, nextSignature)) {
+			renderCurrentDocument();
+		}
+
+		if (
+			isSameDrawingRenderSignature(renderedSealSignature, nextSignature) &&
+			renderedSealTarget === nextSealTarget
+		) {
+			return;
+		}
+
+		renderedSealSignature = nextSignature;
+		renderedSealTarget = nextSealTarget;
 		updateSealPreview();
 	});
 </script>
@@ -1126,7 +1156,15 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.dab-paint {
+			/* `dab-pop` only animates from a pre-state (opacity 0, scale .3), so
+			 * dropping it lands the swatch on its resting look. */
 			animation: none;
+		}
+
+		.dab-paint,
+		.test-dot {
+			/* Not 0s: a zero-length transition does not fire transitionend everywhere. */
+			transition-duration: 0.01ms;
 		}
 	}
 </style>

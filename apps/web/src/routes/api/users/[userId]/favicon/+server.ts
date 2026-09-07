@@ -32,7 +32,7 @@ export const GET: RequestHandler = async (event) => {
 			return cachedResponse;
 		}
 
-		const user = await userRepository.findUserById(event.params.userId);
+		const user = await userRepository.findUserAvatarRefById(event.params.userId);
 
 		if (!user || !user.avatarUrl) {
 			return json({ code: 'NOT_FOUND', message: 'Avatar not found' }, { status: 404 });

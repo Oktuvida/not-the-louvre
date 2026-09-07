@@ -40,7 +40,7 @@ type HomePreviewSource = {
 
 const previewAccents = ['#f3c64c', '#d79f6d', '#7d9785'] as const;
 const previewRotations = [-2, 2, -2] as const;
-const homeSceneArtworkSlotNames = [
+export const homeSceneArtworkSlotNames = [
 	'a1',
 	'a2',
 	'a3',
@@ -67,8 +67,14 @@ export const toHomePreviewCards = (artworks: HomePreviewSource[]): HomePreviewCa
 		title: artwork.title
 	}));
 
+/*
+ * Leading slice: the studio wall shows the BEST of what the discovery query
+ * returned, not the tail of it. `slice(-n)` handed the wall the worst n rows of
+ * a score-DESC page the moment the query returned more rows than there are
+ * frames.
+ */
 export const toHomeSceneArtworkSlots = (artworks: HomePreviewSource[]): HomeSceneArtworkSlot[] =>
-	artworks.slice(-homeSceneArtworkSlotNames.length).map((artwork, index) => ({
+	artworks.slice(0, homeSceneArtworkSlotNames.length).map((artwork, index) => ({
 		id: artwork.id,
 		imageUrl: artwork.mediaUrl,
 		slotName: homeSceneArtworkSlotNames[index] ?? homeSceneArtworkSlotNames[0],

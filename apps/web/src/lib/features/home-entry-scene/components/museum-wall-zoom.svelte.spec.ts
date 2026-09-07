@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
 	WALL_ZOOM_IN_DURATION_MS,
 	WALL_ZOOM_OUT_DURATION_MS,
+	WALL_ZOOM_REDUCED_MOTION_DURATION_MS,
 	playWallZoomIn,
 	playWallZoomOut,
 	resetWallZoom,
@@ -85,6 +86,38 @@ describe('museum-wall-zoom', () => {
 
 		expect(first.playState).toBe('idle');
 		expect(elements.wallSceneElement.getAnimations()).toHaveLength(1);
+	});
+
+	it('collapses the come-in choreography to an instant cut under reduced motion', () => {
+		const elements = createElements();
+
+		const zoom = playWallZoomIn(elements, geometry, { reducedMotion: true });
+
+		expect(zoom.effect?.getTiming().duration).toBe(WALL_ZOOM_REDUCED_MOTION_DURATION_MS);
+		expect((zoom.effect as KeyframeEffect).getKeyframes().at(-1)?.transform).toBe(
+			'translate(-120px, 64px) scale(18)'
+		);
+
+		// The internal texture/frame fades must be scaled too: left on their
+		// original 1520ms/1990ms delays they would fade the wall out long after
+		// the state machine had moved on.
+		for (const animation of elements.overlayElement.getAnimations({ subtree: true })) {
+			const timing = animation.effect!.getTiming();
+			expect(Number(timing.delay) + Number(timing.duration)).toBeLessThanOrEqual(
+				WALL_ZOOM_REDUCED_MOTION_DURATION_MS * 2
+			);
+		}
+	});
+
+	it('collapses the close under reduced motion and still lands on the wall', () => {
+		const elements = createElements();
+
+		const reset = playWallZoomOut(elements, geometry, { reducedMotion: true });
+
+		expect(reset.effect?.getTiming().duration).toBe(WALL_ZOOM_REDUCED_MOTION_DURATION_MS);
+		expect((reset.effect as KeyframeEffect).getKeyframes().at(-1)?.transform).toBe(
+			'translate(0px, 0px) scale(1)'
+		);
 	});
 
 	it('resetWallZoom cancels animations and clears inline styles', () => {

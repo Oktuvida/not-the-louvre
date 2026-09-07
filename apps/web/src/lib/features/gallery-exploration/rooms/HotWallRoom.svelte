@@ -1,21 +1,25 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { createArtworkAccumulator } from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
 	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
 	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
 	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type {
+		GalleryPageInfo,
+		LoadMoreArtworks
+	} from '$lib/features/gallery-exploration/model/discovery';
+	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
+	import { createSeededAccumulator } from '$lib/features/gallery-exploration/use-seeded-accumulator.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
-	import { untrack } from 'svelte';
 	import { writable, type Writable } from 'svelte/store';
 
 	interface Props {
 		artworks: Artwork[];
-		pageInfo: { hasMore: boolean; nextCursor: string | null };
+		pageInfo: GalleryPageInfo;
 		adultContentEnabled?: boolean;
-		loadMoreArtworks?: (request: { cursor: string }) => Promise<{
-			artworks: Artwork[];
-			pageInfo: { hasMore: boolean; nextCursor: string | null };
-		}>;
+		feedCacheKey?: GalleryRoomId | null;
+		loadMoreArtworks?: LoadMoreArtworks;
+		onPrefetch?: (artworkId: string) => void;
 		onSelect?: (artwork: Artwork) => void;
 		revealedArtworkIds?: Writable<Set<string>>;
 		viewerId?: string | null;
@@ -25,50 +29,19 @@
 		artworks,
 		pageInfo,
 		adultContentEnabled = false,
+		feedCacheKey = null,
 		loadMoreArtworks,
+		onPrefetch,
 		onSelect = () => {},
 		revealedArtworkIds,
 		viewerId = null
 	}: Props = $props();
 
-	// Snapshot initial values to avoid reactive re-seeding
-	const { initialArtworks, initialPageInfo } = (() => ({
-		initialArtworks: $state.snapshot(artworks),
-		initialPageInfo: $state.snapshot(pageInfo)
-	}))();
-
-	const accumulator = createArtworkAccumulator({
-		fetchPage: async (cursor: string) => {
-			if (!loadMoreArtworks) {
-				throw new Error('loadMoreArtworks is not configured');
-			}
-			return loadMoreArtworks({ cursor });
-		},
-		initialArtworks,
-		initialPageInfo
-	});
-
-	const seedIdentity = (items: Artwork[]) => items.map((a) => a.id).join(',');
-	const pageInfoIdentity = (info: { hasMore: boolean; nextCursor: string | null }) =>
-		`${info.hasMore}:${info.nextCursor ?? ''}`;
-	let lastSeedIdentity = seedIdentity(initialArtworks);
-	let lastPageInfoIdentity = pageInfoIdentity(initialPageInfo);
-
-	$effect(() => {
-		const identity = seedIdentity(artworks);
-		const nextPageInfoIdentity = pageInfoIdentity(pageInfo);
-		if (identity !== lastSeedIdentity || nextPageInfoIdentity !== lastPageInfoIdentity) {
-			lastSeedIdentity = identity;
-			lastPageInfoIdentity = nextPageInfoIdentity;
-			untrack(() => {
-				accumulator.reseed(artworks, pageInfo);
-			});
-			return;
-		}
-
-		untrack(() => {
-			accumulator.syncSeedArtworks(artworks);
-		});
+	const accumulator = createSeededAccumulator({
+		getFeedCacheKey: () => feedCacheKey,
+		getArtworks: () => artworks,
+		getLoadMoreArtworks: () => loadMoreArtworks,
+		getPageInfo: () => pageInfo
 	});
 
 	const fallbackRevealedIds = writable<Set<string>>(new Set());
@@ -80,10 +53,11 @@
 
 	const isLeadBlurred = (artwork: Artwork | null) =>
 		!!artwork &&
-		artwork.isNsfw &&
-		!adultContentEnabled &&
-		viewerId !== artwork.authorId &&
-		!$revealedIds.has(artwork.id);
+		isArtworkBlurred(artwork, {
+			adultContentEnabled,
+			id: viewerId,
+			revealedIds: $revealedIds
+		});
 
 	const leadArtwork = $derived(accumulator.allArtworks[0] ?? null);
 	const supportingArtworks = $derived(accumulator.allArtworks.slice(1));
@@ -111,7 +85,7 @@
 			<div data-testid="hot-wall-lead" class="flex flex-col items-center gap-4">
 				<button
 					type="button"
-					class="group hover:shadow-3xl relative mt-12 w-full max-w-md cursor-pointer overflow-hidden rounded-xl shadow-2xl transition duration-300 hover:-translate-y-1"
+					class="group relative mt-12 w-full max-w-md cursor-pointer overflow-hidden rounded-xl shadow-2xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_28px_60px_rgba(45,36,32,0.45)]"
 					onclick={() => {
 						if (isLeadBlurred(leadArtwork) && viewerId) {
 							revealArtwork(leadArtwork.id);
@@ -119,6 +93,8 @@
 						}
 						onSelect(leadArtwork);
 					}}
+					onkeydown={() => onPrefetch?.(leadArtwork.id)}
+					onpointerdown={() => onPrefetch?.(leadArtwork.id)}
 				>
 					<div class="relative aspect-square w-full">
 						<NsfwImage

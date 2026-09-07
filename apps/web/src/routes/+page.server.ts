@@ -130,9 +130,14 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
 			status: 'authenticated',
 			user: {
 				...locals.user,
-				avatarDrawingDocument: avatarUserRecord?.avatarDocument
-					? await decodeCompressedDrawingDocumentToEditableDocument(avatarUserRecord.avatarDocument)
-					: null,
+				// avatar_document_version is written last by the chunked write, so a
+				// document without one is a torn write and must read as absent.
+				avatarDrawingDocument:
+					avatarUserRecord?.avatarDocument && avatarUserRecord.avatarDocumentVersion !== null
+						? await decodeCompressedDrawingDocumentToEditableDocument(
+								avatarUserRecord.avatarDocument
+							)
+						: null,
 				avatarUrl: resolveUserAvatarUrl(
 					locals.user.id,
 					locals.user.avatarUrl,

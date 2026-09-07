@@ -8,7 +8,8 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/server/artwork/service', () => ({
-	publishArtwork: mocked.publishArtwork
+	publishArtwork: mocked.publishArtwork,
+	withoutDrawingDocument: <T>(artwork: T) => ({ ...artwork, drawingDocument: null })
 }));
 
 vi.mock('$lib/server/artwork/read.service', () => ({
@@ -336,6 +337,47 @@ describe('artwork publish endpoint', () => {
 		expect(mocked.publishArtwork.mock.calls[0]?.[0]).toMatchObject({
 			isNsfw: true,
 			parentArtworkId: 'artwork-parent'
+		});
+	});
+
+	it('never returns the drawing document with a published artwork', async () => {
+		mocked.publishArtwork.mockResolvedValue({
+			id: 'artwork-1',
+			authorId: 'user-1',
+			drawingDocument: 'compressed-drawing-document-payload',
+			forkCount: 0,
+			title: 'Published artwork',
+			parentId: null,
+			storageKey: 'artworks/user-1/artwork-1.avif',
+			mediaContentType: 'image/avif',
+			mediaSizeBytes: 128,
+			createdAt: new Date('2026-03-26T12:00:00.000Z'),
+			updatedAt: new Date('2026-03-26T12:00:00.000Z')
+		});
+
+		const { POST } = await import('./+server');
+		const formData = new FormData();
+		formData.set('title', 'Published artwork');
+		formData.set(
+			'media',
+			new File([new Uint8Array([1, 2, 3])], 'artwork.avif', { type: 'image/avif' })
+		);
+
+		const response = await POST({
+			locals: {
+				user: {
+					id: 'user-1'
+				}
+			},
+			request: new Request('http://localhost/api/artworks', {
+				body: formData,
+				method: 'POST'
+			})
+		} as never);
+
+		expect(response.status).toBe(201);
+		expect(await response.json()).toMatchObject({
+			artwork: { drawingDocument: null, id: 'artwork-1' }
 		});
 	});
 });

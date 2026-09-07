@@ -15,7 +15,6 @@
 		radial-gradient(circle at top, rgb(255 255 255 / 0.16), transparent 32%),
 		linear-gradient(180deg, #f4ede0 0%, #e7dccf 100%);
 	color: var(--color-ink);
-	text-rendering: geometricPrecision;
 }
 
 :global(*),
@@ -64,4 +63,38 @@
 
 :global(::-webkit-scrollbar-thumb:hover) {
 	background: #6b8e7f;
+}
+
+/*
+ * Reduced motion, once, for the whole app.
+ *
+ * Deliberately a duration reset rather than `animation: none`: several
+ * animations (the tool tray crash-in, Svelte's generated transitions) use
+ * `animation-fill-mode: both` and land their element in its visible end
+ * state, so cancelling them outright would strand the element invisible or
+ * offset. Snapping every animation and transition to ~0 instead lands the
+ * same end state instantly. 0.01ms rather than 0s because a 0s transition
+ * does not reliably fire `transitionend`.
+ *
+ * These selectors are intentionally NOT wrapped in `:global()` — this file is
+ * plain CSS imported from the layout script, not a Svelte `<style>` block.
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-delay: 0ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		transition-delay: 0ms !important;
+		scroll-behavior: auto !important;
+	}
+
+	/* Purely decorative infinite loops whose resting frame is already correct.
+	   Loading affordances (animate-pulse skeletons, the refresh spinner) are
+	   informational and stay out of this list. */
+	.paint-blob {
+		animation: none !important;
+	}
 }

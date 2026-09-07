@@ -10,8 +10,47 @@
 		type TextContentChecker
 	} from '$lib/client/content-filter';
 	import { resolve } from '$app/paths';
+	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
+
+	/* The visitor never reads a stack trace. Codes whose server message is
+	 * already written for them (moderation reasons, rate-limit countdowns) pass
+	 * through; everything else is answered in the museum's own voice. */
+	const PASS_THROUGH_ERROR_CODES = new Set(['INVALID_COMMENT', 'INVALID_TITLE', 'RATE_LIMITED']);
+
+	const HOUSE_ERROR_MESSAGES: Record<string, string> = {
+		BANNED_USER: 'Your gallery pass has been withdrawn.',
+		FORBIDDEN: 'The attendants will not let you do that.',
+		INVALID_VOTE: 'That vote was not one the ledger accepts.',
+		NOT_FOUND: 'This piece has left the wall.',
+		UNAUTHENTICATED: 'Sign in to interact with artworks.'
+	};
+
+	const VOTE_FAILED_MESSAGE = 'That vote did not make it onto the ledger. Please try again.';
+	const COMMENT_FAILED_MESSAGE = "The visitor's book would not take that entry. Please try again.";
+	const DOWNLOAD_FAILED_MESSAGE = 'Artwork could not be downloaded.';
+	const ADULT_PREFERENCE_FAILED_MESSAGE = '18+ artwork preference could not be updated.';
+
+	/* Thrown with copy that is already safe to show; anything else that reaches
+	 * a catch block (a dropped connection, a parser blow-up) gets the fallback
+	 * instead of leaking the browser's own wording. */
+	class ActionFailure extends Error {}
+
+	const describeActionFailure = (
+		payload: { code?: string; message?: string } | null,
+		fallback: string
+	) => {
+		const code = payload?.code;
+
+		if (code && PASS_THROUGH_ERROR_CODES.has(code) && payload?.message) return payload.message;
+		if (code && HOUSE_ERROR_MESSAGES[code]) return HOUSE_ERROR_MESSAGES[code]!;
+
+		return fallback;
+	};
+
+	const toActionError = (error: unknown, fallback: string) =>
+		error instanceof ActionFailure ? error.message : fallback;
 
 	let {
 		artwork,
@@ -49,6 +88,10 @@
 	let isDownloading = $state(false);
 	let commentInput: HTMLInputElement | undefined = $state();
 	let dialogElement: HTMLDivElement | undefined = $state();
+	let avatarTriggerElement: HTMLButtonElement | undefined = $state();
+	let photoElement: HTMLImageElement | undefined = $state();
+	let isPhotoLoaded = $state(true);
+	let restoreFocusTimer: ReturnType<typeof setTimeout> | undefined;
 
 	// --- Postcard flip + tilt ---
 	let isFlipped = $state(false);
@@ -129,10 +172,28 @@
 		tiltY = 0;
 	};
 
-	// Show the front again whenever a different artwork opens.
+	// Show the front again whenever a different artwork opens. The component
+	// itself never unmounts — only `artwork` goes null — so every piece of
+	// per-card state has to be cleared here or it leaks into the next artwork:
+	// a stale `isLifting` opens the new card mid-lift and hides the moderation
+	// buttons behind `{#if viewer && !isFlipped && !isLifting}`.
 	$effect(() => {
 		void openArtworkId;
 		isFlipped = false;
+		isLifting = false;
+		clearTimeout(liftTimer);
+		liftTimer = undefined;
+		cancelAnimationFrame(tiltFrame);
+		tiltX = 0;
+		tiltY = 0;
+	});
+
+	// The postcard flies in over a blurred LQIP and cross-fades to the real
+	// photo. Cached media (the usual case — the grid card behind uses the same
+	// URL) resolves before hydration, so `complete` skips the fade entirely.
+	$effect(() => {
+		void openArtworkId;
+		isPhotoLoaded = photoElement?.complete ?? false;
 	});
 
 	// Lock background scrolling while the dialog is open, compensating for the
@@ -162,16 +223,72 @@
 	$effect(() => {
 		if (!openArtworkId || !dialogElement) return;
 
+		const dialog = dialogElement;
 		const previouslyFocused =
 			document.activeElement instanceof HTMLElement ? document.activeElement : null;
-		dialogElement.focus();
+		clearTimeout(restoreFocusTimer);
+		dialog.focus();
 
 		return () => {
-			previouslyFocused?.focus();
+			// The outro still paints the dialog over the page, so the card the
+			// visitor came from is not there to receive focus yet. Wait it out —
+			// but never steal focus back from wherever they have already gone.
+			const restore = () => {
+				if (!previouslyFocused || !document.body.contains(previouslyFocused)) return;
+
+				const active = document.activeElement;
+				if (active instanceof HTMLElement && active !== document.body && !dialog.contains(active)) {
+					return;
+				}
+
+				previouslyFocused.focus();
+			};
+
+			const delay = prefersReducedMotion.current ? 0 : transitionDuration;
+
+			if (delay === 0) {
+				restore();
+				return;
+			}
+
+			clearTimeout(restoreFocusTimer);
+			restoreFocusTimer = setTimeout(restore, delay);
+		};
+	});
+
+	// Escape has to work even if focus wandered to something fixed above the
+	// backdrop (the ambient audio tab, the Ops link) rather than staying in the
+	// dialog. The dialog's own handler still runs first and stops this one.
+	$effect(() => {
+		if (!openArtworkId) return;
+
+		const handleWindowKeydown = (event: KeyboardEvent) => {
+			if (event.key !== 'Escape' || event.defaultPrevented) return;
+			handleEscape();
+		};
+
+		window.addEventListener('keydown', handleWindowKeydown);
+
+		return () => {
+			window.removeEventListener('keydown', handleWindowKeydown);
 		};
 	});
 
 	const isAvatarPreviewOpen = $derived(avatarPreviewArtworkId === (artwork?.id ?? null));
+
+	// Terminal states only: a screen reader should hear that something is under
+	// way, not a running commentary of every skeleton frame.
+	const pendingStatus = $derived(
+		isSubmittingVote
+			? 'Recording your vote…'
+			: isSubmittingComment
+				? 'Signing the visitor’s book…'
+				: isDownloading
+					? 'Preparing the download…'
+					: isHydrating
+						? 'Loading this artwork…'
+						: ''
+	);
 	let revealedIds = $state<Set<string>>(new Set());
 	$effect(() => {
 		if (!revealedArtworkIds) return;
@@ -213,6 +330,20 @@
 
 	const closeAvatarPreview = () => {
 		avatarPreviewArtworkId = null;
+		// The seal is a dead end for the keyboard otherwise: hand focus back to
+		// the avatar that opened it.
+		avatarTriggerElement?.focus();
+	};
+
+	// One Escape owner for the whole dialog — the postcard, the backdrop and the
+	// window fallback all route here so a single press never closes two layers.
+	const handleEscape = () => {
+		if (isAvatarPreviewOpen) {
+			closeAvatarPreview();
+			return;
+		}
+
+		onClose?.();
 	};
 
 	const patchArtwork = (patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>) => {
@@ -232,8 +363,7 @@
 		try {
 			await onAdultContentToggle(enabled);
 		} catch (error) {
-			actionError =
-				error instanceof Error ? error.message : '18+ artwork preference could not be updated.';
+			actionError = toActionError(error, ADULT_PREFERENCE_FAILED_MESSAGE);
 		} finally {
 			isUpdatingAdultContentPreference = false;
 		}
@@ -262,7 +392,7 @@
 		try {
 			const response = await fetch(artwork.imageUrl);
 			if (!response.ok) {
-				throw new Error('Artwork could not be downloaded.');
+				throw new ActionFailure(DOWNLOAD_FAILED_MESSAGE);
 			}
 
 			const blob = await response.blob();
@@ -280,7 +410,7 @@
 			anchor.click();
 			URL.revokeObjectURL(objectUrl);
 		} catch (error) {
-			actionError = error instanceof Error ? error.message : 'Artwork could not be downloaded.';
+			actionError = toActionError(error, DOWNLOAD_FAILED_MESSAGE);
 		} finally {
 			isDownloading = false;
 		}
@@ -321,8 +451,11 @@
 			});
 
 			if (!response.ok) {
-				const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-				throw new Error(payload?.message ?? 'Vote failed');
+				const payload = (await response.json().catch(() => null)) as {
+					code?: string;
+					message?: string;
+				} | null;
+				throw new ActionFailure(describeActionFailure(payload, VOTE_FAILED_MESSAGE));
 			}
 
 			const payload = (await response.json()) as { artwork: { score: number } };
@@ -332,7 +465,7 @@
 			}
 		} catch (error) {
 			syncArtwork(previousArtwork);
-			actionError = error instanceof Error ? error.message : 'Vote failed';
+			actionError = toActionError(error, VOTE_FAILED_MESSAGE);
 		} finally {
 			isSubmittingVote = false;
 		}
@@ -364,8 +497,11 @@
 			});
 
 			if (!response.ok) {
-				const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-				throw new Error(payload?.message ?? 'Comment failed');
+				const payload = (await response.json().catch(() => null)) as {
+					code?: string;
+					message?: string;
+				} | null;
+				throw new ActionFailure(describeActionFailure(payload, COMMENT_FAILED_MESSAGE));
 			}
 
 			const payload = (await response.json()) as {
@@ -395,7 +531,7 @@
 			commentBody = '';
 			commentInput?.focus();
 		} catch (error) {
-			actionError = error instanceof Error ? error.message : 'Comment failed';
+			actionError = toActionError(error, COMMENT_FAILED_MESSAGE);
 		} finally {
 			isSubmittingComment = false;
 		}
@@ -405,6 +541,7 @@
 {#if artwork}
 	<div
 		bind:this={dialogElement}
+		use:focusTrap={{ enabled: !isAvatarPreviewOpen }}
 		class="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto overscroll-contain bg-black/65 px-3 py-3 backdrop-blur-sm outline-none md:px-4 md:py-6"
 		role="dialog"
 		aria-modal="true"
@@ -413,14 +550,10 @@
 		transition:fade={{ duration: transitionDuration }}
 		onclick={onClose}
 		onkeydown={(event: KeyboardEvent) => {
-			if (event.key === 'Escape' && isAvatarPreviewOpen) {
-				closeAvatarPreview();
-				return;
-			}
+			if (event.key !== 'Escape') return;
 
-			if (event.key === 'Escape') {
-				onClose?.();
-			}
+			event.preventDefault();
+			handleEscape();
 		}}
 	>
 		<!-- Dialog chrome: anchored to the screen so the flip never drags it around -->
@@ -443,9 +576,14 @@
 			transition:scale={{ duration: transitionDuration, start: 0.96 }}
 			onclick={(event: MouseEvent) => event.stopPropagation()}
 			onkeydown={(event: KeyboardEvent) => {
-				if (event.key === 'Escape') {
-					event.stopPropagation();
-				}
+				if (event.key !== 'Escape') return;
+
+				// Owned here so the backdrop handler and the window fallback never
+				// close two layers on one press — and so Escape still dismisses the
+				// dialog while focus sits inside the postcard.
+				event.stopPropagation();
+				event.preventDefault();
+				handleEscape();
 			}}
 		>
 			<!-- The postcard -->
@@ -482,10 +620,28 @@
 									</div>
 								{/if}
 								<div class="postcard-photo border border-[#d6cfc5]">
+									{#if artwork.imagePlaceholder}
+										<!-- The same blur-to-sharp handoff every grid card gets. The LQIP
+										     is blurred with the photo when the piece is sensitive: an
+										     un-blurred thumbnail would still read around the overlay. -->
+										<img
+											class={`postcard-photo-lqip ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
+											src={artwork.imagePlaceholder}
+											alt=""
+											aria-hidden="true"
+											draggable="false"
+										/>
+									{/if}
 									<img
-										class={`h-full w-full object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
+										bind:this={photoElement}
+										class={`relative h-full w-full object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''} ${isPhotoLoaded ? 'opacity-100' : 'opacity-0'}`}
 										src={artwork.imageUrl}
 										alt={artwork.title}
+										decoding="async"
+										fetchpriority="high"
+										onload={() => {
+											isPhotoLoaded = true;
+										}}
 									/>
 									{#if isSensitiveBlurred}
 										<div
@@ -525,6 +681,7 @@
 							<div class="flex items-start gap-3 px-1 pt-3 pb-1">
 								{#if artwork.artistAvatar}
 									<button
+										bind:this={avatarTriggerElement}
 										type="button"
 										class="shrink-0 cursor-zoom-in rounded-full transition outline-none hover:scale-[1.05] focus-visible:ring-2 focus-visible:ring-[#4ecdc4] focus-visible:ring-offset-2"
 										onclick={openAvatarPreview}
@@ -533,6 +690,7 @@
 									>
 										<WaxSealAvatar
 											alt={artwork.artist}
+											loading="eager"
 											seed={artwork.id}
 											size="md"
 											src={artwork.artistAvatar}
@@ -563,11 +721,23 @@
 							<!-- Action row: sticker buttons, hand-applied on the card -->
 							<div class="postcard-actions">
 								{#if viewer}
-									<GameButton variant="secondary" size="sm" onclick={() => submitVote('up')}
-										>👍 {artwork.upvotes}</GameButton
+									<!-- The variant stays constant on purpose: it seeds the sticker's
+									     rotation and canvas background, so flipping it on every vote
+									     would re-rotate and repaint the sticker mid-click. The viewer's
+									     own vote is a persistent ring instead. -->
+									<GameButton
+										variant="secondary"
+										size="sm"
+										className={artwork.viewerVote === 'up' ? 'vote-cast' : ''}
+										disabled={isSubmittingVote}
+										onclick={() => submitVote('up')}>👍 {artwork.upvotes}</GameButton
 									>
-									<GameButton variant="danger" size="sm" onclick={() => submitVote('down')}
-										>👎 {artwork.downvotes}</GameButton
+									<GameButton
+										variant="danger"
+										size="sm"
+										className={artwork.viewerVote === 'down' ? 'vote-cast' : ''}
+										disabled={isSubmittingVote}
+										onclick={() => submitVote('down')}>👎 {artwork.downvotes}</GameButton
 									>
 									<span class="postcard-actions-spacer"></span>
 									<GameButton variant="primary" size="sm" onclick={goToFork}>
@@ -589,11 +759,6 @@
 									<span class="sr-only">{isDownloading ? 'Downloading…' : 'Download'}</span>
 								</GameButton>
 							</div>
-							{#if actionError && !isFlipped}
-								<p class="px-2 pb-1 text-center text-xs font-semibold text-[#8f3720]">
-									{actionError}
-								</p>
-							{/if}
 							<div class="postcard-footer">
 								<span class="postcard-edge-print">Not the Louvre · Gallery Post</span>
 								<button
@@ -699,9 +864,6 @@
 												Send
 											</GameButton>
 										</form>
-									{/if}
-									{#if actionError && isFlipped}
-										<p class="pt-1 text-xs font-semibold text-[#8f3720]">{actionError}</p>
 									{/if}
 								</div>
 
@@ -816,16 +978,26 @@
 				</div>
 			</div>
 
+			<!-- One notice for the whole dialog, outside the card so it neither
+			     changes face with the flip nor pushes the postcard around, and
+			     always in the DOM so a screen reader actually announces it. -->
+			<p class="postcard-notice" class:is-visible={Boolean(actionError)} role="alert">
+				{actionError ?? ''}
+			</p>
+			<p class="sr-only" aria-live="polite">{pendingStatus}</p>
+
 			{#if isAvatarPreviewOpen && artwork.artistAvatar}
 				<!-- The wax seal floats free over the whole dimmed screen: no box, no
 				     chrome. Fixed so it also covers the postcard's crooked corners and
 				     swallows every click — outside clicks close the preview, never the
 				     panel behind it. -->
 				<div
+					use:focusTrap={{ autoFocus: true }}
 					class="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
 					role="dialog"
 					aria-modal="true"
 					aria-label={`Expanded avatar for ${artwork.artist}`}
+					tabindex="-1"
 				>
 					<button
 						type="button"
@@ -838,6 +1010,7 @@
 							<div class="scale-[3.6] md:scale-[4.6]">
 								<WaxSealAvatar
 									alt={artwork.artist}
+									loading="eager"
 									seed={artwork.id}
 									size="xl"
 									src={artwork.artistAvatar}
@@ -1070,6 +1243,37 @@
 		aspect-ratio: 1;
 		width: 100%;
 		overflow: hidden;
+	}
+
+	/* The LQIP sits under the real photo and stays there: the window is never
+	 * blank paper while the full-size media is on the wire. */
+	.postcard-photo-lqip {
+		position: absolute;
+		inset: 0;
+		height: 100%;
+		width: 100%;
+		object-fit: cover;
+		scale: 1.06;
+		filter: blur(var(--nsfw-placeholder-blur, 12px));
+	}
+
+	/* A single notice for the dialog. It keeps its box whether or not there is
+	 * something to say, so a failed vote never shoves the postcard around. */
+	.postcard-notice {
+		margin: 10px 0 0;
+		min-height: 1.1rem;
+		text-align: center;
+		font-family: 'Fredoka', sans-serif;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: #ffd7cb;
+		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+		opacity: 0;
+		transition: opacity 160ms ease;
+	}
+
+	.postcard-notice.is-visible {
+		opacity: 1;
 	}
 
 	/* Signed-out visitors get a pencilled note where the vote stickers go */
@@ -1360,7 +1564,26 @@
 		flex-shrink: 0;
 		padding-inline: 13px;
 		font-size: 11px;
+		/* The sticker's motion is three separate properties (transform, rotate
+		 * and the standalone scale the global `button:active` press also uses),
+		 * so all three have to be pinned or `transform: none` cancels none of it.
+		 * `--sticker-rotate` keeps the sticker's resting tilt. */
 		transform: none !important;
+		rotate: var(--sticker-rotate, 0deg);
+		scale: 1;
+	}
+
+	/* The side the viewer has already voted for keeps a persistent ring instead
+	 * of switching sticker variant, which would re-seed the rotation. */
+	.postcard-actions :global(.sticker-btn.vote-cast) {
+		filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+	}
+
+	.postcard-actions :global(.sticker-btn.vote-cast .sticker-content) {
+		border-radius: 999px;
+		box-shadow:
+			inset 0 0 0 2px rgba(45, 36, 32, 0.85),
+			inset 0 2px 5px rgba(45, 36, 32, 0.28);
 	}
 
 	.postcard-stamp-cluster {

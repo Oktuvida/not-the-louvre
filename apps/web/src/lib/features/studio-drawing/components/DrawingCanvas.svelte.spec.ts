@@ -4,7 +4,8 @@ import { render } from 'vitest-browser-svelte';
 import {
 	createEmptyDrawingDocument,
 	normalizeDrawingDocumentToEditableV2,
-	type DrawingDocumentV2
+	type DrawingDocumentV2,
+	type DrawingStroke
 } from '$lib/features/stroke-json/document';
 import DrawingCanvas from './DrawingCanvas.svelte';
 
@@ -226,6 +227,62 @@ describe('DrawingCanvas', () => {
 		);
 
 		expect(ctx.lineTo).toHaveBeenCalledTimes(1);
+		getContextSpy.mockRestore();
+	});
+
+	it('commits the stroke when a move arrives with the mouse button already released', async () => {
+		const ctx = createMockContext();
+		const getContextSpy = vi
+			.spyOn(HTMLCanvasElement.prototype, 'getContext')
+			.mockImplementation(((contextId: string) =>
+				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
+		const committedStrokes: { stroke: DrawingStroke }[] = [];
+
+		render(DrawingCanvas, {
+			interactive: true,
+			onStrokeCommitted: (input: { stroke: DrawingStroke }) => {
+				committedStrokes.push(input);
+			}
+		});
+
+		const canvas = document.querySelector('canvas');
+		if (!canvas) {
+			throw new Error('Expected drawing canvas to render');
+		}
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 768,
+			height: 768,
+			left: 0,
+			right: 768,
+			top: 0,
+			width: 768,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 24, clientY: 24 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 80, clientY: 80 }));
+		// A mouse released outside the window never delivers a pointerup here.
+		canvas.dispatchEvent(
+			createPointerEvent('pointermove', { buttons: 0, clientX: 120, clientY: 120 })
+		);
+
+		expect(committedStrokes).toHaveLength(1);
+		expect(committedStrokes[0]?.stroke.points).toEqual([
+			[24, 24],
+			[80, 80]
+		]);
+
+		vi.clearAllMocks();
+		canvas.dispatchEvent(
+			createPointerEvent('pointermove', { buttons: 0, clientX: 160, clientY: 160 })
+		);
+		expect(ctx.lineTo).not.toHaveBeenCalled();
+
 		getContextSpy.mockRestore();
 	});
 

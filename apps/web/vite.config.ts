@@ -31,6 +31,14 @@ export default defineConfig({
 		__PLAYWRIGHT__: JSON.stringify(process.env.PLAYWRIGHT === '1')
 	},
 	build: {
+		// Vite's 4KB default inlined eight Fontsource files as base64 data URIs
+		// inside the render-blocking root stylesheet — 34KB raw / 24KB gz, 60%
+		// of its gzipped weight, half of it legacy .woff twins no woff2-capable
+		// browser will ever use. Fonts are always emitted as hashed assets now,
+		// so they are fetched lazily and get their own long-lived cache entry;
+		// returning undefined keeps the byte limit for everything else.
+		assetsInlineLimit: (filePath: string) =>
+			/\.(woff2?|ttf|otf)$/.test(filePath) ? false : undefined,
 		rollupOptions: {
 			// .wasm imports stay external so wrangler bundles them as
 			// WebAssembly.Module entries (workerd forbids compiling from bytes).

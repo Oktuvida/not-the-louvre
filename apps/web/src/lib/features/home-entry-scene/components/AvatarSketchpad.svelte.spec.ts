@@ -446,6 +446,67 @@ describe('AvatarSketchpad', () => {
 		});
 	});
 
+	it('commits the stroke when a move arrives with the mouse button already released', async () => {
+		const initialDrawingDocument = createLargeEditableAvatarDocument();
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: initialDrawingDocument.version,
+			scope: 'profile',
+			surface: 'avatar',
+			userKey: 'artist_1'
+		});
+
+		render(AvatarSketchpad, {
+			draftUserKey: 'artist_1',
+			initialDrawingDocument,
+			nickname: 'artist_1'
+		});
+
+		await vi.waitFor(async () => {
+			expect(await readPersistedDrawingDraft(draftKey)).not.toBeNull();
+		});
+
+		const canvas = document.querySelector('canvas');
+		if (!(canvas instanceof HTMLCanvasElement)) {
+			throw new Error('Expected avatar sketch canvas to render');
+		}
+
+		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+			bottom: 340,
+			height: 340,
+			left: 0,
+			right: 340,
+			top: 0,
+			width: 340,
+			x: 0,
+			y: 0,
+			toJSON: () => ({})
+		} as DOMRect);
+
+		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 80, clientY: 96 }));
+		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 81, clientY: 97 }));
+		// A mouse released outside the window never delivers a pointerup here: the
+		// stroke the artist drew has to be committed, not thrown away.
+		canvas.dispatchEvent(
+			createPointerEvent('pointermove', { buttons: 0, clientX: 82, clientY: 98 })
+		);
+
+		await vi.waitFor(async () => {
+			expect(await readPersistedJournalEntries(draftKey)).toEqual([
+				{
+					color: drawingPalette[3] ?? '#1a1a1a',
+					points: [
+						[80, 96],
+						[81, 97]
+					],
+					size: 10
+				}
+			]);
+		});
+	});
+
 	it('surfaces an unsaved-draft warning when avatar draft persistence fails while keeping the current drawing', async () => {
 		const backingStore = createIndexedDbDrawingDraftStore();
 		const failingStore = {

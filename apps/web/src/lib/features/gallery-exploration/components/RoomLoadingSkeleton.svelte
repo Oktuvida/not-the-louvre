@@ -1,29 +1,102 @@
 <script lang="ts">
-	// Mirrors the polaroid pulse cards ScrollSentinel shows while paging, so
-	// the streamed initial room load looks like the rest of the gallery.
-	let { cardCount = 8 }: { cardCount?: number } = $props();
+	import PolaroidSkeletonGrid from '$lib/features/gallery-exploration/components/PolaroidSkeletonGrid.svelte';
+	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+
+	/*
+	 * A placeholder shaped like the room it precedes.
+	 *
+	 * A skeleton earns its keep by reserving the space the content will land in.
+	 * A single grid of polaroids did the opposite on the default landing route:
+	 * `/gallery` resolves to the Hall of Fame, so eight stacked cards were
+	 * replaced by a three-tier podium the instant the stream arrived — a
+	 * full-viewport jump that reads as a page reload.
+	 *
+	 * The header blocks are plain pulse boxes on purpose: they borrow the room's
+	 * own geometry (the podium sizes, the lead card's `max-w-md`, the reel's
+	 * shell) without re-implementing wax seals, banners or engraved plaques,
+	 * which would drift from the real room the first time it changes.
+	 */
+	let {
+		cardCount = 8,
+		roomId = 'hall-of-fame'
+	}: {
+		cardCount?: number;
+		roomId?: GalleryRoomId;
+	} = $props();
+
+	// Mirrors HallOfFameRoom's podiumMeta width/height classes.
+	const podiumBlocks = [
+		{ frame: 'w-76 md:w-[22rem] h-76 md:h-[22rem]', medal: 'h-16 w-16' },
+		{ frame: 'w-68 md:w-[19rem] h-68 md:h-[19rem]', medal: 'h-14 w-14' },
+		{ frame: 'w-60 md:w-[16rem] h-60 md:h-[16rem]', medal: 'h-12 w-12' }
+	];
+
+	// YourStudioRoom's grid runs at gap-15 (60px); the other grids at gap-12.
+	const gridClassName = $derived(
+		roomId === 'your-studio' ? 'grid gap-15 py-6' : 'grid gap-12 py-6'
+	);
 </script>
 
-<div
-	data-testid="room-loading-skeleton"
-	class="grid gap-12 py-6"
-	style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr))"
->
-	{#each Array.from({ length: cardCount }, (_, i) => i) as i (i)}
-		<div class="animate-pulse">
+<div data-testid="room-loading-skeleton" data-room-skeleton={roomId}>
+	<p class="sr-only" role="status">Loading artworks…</p>
+
+	{#if roomId === 'hall-of-fame'}
+		<div class="space-y-12">
 			<div
-				class="bg-[#f8f4ed] p-[8px] shadow-[3px_4px_12px_rgba(0,0,0,0.22),0_1px_3px_rgba(0,0,0,0.1)]"
-				style={`transform: rotate(${(i % 3) - 1}deg);`}
+				aria-hidden="true"
+				class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end lg:gap-10"
 			>
-				<div class="aspect-square w-full border border-[#d6cfc5] bg-[#ece4d8]"></div>
-				<div class="flex items-center gap-3 px-[6px] pt-2 pb-[10px]">
-					<div class="h-8 w-8 shrink-0 rounded-full bg-[#e8ddd0]"></div>
-					<div class="flex-1 space-y-1.5">
-						<div class="h-3 w-3/4 rounded bg-[#e8ddd0]"></div>
-						<div class="h-2.5 w-1/2 rounded bg-[#efe5d6]"></div>
+				{#each podiumBlocks as block, index (index)}
+					<div class="flex animate-pulse flex-col items-center gap-5">
+						<div class="mb-5 flex flex-col items-center gap-3">
+							<div class={`${block.medal} rounded-full bg-[#e8ddd0]`}></div>
+							<div class="h-6 w-32 rounded bg-[#e8ddd0]"></div>
+						</div>
+						<div class={`${block.frame} rounded border border-[#d6cfc5] bg-[#ece4d8]`}></div>
+						<div class="h-16 w-44 rounded bg-[#e8ddd0]"></div>
 					</div>
-				</div>
+				{/each}
+			</div>
+
+			<div class="w-full">
+				<PolaroidSkeletonGrid
+					count={cardCount}
+					{gridClassName}
+					testId="room-loading-skeleton-grid"
+				/>
 			</div>
 		</div>
-	{/each}
+	{:else if roomId === 'hot-wall'}
+		<div class="space-y-10">
+			<div aria-hidden="true" class="flex flex-col items-center gap-4">
+				<div
+					class="mt-12 aspect-square w-full max-w-md animate-pulse rounded-xl border border-[#d6cfc5] bg-[#ece4d8]"
+				></div>
+			</div>
+
+			<div class="w-full">
+				<PolaroidSkeletonGrid
+					count={cardCount}
+					{gridClassName}
+					testId="room-loading-skeleton-grid"
+				/>
+			</div>
+		</div>
+	{:else if roomId === 'mystery'}
+		<div
+			aria-hidden="true"
+			class="relative flex min-h-[320px] flex-col items-center justify-center gap-8 px-2 py-6 pt-28 md:min-h-[400px] md:gap-16 md:px-0 md:py-8 md:pt-55"
+		>
+			<div
+				class="h-[200px] w-full animate-pulse rounded-xl border border-[#d6cfc5] bg-[#ece4d8] md:h-[280px]"
+			></div>
+			<div
+				class="h-14 w-full max-w-[16rem] animate-pulse rounded-xl bg-[#e8ddd0] md:h-16 md:max-w-[20rem]"
+			></div>
+		</div>
+	{:else}
+		<div class="w-full">
+			<PolaroidSkeletonGrid count={cardCount} {gridClassName} testId="room-loading-skeleton-grid" />
+		</div>
+	{/if}
 </div>

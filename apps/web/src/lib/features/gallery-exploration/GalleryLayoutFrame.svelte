@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { type Snippet } from 'svelte';
-	import { ArrowLeft, Paintbrush, RefreshCw } from 'lucide-svelte';
+	import { ArrowLeft, Paintbrush, RefreshCw, Sparkles } from 'lucide-svelte';
 	import ArtworkDetailPanel from '$lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte';
 	import GalleryRoomNav from '$lib/features/gallery-exploration/components/GalleryRoomNav.svelte';
 	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
@@ -124,6 +124,22 @@
 						{$actionBindings?.isRefreshingGallery ? 'Refreshing' : 'Refresh'}
 					</div>
 				</GameButton>
+			{:else}
+				<!--
+					The gallery is the shareable surface: a link used to land a
+					stranger in a room whose only chrome was Back and the room tabs,
+					with no way to join and nothing saying what this is.
+				-->
+				<GameLink
+					href="/"
+					variant="primary"
+					size="sm"
+					className="rotate-1 shadow-xl"
+					data-testid="gallery-join-cta"
+				>
+					<Sparkles class="h-5 w-5 md:mr-1" />
+					<span class="font-semibold">Join &amp; draw</span>
+				</GameLink>
 			{/if}
 		</div>
 

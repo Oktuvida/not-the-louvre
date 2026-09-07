@@ -3,7 +3,7 @@ import { APIError } from 'better-auth/api';
 import { hashPassword } from 'better-auth/crypto';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
-import { account, authRateLimits, users } from '$lib/server/db/schema';
+import { account, users } from '$lib/server/db/schema';
 import { checkTextModeration } from '$lib/server/moderation/service';
 import { logSecurityEvent } from '$lib/server/security/logging';
 import { AuthFlowError } from './errors';
@@ -332,5 +332,3 @@ export const resolveSessionContext = async (
 		user: mapProfileToCanonicalUser(profile, session.user)
 	};
 };
-
-export const getRateLimitSnapshot = async () => db.select().from(authRateLimits);

@@ -10,24 +10,38 @@
 	import { getStudioDracoLoader } from '$lib/features/home-entry-scene/scene/studio-draco-loader';
 	import SceneFrameInvalidator from '$lib/features/home-entry-scene/scene/SceneFrameInvalidator.svelte';
 	import SceneTextureBindings from '$lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
-	import StudioLoadingFallback from '$lib/features/shared-3d-world/components/StudioLoadingFallback.svelte';
+	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
 	import type { EntryFlowState } from '$lib/features/home-entry-scene/state/entry-state.svelte';
+
+	type StudioSceneMediaState = 'error' | 'loaded' | 'pending';
 
 	let {
 		entryState = 'outside',
 		initialPose = 'default',
 		scenePose = 'default',
 		artworkSlots = [],
-		avatarUrl = null
+		avatarUrl = null,
+		onMediaStateChange
 	}: {
 		entryState?: EntryFlowState;
 		initialPose?: 'default' | 'left-wall' | 'top-close';
 		scenePose?: 'default' | 'left-wall' | 'top-close';
 		artworkSlots?: HomeSceneArtworkSlot[];
 		avatarUrl?: string | null;
+		/*
+		 * The loading card lives in HomeEntryPage, not here: this component is
+		 * imported lazily so three.js stays off the home critical path, and the
+		 * card has to be on screen from first paint — before this chunk lands.
+		 */
+		onMediaStateChange?: (state: StudioSceneMediaState) => void;
 	} = $props();
 
-	let sceneMediaState = $state<'error' | 'loaded' | 'pending'>('pending');
+	let sceneMediaState = $state<StudioSceneMediaState>('pending');
+
+	const setSceneMediaState = (state: StudioSceneMediaState) => {
+		sceneMediaState = state;
+		onMediaStateChange?.(state);
+	};
 
 	const LEFT_WALL_CAMERA = {
 		cameraX: 0,
@@ -62,6 +76,8 @@
 		targetZ: 0,
 		zoom: 40
 	};
+	/** Where every "back to the room" move ends: the default pose, turned 45deg. */
+	const RESTING_CAMERA = { ...DEFAULT_CAMERA, rotationY: -Math.PI / 4, zoom: 60 };
 	const initialPoseValue = untrack(() => initialPose);
 	const initialCamera =
 		initialPoseValue === 'left-wall'
@@ -98,7 +114,6 @@
 	};
 	const studioDracoLoader = browser ? getStudioDracoLoader() : undefined;
 	const sceneReady = $derived(sceneMediaState === 'loaded');
-	const sceneFailed = $derived(sceneMediaState === 'error');
 
 	let invalidateFrame: (() => void) | undefined;
 
@@ -129,11 +144,34 @@
 		}
 	};
 
+	/** Cut straight to a pose. Used for reduced motion and for the outside snap. */
+	const snapStudioMotion = (camera: typeof studioMotion) => {
+		gsap.set(studioMotion, camera);
+		// untrack: applyStudioMotion reads studioCamera/studioSceneRoot, which must
+		// not become dependencies of the pose effect.
+		untrack(applyStudioMotion);
+	};
+
 	/** Re-sync once the camera binds or the GLTF scene finishes loading mid-tween. */
 	$effect(() => {
 		void studioCamera;
 		void studioSceneRoot;
 		applyStudioMotion();
+	});
+
+	/*
+	 * Teardown-only effect. It must NOT live on the pose effect: that one has
+	 * branches which deliberately return before killing the running timeline (the
+	 * holdingInitialPose hold), so a teardown-based kill there would cut those
+	 * animations short on an unrelated re-run. Without this, leaving home mid-move
+	 * left a 3.3s camera timeline writing into a detached three.js camera and
+	 * invalidating a torn-down render loop.
+	 */
+	$effect(() => () => {
+		activeSceneTimeline?.kill();
+		activeSceneTimeline = null;
+		gsap.killTweensOf(studioMotion);
+		invalidateFrame = undefined;
 	});
 
 	$effect(() => {
@@ -147,6 +185,8 @@
 			entryState === 'auth-signup' ||
 			entryState === 'auth-recovery' ||
 			entryState === 'inside';
+
+		const reducedMotion = prefersReducedMotion();
 
 		// Hold the initial return pose — only on the first mount, not on subsequent visits
 		if (holdingInitialPose && scenePose === initialPoseValue) {
@@ -163,6 +203,12 @@
 
 		if (isLeftWallPose) {
 			previousScenePose = scenePose;
+
+			if (reducedMotion) {
+				snapStudioMotion(LEFT_WALL_CAMERA);
+				return;
+			}
+
 			activeSceneTimeline = gsap
 				.timeline()
 				.to(studioMotion, {
@@ -190,6 +236,12 @@
 
 		if (isTopClosePose && isInside) {
 			previousScenePose = scenePose;
+
+			if (reducedMotion) {
+				snapStudioMotion(TOP_CLOSE_CAMERA);
+				return;
+			}
+
 			activeSceneTimeline = gsap.to(studioMotion, {
 				zoom: TOP_CLOSE_CAMERA.zoom,
 				cameraX: TOP_CLOSE_CAMERA.cameraX,
@@ -210,6 +262,12 @@
 
 		if (isLeavingLeftWall && isInside) {
 			previousScenePose = scenePose;
+
+			if (reducedMotion) {
+				snapStudioMotion(RESTING_CAMERA);
+				return;
+			}
+
 			activeSceneTimeline = gsap
 				.timeline()
 				.to(studioMotion, {
@@ -237,6 +295,12 @@
 
 		if (isLeavingTopClose && isInside) {
 			previousScenePose = scenePose;
+
+			if (reducedMotion) {
+				snapStudioMotion(RESTING_CAMERA);
+				return;
+			}
+
 			activeSceneTimeline = gsap
 				.timeline()
 				.to(studioMotion, {
@@ -264,16 +328,14 @@
 
 		if (entryState === 'transitioning-out') {
 			previousScenePose = scenePose;
-			gsap.to(studioMotion, {
-				cameraX: 0,
-				zoom: 40,
-				cameraDepth: 16,
-				cameraHeight: 7.8,
-				targetX: 0,
-				targetY: 0.8,
-				targetZ: 0,
-				rotationX: -0.22,
-				rotationY: 0,
+
+			if (reducedMotion) {
+				snapStudioMotion(DEFAULT_CAMERA);
+				return;
+			}
+
+			activeSceneTimeline = gsap.to(studioMotion, {
+				...DEFAULT_CAMERA,
 				duration: RESET_DURATION,
 				ease: 'power3.out',
 				onUpdate: applyStudioMotion
@@ -284,24 +346,17 @@
 
 		if (!isInside) {
 			previousScenePose = scenePose;
-			gsap.set(studioMotion, {
-				cameraX: 0,
-				zoom: 40,
-				cameraDepth: 16,
-				cameraHeight: 7.8,
-				targetX: 0,
-				targetY: 0.8,
-				targetZ: 0,
-				rotationX: -0.22,
-				rotationY: 0
-			});
-			// untrack: applyStudioMotion reads studioCamera/studioSceneRoot, which must
-			// not become dependencies of this pose effect.
-			untrack(applyStudioMotion);
+			snapStudioMotion(DEFAULT_CAMERA);
 			return;
 		}
 
 		previousScenePose = scenePose;
+
+		if (reducedMotion) {
+			snapStudioMotion(RESTING_CAMERA);
+			return;
+		}
+
 		activeSceneTimeline = gsap
 			.timeline()
 			.to(studioMotion, {
@@ -331,64 +386,52 @@
 </script>
 
 <div
-	class="relative h-full w-full overflow-hidden border-[var(--border-frame)] bg-[radial-gradient(circle_at_50%_18%,_rgba(255,255,255,0.44),_transparent_30%),linear-gradient(180deg,_#ccb194_0%,_#8b6f57_100%)] shadow-[var(--shadow-strong)]"
+	class={`h-full w-full transition-opacity duration-500 ${sceneReady ? 'opacity-100' : 'opacity-0'}`}
 >
-	<div
-		aria-hidden={sceneReady}
-		class={`absolute inset-0 z-10 transition-opacity duration-500 ${sceneReady ? 'opacity-0' : 'opacity-100'}`}
-	>
-		<StudioLoadingFallback failed={sceneFailed} />
-	</div>
-	<div
-		class={`h-full w-full transition-opacity duration-500 ${sceneReady ? 'opacity-100' : 'opacity-0'}`}
-	>
-		<Canvas dpr={1.5} shadows={studioCanvasShadowMap}>
-			<T.OrthographicCamera
-				bind:ref={studioCamera}
-				makeDefault
-				position={[initialCamera.cameraX, initialCamera.cameraHeight, initialCamera.cameraDepth]}
-				zoom={initialCamera.zoom}
-				oncreate={(camera) =>
-					camera.lookAt(initialCamera.targetX, initialCamera.targetY, initialCamera.targetZ)}
-			/>
-			<SceneFrameInvalidator
-				onready={(invalidate) => {
-					invalidateFrame = invalidate;
-				}}
-			/>
-			<T.Color attach="background" args={['#d7c2a8']} />
-			<T.Fog args={['#d7c2a8', 14, 32]} />
-			<T.AmbientLight intensity={0.08} />
-			<T.DirectionalLight position={[5, 16, 6]} intensity={1.4} castShadow />
-			{#key avatarUrl}
-				<SceneTextureBindings
-					{avatarUrl}
-					{artworkSlots}
-					nodes={studioNodes}
-					sceneRoot={studioSceneRoot}
-				/>
-			{/key}
-			<GLTF
-				bind:nodes={studioNodes}
-				bind:scene={studioSceneRoot}
-				dracoLoader={studioDracoLoader}
-				url="/models/studio-transformed.glb"
-				scale={5.7}
-				position={[0, -6, 0]}
-				rotation={[initialCamera.rotationX, initialCamera.rotationY, 0]}
-				castShadow
-				receiveShadow
-				onload={() => {
-					sceneMediaState = 'loaded';
-				}}
-				onerror={() => {
-					sceneMediaState = 'error';
-				}}
-			/>
-			<T.Mesh rotation={[-Math.PI / 2, 0, 0.5]} position={[0, -2.62, 0]} receiveShadow>
-				<T.CircleGeometry args={[18, 48]} />
-				<T.ShadowMaterial transparent opacity={0.2} />
-			</T.Mesh>
-		</Canvas>
-	</div>
+	<Canvas dpr={1.5} shadows={studioCanvasShadowMap}>
+		<T.OrthographicCamera
+			bind:ref={studioCamera}
+			makeDefault
+			position={[initialCamera.cameraX, initialCamera.cameraHeight, initialCamera.cameraDepth]}
+			zoom={initialCamera.zoom}
+			oncreate={(camera) =>
+				camera.lookAt(initialCamera.targetX, initialCamera.targetY, initialCamera.targetZ)}
+		/>
+		<SceneFrameInvalidator
+			onready={(invalidate) => {
+				invalidateFrame = invalidate;
+			}}
+		/>
+		<T.Color attach="background" args={['#d7c2a8']} />
+		<T.Fog args={['#d7c2a8', 14, 32]} />
+		<T.AmbientLight intensity={0.08} />
+		<T.DirectionalLight position={[5, 16, 6]} intensity={1.4} castShadow />
+		<SceneTextureBindings
+			{avatarUrl}
+			{artworkSlots}
+			nodes={studioNodes}
+			sceneRoot={studioSceneRoot}
+		/>
+		<GLTF
+			bind:nodes={studioNodes}
+			bind:scene={studioSceneRoot}
+			dracoLoader={studioDracoLoader}
+			url="/models/studio-transformed.glb"
+			scale={5.7}
+			position={[0, -6, 0]}
+			rotation={[initialCamera.rotationX, initialCamera.rotationY, 0]}
+			castShadow
+			receiveShadow
+			onload={() => {
+				setSceneMediaState('loaded');
+			}}
+			onerror={() => {
+				setSceneMediaState('error');
+			}}
+		/>
+		<T.Mesh rotation={[-Math.PI / 2, 0, 0.5]} position={[0, -2.62, 0]} receiveShadow>
+			<T.CircleGeometry args={[18, 48]} />
+			<T.ShadowMaterial transparent opacity={0.2} />
+		</T.Mesh>
+	</Canvas>
 </div>

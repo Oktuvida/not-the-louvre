@@ -63,7 +63,8 @@ Before pushing code, all of the above must pass. Prefer running them in order: f
 
 Local development must be reproducible from a clean clone:
 
-- **Infrastructure**: `compose.yaml` defines all services. `bun run db:start` brings them up.
+- **Infrastructure**: `compose.yaml` defines all services. `bun run db:start` brings up only the ones the app talks to (`db`, `kong`, `rest`, `storage`, `imgproxy`, `realtime`). Supabase Studio, GoTrue, postgres-meta, logflare and the edge runtime sit behind the `tools` profile: `docker compose --env-file .env.supabase --profile tools up -d`.
+- **Commit hooks**: run `bun run hooks:install` once per clone to enable the commit-message hook (`git config core.hooksPath .githooks`).
 - **Dependencies**: `bun install` from root. Lockfile is committed.
 - **Environment**: `.env.example` documents every required variable.
 - **Schema**: Drizzle migrations define the database state (see below).

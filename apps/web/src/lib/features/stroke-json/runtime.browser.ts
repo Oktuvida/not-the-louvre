@@ -1,6 +1,5 @@
 import { createStrokeJsonBrowserRuntime } from '@not-the-louvre/stroke-json-runtime/browser';
 import {
-	parseEditableDrawingDocumentV2,
 	parseDrawingDocumentV2,
 	serializeDrawingDocument,
 	type DrawingDocument,
@@ -61,16 +60,6 @@ export const compactDrawingDocumentLosslesslyWithReport = async (
 export const decodeCompressedDrawingDocument = (payloadBase64: string) =>
 	browserRuntime.decodeEditableDocument(payloadBase64);
 
-export const hydrateEditableDrawingDocument = async (
-	document: DrawingDocument | string
-): Promise<DrawingDocumentV2> => {
-	const documentJson = typeof document === 'string' ? document : serializeDrawingDocument(document);
-
-	return parseEditableDrawingDocumentV2(
-		await browserRuntime.normalizeEditableDocument(documentJson)
-	);
-};
-
 export const prepareDrawingDocumentForPublish = async (
 	document: DrawingDocument,
 	options: {
@@ -112,8 +101,4 @@ export const runProdLikePipeline = async (
 		})),
 		totalDurationMs: result.totalDurationMs
 	};
-};
-
-export const disposeStrokeJsonBrowserRuntime = () => {
-	browserRuntime.dispose();
 };

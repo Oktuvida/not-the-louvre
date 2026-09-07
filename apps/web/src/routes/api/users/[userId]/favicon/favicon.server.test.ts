@@ -5,13 +5,13 @@ import type { UserRecord } from '$lib/server/user/types';
 import { createAvifTestFile, fileToBytes } from '$lib/server/media/test-helpers';
 
 const mocked = vi.hoisted(() => ({
-	findUserById: vi.fn(),
+	findUserAvatarRefById: vi.fn(),
 	streamAvatarStorageObject: vi.fn()
 }));
 
 vi.mock('$lib/server/user/repository', () => ({
 	userRepository: {
-		findUserById: mocked.findUserById
+		findUserAvatarRefById: mocked.findUserAvatarRefById
 	}
 }));
 
@@ -37,7 +37,7 @@ const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
 
 describe('GET /api/users/[userId]/favicon', () => {
 	beforeEach(() => {
-		mocked.findUserById.mockReset();
+		mocked.findUserAvatarRefById.mockReset();
 		mocked.streamAvatarStorageObject.mockReset();
 	});
 
@@ -49,7 +49,7 @@ describe('GET /api/users/[userId]/favicon', () => {
 			width: 256
 		});
 
-		mocked.findUserById.mockResolvedValue(makeUserRecord());
+		mocked.findUserAvatarRefById.mockResolvedValue(makeUserRecord());
 		mocked.streamAvatarStorageObject.mockResolvedValue(
 			new Response(await fileToBytes(avatarFile), {
 				headers: { 'content-type': 'image/avif' },
@@ -90,7 +90,7 @@ describe('GET /api/users/[userId]/favicon', () => {
 	});
 
 	it('returns 404 when the user has no uploaded avatar', async () => {
-		mocked.findUserById.mockResolvedValue(makeUserRecord({ avatarUrl: null }));
+		mocked.findUserAvatarRefById.mockResolvedValue(makeUserRecord({ avatarUrl: null }));
 
 		const { GET } = await import('./+server');
 		const response = await GET({
@@ -103,7 +103,7 @@ describe('GET /api/users/[userId]/favicon', () => {
 	});
 
 	it('returns a JSON error envelope when avatar streaming fails with a domain error', async () => {
-		mocked.findUserById.mockResolvedValue(makeUserRecord());
+		mocked.findUserAvatarRefById.mockResolvedValue(makeUserRecord());
 		mocked.streamAvatarStorageObject.mockRejectedValue(
 			new ArtworkFlowError(404, 'Avatar not found', 'NOT_FOUND')
 		);

@@ -23,7 +23,7 @@ export const auth = betterAuth({
 		}
 	}),
 	logger: {
-		disabled: process.env.PLAYWRIGHT === '1'
+		disabled: __PLAYWRIGHT__
 	},
 	emailAndPassword: {
 		enabled: true,

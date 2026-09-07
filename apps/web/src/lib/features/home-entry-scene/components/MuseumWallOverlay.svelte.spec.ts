@@ -170,7 +170,7 @@ describe('MuseumWallOverlay', () => {
 		authOverlayElement.remove();
 	});
 
-	it('keeps the full Come In zoom when reduced motion is requested', async () => {
+	it('cuts the Come In zoom to its end state when reduced motion is requested', async () => {
 		vi.stubGlobal(
 			'matchMedia',
 			vi.fn(() => reducedMotionMediaQuery)
@@ -191,8 +191,34 @@ describe('MuseumWallOverlay', () => {
 		const zoomAnimations = wallScene.getAnimations();
 
 		expect(zoomAnimations).toHaveLength(1);
-		expect(zoomAnimations[0].effect?.getTiming().duration).toBe(2080);
+		expect(zoomAnimations[0].effect?.getTiming().duration).toBe(1);
 
 		authOverlayElement.remove();
+	});
+
+	it('defers a resize that lands while the wall is transformed until it is flat again', async () => {
+		const { rerender } = render(MuseumWallOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'outside'
+		});
+
+		// Let the mount-time measurement finish before watching for new ones.
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		await rerender({ entryState: 'auth-login' });
+
+		const measure = vi.spyOn(Element.prototype, 'getBoundingClientRect');
+		window.dispatchEvent(new Event('resize'));
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(measure).not.toHaveBeenCalled();
+
+		await rerender({ entryState: 'outside' });
+
+		await vi.waitFor(() => {
+			expect(measure).toHaveBeenCalled();
+		});
+
+		measure.mockRestore();
 	});
 });

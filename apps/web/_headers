@@ -1,0 +1,38 @@
+# Cache lifetimes for the hand-placed static assets.
+#
+# adapter-cloudflare copies this file (from the project root — it throws if it
+# finds one in static/) to .svelte-kit/cloudflare/_headers and APPENDS its own
+# generated block for /_app/* below, so these rules sit on top and cover the
+# paths SvelteKit does not hash.
+#
+# Verify after a build with:
+#   bun run build && cat .svelte-kit/cloudflare/_headers
+# and after a deploy with `curl -I https://not-the-louvre.art/models/studio-transformed.glb`.
+
+# Versioned filenames (see GENERATED_ART_VERSION in shared-ui/generated-art.ts):
+# a change to the artwork ships under a new name, so these are immutable.
+/generated/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The three ambient tracks are content-stable; a new track gets a new filename.
+/audio/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The DRACO decoder is pinned to the installed `three` version and re-copied by
+# scripts/copy-draco-decoder.ts; a version bump rewrites these bytes under the
+# same name, so revalidate weekly rather than never.
+/draco/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=2592000
+
+# scripts/transform-studio-model.ts overwrites studio-transformed.glb in place,
+# so a year-long immutable lifetime would freeze a new model on returning
+# visitors. A day, with a week of stale-while-revalidate, keeps repeat visits
+# free without that risk. Hash the filename if you ever want `immutable` here.
+/models/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/table.avif
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/table.webp
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800

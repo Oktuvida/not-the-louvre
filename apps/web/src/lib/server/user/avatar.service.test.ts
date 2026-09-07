@@ -10,8 +10,12 @@ import {
 	serializeCanonicalDrawingDocument,
 	serializeDrawingDocument
 } from '$lib/features/stroke-json/document';
-import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
-import { gzipSync, strToU8 } from 'fflate';
+import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
+
+// storage.ts is gone: gzip/base64 is the Rust runtime's job in production, so
+// these suites unwrap the payload they gzipped themselves.
+const gunzipBase64 = (payload: string) =>
+	strFromU8(gunzipSync(new Uint8Array(Buffer.from(payload, 'base64'))));
 
 const runtime = vi.hoisted(() => ({
 	prepareDrawingDocumentForStorage: vi.fn()
@@ -227,7 +231,7 @@ describe('avatar upload', () => {
 		expect(storage.upload).toHaveBeenCalledWith('avatars/user-1.avif', expect.any(File));
 		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(avatarDocument);
 		expect(result.avatarDocumentVersion).toBe(2);
-		expect(decodeCompressedDrawingDocument(store.read()!.avatarDocument!)).toBe(
+		expect(gunzipBase64(store.read()!.avatarDocument!)).toBe(
 			serializeCanonicalDrawingDocument(createEmptyDrawingDocument('avatar'))
 		);
 		expect(result.avatarUrl).toBe('avatars/user-1.avif');
@@ -282,7 +286,7 @@ describe('avatar upload', () => {
 		const result = await service.uploadAvatar(makeCanonicalUser({ id: 'user-1' }), avatarDocument);
 
 		expect(result.avatarDocumentVersion).toBe(2);
-		expect(decodeCompressedDrawingDocument(store.read()!.avatarDocument!)).toBe(
+		expect(gunzipBase64(store.read()!.avatarDocument!)).toBe(
 			serializeCanonicalDrawingDocument(createEmptyDrawingDocument('avatar'))
 		);
 	});

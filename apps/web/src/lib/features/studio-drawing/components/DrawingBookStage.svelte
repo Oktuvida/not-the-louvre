@@ -1,5 +1,11 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
+
+	// A 950ms 3D cover flip is the biggest motion on /draw. Under reduced motion it
+	// becomes an instant cut: the same duration feeds `--book-open-duration` and the
+	// unlock timer below, so CSS and callbacks stay in step either way.
+	const REDUCED_MOTION_OPENING_DURATION_MS = 1;
 
 	export type BookStageState = 'closed' | 'opening' | 'open' | 'closing';
 
@@ -23,7 +29,9 @@
 		stageState: BookStageState;
 	} = $props();
 
-	let effectiveOpeningDurationMs = $derived(openingDurationMs);
+	let effectiveOpeningDurationMs = $derived(
+		prefersReducedMotion() ? REDUCED_MOTION_OPENING_DURATION_MS : openingDurationMs
+	);
 	let stageStatus = $derived(
 		stageState === 'closed'
 			? 'Closed sketchbook. Activate to begin drawing.'
@@ -105,12 +113,8 @@
 					aria-label="Open sketchbook"
 				>
 					<div class="cover-surface" aria-hidden="true"></div>
-					<div class="cover-border-outer" aria-hidden="true"></div>
-					<div class="cover-border-inner" aria-hidden="true"></div>
 					<div class="cover-spine-strip" aria-hidden="true"></div>
-					<div class="cover-strap" aria-hidden="true">
-						<span class="cover-strap-text">Sketch & Create</span>
-					</div>
+					<div class="cover-strap" aria-hidden="true"></div>
 					<div class="cover-title-area">
 						<strong class="cover-title">Sketchbook</strong>
 					</div>
@@ -422,12 +426,16 @@
 		position: relative;
 		z-index: 2;
 		margin-top: 0;
+		padding-top: 0.65rem;
 		text-align: center;
 		font-family: 'Caveat', cursive;
-		font-size: 7;
+		/* `font-size: 7` is not a length, so it was dropped while the matching
+		 * `line-height: 7` stood: a ~7-line box under the canvas, stealing height
+		 * from `.canvas-window` (flex: 1) on every viewport. */
+		font-size: 1rem;
 		color: rgba(80, 71, 63, 0.806);
 		font-style: italic;
-		line-height: 7;
+		line-height: 1.35;
 	}
 
 	/* --- Book cover (3D flip) — cloth surface --- */
@@ -479,7 +487,8 @@
 	}
 
 	.cover-front:active {
-		transform: none !important;
+		transform: none;
+		scale: 1;
 	}
 
 	/* Apply the press feedback to the whole cover instead of the inner button contents. */
@@ -503,22 +512,6 @@
 		inset: 0;
 		border-radius: inherit;
 		background: radial-gradient(ellipse at 35% 25%, rgb(255 255 255 / 0.12), transparent 55%);
-		pointer-events: none;
-	}
-
-	.cover-border-outer {
-		position: absolute;
-		inset: 0;
-		border: none;
-		border-radius: inherit;
-		pointer-events: none;
-	}
-
-	.cover-border-inner {
-		position: absolute;
-		inset: 10px;
-		border: none;
-		border-radius: 2px;
 		pointer-events: none;
 	}
 
@@ -575,13 +568,12 @@
 		z-index: 6;
 	}
 
-	.cover-strap-text {
-		display: none;
-	}
-
 	.cover-title-area {
 		position: absolute;
-		top: clamp(7rem, 3vw, 2rem);
+		/* Was `clamp(7rem, 3vw, 2rem)`: min above max, so it resolved to a flat
+		 * 7rem at every width. The cap keeps the offset the wide cover ships with
+		 * and the preferred value now lets the title ride up on narrow ones. */
+		top: clamp(2rem, 8vw, 7rem);
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 5;

@@ -39,8 +39,17 @@
 	};
 
 	let textureByTarget = $state<Partial<Record<SceneTextureTargetName, Texture>>>({});
+	// Non-reactive mirrors: the loader effect diffs and disposes against these, so
+	// its own writes cannot re-trigger it.
+	let loadedTextures: Partial<Record<SceneTextureTargetName, Texture>> = {};
+	let loadedUrlByTarget: Partial<Record<SceneTextureTargetName, string>> = {};
 	const { invalidate } = useThrelte();
 	const textureLoader = new TextureLoader();
+
+	const publishTextures = () => {
+		textureByTarget = { ...loadedTextures };
+		invalidate();
+	};
 	const textureTargets = $derived.by(
 		() =>
 			[
@@ -49,37 +58,85 @@
 			] satisfies Array<{ name: SceneTextureTargetName; url: string }>
 	);
 
+	/*
+	 * Each texture resolves and is applied on its own. The previous shape was a
+	 * single Promise.all whose .catch reset the whole map, so one flaky artwork
+	 * media response left all eleven walls bare; and nothing ever called
+	 * texture.dispose(), so every avatar save orphaned a dozen GPU uploads inside
+	 * the live WebGL context (the endpoint returns ?v=<updatedAt>, so the URL
+	 * changes on every save).
+	 */
 	$effect(() => {
+		const targets = textureTargets;
 		let cancelled = false;
 
-		void Promise.all(
-			textureTargets.map(async ({ name, url }) => {
-				const texture = await textureLoader.loadAsync(url);
-				texture.colorSpace = SRGBColorSpace;
-				texture.flipY = false;
-				texture.needsUpdate = true;
+		const activeNames = new Set(targets.map((target) => target.name));
+		let retiredAny = false;
 
-				return [name, texture] as const;
-			})
-		)
-			.then((entries) => {
-				if (!cancelled) {
-					textureByTarget = Object.fromEntries(entries) as Partial<
-						Record<SceneTextureTargetName, Texture>
-					>;
-					invalidate();
-				}
-			})
-			.catch(() => {
-				if (!cancelled) {
-					textureByTarget = {};
-					invalidate();
-				}
-			});
+		for (const name of Object.keys(loadedTextures) as SceneTextureTargetName[]) {
+			if (activeNames.has(name)) {
+				continue;
+			}
+
+			const retired = loadedTextures[name];
+			delete loadedTextures[name];
+			delete loadedUrlByTarget[name];
+			retired?.dispose();
+			retiredAny = true;
+		}
+
+		if (retiredAny) {
+			publishTextures();
+		}
+
+		for (const { name, url } of targets) {
+			// An avatar save changes one URL; the other ten frames keep their texture.
+			if (loadedUrlByTarget[name] === url) {
+				continue;
+			}
+
+			loadedUrlByTarget[name] = url;
+
+			void textureLoader
+				.loadAsync(url)
+				.then((texture) => {
+					texture.colorSpace = SRGBColorSpace;
+					texture.flipY = false;
+					texture.needsUpdate = true;
+
+					if (cancelled) {
+						// The load outlived its effect run — free what it downloaded.
+						texture.dispose();
+						return;
+					}
+
+					const previous = loadedTextures[name];
+					loadedTextures[name] = texture;
+					// Swap first, dispose second, so no frame renders against a freed texture.
+					publishTextures();
+					previous?.dispose();
+				})
+				.catch(() => {
+					// One failed media response costs one wall, not all of them. Forget the
+					// URL so a later pass can retry it.
+					if (loadedUrlByTarget[name] === url) {
+						delete loadedUrlByTarget[name];
+					}
+				});
+		}
 
 		return () => {
 			cancelled = true;
 		};
+	});
+
+	$effect(() => () => {
+		for (const texture of Object.values(loadedTextures)) {
+			texture?.dispose();
+		}
+
+		loadedTextures = {};
+		loadedUrlByTarget = {};
 	});
 
 	$effect(() => {

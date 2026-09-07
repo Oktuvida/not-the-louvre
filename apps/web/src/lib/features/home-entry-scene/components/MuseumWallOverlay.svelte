@@ -6,11 +6,13 @@
 	import graffitiLogoUrl from '$lib/assets/logo-graffiti.svg';
 	import { applyMuseumWallWillChange } from '$lib/features/home-entry-scene/components/museum-wall-will-change';
 	import {
+		WALL_ZOOM_REDUCED_MOTION_DURATION_MS,
 		playWallZoomIn,
 		playWallZoomOut,
 		resetWallZoom,
 		type WallZoomGeometry
 	} from '$lib/features/home-entry-scene/components/museum-wall-zoom';
+	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
 	import { waitForPageLayoutReady } from '$lib/features/home-entry-scene/components/page-layout-ready';
 	import MuseumWindowFrame from '$lib/features/home-entry-scene/components/MuseumWindowFrame.svelte';
 	import {
@@ -84,6 +86,7 @@
 	let enterFallbackHandle: ReturnType<typeof setTimeout> | null = null;
 	let resetFallbackHandle: ReturnType<typeof setTimeout> | null = null;
 	let measurePending = false;
+	let needsRemeasure = false;
 
 	const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
 	const toPercent = (value: number) => `${clampUnit(value) * 100}%`;
@@ -176,6 +179,17 @@
 
 	onMount(() => {
 		const handleResize = () => {
+			// `outside` is the only state in which the wall is untransformed, and
+			// updateMeasurements reads the opening's live client rect. Measuring
+			// during the zoom (orientation change, or a desktop resize while the auth
+			// sheet is open) reads the ~14x-scaled opening: targetScale collapses and
+			// the two slabs' clip-path percentages saturate to 0%/100%, so the close
+			// then animates from geometry the wall is not actually sitting at.
+			if (entryState !== 'outside') {
+				needsRemeasure = true;
+				return;
+			}
+
 			void scheduleMeasurement();
 		};
 
@@ -212,6 +226,8 @@
 	});
 
 	$effect(() => {
+		const reducedMotion = prefersReducedMotion();
+
 		if (entryState === 'transitioning-in') {
 			clearFallbacks();
 			const elements = wallElements();
@@ -225,7 +241,7 @@
 					gsap.set(authOverlayElement, { opacity: 0, scale: 0.95 });
 				}
 
-				const zoom = playWallZoomIn(elements, zoomGeometry);
+				const zoom = playWallZoomIn(elements, zoomGeometry, { reducedMotion });
 				zoom.finished
 					.then(() => {
 						// Intentionally keep will-change:transform active here. Removing it
@@ -245,7 +261,7 @@
 						dispatch('TRANSITION_DONE');
 					}
 				},
-				ENTER_DURATION * 1000 + 150
+				reducedMotion ? WALL_ZOOM_REDUCED_MOTION_DURATION_MS + 150 : ENTER_DURATION * 1000 + 150
 			);
 		}
 
@@ -265,7 +281,7 @@
 					});
 				}
 
-				const zoom = playWallZoomOut(elements, zoomGeometry);
+				const zoom = playWallZoomOut(elements, zoomGeometry, { reducedMotion });
 				zoom.finished
 					.then(() => {
 						resetWallStyles();
@@ -282,13 +298,22 @@
 						dispatch('TRANSITION_RESET_DONE');
 					}
 				},
-				RESET_DURATION * 1000 + 150
+				reducedMotion ? WALL_ZOOM_REDUCED_MOTION_DURATION_MS + 150 : RESET_DURATION * 1000 + 150
 			);
 		}
 
 		if (entryState === 'outside') {
 			clearFallbacks();
 			resetWallStyles();
+
+			if (needsRemeasure) {
+				needsRemeasure = false;
+				// resetWallStyles() cancelled the WAAPI animations and removed the
+				// inline transform, so the opening measures untransformed again. This
+				// is the only safe moment to consume a deferred resize: remeasuring
+				// before the close would replace the geometry the wall is sitting at.
+				void scheduleMeasurement();
+			}
 		}
 
 		if (

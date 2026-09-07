@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(scriptDir, '..');
-const sourceModelPath = resolve(appRoot, 'static/models/studio.glb');
+const sourceModelPath = resolve(appRoot, 'assets/models/studio.glb');
 const generatedComponentPath = resolve(appRoot, 'studio.svelte');
 const generatedTransformedPath = resolve(appRoot, 'studio-transformed.glb');
 const finalTransformedPath = resolve(appRoot, 'static/models/studio-transformed.glb');

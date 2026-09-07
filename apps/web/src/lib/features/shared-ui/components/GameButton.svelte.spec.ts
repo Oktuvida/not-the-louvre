@@ -1,5 +1,5 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import GameControlsHarness from './GameControlsHarness.svelte';
 
@@ -17,32 +17,20 @@ describe('GameButton', () => {
 		await expect.element(cancel).toBeDisabled();
 
 		const ctaBackground = document.querySelector('[data-testid="game-button-bg"]');
-		expect(ctaBackground?.getAttribute('src')).toMatch(/^data:image\/(png|svg\+xml)/);
+		expect(ctaBackground?.getAttribute('src')).toMatch(
+			/^\/generated\/sticker-lg-accent\.v\d+\.svg$/
+		);
 	});
 
-	it('requests willReadFrequently for sticker canvases', async () => {
-		const originalGetContext = HTMLCanvasElement.prototype.getContext;
-		const getContextSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'getContext')
-			.mockImplementation(function (this: HTMLCanvasElement, ...args: unknown[]) {
-				return originalGetContext.apply(this, args as Parameters<HTMLCanvasElement['getContext']>);
-			} as HTMLCanvasElement['getContext']);
-
+	it('paints the sticker from a cached static asset instead of a per-instance canvas', async () => {
 		render(GameControlsHarness);
-		await expect.element(page.getByRole('button', { name: 'Create Art' })).toBeVisible();
 
-		expect(
-			getContextSpy.mock.calls.some((call) => {
-				const [contextId, options] = call as [string, CanvasRenderingContext2DSettings?];
+		const cta = page.getByRole('button', { name: 'Create Art' });
+		await expect.element(cta).toBeVisible();
 
-				return (
-					contextId === '2d' &&
-					typeof options === 'object' &&
-					options !== null &&
-					'willReadFrequently' in options &&
-					options.willReadFrequently === true
-				);
-			})
-		).toBe(true);
+		// The background used to be painted twice: an <img> before hydration and
+		// a per-pixel canvas repaint after it, on a ResizeObserver. One shared,
+		// cacheable file replaces both.
+		expect(document.querySelectorAll('canvas')).toHaveLength(0);
 	});
 });
