@@ -1,66 +1,53 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import { untrack } from 'svelte';
-	import { createStreamingAccumulator } from '../streaming-accumulator.svelte';
+	import type {
+		GalleryPageInfo,
+		LoadMoreArtworks
+	} from '$lib/features/gallery-exploration/model/discovery';
+	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+	import { createSeededAccumulator } from '$lib/features/gallery-exploration/use-seeded-accumulator.svelte';
+	import type { Writable } from 'svelte/store';
 	import FilmReel from './FilmReel.svelte';
 
 	let {
 		adultContentEnabled = false,
 		artworks,
+		feedCacheKey = null,
 		pageInfo,
 		loadMoreArtworks,
 		fetchRandomArtwork,
-		onSelect
+		onSelect,
+		revealedArtworkIds,
+		viewerId = null
 	}: {
 		adultContentEnabled?: boolean;
 		artworks: Artwork[];
-		pageInfo: { hasMore: boolean; nextCursor: string | null };
-		loadMoreArtworks?: (request: { cursor: string }) => Promise<{
-			artworks: Artwork[];
-			pageInfo: { hasMore: boolean; nextCursor: string | null };
-		}>;
+		feedCacheKey?: GalleryRoomId | null;
+		pageInfo: GalleryPageInfo;
+		loadMoreArtworks?: LoadMoreArtworks;
 		fetchRandomArtwork?: () => Promise<Artwork>;
 		onSelect?: (artwork: Artwork) => void;
+		revealedArtworkIds?: Writable<Set<string>>;
+		viewerId?: string | null;
 	} = $props();
 
-	// Snapshot initial values to avoid reactive re-seeding
-	const { initialArtworks, initialPageInfo } = (() => ({
-		initialArtworks: $state.snapshot(artworks),
-		initialPageInfo: $state.snapshot(pageInfo)
-	}))();
-
-	const accumulator = createStreamingAccumulator({
-		initialArtworks,
-		initialPageInfo,
-		fetchPage: async (cursor: string) => {
-			if (!loadMoreArtworks) {
-				return { artworks: [], pageInfo: { hasMore: false, nextCursor: null } };
-			}
-			return loadMoreArtworks({ cursor });
-		}
-	});
-
-	const seedIdentity = (items: Artwork[]) => items.map((artwork) => artwork.id).join(',');
-	let lastSeedIdentity = seedIdentity(initialArtworks);
-
-	$effect(() => {
-		const identity = seedIdentity(artworks);
-		if (identity !== lastSeedIdentity) {
-			lastSeedIdentity = identity;
-			untrack(() => {
-				accumulator.reseed(artworks, pageInfo);
-			});
-			return;
-		}
-
-		untrack(() => {
-			accumulator.syncSeedArtworks(artworks);
-		});
+	const accumulator = createSeededAccumulator({
+		// A cursor-only change must not reseed the pool: the reel would restart
+		// mid-cycle.
+		emptyPageWhenUnavailable: true,
+		getFeedCacheKey: () => feedCacheKey,
+		getArtworks: () => artworks,
+		getLoadMoreArtworks: () => loadMoreArtworks,
+		getPageInfo: () => pageInfo,
+		// The reel is centred in its own shell; there is nothing to scroll back to.
+		restoreScroll: false,
+		watchPageInfo: false
 	});
 
 	let filmReel: ReturnType<typeof FilmReel> | undefined = $state();
 	let isSpinning = $state(false);
+	let resetToIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const LOAD_MORE_THRESHOLD = 0.8;
 
@@ -81,14 +68,14 @@
 		isSpinning = false;
 
 		onSelect?.(artwork);
-		setTimeout(() => {
+		if (resetToIdleTimer !== null) clearTimeout(resetToIdleTimer);
+		resetToIdleTimer = setTimeout(() => {
+			resetToIdleTimer = null;
 			filmReel?.resetToIdle();
 		}, 500);
 	};
 
 	const handleIdleProgress = (fraction: number) => {
-		accumulator.setProgress(fraction);
-
 		if (fraction >= LOAD_MORE_THRESHOLD && accumulator.hasMore && !accumulator.isLoading) {
 			accumulator.loadMore();
 		}
@@ -100,6 +87,15 @@
 			accumulator.loadMore();
 		}
 	};
+
+	// Destroy-only: nothing should still be waiting to touch the reel after the
+	// room is gone.
+	$effect(() => () => {
+		if (resetToIdleTimer !== null) {
+			clearTimeout(resetToIdleTimer);
+			resetToIdleTimer = null;
+		}
+	});
 </script>
 
 <div
@@ -113,6 +109,8 @@
 		onLand={handleLand}
 		onIdleProgress={handleIdleProgress}
 		onIdleCycleComplete={handleIdleCycleComplete}
+		{revealedArtworkIds}
+		{viewerId}
 	/>
 
 	<GameButton

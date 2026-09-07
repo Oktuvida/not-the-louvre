@@ -22,7 +22,7 @@
 	<div class="pointer-events-none absolute inset-0">
 		{#each Array.from({ length: 8 }).map((__, i) => i) as index (`splotch-${index}`)}
 			<div
-				class="absolute animate-[splotchFloat_5s_ease-in-out_infinite] rounded-full opacity-10"
+				class="splotch absolute rounded-full opacity-10"
 				style={`
 					width: ${100 + index * 20}px;
 					height: ${100 + index * 20}px;
@@ -82,6 +82,15 @@
 </div>
 
 <style>
+	/* Declared in the same scoped block as the keyframes: Svelte renames scoped
+	 * keyframes and only rewrites `animation` references inside this stylesheet,
+	 * so a Tailwind `animate-[splotchFloat_…]` utility (or an inline style) can
+	 * never resolve them. The per-element inline animation-delay/duration above
+	 * still wins over this shorthand and keeps the stagger. */
+	.splotch {
+		animation: splotchFloat 5s ease-in-out infinite;
+	}
+
 	@keyframes splotchFloat {
 		0%,
 		100% {

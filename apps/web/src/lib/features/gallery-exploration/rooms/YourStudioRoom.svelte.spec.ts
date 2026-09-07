@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
@@ -5,11 +6,7 @@ import { page } from 'vitest/browser';
 vi.mock('$lib/features/home-entry-scene/canvas/museum-canvas', () => ({
 	museumWindowOpening: { x: 0, y: 0, width: 100, height: 100 },
 	museumWindowAspectRatio: '16/9',
-	drawMuseumWindowFrame: vi.fn(),
 	createMuseumWallPatternUrl: () => 'data:image/png;base64,mock',
-	drawArtworkFrame: vi.fn(),
-	applyFrameWeathering: vi.fn(),
-	createArtworkFrameUrl: () => 'data:image/png;base64,mock',
 	drawStickerBackground: vi.fn(),
 	createStickerBackgroundUrl: () => 'data:image/png;base64,mock'
 }));
@@ -18,28 +15,26 @@ vi.mock('$app/environment', () => ({
 	browser: true
 }));
 
-import YourStudioRoomHarness from './YourStudioRoomHarness.svelte';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
+import RoomHarness from './RoomHarness.svelte';
+import YourStudioRoom from './YourStudioRoom.svelte';
 
-const createArtwork = (id: string, score: number): Artwork => ({
-	id,
-	title: `Artwork ${id}`,
-	artist: `Artist ${id}`,
-	authorId: `user-${id}`,
-	imageUrl: `https://example.com/${id}.avif`,
-	score,
-	upvotes: score,
-	downvotes: 0,
-	timestamp: Date.now(),
-	isNsfw: false,
-	comments: []
-});
+const createArtwork = (id: string, score: number) => makeArtwork({ id, score, upvotes: score });
+
+type YourStudioProps = ComponentProps<typeof YourStudioRoom>;
+
+const renderRoom = (
+	props: Partial<YourStudioProps> & Pick<YourStudioProps, 'artworks' | 'pageInfo'>
+) =>
+	render(RoomHarness, {
+		props: { component: YourStudioRoom, roomProps: { onSelect: () => {}, ...props } }
+	});
 
 describe('YourStudioRoom', () => {
 	it('creates its own ArtworkAccumulator seeded with SSR artworks', async () => {
 		const artworks = [createArtwork('s1', 50), createArtwork('s2', 40), createArtwork('s3', 30)];
 
-		render(YourStudioRoomHarness, {
+		renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -57,7 +52,7 @@ describe('YourStudioRoom', () => {
 			createArtwork('s4', 20)
 		];
 
-		render(YourStudioRoomHarness, {
+		renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -81,7 +76,7 @@ describe('YourStudioRoom', () => {
 
 		const artworks = [createArtwork('s1', 50)];
 
-		render(YourStudioRoomHarness, {
+		renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
 			loadMoreArtworks
@@ -97,7 +92,7 @@ describe('YourStudioRoom', () => {
 	it('reseeds accumulator when artworks prop changes so refreshed data is shown', async () => {
 		const artworks = [createArtwork('s1', 50), createArtwork('s2', 40), createArtwork('s3', 30)];
 
-		const screen = render(YourStudioRoomHarness, {
+		const screen = renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -112,8 +107,12 @@ describe('YourStudioRoom', () => {
 		];
 
 		await screen.rerender({
-			artworks: refreshedArtworks,
-			pageInfo: { hasMore: false, nextCursor: null }
+			component: YourStudioRoom,
+			roomProps: {
+				artworks: refreshedArtworks,
+				onSelect: () => {},
+				pageInfo: { hasMore: false, nextCursor: null }
+			}
 		});
 
 		// New artwork s4 should be visible
@@ -126,7 +125,7 @@ describe('YourStudioRoom', () => {
 	it('releases state on unmount', async () => {
 		const artworks = [createArtwork('s1', 50)];
 
-		const { unmount } = render(YourStudioRoomHarness, {
+		const { unmount } = renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});

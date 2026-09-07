@@ -6,12 +6,18 @@
 	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
 	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
+	import {
+		homeGalleryTarget,
+		warmOnIntent
+	} from '$lib/features/home-entry-scene/navigation-warmup';
+	import { setAdultContentEnabled, uploadViewerAvatar } from '$lib/client/avatar-upload';
 	import { buildDrawingDraftKey, clearDrawingDraft } from '$lib/features/stroke-json/drafts';
 	import {
 		DRAWING_DOCUMENT_VERSION,
 		createEmptyDrawingDocumentV2,
 		parseEditableDrawingDocumentV2
 	} from '$lib/features/stroke-json/document';
+	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
@@ -45,6 +51,7 @@
 	let adultContentError = $state<string | null>(null);
 	let isSavingAdultContentPreference = $state(false);
 	let isAvatarEditorOpen = $state(false);
+	let avatarEditorTrigger: HTMLElement | null = null;
 
 	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
 	const hasSensitivePreview = $derived(previewCards.some((card) => card.isNsfw));
@@ -81,16 +88,7 @@
 		adultContentError = null;
 
 		try {
-			const response = await fetch('/api/viewer/content-preferences', {
-				body: JSON.stringify({ adultContentEnabled: enabled }),
-				headers: { 'content-type': 'application/json' },
-				method: 'PATCH'
-			});
-
-			if (!response.ok) {
-				throw new Error('18+ artwork preference could not be updated.');
-			}
-
+			await setAdultContentEnabled(enabled);
 			adultContentPreferenceOverride = enabled;
 		} catch (error) {
 			adultContentError =
@@ -105,6 +103,10 @@
 	};
 
 	const openAvatarEditor = () => {
+		// focusTrap moves focus into the dialog; remember where it came from so the
+		// visitor is not dumped at the top of the page when the dialog closes.
+		avatarEditorTrigger =
+			document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		isAvatarEditorOpen = true;
 	};
 
@@ -117,59 +119,28 @@
 		}
 
 		isAvatarEditorOpen = false;
+
+		if (avatarEditorTrigger?.isConnected) {
+			avatarEditorTrigger.focus();
+		}
+
+		avatarEditorTrigger = null;
 	};
 
 	const saveAvatar = async (drawingDocument: string) => {
-		if (!user?.id) {
-			return {
-				message: 'Your session is not ready for avatar upload. Please sign in again.',
-				success: false as const
-			};
-		}
+		const userId = user?.id;
+		const result = await uploadViewerAvatar(userId, drawingDocument);
 
-		const formData = new FormData();
-		formData.set('drawingDocument', drawingDocument);
-
-		const response = await fetch(`/api/users/${user.id}/avatar`, {
-			body: formData,
-			method: 'PUT'
-		});
-
-		if (response.ok) {
-			const data = (await response.json()) as { avatarUrl?: string };
-
-			if (!data.avatarUrl) {
-				return {
-					message: 'Avatar save succeeded but no avatar URL was returned.',
-					success: false as const
-				};
-			}
-
-			dispatchAvatarFaviconUpdate(user.id);
+		if (result.success && userId) {
+			dispatchAvatarFaviconUpdate(userId);
 			onAvatarSaved?.({
 				avatarDrawingDocument: parseEditableDrawingDocumentV2(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
-				avatarUrl: data.avatarUrl
+				avatarUrl: result.avatarUrl
 			});
-			return { success: true as const };
 		}
 
-		try {
-			const data = (await response.json()) as { code?: string; message?: string };
-
-			return {
-				code: data.code,
-				message: data.message ?? 'Avatar save failed. Please try again.',
-				success: false as const
-			};
-		} catch {
-			// Ignore invalid error bodies and fall back to a generic message.
-		}
-
-		return {
-			message: 'Avatar save failed. Please try again.',
-			success: false as const
-		};
+		return result;
 	};
 </script>
 
@@ -179,6 +150,7 @@
 			class="pointer-events-auto absolute top-4 left-4 max-w-[calc(100vw-2rem)] transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:top-8 md:left-8 md:max-w-[22rem]"
 			class:-translate-x-[calc(100%+3rem)]={isExiting}
 			class:opacity-0={isExiting}
+			inert={isExiting}
 		>
 			<VisitorBadge
 				avatarUrl={user.avatarUrl ?? user.image ?? null}
@@ -189,11 +161,17 @@
 		</div>
 	{/if}
 
+	<!--
+		inert, not pointer-events-none: both are plain utilities, so which one wins
+		depends on Tailwind's generated source order. inert also drops the fading
+		layer out of the tab order and the a11y tree while it leaves.
+	-->
 	<div
 		class="pointer-events-auto absolute top-4 right-4 hidden transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:top-8 md:right-8 md:block"
 		class:translate-x-[calc(100%+3rem)]={isExiting}
 		class:opacity-0={isExiting}
 		data-testid="home-preview-stack"
+		inert={isExiting}
 	>
 		<div class="relative flex flex-col items-end gap-7 pb-[13.5rem]">
 			{#each previewCards as card (card.id)}
@@ -278,23 +256,32 @@
 		class="pointer-events-auto absolute right-4 bottom-6 left-4 flex items-stretch justify-center transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:right-auto md:bottom-20 md:left-16 md:translate-x-0 md:items-start"
 		class:translate-y-[calc(100%+6rem)]={isExiting}
 		class:opacity-0={isExiting}
+		inert={isExiting}
 	>
 		<div
 			class="flex w-full max-w-[22rem] flex-col items-stretch gap-4 md:w-auto md:max-w-none md:items-start"
 		>
 			{#if user}
-				<GameButton
-					type="button"
-					variant="secondary"
-					size="lg"
-					className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 md:w-auto"
-					onclick={handleGalleryClick}
-				>
-					<Trophy
-						class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-					/>
-					<span>GALLERY</span>
-				</GameButton>
+				<!--
+					The signed-in GALLERY control is a <button>, so the body-level
+					`data-sveltekit-preload-data="hover"` never reaches it — and the click
+					starts 2.4s of camera choreography before `goto` runs. Warming on
+					pointer/focus intent turns that hold into overlap.
+				-->
+				<div class="w-full md:w-auto" use:warmOnIntent={homeGalleryTarget}>
+					<GameButton
+						type="button"
+						variant="secondary"
+						size="lg"
+						className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 md:w-auto"
+						onclick={handleGalleryClick}
+					>
+						<Trophy
+							class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
+						/>
+						<span>GALLERY</span>
+					</GameButton>
+				</div>
 			{:else}
 				<GameLink
 					href={galleryHref}
@@ -335,6 +322,7 @@
 		aria-modal="true"
 		aria-label="Edit your avatar"
 		tabindex="-1"
+		use:focusTrap={{ autoFocus: true }}
 		onclick={closeAvatarEditor}
 		onkeydown={(event) => {
 			if (event.key === 'Escape') closeAvatarEditor();

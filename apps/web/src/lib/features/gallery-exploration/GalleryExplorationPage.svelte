@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { fade } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
+	import { get } from 'svelte/store';
 	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
 	import { getGalleryLayoutContext } from '$lib/features/gallery-exploration/gallery-layout-context';
 	import { onMount } from 'svelte';
@@ -14,12 +15,21 @@
 		toGalleryArtwork,
 		toGalleryArtworkDetail
 	} from '$lib/features/gallery-exploration/gallery-adapter';
+	import { createDetailPrefetcher } from '$lib/features/gallery-exploration/detail-prefetch';
+	import type {
+		GalleryDiscovery,
+		GalleryDiscoveryRequest,
+		GalleryRoomContent
+	} from '$lib/features/gallery-exploration/model/discovery';
+	import { suppressNextRoomFeedSnapshot } from '$lib/features/gallery-exploration/model/feed-cache';
 	import {
 		type GalleryRoomConfig,
 		type GalleryRoomId
 	} from '$lib/features/gallery-exploration/model/rooms';
 	import { createRealtimeSubscription } from '$lib/features/gallery-exploration/use-realtime-subscription.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
+	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
+	import GalleryStatusRegion from '$lib/features/gallery-exploration/components/GalleryStatusRegion.svelte';
 	import RoomLoadingSkeleton from '$lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
 	import HallOfFameRoom from '$lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
 	import HotWallRoom from '$lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
@@ -29,6 +39,8 @@
 	type GalleryDetailHistoryState = NonNullable<App.PageState['galleryDetail']>;
 
 	const LOCAL_GALLERY_DETAIL_SOURCE = 'local-room-selection' as const;
+
+	const ROOM_LOAD_ERROR_MESSAGE = 'The gallery could not load right now — refresh to try again.';
 
 	const isGalleryDetailHistoryState = (
 		value: App.PageState['galleryDetail'] | null | undefined
@@ -61,17 +73,13 @@
 
 	let {
 		adultContentEnabled = false,
-		artworks: routeArtworks,
+		artworks: routeArtworks = [],
 		discovery: routeDiscovery = { pageInfo: { hasMore: false, nextCursor: null }, request: null },
 		emptyStateMessage = null,
 		isRoomLoading = false,
-		loadMoreArtworks = async (request: {
-			authorId: string | null;
-			cursor: string;
-			limit: number;
-			sort: 'hot' | 'recent' | 'top';
-			window: 'all' | null;
-		}) => {
+		loadError = null,
+		roomContent = null,
+		loadMoreArtworks = async (request: GalleryDiscoveryRequest & { cursor: string }) => {
 			const query = [
 				`cursor=${encodeURIComponent(request.cursor)}`,
 				`limit=${encodeURIComponent(String(request.limit))}`,
@@ -165,26 +173,21 @@
 		viewer = null
 	}: {
 		adultContentEnabled?: boolean;
-		artworks: Artwork[];
-		discovery?: {
-			pageInfo: { hasMore: boolean; nextCursor: string | null };
-			request: {
-				authorId: string | null;
-				limit: number;
-				sort: 'hot' | 'recent' | 'top';
-				window: 'all' | null;
-			} | null;
-		};
+		artworks?: Artwork[];
+		discovery?: GalleryDiscovery;
 		emptyStateMessage?: string | null;
 		isRoomLoading?: boolean;
+		/** Set only by the route's failure path; never reuses the empty-state slot. */
+		loadError?: string | null;
+		/**
+		 * The streamed room payload. Owning the await here — instead of branching
+		 * three `<GalleryExplorationPage>` instances around it in the route — is
+		 * what keeps one instance alive across the skeleton→room hand-off, so the
+		 * entry fade, the layout bindings and the detail state survive it.
+		 */
+		roomContent?: Promise<GalleryRoomContent> | null;
 		fetchRandomArtwork?: () => Promise<Artwork>;
-		loadMoreArtworks?: (request: {
-			authorId: string | null;
-			cursor: string;
-			limit: number;
-			sort: 'hot' | 'recent' | 'top';
-			window: 'all' | null;
-		}) => Promise<{
+		loadMoreArtworks?: (request: GalleryDiscoveryRequest & { cursor: string }) => Promise<{
 			artworks: Artwork[];
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
@@ -196,15 +199,82 @@
 	} = $props();
 
 	const galleryLayout = getGalleryLayoutContext();
-	const revealedArtworkIds = galleryLayout?.revealedArtworkIds ?? writable(new Set());
+	const revealedArtworkIds = galleryLayout?.revealedArtworkIds ?? writable(new Set<string>());
 
-	const { initialViewer, initialRealtimeConfig, initialArtworks } = (() => ({
-		initialViewer: $state.snapshot(viewer),
+	// Values deliberately frozen at construction (the realtime channel is opened
+	// once for the viewer that mounted the page); the IIFE keeps them out of the
+	// reactive graph without tripping `state_referenced_locally`.
+	const { initialArtworks, initialRealtimeConfig, initialRoomContent, initialViewer } = (() => ({
+		initialArtworks: $state.snapshot(routeArtworks),
 		initialRealtimeConfig: $state.snapshot(realtimeConfig),
-		initialArtworks: $state.snapshot(routeArtworks)
+		initialRoomContent: roomContent,
+		initialViewer: $state.snapshot(viewer)
 	}))();
 
-	let artworks = $state(initialArtworks);
+	// --- Streamed room content ---------------------------------------------
+	// The template awaits the same promise so SvelteKit still streams the room
+	// HTML; this seeder is what feeds the script-level state (notes, panel
+	// bindings, the seed each room reconciles against). The rejection handler is
+	// attached at init, not in onMount: without the route's `{:catch}` a streamed
+	// failure would otherwise surface as an unhandled rejection.
+	let streamedContent = $state<GalleryRoomContent | null>(null);
+	let streamFailed = $state(false);
+
+	const seedFromStream = (pending: Promise<GalleryRoomContent>) => {
+		let isCurrent = true;
+
+		void pending.then(
+			(content) => {
+				if (!isCurrent) return;
+				streamedContent = content;
+				streamFailed = false;
+			},
+			() => {
+				if (!isCurrent) return;
+				streamFailed = true;
+			}
+		);
+
+		return () => {
+			isCurrent = false;
+		};
+	};
+
+	// The first promise is claimed at construction so a rejection is handled
+	// before anything can report it as unhandled; the room can still be torn
+	// down before it settles, so the seeder is released on destroy.
+	const disposeInitialSeed = initialRoomContent ? seedFromStream(initialRoomContent) : null;
+	$effect(() => () => disposeInitialSeed?.());
+
+	// A refresh hands over a new promise; the room goes back to its skeleton
+	// while it settles, exactly as the template's await block does.
+	$effect.pre(() => {
+		const pending = roomContent;
+		if (!pending || pending === initialRoomContent) return;
+
+		streamedContent = null;
+		streamFailed = false;
+
+		return seedFromStream(pending);
+	});
+
+	const seedArtworks = $derived(roomContent ? (streamedContent?.artworks ?? []) : routeArtworks);
+	const seedDiscovery = $derived<GalleryDiscovery>(
+		roomContent
+			? (streamedContent?.discovery ?? {
+					pageInfo: { hasMore: false, nextCursor: null },
+					request: null
+				})
+			: routeDiscovery
+	);
+	const roomEmptyStateMessage = $derived(
+		roomContent ? (streamedContent?.emptyStateMessage ?? null) : emptyStateMessage
+	);
+	const isRoomBusy = $derived(
+		roomContent ? streamedContent === null && !streamFailed : isRoomLoading
+	);
+
+	let artworks = $state<Artwork[]>(initialRoomContent ? [] : initialArtworks);
 
 	let adultContentPreferenceOverride = $state<boolean | null>(null);
 	let isSavingAdultContentPreference = $state(false);
@@ -222,7 +292,10 @@
 	let detailLoadSequence = 0;
 
 	const selectedArtworkId = $derived(selectedArtwork?.id ?? null);
-	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
+	const adultContentAllowed = $derived(
+		adultContentPreferenceOverride ??
+			(roomContent ? (streamedContent?.adultContentEnabled ?? false) : adultContentEnabled)
+	);
 	const hasSensitiveArtwork = $derived(
 		artworks.some((artwork) => artwork.isNsfw) || Boolean(selectedArtwork?.isNsfw)
 	);
@@ -234,12 +307,12 @@
 
 	// --- Reseed artworks from route data on navigation ---
 	$effect(() => {
-		artworks = routeArtworks;
+		artworks = seedArtworks;
 	});
 
 	// --- Room-scoped loadMoreArtworks that binds discovery request context ---
 	const roomLoadMoreArtworks = $derived.by(() => {
-		const request = routeDiscovery.request;
+		const request = seedDiscovery.request;
 		if (!request) return undefined;
 		return async (params: { cursor: string }) => {
 			return loadMoreArtworks({ ...request, cursor: params.cursor });
@@ -247,14 +320,24 @@
 	});
 
 	// --- Detail panel ---
+	const detailPrefetcher = createDetailPrefetcher((artworkId: string) =>
+		loadArtworkDetail(artworkId)
+	);
+
+	/** Fired from a card's pointerdown/keydown, ~100ms ahead of its click. */
+	const prefetchArtworkDetail = (artworkId: string) => {
+		detailPrefetcher.prefetch(artworkId);
+	};
+
 	const loadArtworkFromHistoryState = async (historyState: GalleryDetailHistoryState) => {
 		const requestSequence = ++detailLoadSequence;
 		detailErrorMessage = null;
 
 		// Open the panel instantly with the room copy of the artwork; the full
 		// detail (fresh votes, comments) hydrates in place once fetched.
+		const roomArtwork = artworks.find((candidate) => candidate.id === historyState.artworkId);
+
 		if (selectedArtwork?.id !== historyState.artworkId) {
-			const roomArtwork = artworks.find((candidate) => candidate.id === historyState.artworkId);
 			if (roomArtwork) {
 				selectedArtwork = roomArtwork;
 				detailOrigin = historyState.source;
@@ -263,10 +346,16 @@
 		isHydratingDetail = true;
 
 		try {
-			const nextArtwork = await loadArtworkDetail(historyState.artworkId);
+			const nextArtwork = await detailPrefetcher.load(historyState.artworkId);
 			if (requestSequence !== detailLoadSequence) return;
 
-			selectedArtwork = nextArtwork;
+			// `rank` is a room position computed by the room loader, not a property
+			// of the artwork, so the detail endpoint does not return it. Without
+			// this the Hall of Fame medal appears with the room copy and then
+			// vanishes the moment the detail lands.
+			selectedArtwork = roomArtwork?.rank
+				? { ...nextArtwork, rank: roomArtwork.rank }
+				: nextArtwork;
 			detailOrigin = historyState.source;
 		} catch (error) {
 			if (requestSequence !== detailLoadSequence) return;
@@ -408,8 +497,7 @@
 							headers: { accept: 'application/json' }
 						});
 						if (!response.ok) return null;
-						const { token } = (await response.json()) as { token: string };
-						return token;
+						return (await response.json()) as { expiresAt?: string; token: string };
 					},
 					viewerId: initialViewer.id,
 					onRefresh: (artworkId: string) => {
@@ -514,6 +602,11 @@
 
 		isRefreshingGallery = true;
 		detailErrorMessage = null;
+		// A refresh is a request for fresh data: the room is about to remount
+		// around the new stream, and the feed it hands over on the way out must
+		// not come back over the top of it.
+		suppressNextRoomFeedSnapshot(roomId);
+		detailPrefetcher.clear();
 
 		try {
 			await invalidateAll();
@@ -534,9 +627,30 @@
 		} else {
 			replaceState(resolve('/gallery/[room]', { room: roomId }), window.history.state);
 		}
+	});
 
-		// Dropping the flag removes the overlay; its outro fade reveals the room.
+	/*
+	 * The grey overlay carried over from the home page used to be dropped in
+	 * `onMount`, which — with the route branching three page instances around
+	 * the stream — meant it dissolved over the loading skeleton belonging to an
+	 * instance that was about to be thrown away. Hold it until the room content
+	 * is actually on screen.
+	 */
+	$effect(() => {
+		if (isRoomBusy) return;
 		showEntryFade = false;
+	});
+
+	/** ...but never hold the page hostage to a slow or failed stream. */
+	const ENTRY_FADE_MAX_HOLD_MS = 1500;
+	$effect(() => {
+		if (!enteredFromHome) return;
+
+		const timer = setTimeout(() => {
+			showEntryFade = false;
+		}, ENTRY_FADE_MAX_HOLD_MS);
+
+		return () => clearTimeout(timer);
 	});
 
 	// --- Empty state ---
@@ -546,7 +660,7 @@
 		mystery: '',
 		'your-studio': ''
 	};
-	const showEmptyState = $derived(Boolean(emptyStateMessage) && roomId !== 'hot-wall');
+	const showEmptyState = $derived(Boolean(roomEmptyStateMessage) && roomId !== 'hot-wall');
 	const emptyStateSupportMessage = $derived.by(() => {
 		if (viewer && roomId === 'your-studio') {
 			return 'Publish a new piece from the studio and it will show up here.';
@@ -562,13 +676,21 @@
 	$effect(() => {
 		if (!galleryLayout) return;
 
-		galleryLayout.actionBindings.set({
+		/*
+		 * Ownership, not lifecycle. The room lives inside the layout's
+		 * `{#key roomId}` block, whose out-transition defers this teardown ~225ms
+		 * — long after the incoming room has published its own handlers into the
+		 * same stores. Clearing unconditionally therefore erased the live room's
+		 * bindings: Refresh became a no-op that still looked enabled, Back lost
+		 * its fade to the home page, and the detail panel unmounted entirely.
+		 */
+		const actions = {
 			isRefreshingGallery,
 			onBack: handleBackToHome,
 			onRefresh: refreshGallery
-		});
+		};
 
-		galleryLayout.panelBindings.set({
+		const panel = {
 			adultContentEnabled: adultContentAllowed,
 			artwork: selectedArtwork,
 			isHydratingDetail,
@@ -578,14 +700,101 @@
 			onClose: closeArtworkDetail,
 			revealedArtworkIds,
 			viewer
-		});
+		};
+
+		galleryLayout.actionBindings.set(actions);
+		galleryLayout.panelBindings.set(panel);
 
 		return () => {
-			galleryLayout.actionBindings.set(null);
-			galleryLayout.panelBindings.set(null);
+			if (get(galleryLayout.actionBindings) === actions) galleryLayout.actionBindings.set(null);
+			if (get(galleryLayout.panelBindings) === panel) galleryLayout.panelBindings.set(null);
 		};
 	});
 </script>
+
+{#snippet roomLoadFailure(message: string)}
+	<div
+		class="rounded-xl border-4 border-[#2d2420] bg-[#fdfbf7] p-10 text-center shadow-md"
+		data-testid="gallery-room-error"
+	>
+		<p class="font-display text-2xl text-[#2d2420]">Something went wrong</p>
+		<p class="mt-3 text-[#6b625a]">{message}</p>
+		<button
+			class="mt-6 rounded-full border-3 border-[#2d2420] bg-[#f6df65] px-5 py-2 text-sm font-black text-[#2d2420] transition hover:-translate-y-0.5 disabled:opacity-60"
+			disabled={isRefreshingGallery}
+			onclick={() => refreshGallery()}
+			type="button"
+		>
+			{isRefreshingGallery ? 'Retrying…' : 'Try again'}
+		</button>
+	</div>
+{/snippet}
+
+{#snippet roomBody()}
+	{#if showEmptyState}
+		<div
+			class="rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
+		>
+			<p class="font-display text-2xl text-[#2d2420]">{roomEmptyStateMessage}</p>
+			<p class="mt-3 text-[#6b625a]">
+				{emptyStateSupportMessage}
+			</p>
+			{#if !viewer}
+				<div class="mt-6 flex justify-center">
+					<GameLink href="/" variant="primary" size="sm">
+						<span class="font-semibold">Join &amp; draw</span>
+					</GameLink>
+				</div>
+			{/if}
+		</div>
+	{:else if roomId === 'hall-of-fame'}
+		<HallOfFameRoom
+			{artworks}
+			pageInfo={seedDiscovery.pageInfo}
+			adultContentEnabled={adultContentAllowed}
+			feedCacheKey={roomId}
+			loadMoreArtworks={roomLoadMoreArtworks}
+			onPrefetch={prefetchArtworkDetail}
+			onSelect={openArtwork}
+			{revealedArtworkIds}
+			viewerId={viewer?.id ?? null}
+		/>
+	{:else if roomId === 'hot-wall'}
+		<HotWallRoom
+			{artworks}
+			pageInfo={seedDiscovery.pageInfo}
+			adultContentEnabled={adultContentAllowed}
+			feedCacheKey={roomId}
+			loadMoreArtworks={roomLoadMoreArtworks}
+			onPrefetch={prefetchArtworkDetail}
+			onSelect={openArtwork}
+			{revealedArtworkIds}
+			viewerId={viewer?.id ?? null}
+		/>
+	{:else if roomId === 'mystery' && artworks.length > 0}
+		<MysteryRoom
+			{artworks}
+			pageInfo={seedDiscovery.pageInfo}
+			adultContentEnabled={adultContentAllowed}
+			feedCacheKey={roomId}
+			loadMoreArtworks={roomLoadMoreArtworks}
+			{fetchRandomArtwork}
+			onSelect={openArtwork}
+			{revealedArtworkIds}
+			viewerId={viewer?.id ?? null}
+		/>
+	{:else if roomId === 'your-studio'}
+		<YourStudioRoom
+			{artworks}
+			pageInfo={seedDiscovery.pageInfo}
+			adultContentEnabled={adultContentAllowed}
+			feedCacheKey={roomId}
+			loadMoreArtworks={roomLoadMoreArtworks}
+			onSelect={openArtwork}
+			viewerId={viewer?.id ?? null}
+		/>
+	{/if}
+{/snippet}
 
 <div class="relative z-10" data-testid="gallery-room-content">
 	<div
@@ -649,65 +858,27 @@
 		{/if}
 
 		<div class="space-y-5 md:space-y-6">
-			{#if detailErrorMessage}
-				<div class="rounded-xl border-4 border-[#2d2420] bg-[#f7d8c7] p-5 text-[#7a2e1c]">
-					{detailErrorMessage}
-				</div>
-			{/if}
-
-			{#if isRoomLoading}
-				<RoomLoadingSkeleton />
-			{:else if showEmptyState}
-				<div
-					class="rounded-xl border-4 border-dashed border-[#5d4e37] bg-[#fdfbf7] p-10 text-center shadow-md"
-				>
-					<p class="font-display text-2xl text-[#2d2420]">{emptyStateMessage}</p>
-					<p class="mt-3 text-[#6b625a]">
-						{emptyStateSupportMessage}
-					</p>
-				</div>
-			{:else if roomId === 'hall-of-fame'}
-				<HallOfFameRoom
-					{artworks}
-					pageInfo={routeDiscovery.pageInfo}
-					adultContentEnabled={adultContentAllowed}
-					loadMoreArtworks={roomLoadMoreArtworks}
-					onSelect={openArtwork}
-					{revealedArtworkIds}
-					viewerId={viewer?.id ?? null}
-				/>
-			{:else if roomId === 'hot-wall'}
-				<HotWallRoom
-					{artworks}
-					pageInfo={routeDiscovery.pageInfo}
-					adultContentEnabled={adultContentAllowed}
-					loadMoreArtworks={roomLoadMoreArtworks}
-					onSelect={openArtwork}
-					{revealedArtworkIds}
-					viewerId={viewer?.id ?? null}
-				/>
-			{:else if roomId === 'mystery' && artworks.length > 0}
-				<MysteryRoom
-					{artworks}
-					pageInfo={routeDiscovery.pageInfo}
-					adultContentEnabled={adultContentAllowed}
-					loadMoreArtworks={roomLoadMoreArtworks}
-					{fetchRandomArtwork}
-					onSelect={openArtwork}
-				/>
-			{:else if roomId === 'your-studio'}
-				<YourStudioRoom
-					{artworks}
-					pageInfo={routeDiscovery.pageInfo}
-					adultContentEnabled={adultContentAllowed}
-					loadMoreArtworks={roomLoadMoreArtworks}
-					onSelect={openArtwork}
-					viewerId={viewer?.id ?? null}
-				/>
+			{#if roomContent}
+				{#await roomContent}
+					<RoomLoadingSkeleton {roomId} />
+				{:then}
+					{@render roomBody()}
+				{:catch}
+					{@render roomLoadFailure(ROOM_LOAD_ERROR_MESSAGE)}
+				{/await}
+			{:else if loadError}
+				{@render roomLoadFailure(loadError)}
+			{:else if isRoomLoading}
+				<RoomLoadingSkeleton {roomId} />
+			{:else}
+				{@render roomBody()}
 			{/if}
 		</div>
 	</div>
 </div>
+
+<!-- Transient outcomes announce themselves instead of shoving the room down. -->
+<GalleryStatusRegion message={detailErrorMessage} onDismiss={() => (detailErrorMessage = null)} />
 
 {#if showEntryFade}
 	<div

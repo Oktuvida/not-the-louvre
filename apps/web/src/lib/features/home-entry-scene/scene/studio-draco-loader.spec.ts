@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldUseJsDracoDecoder } from './studio-draco-loader';
+import { getStudioDracoLoader, shouldUseJsDracoDecoder } from './studio-draco-loader';
 
 describe('shouldUseJsDracoDecoder', () => {
 	it('prefers the JavaScript Draco decoder only for Firefox during development', () => {
@@ -27,5 +27,17 @@ describe('shouldUseJsDracoDecoder', () => {
 				userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0'
 			})
 		).toBe(false);
+	});
+});
+
+describe('getStudioDracoLoader', () => {
+	it('resolves the decoder from our own origin instead of a third party', () => {
+		const loader = getStudioDracoLoader() as unknown as { decoderPath: string };
+
+		expect(loader.decoderPath).toBe('/draco/');
+	});
+
+	it('memoizes a single loader so the decoder is fetched at most once', () => {
+		expect(getStudioDracoLoader()).toBe(getStudioDracoLoader());
 	});
 });

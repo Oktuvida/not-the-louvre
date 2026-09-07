@@ -47,6 +47,7 @@ The repository now uses a small Bun workspace so the root stays focused on share
 
 - Run the local Supabase stack with `bun run db:start` and stop it with `bun run db:stop`.
 - The first `bun run db:start` copies `.env.supabase.example` to `.env.supabase` if you have not customized it yet.
+- `bun run db:start` boots only the services the app talks to (`db`, `kong`, `rest`, `storage`, `imgproxy`, `realtime`). Supabase Studio, GoTrue, postgres-meta, logflare and the edge runtime are behind the `tools` profile: `docker compose --env-file .env.supabase --profile tools up -d`.
 - Run the app from the repository root with `bun run dev`, `bun run check`, `bun run build`, etc.
 - App-specific configuration now lives in `apps/web`.
 - Environment files for the app now live in `apps/web/.env` and `apps/web/.env.example`.

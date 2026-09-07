@@ -5,4 +5,8 @@
 	let { data }: PageProps = $props();
 </script>
 
-<StudioDrawingPage forkParent={data.forkParent} user={data.user} />
+<StudioDrawingPage
+	forkParent={data.forkParent}
+	initialIsMobile={data.initialIsMobile}
+	user={data.user}
+/>

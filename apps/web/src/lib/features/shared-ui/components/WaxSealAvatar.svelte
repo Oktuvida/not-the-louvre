@@ -3,7 +3,7 @@
 
 	type WaxSealSize = 'xl' | 'lg' | 'md' | 'sm';
 
-	// Blobs más pronunciados — mayor varianza en las curvas
+	// More pronounced blobs — wider variance across the curves
 	const BLOB_PRESETS = [
 		'40% 60% 55% 45% / 58% 42% 62% 38%',
 		'62% 38% 44% 56% / 42% 58% 38% 62%',
@@ -18,12 +18,17 @@
 	let {
 		alt,
 		className = '',
+		loading = 'lazy',
 		seed = '',
 		size = 'md' as WaxSealSize,
 		src
 	}: {
 		alt: string;
 		className?: string;
+		/* Seals also hang above the fold (the home preview stack, the detail
+		 * postcard), so the caller decides — the default keeps the grid's dozens
+		 * of avatars out of the artwork's way. */
+		loading?: 'eager' | 'lazy';
 		seed?: string;
 		size?: WaxSealSize;
 		src: string;
@@ -43,7 +48,7 @@
 	<div class="wax-seal__body">
 		<div class="wax-seal__well">
 			<div class="wax-seal__avatar">
-				<img {src} {alt} class="wax-seal__img" />
+				<img {src} {alt} {loading} decoding="async" fetchpriority="low" class="wax-seal__img" />
 			</div>
 		</div>
 	</div>
@@ -56,7 +61,7 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		/* La sombra se escala por tamaño vía custom property */
+		/* The shadow scales with the size through a custom property */
 		filter: var(--seal-shadow);
 	}
 
@@ -98,7 +103,7 @@
 			inset 0 calc(var(--seal-well-depth) * -0.5) var(--seal-well-depth) rgba(255, 160, 160, 0.1);
 	}
 
-	/* Groove ring — solo visible en lg/xl */
+	/* Groove ring — only visible at lg/xl */
 	.wax-seal__well::before {
 		content: '';
 		position: absolute;

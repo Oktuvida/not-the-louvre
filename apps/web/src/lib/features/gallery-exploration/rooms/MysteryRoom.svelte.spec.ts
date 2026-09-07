@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'svelte';
 import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
@@ -53,25 +54,26 @@ vi.mock('$lib/client/gsap', () => {
 	};
 });
 
-import MysteryRoomHarness from './MysteryRoomHarness.svelte';
+import { makeArtwork as makeArtworkFixture } from '$lib/features/gallery-exploration/fixtures/artworks';
+import MysteryRoom from './MysteryRoom.svelte';
+import RoomHarness from './RoomHarness.svelte';
 
-const makeArtwork = (id: string, title: string): Artwork => ({
-	artist: `artist-${id}`,
-	authorId: 'user-test',
-	artistAvatar: undefined,
-	commentCount: 0,
-	comments: [],
-	downvotes: 0,
-	forkCount: 0,
-	id,
-	imageUrl: `/api/artworks/${id}/media`,
-	isNsfw: false,
-	score: 10,
-	timestamp: Date.now(),
-	title,
-	upvotes: 10,
-	viewerVote: null
-});
+const makeArtwork = (id: string, title: string): Artwork =>
+	makeArtworkFixture({
+		authorId: 'user-test',
+		id,
+		imageUrl: `/api/artworks/${id}/media`,
+		score: 10,
+		title,
+		upvotes: 10
+	});
+
+type MysteryProps = ComponentProps<typeof MysteryRoom>;
+
+const renderRoom = (props: Partial<MysteryProps> & Pick<MysteryProps, 'artworks' | 'pageInfo'>) =>
+	render(RoomHarness, {
+		props: { component: MysteryRoom, roomProps: props, style: 'width: 800px; height: 600px;' }
+	});
 
 const sampleArtworks = [
 	makeArtwork('a1', 'Sunset Dreams'),
@@ -91,7 +93,7 @@ describe('MysteryRoom', () => {
 	});
 
 	it('renders a film reel with artwork frames visible on the strip', async () => {
-		render(MysteryRoomHarness, {
+		renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo
 		});
@@ -104,7 +106,7 @@ describe('MysteryRoom', () => {
 	});
 
 	it('applies the tighter mystery mobile shell layout hooks', async () => {
-		render(MysteryRoomHarness, {
+		renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo
 		});
@@ -116,7 +118,7 @@ describe('MysteryRoom', () => {
 	});
 
 	it('shows the spin button that triggers the reel animation', async () => {
-		render(MysteryRoomHarness, {
+		renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo
 		});
@@ -128,7 +130,7 @@ describe('MysteryRoom', () => {
 		// fetchRandomArtwork never resolves so the spin stays active
 		const fetchRandomArtwork = vi.fn(() => new Promise<Artwork>(() => {}));
 
-		render(MysteryRoomHarness, {
+		renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo,
 			fetchRandomArtwork
@@ -145,7 +147,7 @@ describe('MysteryRoom', () => {
 		const fetchRandomArtwork = vi.fn().mockResolvedValue(randomArtwork);
 		const onSelect = vi.fn();
 
-		render(MysteryRoomHarness, {
+		renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo,
 			fetchRandomArtwork,
@@ -178,7 +180,7 @@ describe('MysteryRoom', () => {
 	it('spin error keeps FilmReel in idle and re-enables the spin button', async () => {
 		const fetchRandomArtwork = vi.fn().mockRejectedValue(new Error('Network error'));
 
-		render(MysteryRoomHarness, {
+		renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo,
 			fetchRandomArtwork
@@ -200,7 +202,7 @@ describe('MysteryRoom', () => {
 	});
 
 	it('renders artwork images inside the reel viewport', async () => {
-		render(MysteryRoomHarness, {
+		renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo
 		});
@@ -209,7 +211,7 @@ describe('MysteryRoom', () => {
 	});
 
 	it('renders helper text explaining the feature', async () => {
-		render(MysteryRoomHarness, {
+		renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo
 		});
@@ -226,7 +228,7 @@ describe('MysteryRoom', () => {
 			makeArtwork('safe-4', 'Super Safe')
 		];
 
-		render(MysteryRoomHarness, {
+		renderRoom({
 			adultContentEnabled: false,
 			artworks: nsfwArtworks,
 			pageInfo: defaultPageInfo
@@ -244,7 +246,7 @@ describe('MysteryRoom', () => {
 			makeArtwork('safe-4', 'Super Safe')
 		];
 
-		render(MysteryRoomHarness, {
+		renderRoom({
 			adultContentEnabled: true,
 			artworks: nsfwArtworks,
 			pageInfo: defaultPageInfo
@@ -259,7 +261,7 @@ describe('MysteryRoom', () => {
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
 
-		render(MysteryRoomHarness, {
+		renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo,
 			loadMoreArtworks

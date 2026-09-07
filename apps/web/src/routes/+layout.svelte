@@ -1,27 +1,61 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import AmbientAudioController from '$lib/features/ambient-audio/AmbientAudioController.svelte';
-	// Self-hosted fonts (same families and weights the Google Fonts link
-	// used to serve) — bundled woff2, no render-blocking third-party CSS.
-	import '@fontsource/baloo-2/400.css';
-	import '@fontsource/baloo-2/500.css';
-	import '@fontsource/baloo-2/600.css';
-	import '@fontsource/baloo-2/700.css';
-	import '@fontsource/baloo-2/800.css';
-	import '@fontsource/caveat/400.css';
-	import '@fontsource/caveat/700.css';
-	import '@fontsource/fredoka/400.css';
-	import '@fontsource/fredoka/500.css';
-	import '@fontsource/fredoka/600.css';
-	import '@fontsource/fredoka/700.css';
+	import SiteMeta from '$lib/features/shared-ui/components/SiteMeta.svelte';
+	import { readRouteMeta } from '$lib/features/shared-ui/site-meta';
+	/*
+	 * Self-hosted fonts, latin + latin-ext subsets only.
+	 *
+	 * The aggregate entry points (`@fontsource/baloo-2/400.css`) declare EVERY
+	 * subset the family ships — devanagari, vietnamese, cyrillic(-ext) and
+	 * hebrew as well — which put 40 @font-face rules on the render-blocking
+	 * path of every route and pushed 2MB of never-requested font files into the
+	 * Workers asset bundle. The per-subset entry points below carry the 22
+	 * faces this UI can actually paint.
+	 *
+	 * The accepted trade: user-generated text in a non-Latin script (a nickname,
+	 * a guestbook note) renders in the system fallback stack rather than in
+	 * Baloo 2 / Fredoka / Caveat.
+	 */
+	import '@fontsource/baloo-2/latin-400.css';
+	import '@fontsource/baloo-2/latin-ext-400.css';
+	import '@fontsource/baloo-2/latin-500.css';
+	import '@fontsource/baloo-2/latin-ext-500.css';
+	import '@fontsource/baloo-2/latin-600.css';
+	import '@fontsource/baloo-2/latin-ext-600.css';
+	import '@fontsource/baloo-2/latin-700.css';
+	import '@fontsource/baloo-2/latin-ext-700.css';
+	// Weight 800 stays: `font-black` (900) has no 900 face anywhere and matches
+	// upward onto it, so dropping it would visibly lighten 11 call sites.
+	import '@fontsource/baloo-2/latin-800.css';
+	import '@fontsource/baloo-2/latin-ext-800.css';
+	import '@fontsource/caveat/latin-400.css';
+	import '@fontsource/caveat/latin-ext-400.css';
+	import '@fontsource/caveat/latin-700.css';
+	import '@fontsource/caveat/latin-ext-700.css';
+	import '@fontsource/fredoka/latin-400.css';
+	import '@fontsource/fredoka/latin-ext-400.css';
+	import '@fontsource/fredoka/latin-500.css';
+	import '@fontsource/fredoka/latin-ext-500.css';
+	import '@fontsource/fredoka/latin-600.css';
+	import '@fontsource/fredoka/latin-ext-600.css';
+	import '@fontsource/fredoka/latin-700.css';
+	import '@fontsource/fredoka/latin-ext-700.css';
+	/*
+	 * The two faces that paint above the fold on every route: Baloo 2 400 is
+	 * the body font and Fredoka 700 letters every sticker control and the home
+	 * hero. Imported as URLs so Vite hashes them and the preload can never
+	 * drift from the emitted filename. `crossorigin` is mandatory even
+	 * same-origin — without it the preload does not match the font fetch and
+	 * the file is downloaded twice.
+	 */
+	import balooBodyFontUrl from '@fontsource/baloo-2/files/baloo-2-latin-400-normal.woff2?url';
+	import fredokaDisplayFontUrl from '@fontsource/fredoka/files/fredoka-latin-700-normal.woff2?url';
 	import './layout.css';
 	import type { LayoutProps } from './$types';
 	import { faviconUpdateEventName } from '$lib/favicon';
-
-	const STUDIO_BACKGROUND_URL = '/table.avif';
-	const STUDIO_BACKGROUND_WARMUP_DELAY_MS = 1200;
-	let studioBackgroundWarmupStarted = false;
 
 	let { children, data }: LayoutProps = $props();
 	let clientFaviconHref = $state<string | null>(null);
@@ -34,32 +68,12 @@
 			: serverFaviconHref
 	);
 
+	// Routes contribute `meta` from their `load`; the head is rendered here
+	// once so a page can never end up with two competing <title> elements.
+	const routeMeta = $derived(readRouteMeta(page.data));
+	const pathname = $derived(page.url?.pathname);
+
 	onMount(() => {
-		let idleHandle: number | null = null;
-		let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-
-		const warmStudioBackground = () => {
-			if (studioBackgroundWarmupStarted) {
-				return;
-			}
-
-			studioBackgroundWarmupStarted = true;
-			const image = new Image();
-			image.decoding = 'async';
-			image.src = STUDIO_BACKGROUND_URL;
-		};
-
-		const scheduleStudioBackgroundWarmup = () => {
-			if ('requestIdleCallback' in window) {
-				idleHandle = window.requestIdleCallback(() => {
-					warmStudioBackground();
-				});
-				return;
-			}
-
-			timeoutHandle = setTimeout(warmStudioBackground, STUDIO_BACKGROUND_WARMUP_DELAY_MS);
-		};
-
 		const handleFaviconUpdate = (event: Event) => {
 			const customEvent = event as CustomEvent<{ href?: string }>;
 
@@ -72,17 +86,8 @@
 		};
 
 		window.addEventListener(faviconUpdateEventName, handleFaviconUpdate);
-		scheduleStudioBackgroundWarmup();
 
 		return () => {
-			if (idleHandle !== null && 'cancelIdleCallback' in window) {
-				window.cancelIdleCallback(idleHandle);
-			}
-
-			if (timeoutHandle !== null) {
-				clearTimeout(timeoutHandle);
-			}
-
 			window.removeEventListener(faviconUpdateEventName, handleFaviconUpdate);
 		};
 	});
@@ -90,12 +95,17 @@
 
 <svelte:head>
 	<link rel="icon" href={faviconHref} sizes="any" />
-	<title>Not the Louvre</title>
-	<meta
-		name="description"
-		content="A playful studio-world where sketchy masterpieces, strange rankings, and a 3D room all collide."
+	<link rel="preload" as="font" type="font/woff2" href={balooBodyFontUrl} crossorigin="anonymous" />
+	<link
+		rel="preload"
+		as="font"
+		type="font/woff2"
+		href={fredokaDisplayFontUrl}
+		crossorigin="anonymous"
 	/>
 </svelte:head>
+
+<SiteMeta title={routeMeta.title} description={routeMeta.description} {pathname} />
 
 {@render children()}
 
@@ -111,9 +121,12 @@
 <style>
 	.ops-link {
 		position: fixed;
+		/* Stays top-right at every width: the mobile override used to move it
+		   into the bottom-right corner, straight on top of the ambient audio
+		   tab. */
 		top: 1rem;
 		right: 1rem;
-		z-index: 1000;
+		z-index: var(--z-ops);
 		padding: 0.7rem 1rem;
 		border: 1px solid rgba(27, 33, 30, 0.18);
 		border-radius: 999px;
@@ -135,12 +148,8 @@
 		box-shadow: 0 18px 36px rgba(51, 43, 26, 0.22);
 	}
 
-	@media (max-width: 700px) {
-		.ops-link {
-			top: auto;
-			bottom: 1rem;
-			right: 1rem;
-			left: auto;
-		}
+	.ops-link:focus-visible {
+		outline: 3px solid var(--focus-ring-color, #4ecdc4);
+		outline-offset: 3px;
 	}
 </style>

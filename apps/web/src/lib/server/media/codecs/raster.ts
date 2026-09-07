@@ -40,22 +40,6 @@ export const createSolidImage = (width: number, height: number, color: RgbColor)
 	return { data, height, width };
 };
 
-export const flattenOntoBackground = (image: RawImage, color: RgbColor): RawImage => {
-	const data = new Uint8ClampedArray(image.data.length);
-
-	for (let index = 0; index < data.length; index += 4) {
-		const alpha = image.data[index + 3] / 255;
-		const inverse = 1 - alpha;
-
-		data[index] = image.data[index] * alpha + color.r * inverse;
-		data[index + 1] = image.data[index + 1] * alpha + color.g * inverse;
-		data[index + 2] = image.data[index + 2] * alpha + color.b * inverse;
-		data[index + 3] = 255;
-	}
-
-	return { data, height: image.height, width: image.width };
-};
-
 export const blitWithAlpha = (canvas: RawImage, image: RawImage, left: number, top: number) => {
 	for (let y = 0; y < image.height; y += 1) {
 		const targetY = top + y;

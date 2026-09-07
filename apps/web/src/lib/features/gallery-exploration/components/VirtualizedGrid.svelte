@@ -1,6 +1,10 @@
 <script lang="ts" generics="T">
 	import { WindowVirtualizer } from 'virtua/svelte';
 	import type { Snippet } from 'svelte';
+	import {
+		GALLERY_GRID_GAP,
+		GALLERY_GRID_MIN_COLUMN_WIDTH
+	} from '$lib/features/gallery-exploration/model/grid';
 
 	interface Props {
 		items: T[];
@@ -11,7 +15,12 @@
 		minColumnWidth?: number;
 	}
 
-	let { items, renderCard, gap = 48, minColumnWidth = 280 }: Props = $props();
+	let {
+		items,
+		renderCard,
+		gap = GALLERY_GRID_GAP,
+		minColumnWidth = GALLERY_GRID_MIN_COLUMN_WIDTH
+	}: Props = $props();
 
 	// Before the container is measured (SSR / first paint) we fall back to
 	// auto-fill CSS columns so the server-rendered layout stays correct.

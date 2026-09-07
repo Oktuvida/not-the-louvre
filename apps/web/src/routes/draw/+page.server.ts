@@ -33,6 +33,25 @@ const toFailure = (errorValue: unknown, fallback: string) => {
 	return fail(500, { action: 'publish', message: fallback });
 };
 
+/**
+ * Coarse "is this a phone" read for the first paint only. Chromium sends the
+ * low-entropy `sec-ch-ua-mobile` hint by default, so no Accept-CH round trip is
+ * needed; everything else falls back to a user-agent test. The client's
+ * `matchMedia('(max-width: 700px)')` sync stays the authority and corrects a
+ * wrong guess on mount — exactly what used to happen on every mobile visit,
+ * except now it usually has nothing to correct.
+ */
+const isMobileRequest = (request: Request) => {
+	const mobileHint = request.headers.get('sec-ch-ua-mobile');
+	if (mobileHint) {
+		return mobileHint.trim() === '?1';
+	}
+
+	return /Android|iPhone|iPod|IEMobile|Opera Mini|Mobile Safari/i.test(
+		request.headers.get('user-agent') ?? ''
+	);
+};
+
 export const load: PageServerLoad = async (event) => {
 	if (event.locals.integrityFailure) {
 		throw error(500, 'Authenticated session is missing its product user profile');
@@ -62,6 +81,7 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		forkParent,
+		initialIsMobile: isMobileRequest(event.request),
 		user: event.locals.user
 	};
 };

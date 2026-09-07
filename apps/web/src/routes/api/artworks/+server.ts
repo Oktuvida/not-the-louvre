@@ -4,7 +4,7 @@ import type { RequestHandler } from './$types';
 import { auth } from '$lib/server/auth';
 import { ArtworkFlowError, logArtworkFlowFailure } from '$lib/server/artwork/errors';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
-import { publishArtwork } from '$lib/server/artwork/service';
+import { publishArtwork, withoutDrawingDocument } from '$lib/server/artwork/service';
 import { edgeCacheControl, readEdgeCache, storeInEdgeCache } from '$lib/server/http/edge-cache';
 
 // Anonymous discovery pages are viewer-independent: `viewerVote` collapses to a
@@ -53,7 +53,7 @@ export const POST: RequestHandler = async (event) => {
 			}
 		);
 
-		return json({ artwork }, { status: 201 });
+		return json({ artwork: withoutDrawingDocument(artwork) }, { status: 201 });
 	} catch (error) {
 		return toErrorResponse(error, 'artwork publish');
 	}

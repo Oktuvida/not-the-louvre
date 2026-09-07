@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'svelte';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
@@ -6,24 +7,23 @@ vi.mock('$app/environment', () => ({
 	browser: true
 }));
 
-import HotWallRoomHarness from './HotWallRoomHarness.svelte';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
+import { clearRoomFeedCache } from '$lib/features/gallery-exploration/model/feed-cache';
+import HotWallRoom from './HotWallRoom.svelte';
+import RoomHarness from './RoomHarness.svelte';
 
-const createArtwork = (id: string, score: number): Artwork => ({
-	id,
-	title: `Artwork ${id}`,
-	artist: `Artist ${id}`,
-	authorId: `user-${id}`,
-	imageUrl: `https://example.com/${id}.avif`,
-	score,
-	upvotes: score,
-	downvotes: 0,
-	timestamp: Date.now(),
-	isNsfw: false,
-	comments: []
-});
+const createArtwork = (id: string, score: number) => makeArtwork({ id, score, upvotes: score });
+
+type HotWallProps = ComponentProps<typeof HotWallRoom>;
+
+const renderRoom = (props: Partial<HotWallProps> & Pick<HotWallProps, 'artworks' | 'pageInfo'>) =>
+	render(RoomHarness, { props: { component: HotWallRoom, roomProps: props } });
 
 describe('HotWallRoom', () => {
+	beforeEach(() => {
+		clearRoomFeedCache();
+	});
+
 	it('creates its own ArtworkAccumulator seeded with initial artworks', async () => {
 		const artworks = [
 			createArtwork('h1', 100),
@@ -33,7 +33,7 @@ describe('HotWallRoom', () => {
 			createArtwork('h5', 60)
 		];
 
-		render(HotWallRoomHarness, {
+		renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
 		});
@@ -56,7 +56,7 @@ describe('HotWallRoom', () => {
 			createArtwork('h7', 40)
 		];
 
-		render(HotWallRoomHarness, {
+		renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -87,7 +87,7 @@ describe('HotWallRoom', () => {
 			createArtwork('h5', 60)
 		];
 
-		render(HotWallRoomHarness, {
+		renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
 			loadMoreArtworks
@@ -103,7 +103,7 @@ describe('HotWallRoom', () => {
 	it('reseeds accumulator when artworks prop changes so refreshed data is shown', async () => {
 		const artworks = [createArtwork('h1', 100), createArtwork('h2', 90), createArtwork('h3', 80)];
 
-		const screen = render(HotWallRoomHarness, {
+		const screen = renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -119,8 +119,11 @@ describe('HotWallRoom', () => {
 		];
 
 		await screen.rerender({
-			artworks: refreshedArtworks,
-			pageInfo: { hasMore: false, nextCursor: null }
+			component: HotWallRoom,
+			roomProps: {
+				artworks: refreshedArtworks,
+				pageInfo: { hasMore: false, nextCursor: null }
+			}
 		});
 
 		// The new lead artwork should be h4
@@ -135,7 +138,7 @@ describe('HotWallRoom', () => {
 	});
 
 	it('renders empty state when no artworks are provided', async () => {
-		render(HotWallRoomHarness, {
+		renderRoom({
 			artworks: [],
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -145,5 +148,70 @@ describe('HotWallRoom', () => {
 
 		// Lead artwork should NOT be visible
 		expect(document.querySelector('[data-testid="hot-wall-lead"]')).toBeNull();
+	});
+
+	it('keeps the lead card unblurred for its own author and prefetches its detail on pointerdown', async () => {
+		const onPrefetch = vi.fn();
+		const lead = makeArtwork({ authorId: 'user-1', id: 'h1', isNsfw: true, score: 100 });
+
+		renderRoom({
+			adultContentEnabled: false,
+			artworks: [lead, createArtwork('h2', 90)],
+			onPrefetch,
+			pageInfo: { hasMore: false, nextCursor: null },
+			viewerId: 'user-1'
+		});
+
+		await expect.element(page.getByTestId('hot-wall-lead')).toBeVisible();
+
+		// The author's own sensitive artwork is not hidden from them.
+		expect(document.querySelector('[data-testid="hot-wall-lead"] .nsfw-scrim')).toBeNull();
+
+		const leadButton = document.querySelector<HTMLButtonElement>(
+			'[data-testid="hot-wall-lead"] button'
+		);
+		leadButton?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+
+		expect(onPrefetch).toHaveBeenCalledWith('h1');
+	});
+	it('comes back to the feed it left instead of restarting at the first page', async () => {
+		const seed = [createArtwork('h1', 100), createArtwork('h2', 90)];
+		const loadMoreArtworks = vi.fn().mockResolvedValue({
+			artworks: [createArtwork('h3', 80), createArtwork('h4', 70)],
+			pageInfo: { hasMore: false, nextCursor: null }
+		});
+
+		const first = renderRoom({
+			artworks: seed,
+			feedCacheKey: 'hot-wall',
+			loadMoreArtworks,
+			pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
+		});
+
+		await expect.element(page.getByTestId('hot-wall-room')).toBeVisible();
+
+		document
+			.querySelector('[data-testid="scroll-sentinel"]')
+			?.scrollIntoView({ behavior: 'instant', block: 'center' });
+
+		await vi.waitFor(() => {
+			expect(document.querySelector('[data-testid="hot-wall-card-h4"]')).not.toBeNull();
+		});
+
+		// Leaving the room hands the paged-in feed to the cache…
+		first.unmount();
+
+		renderRoom({
+			artworks: seed,
+			feedCacheKey: 'hot-wall',
+			loadMoreArtworks,
+			pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
+		});
+
+		// …so coming back does not drop three pages and start at the top again.
+		await expect.element(page.getByTestId('hot-wall-room')).toBeVisible();
+		await vi.waitFor(() => {
+			expect(document.querySelector('[data-testid="hot-wall-card-h4"]')).not.toBeNull();
+		});
 	});
 });

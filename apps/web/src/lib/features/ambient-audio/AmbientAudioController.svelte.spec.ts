@@ -170,6 +170,36 @@ describe('AmbientAudioController', () => {
 		});
 	});
 
+	it('pauses on mute even when animation frames stop being delivered', async () => {
+		const fakeAudio = createFakeAudio();
+
+		render(AmbientAudioController, {
+			audioFactory: () => fakeAudio,
+			bootstrappedPreference: true,
+			playlist: [{ id: 'track-1', src: '/audio/ambient/test.wav', title: 'Gallery Rain' }],
+			viewerId: null
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
+		await vi.waitFor(() => {
+			expect(fakeAudio.play).toHaveBeenCalledTimes(1);
+		});
+
+		// A backgrounded tab is not serviced by requestAnimationFrame.
+		vi.stubGlobal(
+			'requestAnimationFrame',
+			vi.fn(() => 0)
+		);
+
+		await page.getByRole('button', { name: 'Mute ambient audio' }).click();
+
+		await vi.waitFor(() => {
+			expect(fakeAudio.pause).toHaveBeenCalled();
+		});
+
+		vi.unstubAllGlobals();
+	});
+
 	it('pauses and resumes the current stream position when toggled off and on', async () => {
 		const fakeAudio = createFakeAudio();
 

@@ -115,9 +115,9 @@ const defaultDesktopMediaQuery = {
 	removeListener: vi.fn()
 } satisfies MediaQueryList;
 
-const createMediaQueryList = (query: string) => {
+const createMediaQueryListWithMotion = (query: string, reduceMotion: boolean) => {
 	if (query === '(prefers-reduced-motion: reduce)') {
-		return reducedMotionMediaQuery;
+		return { ...reducedMotionMediaQuery, matches: reduceMotion } satisfies MediaQueryList;
 	}
 
 	return {
@@ -125,6 +125,11 @@ const createMediaQueryList = (query: string) => {
 		media: query
 	} satisfies MediaQueryList;
 };
+
+const createMediaQueryList = (query: string) => createMediaQueryListWithMotion(query, true);
+
+const readBookState = () =>
+	document.querySelector('[data-book-state]')?.getAttribute('data-book-state') ?? null;
 
 const createPointerEvent = (
 	type: string,
@@ -165,6 +170,14 @@ describe('StudioDrawingPage', () => {
 		expect(preloadLink).not.toBeNull();
 		expect(preloadLink?.getAttribute('as')).toBe('image');
 		expect(preloadLink?.getAttribute('type')).toBe('image/avif');
+	});
+
+	it('titles the studio route so open tabs are distinguishable', async () => {
+		render(StudioDrawingPage, { openingDurationMs: 1 });
+
+		await vi.waitFor(() => {
+			expect(document.title).toBe('Studio · Not the Louvre');
+		});
 	});
 
 	it('starts with a closed sketchbook and hides active studio controls', async () => {
@@ -208,10 +221,29 @@ describe('StudioDrawingPage', () => {
 		expect(mobileCanvasCard?.className).toContain('studio-mobile-canvas-card');
 	});
 
-	it('keeps the sketchbook opening animation duration even when reduced motion is requested', async () => {
+	it('cuts the sketchbook open when reduced motion is requested', async () => {
 		vi.stubGlobal(
 			'matchMedia',
-			vi.fn((query: string) => createMediaQueryList(query))
+			vi.fn((query: string) => createMediaQueryListWithMotion(query, true))
+		);
+
+		render(StudioDrawingPage, {
+			openingDurationMs: 300
+		});
+
+		await page.getByRole('button', { name: 'Open sketchbook' }).click();
+		await new Promise((resolve) => setTimeout(resolve, 60));
+
+		// The cover flip is a CSS transition on the same duration the unlock timer
+		// uses, so both collapse together instead of unlocking after a dead beat.
+		expect(readBookState()).toBe('open');
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+	});
+
+	it('plays the whole sketchbook opening when motion is welcome', async () => {
+		vi.stubGlobal(
+			'matchMedia',
+			vi.fn((query: string) => createMediaQueryListWithMotion(query, false))
 		);
 
 		render(StudioDrawingPage, {
@@ -329,7 +361,11 @@ describe('StudioDrawingPage', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'Exit Studio' }))
 			.toHaveAttribute('data-sticker-variant', 'secondary');
-		await expect.element(page.getByRole('link', { name: 'Open gallery' })).toBeVisible();
+		const wallLink = page.getByRole('link', { name: 'See it on the wall' });
+		await expect.element(wallLink).toBeVisible();
+		// /gallery is the hall of fame (top 12 by score); a brand new artwork scores
+		// 0 and is not on it, so the CTA points at the artist's own room instead.
+		await expect.element(wallLink).toHaveAttribute('href', '/gallery/your-studio');
 		await expect
 			.element(page.getByRole('button', { name: 'Draw again' }))
 			.toHaveAttribute('data-sticker-variant', 'accent');
@@ -996,6 +1032,45 @@ describe('StudioDrawingPage', () => {
 			title: 'Fresh Start'
 		});
 		window.localStorage.clear();
+	});
+
+	it('lets the closed sketchbook paint before auto-opening it for a fork', async () => {
+		render(StudioDrawingPage, {
+			forkParent: {
+				drawingDocument: normalizeDrawingDocumentToEditableV2(
+					createEmptyDrawingDocument('artwork')
+				),
+				id: 'artwork-parent',
+				mediaUrl: forkParentPreviewDataUrl,
+				title: 'Parent Artwork'
+			},
+			openingDurationMs: 1
+		});
+
+		// The cover flip and the frame zoom are CSS transitions: flipping the state
+		// during the mount flush leaves them without a start value and the book jumps
+		// straight to open, which is why forks used to skip the opening entirely.
+		expect(readBookState()).toBe('closed');
+
+		await vi.waitFor(() => {
+			expect(readBookState()).toBe('open');
+		});
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+	});
+
+	it('drops the exit fade tween when the studio unmounts mid-fade', async () => {
+		goto.mockReset();
+
+		const { unmount } = render(StudioDrawingPage, { openingDurationMs: 1 });
+
+		await openSketchbook();
+		await page.getByRole('link', { name: 'Exit Studio' }).click();
+		await new Promise((resolve) => setTimeout(resolve, 80));
+
+		unmount();
+		await new Promise((resolve) => setTimeout(resolve, 700));
+
+		expect(goto).not.toHaveBeenCalled();
 	});
 
 	it('auto-opens the sketchbook for a fork once the parent artwork preload is ready', async () => {

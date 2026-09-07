@@ -52,6 +52,31 @@ describe('WaxSealAvatar', () => {
 		await expect.element(seal).toHaveAttribute('data-seal-size', 'md');
 	});
 
+	it('keeps avatars out of the artwork images priority lane by default', async () => {
+		render(WaxSealAvatar, {
+			alt: 'lazy_artist',
+			src: '/avatars/lazy.png'
+		});
+
+		const avatar = page.getByRole('img', { name: 'lazy_artist' });
+
+		await expect.element(avatar).toHaveAttribute('loading', 'lazy');
+		await expect.element(avatar).toHaveAttribute('decoding', 'async');
+		await expect.element(avatar).toHaveAttribute('fetchpriority', 'low');
+	});
+
+	it('lets above-the-fold callers ask for an eager seal', async () => {
+		render(WaxSealAvatar, {
+			alt: 'eager_artist',
+			loading: 'eager',
+			src: '/avatars/eager.png'
+		});
+
+		const avatar = page.getByRole('img', { name: 'eager_artist' });
+
+		await expect.element(avatar).toHaveAttribute('loading', 'eager');
+	});
+
 	it('produces different seal shapes for different seeds', async () => {
 		const { unmount } = render(WaxSealAvatar, {
 			alt: 'artist_a',

@@ -21,6 +21,7 @@
 		EntryFlowState
 	} from '$lib/features/home-entry-scene/state/entry-state.svelte';
 	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
+	import { uploadViewerAvatar } from '$lib/client/avatar-upload';
 	import { onMount } from 'svelte';
 	import { waitForPageLayoutReady } from '$lib/features/home-entry-scene/components/page-layout-ready';
 
@@ -83,6 +84,8 @@
 	let allowValidatedSignupSubmit = $state(false);
 	let backdropElement = $state<HTMLDivElement | null>(null);
 	let pageLayoutReady = $state(!browser || document.readyState === 'complete');
+	/** Well under WALL_ZOOM_IN_DURATION_MS (2080), so the panel always beats the reveal. */
+	const PAGE_LAYOUT_READY_TIMEOUT_MS = 600;
 
 	const isInteractive = $derived(
 		pageLayoutReady &&
@@ -390,56 +393,19 @@
 	};
 
 	const saveAvatar = async (drawingDocument: string) => {
-		if (!authenticatedUser?.id) {
-			return {
-				message: 'Your session is not ready for avatar upload. Please sign in again.',
-				success: false as const
-			};
-		}
+		const userId = authenticatedUser?.id;
+		const result = await uploadViewerAvatar(userId, drawingDocument);
 
-		const formData = new FormData();
-		formData.set('drawingDocument', drawingDocument);
-
-		const response = await fetch(`/api/users/${authenticatedUser.id}/avatar`, {
-			body: formData,
-			method: 'PUT'
-		});
-
-		if (response.ok) {
-			const data = (await response.json()) as { avatarUrl?: string };
-
-			if (!data.avatarUrl) {
-				return {
-					message: 'Avatar save succeeded but no avatar URL was returned.',
-					success: false as const
-				};
-			}
-
-			dispatchAvatarFaviconUpdate(authenticatedUser.id);
+		if (result.success && userId) {
+			dispatchAvatarFaviconUpdate(userId);
 			onAvatarSaved?.({
 				avatarDrawingDocument: parseEditableDrawingDocumentV2(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
-				avatarUrl: data.avatarUrl
+				avatarUrl: result.avatarUrl
 			});
-			return { success: true as const };
 		}
 
-		try {
-			const data = (await response.json()) as { code?: string; message?: string };
-
-			return {
-				code: data.code,
-				message: data.message ?? 'Avatar save failed. Please try again.',
-				success: false as const
-			};
-		} catch {
-			// Ignore invalid error bodies and fall back to a generic message.
-		}
-
-		return {
-			message: 'Avatar save failed. Please try again.',
-			success: false as const
-		};
+		return result;
 	};
 
 	onMount(() => {
@@ -448,6 +414,16 @@
 		}
 
 		let cancelled = false;
+		/*
+		 * `window.load` + document.fonts.ready is an unbounded wait — one stalled
+		 * subresource and the panel never appears — while the wall zoom that
+		 * reveals it is a fixed 2.08s. Cap the wait well below that: the sheet is
+		 * still laid out after the fonts settle on a normal load, and on a slow one
+		 * the visitor gets a usable form instead of a bare wall.
+		 */
+		const layoutReadyTimeout = window.setTimeout(() => {
+			pageLayoutReady = true;
+		}, PAGE_LAYOUT_READY_TIMEOUT_MS);
 
 		void waitForPageLayoutReady({ document, window }).then(() => {
 			if (!cancelled) {
@@ -457,6 +433,7 @@
 
 		return () => {
 			cancelled = true;
+			window.clearTimeout(layoutReadyTimeout);
 		};
 	});
 
@@ -700,7 +677,7 @@
 										size="md"
 										className="w-full min-w-0 sm:w-auto sm:[--sticker-min-width:0px]"
 									>
-										<span>{isSubmitting ? 'Working...' : 'Sign In'}</span>
+										<span>{isSubmitting ? 'Working…' : 'Sign in'}</span>
 									</GameButton>
 								</div>
 							</form>
@@ -775,7 +752,7 @@
 										size="md"
 										className="w-full min-w-0 sm:w-auto sm:[--sticker-min-width:0px]"
 									>
-										<span>{isSubmitting ? 'Working...' : 'Start account'}</span>
+										<span>{isSubmitting ? 'Working…' : 'Start account'}</span>
 									</GameButton>
 								</div>
 							</form>
@@ -867,7 +844,7 @@
 										size="md"
 										className="w-full min-w-0 sm:w-auto sm:[--sticker-min-width:0px]"
 									>
-										<span>{isSubmitting ? 'Working...' : 'Recover Access'}</span>
+										<span>{isSubmitting ? 'Working…' : 'Recover access'}</span>
 									</GameButton>
 								</div>
 							</form>
@@ -919,7 +896,7 @@
 									}}
 									size="md"
 								>
-									<span>{view === 'signup-success' ? 'I Stored It' : 'Back To Sign In'}</span>
+									<span>{view === 'signup-success' ? 'I stored it' : 'Back to sign in'}</span>
 								</GameButton>
 							</div>
 						{:else}

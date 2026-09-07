@@ -1,25 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import { makeArtworks } from '$lib/features/gallery-exploration/fixtures/artworks';
 import VirtualizedGridHarness from './VirtualizedGridHarness.svelte';
 
-const createArtwork = (id: string): Artwork => ({
-	id,
-	title: `Artwork ${id}`,
-	artist: 'Test Artist',
-	authorId: `user-${id}`,
-	imageUrl: `https://example.com/${id}.avif`,
-	score: 0,
-	upvotes: 0,
-	downvotes: 0,
-	timestamp: Date.now(),
-	isNsfw: false,
-	comments: []
-});
-
-const createArtworks = (count: number, prefix: string): Artwork[] =>
-	Array.from({ length: count }, (_, index) => createArtwork(`${prefix}${index + 1}`));
+const createArtworks = (count: number, prefix: string) => makeArtworks(count, { prefix });
 
 describe('VirtualizedGrid', () => {
 	it('renders rows using WindowVirtualizer with the provided items', async () => {

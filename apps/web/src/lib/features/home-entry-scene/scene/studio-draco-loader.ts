@@ -1,7 +1,16 @@
 import { browser } from '$app/environment';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
-const STUDIO_DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.4.3/';
+/*
+ * The decoder ships from our own origin (static/draco/, copied out of the
+ * resolved `three` package at build time). Pointing DRACOLoader at
+ * www.gstatic.com added a third-party DNS + TLS handshake at the very END of
+ * the home critical path — the decoder is only requested once the 578KB GLB
+ * header has been parsed — and made the 3D studio depend on a third party
+ * staying up: the GLB declares extensionsRequired KHR_draco_mesh_compression,
+ * so every visitor needs it.
+ */
+const STUDIO_DRACO_DECODER_PATH = '/draco/';
 
 let studioDracoLoader: DRACOLoader | null = null;
 
@@ -34,8 +43,4 @@ export const getStudioDracoLoader = () => {
 
 	studioDracoLoader = loader;
 	return loader;
-};
-
-export const resetStudioDracoLoader = () => {
-	studioDracoLoader = null;
 };

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	createMuseumWallPatternUrl,
 	createMuseumWindowFrameUrl,
-	createStickerBackgroundUrl
+	createStickerBackgroundUrl,
+	type StickerVariant
 } from './museum-canvas';
 
 describe('createMuseumWallPatternUrl', () => {
@@ -37,5 +38,16 @@ describe('createStickerBackgroundUrl', () => {
 		expect(firstUrl).toMatch(/^data:image\/(png|svg\+xml)/);
 		expect(secondUrl).toBe(firstUrl);
 		expect(firstUrl).toContain('%3Csvg');
+	});
+
+	it('renders every variant as its own non-empty markup', () => {
+		const variants: StickerVariant[] = ['primary', 'secondary', 'accent', 'danger', 'ghost'];
+		const urls = variants.map((variant) => createStickerBackgroundUrl(180, 48, { variant }));
+
+		for (const url of urls) {
+			expect(url.length).toBeGreaterThan(100);
+		}
+
+		expect(new Set(urls).size).toBe(variants.length);
 	});
 });

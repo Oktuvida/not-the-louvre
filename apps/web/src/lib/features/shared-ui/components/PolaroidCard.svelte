@@ -1,12 +1,18 @@
+<script lang="ts" module>
+	const EMPTY_REVEALED_IDS: ReadonlySet<string> = new Set<string>();
+</script>
+
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import { hashString } from '$lib/features/artwork-presentation/model/frame';
+	import { isArtworkBlurred } from '$lib/features/gallery-exploration/gallery-adapter';
 	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
 
 	let {
 		artwork,
 		className = '',
 		onclick,
+		onPrefetch,
 		testId,
 		viewerId = null,
 		adultContentEnabled = false,
@@ -17,6 +23,7 @@
 		artwork: Artwork;
 		className?: string;
 		onclick?: () => void;
+		onPrefetch?: () => void;
 		testId?: string;
 		viewerId?: string | null;
 		adultContentEnabled?: boolean;
@@ -29,12 +36,11 @@
 	// survives virtualization unmounts, this one intentionally does not.
 	let internalRevealed = $state(false);
 
+	const revealedIds = $derived<ReadonlySet<string>>(
+		revealed || internalRevealed ? new Set([artwork.id]) : EMPTY_REVEALED_IDS
+	);
 	const blurred = $derived(
-		artwork.isNsfw &&
-			!adultContentEnabled &&
-			viewerId !== artwork.authorId &&
-			!revealed &&
-			!internalRevealed
+		isArtworkBlurred(artwork, { adultContentEnabled, id: viewerId, revealedIds })
 	);
 
 	// Only signed-in viewers may reveal; signed-out clicks fall through to the
@@ -48,6 +54,14 @@
 			return;
 		}
 		onclick?.();
+	};
+
+	// Intent, not hover: pointerdown lands 80-150ms before the click on every
+	// input type, so the detail request is already in flight when the panel
+	// opens — and a pointer sweeping the wall costs nothing.
+	const handlePointerDown = () => {
+		if (blurred && canReveal) return;
+		onPrefetch?.();
 	};
 
 	const seed = $derived(hashString(artwork.id));
@@ -76,13 +90,14 @@
 
 <button
 	type="button"
-	class={`group relative cursor-pointer text-left ${className}`}
+	class={`polaroid-card group relative cursor-pointer text-left ${className}`}
 	data-testid={testId}
-	style={`transform: rotate(${rotation}deg);`}
+	style={`--card-rotate: ${rotation}deg;`}
 	onclick={handleClick}
+	onpointerdown={handlePointerDown}
 >
 	<div
-		class="polaroid relative bg-[#f8f4ed] p-[8px] pb-0 shadow-[3px_4px_12px_rgba(0,0,0,0.22),0_1px_3px_rgba(0,0,0,0.1)] transition duration-200 group-hover:z-[5] group-hover:scale-[1.06] group-hover:rotate-0 group-active:scale-[0.97]"
+		class="polaroid relative bg-[#f8f4ed] p-[8px] pb-0 shadow-[3px_4px_12px_rgba(0,0,0,0.22),0_1px_3px_rgba(0,0,0,0.1)] transition duration-200 group-hover:z-[5] group-hover:scale-[1.06] group-active:scale-[0.97]"
 	>
 		<!-- Paint stain decoration -->
 		<div
@@ -137,7 +152,16 @@
 				class="flex h-8 w-8 min-w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-[2.5px] border-[#2d2420] bg-[#e8ddd0] shadow-[1px_2px_4px_rgba(0,0,0,0.15)]"
 			>
 				{#if artwork.artistAvatar}
-					<img src={artwork.artistAvatar} alt={artwork.artist} class="h-full w-full object-cover" />
+					<!-- The artwork is what the visitor came for: keep the avatar out of
+					     its way instead of racing it at the same priority. -->
+					<img
+						src={artwork.artistAvatar}
+						alt={artwork.artist}
+						loading="lazy"
+						decoding="async"
+						fetchpriority="low"
+						class="h-full w-full object-cover"
+					/>
 				{:else}
 					<div class="h-full w-full bg-[linear-gradient(135deg,#c4b5a0,#a89680)]"></div>
 				{/if}
@@ -177,6 +201,26 @@
 </button>
 
 <style>
+	/* The hand-pinned tilt lives on the element that straightens, expressed as
+	 * the standalone `rotate` property: it composes with the global
+	 * `button:active { scale }` press instead of being replaced by it, and it
+	 * lets the designed "card straightens under the pointer" actually happen —
+	 * the old `group-hover:rotate-0` sat on the inner div, which never rotated. */
+	.polaroid-card {
+		rotate: var(--card-rotate, 0deg);
+		transition: rotate 200ms ease;
+	}
+
+	.polaroid-card:hover {
+		rotate: 0deg;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.polaroid-card {
+			transition: none;
+		}
+	}
+
 	.pin-blue {
 		background: radial-gradient(circle at 4px 4px, #4a90d9, #2d6bb5);
 	}

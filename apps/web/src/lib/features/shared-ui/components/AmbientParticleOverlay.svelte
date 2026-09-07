@@ -34,8 +34,11 @@
 
 		<div class="absolute inset-0 z-[5]">
 			{#each homeFloatingPaint as color, index (`splotch-${color}-${index}`)}
+				<!-- No `blur-sm` here: `.paint-blob` is unlayered CSS and beats
+				     Tailwind's layered `filter`, so the class was dead weight and
+				     a future "soften the blobs" tweak would have edited nothing. -->
 				<div
-					class="paint-blob absolute rounded-full opacity-20 blur-sm"
+					class="paint-blob absolute rounded-full opacity-20"
 					style={`
 						width: 64px;
 						height: 64px;

@@ -14,14 +14,22 @@
 		initialPose = 'default',
 		scenePose = 'default',
 		artworkSlots = [],
-		avatarUrl = null
+		avatarUrl = null,
+		onMediaStateChange
 	}: {
 		entryState?: EntryFlowState;
 		initialPose?: 'default' | 'left-wall' | 'top-close';
 		scenePose?: 'default' | 'left-wall' | 'top-close';
 		artworkSlots?: HomeSceneArtworkSlot[];
 		avatarUrl?: string | null;
+		onMediaStateChange?: (state: 'error' | 'loaded' | 'pending') => void;
 	} = $props();
+
+	// Stand in for a scene whose model has landed, so the host's loading card
+	// clears exactly as it does in the real thing.
+	$effect(() => {
+		onMediaStateChange?.('loaded');
+	});
 </script>
 
 <div

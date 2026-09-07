@@ -38,8 +38,8 @@
 
 <button
 	type="button"
-	class={`visitor-badge relative w-[270px] overflow-visible text-left ${onclick ? 'cursor-pointer transition-transform duration-200 hover:scale-105' : ''} ${className}`}
-	style={`transform: rotate(${rotation}deg);`}
+	class={`visitor-badge relative w-[270px] overflow-visible text-left ${onclick ? 'cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-[0.98]' : ''} ${className}`}
+	style={`--badge-rotate: ${rotation}deg;`}
 	{onclick}
 	aria-label={onclick ? `Edit avatar for ${nickname}` : undefined}
 >
@@ -100,3 +100,13 @@
 		<div class="h-[0.3rem]" style={`background:${palette.footer};`}></div>
 	</div>
 </button>
+
+<style>
+	/* The pinned tilt is the standalone `rotate` property, not a `transform`, so
+	 * the global `button:active { scale }` press and the `hover:scale-105` /
+	 * `active:scale-[0.98]` utilities all compose with it instead of replacing
+	 * it and snapping the badge straight under the pointer. */
+	.visitor-badge {
+		rotate: var(--badge-rotate, 0deg);
+	}
+</style>

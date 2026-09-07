@@ -306,6 +306,222 @@ describe('ArtworkDetailPanel', () => {
 			.not.toBeInTheDocument();
 	});
 
+	it('never carries the lift or the tilt of the previous artwork into the next one', async () => {
+		const { rerender } = render(ArtworkDetailPanel, {
+			artwork,
+			viewer: { id: 'admin-1', role: 'admin' }
+		});
+
+		await page.getByRole('button', { name: 'Read the comments' }).click();
+
+		const card = () => document.querySelector('.postcard');
+		await vi.waitFor(() => {
+			expect(card()?.className).toContain('is-lifting');
+		});
+
+		// Closing mid-flip and opening another piece must not inherit the lift:
+		// the moderation controls are gated on `!isLifting`.
+		await rerender({ artwork: { ...artwork, id: 'artwork-2', title: 'Next artwork' } });
+
+		expect(card()?.className).not.toContain('is-lifting');
+		expect(card()?.className).not.toContain('is-flipped');
+		await expect.element(page.getByRole('button', { name: 'Report artwork' })).toBeVisible();
+	});
+
+	it('opens the postcard window onto the LQIP instead of blank paper', async () => {
+		render(ArtworkDetailPanel, {
+			artwork: { ...artwork, imagePlaceholder: 'data:image/webp;base64,lqip' }
+		});
+
+		const photo = page.getByAltText('Detail artwork');
+
+		await expect.element(photo).toHaveAttribute('decoding', 'async');
+		await expect.element(photo).toHaveAttribute('fetchpriority', 'high');
+
+		const placeholder = document.querySelector('.postcard-photo-lqip');
+		expect(placeholder?.getAttribute('src')).toBe('data:image/webp;base64,lqip');
+	});
+
+	it('blurs the LQIP as well when the piece is sensitive', async () => {
+		render(ArtworkDetailPanel, {
+			artwork: {
+				...artwork,
+				imagePlaceholder: 'data:image/webp;base64,lqip',
+				isNsfw: true
+			},
+			viewer: { id: 'user-other', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Sensitive artwork')).toBeVisible();
+		expect(document.querySelector('.postcard-photo-lqip')?.className).toContain('blur-xl');
+	});
+
+	it('shows the viewer their own vote and locks both buttons while one is in flight', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(() => new Promise(() => undefined))
+		);
+
+		render(ArtworkDetailPanel, {
+			artwork: { ...artwork, upvotes: 3, viewerVote: 'up' as const },
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		const upvote = page.getByRole('button', { name: /👍/ });
+		const downvote = page.getByRole('button', { name: /👎/ });
+
+		await expect.element(upvote).toBeVisible();
+		expect(upvote.element().className).toContain('vote-cast');
+		expect(downvote.element().className).not.toContain('vote-cast');
+
+		await downvote.click();
+
+		await expect.element(upvote).toBeDisabled();
+		await expect.element(downvote).toBeDisabled();
+	});
+
+	it('answers a failed vote in the museum voice instead of the server code', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(JSON.stringify({ code: 'NOT_FOUND', message: 'Artwork not found' }), {
+						status: 404
+					})
+			)
+		);
+
+		render(ArtworkDetailPanel, {
+			artwork,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByRole('button', { name: /👍/ }).click();
+
+		await expect.element(page.getByText('This piece has left the wall.')).toBeVisible();
+		await expect.element(page.getByText('Artwork not found')).not.toBeInTheDocument();
+	});
+
+	it('keeps one notice for both faces of the postcard', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify({ code: 'PUBLISH_FAILED' }), { status: 500 }))
+		);
+
+		render(ArtworkDetailPanel, {
+			artwork,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByRole('button', { name: /👍/ }).click();
+
+		const notice = page.getByRole('alert');
+		await expect.element(notice).toBeVisible();
+		expect(document.querySelectorAll('.postcard-notice')).toHaveLength(1);
+
+		// The message survives the flip instead of changing face with the card.
+		await openCommentsSide();
+		await expect.element(notice).toBeVisible();
+	});
+
+	it('keeps Tab inside the dialog instead of walking into the gallery behind it', async () => {
+		render(ArtworkDetailPanel, {
+			artwork,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Dismiss details' })).toBeVisible();
+
+		const dialog = document.querySelector('[role="dialog"]');
+		expect(dialog).toBeInstanceOf(HTMLElement);
+		(dialog as HTMLElement).focus();
+
+		const event = new KeyboardEvent('keydown', {
+			bubbles: true,
+			cancelable: true,
+			key: 'Tab',
+			shiftKey: true
+		});
+		document.activeElement?.dispatchEvent(event);
+
+		expect(event.defaultPrevented).toBe(true);
+		expect((dialog as HTMLElement).contains(document.activeElement)).toBe(true);
+	});
+
+	it('dismisses on Escape even when focus sits inside the postcard', async () => {
+		const onClose = vi.fn();
+
+		render(ArtworkDetailPanel, {
+			artwork,
+			onClose,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		const flip = page.getByRole('button', { name: 'Read the comments' });
+		await expect.element(flip).toBeVisible();
+		(flip.element() as HTMLElement).focus();
+		flip
+			.element()
+			.dispatchEvent(
+				new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' })
+			);
+
+		expect(onClose).toHaveBeenCalledTimes(1);
+	});
+
+	it('hands focus back to the avatar that opened the seal preview', async () => {
+		render(ArtworkDetailPanel, {
+			artwork: { ...artwork, artistAvatar: '/avatars/journey.png' }
+		});
+
+		const trigger = page.getByRole('button', { name: 'Expand avatar for journey_artist' });
+		await trigger.click();
+		await expect
+			.element(page.getByRole('dialog', { name: 'Expanded avatar for journey_artist' }))
+			.toBeVisible();
+
+		await page.getByRole('button', { name: 'Close' }).click();
+
+		await vi.waitFor(() => {
+			expect(document.activeElement).toBe(trigger.element());
+		});
+	});
+
+	it('returns focus to the element that opened the panel once the outro is done', async () => {
+		const opener = document.createElement('button');
+		opener.textContent = 'Open artwork';
+		document.body.append(opener);
+		opener.focus();
+
+		const { rerender } = render(ArtworkDetailPanel, { artwork });
+
+		await vi.waitFor(() => {
+			expect(document.activeElement).not.toBe(opener);
+		});
+
+		await rerender({ artwork: null });
+
+		await vi.waitFor(
+			() => {
+				expect(document.activeElement).toBe(opener);
+			},
+			{ timeout: 2000 }
+		);
+
+		opener.remove();
+	});
+
+	it('announces async work in a live region', async () => {
+		render(ArtworkDetailPanel, {
+			artwork,
+			isHydrating: true
+		});
+
+		const status = document.querySelector('[aria-live="polite"]');
+
+		expect(status?.textContent).toContain('Loading this artwork…');
+	});
+
 	it('downloads the artwork image as a named file', async () => {
 		const fetchSpy = vi
 			.fn()

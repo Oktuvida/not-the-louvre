@@ -13,6 +13,8 @@ const extraFileExtensions = ['.svelte'];
 
 export default defineConfig(
 	includeIgnoreFile(gitignorePath),
+	// Vendored DRACO decoder (copied by scripts/copy-draco-decoder.ts) and build-generated art.
+	{ ignores: ['static/draco/**', 'static/generated/**'] },
 	js.configs.recommended,
 	ts.configs.recommended,
 	svelte.configs.recommended,

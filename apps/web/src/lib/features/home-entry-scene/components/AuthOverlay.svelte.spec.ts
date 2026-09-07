@@ -85,7 +85,7 @@ describe('AuthOverlay', () => {
 		});
 
 		await expect.element(page.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
-		await submitButton('Sign In').click();
+		await submitButton('Sign in').click();
 		await expect.element(page.getByText('Nickname is required')).toBeInTheDocument();
 		await expect.element(page.getByText('Password is required')).toBeInTheDocument();
 	});
@@ -231,6 +231,55 @@ describe('AuthOverlay', () => {
 		}
 	});
 
+	it('stops waiting on the page load event before the wall zoom finishes', async () => {
+		const readyStateDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'readyState');
+		const fontsDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'fonts');
+
+		Object.defineProperty(document, 'readyState', {
+			configurable: true,
+			get: () => 'interactive'
+		});
+		Object.defineProperty(document, 'fonts', {
+			configurable: true,
+			value: { ready: new Promise<void>(() => {}) }
+		});
+
+		// The load event never fires: a stalled subresource, exactly the case that
+		// used to leave the visitor staring at a bare wall after the 2.08s zoom.
+		const addEventListenerSpy = vi
+			.spyOn(window, 'addEventListener')
+			.mockImplementation((() => {}) as typeof window.addEventListener);
+
+		render(AuthOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'auth-login',
+			form: undefined
+		});
+
+		expect(
+			document.querySelector('[data-testid="auth-overlay"]')?.getAttribute('aria-hidden')
+		).toBe('true');
+
+		await vi.waitFor(
+			() => {
+				expect(
+					document.querySelector('[data-testid="auth-overlay"]')?.getAttribute('aria-hidden')
+				).toBe('false');
+			},
+			{ timeout: 3000 }
+		);
+
+		addEventListenerSpy.mockRestore();
+
+		if (readyStateDescriptor) {
+			Object.defineProperty(document, 'readyState', readyStateDescriptor);
+		}
+
+		if (fontsDescriptor) {
+			Object.defineProperty(document, 'fonts', fontsDescriptor);
+		}
+	});
+
 	it('submits signup only once after successful validation', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const requestSubmit = vi.fn();
@@ -297,7 +346,7 @@ describe('AuthOverlay', () => {
 			.element(page.getByRole('heading', { name: 'Replacement key' }))
 			.toBeInTheDocument();
 		await expect.element(page.getByText('rotated-recovery-key')).toBeInTheDocument();
-		await page.getByRole('button', { name: 'Back To Sign In' }).click();
+		await page.getByRole('button', { name: 'Back to sign in' }).click();
 		expect(dispatch).toHaveBeenCalledWith('SHOW_LOGIN');
 	});
 

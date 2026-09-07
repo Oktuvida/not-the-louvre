@@ -1,19 +1,22 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { createArtworkAccumulator } from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
 	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
 	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type {
+		GalleryPageInfo,
+		LoadMoreArtworks
+	} from '$lib/features/gallery-exploration/model/discovery';
+	import { GALLERY_GRID_GAP } from '$lib/features/gallery-exploration/model/grid';
+	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+	import { createSeededAccumulator } from '$lib/features/gallery-exploration/use-seeded-accumulator.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
-	import { untrack } from 'svelte';
 
 	interface Props {
 		artworks: Artwork[];
-		pageInfo: { hasMore: boolean; nextCursor: string | null };
+		pageInfo: GalleryPageInfo;
 		adultContentEnabled?: boolean;
-		loadMoreArtworks?: (request: { cursor: string }) => Promise<{
-			artworks: Artwork[];
-			pageInfo: { hasMore: boolean; nextCursor: string | null };
-		}>;
+		feedCacheKey?: GalleryRoomId | null;
+		loadMoreArtworks?: LoadMoreArtworks;
 		onSelect: (artwork: Artwork) => void;
 		viewerId?: string | null;
 	}
@@ -22,53 +25,25 @@
 		artworks,
 		pageInfo,
 		adultContentEnabled = false,
+		feedCacheKey = null,
 		loadMoreArtworks,
 		onSelect,
 		viewerId = null
 	}: Props = $props();
 
-	const { initialArtworks, initialPageInfo } = (() => ({
-		initialArtworks: $state.snapshot(artworks),
-		initialPageInfo: $state.snapshot(pageInfo)
-	}))();
-
-	const accumulator = createArtworkAccumulator({
-		fetchPage: async (cursor: string) => {
-			if (!loadMoreArtworks) {
-				throw new Error('loadMoreArtworks is not configured');
-			}
-			return loadMoreArtworks({ cursor });
-		},
-		initialArtworks,
-		initialPageInfo
+	const accumulator = createSeededAccumulator({
+		getFeedCacheKey: () => feedCacheKey,
+		getArtworks: () => artworks,
+		getLoadMoreArtworks: () => loadMoreArtworks,
+		getPageInfo: () => pageInfo
 	});
 
-	const seedIdentity = (items: Artwork[]) => items.map((a) => a.id).join(',');
-	const pageInfoIdentity = (info: { hasMore: boolean; nextCursor: string | null }) =>
-		`${info.hasMore}:${info.nextCursor ?? ''}`;
-	let lastSeedIdentity = seedIdentity(initialArtworks);
-	let lastPageInfoIdentity = pageInfoIdentity(initialPageInfo);
-
-	$effect(() => {
-		const identity = seedIdentity(artworks);
-		const nextPageInfoIdentity = pageInfoIdentity(pageInfo);
-		if (identity !== lastSeedIdentity || nextPageInfoIdentity !== lastPageInfoIdentity) {
-			lastSeedIdentity = identity;
-			lastPageInfoIdentity = nextPageInfoIdentity;
-			untrack(() => {
-				accumulator.reseed(artworks, pageInfo);
-			});
-			return;
-		}
-
-		untrack(() => {
-			accumulator.syncSeedArtworks(artworks);
-		});
-	});
+	// The studio grid breathes a little wider than the other rooms.
+	const STUDIO_GRID_GAP = GALLERY_GRID_GAP + 12;
 </script>
 
 <div class="w-full">
-	<VirtualizedGrid items={accumulator.allArtworks} gap={60}>
+	<VirtualizedGrid items={accumulator.allArtworks} gap={STUDIO_GRID_GAP}>
 		{#snippet renderCard(artwork)}
 			<div data-testid={`virtualized-artwork-card-${artwork.id}`}>
 				<PolaroidCard

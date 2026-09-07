@@ -476,15 +476,6 @@ export const loadDrawingDraft = async (
 	});
 };
 
-export const saveDrawingDraft = (
-	key: string,
-	document: DrawingDocumentV2,
-	options?: DrawingDraftPersistenceOptions
-) => {
-	const { store } = getDrawingDraftPersistenceOptions(options);
-	void store.writeSnapshot({ draftKey: key, document });
-};
-
 export const clearDrawingDraft = (key: string, options?: DrawingDraftPersistenceOptions) => {
 	const { storage, store } = getDrawingDraftPersistenceOptions(options);
 	storage?.removeItem(key);

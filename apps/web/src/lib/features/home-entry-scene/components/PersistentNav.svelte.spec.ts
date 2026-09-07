@@ -249,6 +249,61 @@ describe('PersistentNav', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it('takes the leaving chrome out of the tab order while the page exits', async () => {
+		const user = {
+			authUserId: 'auth-user-1',
+			email: 'artist_1@not-the-louvre.local',
+			id: 'product-user-1',
+			nickname: 'artist_1',
+			role: 'user'
+		};
+
+		const { rerender } = render(PersistentNav, { previewCards: topArtworks, user });
+
+		const previewStack = document.querySelector('[data-testid="home-preview-stack"]')!;
+		expect(previewStack.hasAttribute('inert')).toBe(false);
+
+		await rerender({ isExiting: true, previewCards: topArtworks, user });
+
+		expect(previewStack.hasAttribute('inert')).toBe(true);
+		expect(
+			[...document.querySelectorAll('[inert]')].some((element) =>
+				element.querySelector('form[action="?/signOut"]')
+			)
+		).toBe(true);
+	});
+
+	it('keeps keyboard focus inside the avatar editor and hands it back on close', async () => {
+		render(PersistentNav, {
+			previewCards: topArtworks,
+			user: {
+				authUserId: 'auth-user-1',
+				email: 'artist_1@not-the-louvre.local',
+				id: 'product-user-1',
+				nickname: 'artist_1',
+				role: 'user'
+			}
+		});
+
+		await page.getByRole('button', { name: 'Edit avatar for artist_1' }).click();
+
+		const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+		expect(dialog.contains(document.activeElement)).toBe(true);
+
+		document.activeElement?.dispatchEvent(
+			new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Tab', shiftKey: true })
+		);
+		expect(dialog.contains(document.activeElement)).toBe(true);
+
+		await page.getByRole('button', { name: 'Close' }).click();
+
+		await vi.waitFor(() => {
+			expect(document.activeElement?.getAttribute('aria-label')).toContain(
+				'Edit avatar for artist_1'
+			);
+		});
+	});
+
 	it('uses a scrollable avatar editor dialog shell on small screens', async () => {
 		render(PersistentNav, {
 			previewCards: topArtworks,

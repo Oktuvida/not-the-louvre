@@ -54,7 +54,9 @@ export const galleryRooms: GalleryRoomConfig[] = [
 export const isGalleryRoomId = (value: string): value is GalleryRoomId =>
 	galleryRoomIds.includes(value as GalleryRoomId);
 
-export const roomHref = (roomId: GalleryRoomId) =>
+// The narrow literal union is what `GameLink`'s `href` prop accepts; without
+// the annotation the template literal widens to `string`.
+export const roomHref = (roomId: GalleryRoomId): '/gallery' | `/gallery/${GalleryRoomId}` =>
 	roomId === 'hall-of-fame' ? '/gallery' : `/gallery/${roomId}`;
 
 export const getGalleryRoom = (roomId: GalleryRoomId) =>

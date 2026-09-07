@@ -2,24 +2,28 @@
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
-	import { createArtworkAccumulator } from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
 	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
 	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
 	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type {
+		GalleryPageInfo,
+		LoadMoreArtworks
+	} from '$lib/features/gallery-exploration/model/discovery';
+	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
+	import { createSeededAccumulator } from '$lib/features/gallery-exploration/use-seeded-accumulator.svelte';
 	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import WaxSealMedal from '$lib/features/shared-ui/components/WaxSealMedal.svelte';
-	import { untrack } from 'svelte';
 	import { writable, type Writable } from 'svelte/store';
 
 	interface Props {
 		artworks: Artwork[];
-		pageInfo: { hasMore: boolean; nextCursor: string | null };
+		pageInfo: GalleryPageInfo;
 		adultContentEnabled: boolean;
-		loadMoreArtworks?: (request: { cursor: string }) => Promise<{
-			artworks: Artwork[];
-			pageInfo: { hasMore: boolean; nextCursor: string | null };
-		}>;
+		feedCacheKey?: GalleryRoomId | null;
+		loadMoreArtworks?: LoadMoreArtworks;
+		onPrefetch?: (artworkId: string) => void;
 		onSelect: (artwork: Artwork) => void;
 		revealedArtworkIds?: Writable<Set<string>>;
 		viewerId?: string | null;
@@ -29,7 +33,9 @@
 		artworks,
 		pageInfo,
 		adultContentEnabled,
+		feedCacheKey = null,
 		loadMoreArtworks,
+		onPrefetch,
 		onSelect,
 		revealedArtworkIds,
 		viewerId = null
@@ -43,10 +49,11 @@
 	};
 
 	const isPodiumBlurred = (artwork: Artwork) =>
-		artwork.isNsfw &&
-		!adultContentEnabled &&
-		viewerId !== artwork.authorId &&
-		!$revealedIds.has(artwork.id);
+		isArtworkBlurred(artwork, {
+			adultContentEnabled,
+			id: viewerId,
+			revealedIds: $revealedIds
+		});
 
 	const podiumMeta = {
 		1: {
@@ -96,43 +103,15 @@
 	const frameForArtwork = (artworkId: string, podiumPosition?: 1 | 2 | 3) =>
 		resolveArtworkFrame({ artworkId, podiumPosition });
 
-	const { initialArtworks, initialPageInfo } = (() => ({
-		initialArtworks: $state.snapshot(artworks),
-		initialPageInfo: $state.snapshot(pageInfo)
-	}))();
-
-	const accumulator = createArtworkAccumulator({
-		fetchPage: async (cursor: string) => {
-			if (!loadMoreArtworks) {
-				throw new Error('loadMoreArtworks is not configured');
-			}
-			return loadMoreArtworks({ cursor });
-		},
-		initialArtworks: initialArtworks.slice(3),
-		initialPageInfo
-	});
-
-	const seedIdentity = (items: Artwork[]) => items.map((a) => a.id).join(',');
-	const pageInfoIdentity = (info: { hasMore: boolean; nextCursor: string | null }) =>
-		`${info.hasMore}:${info.nextCursor ?? ''}`;
-	let lastSeedIdentity = seedIdentity(initialArtworks);
-	let lastPageInfoIdentity = pageInfoIdentity(initialPageInfo);
-
-	$effect(() => {
-		const identity = seedIdentity(artworks);
-		const nextPageInfoIdentity = pageInfoIdentity(pageInfo);
-		if (identity !== lastSeedIdentity || nextPageInfoIdentity !== lastPageInfoIdentity) {
-			lastSeedIdentity = identity;
-			lastPageInfoIdentity = nextPageInfoIdentity;
-			untrack(() => {
-				accumulator.reseed(artworks.slice(3), pageInfo);
-			});
-			return;
-		}
-
-		untrack(() => {
-			accumulator.syncSeedArtworks(artworks.slice(3));
-		});
+	// The podium owns the top three; the grid below it starts at the fourth. The
+	// seed identity is still computed on the whole list, so a reorder confined to
+	// the podium keeps reseeding the grid underneath it.
+	const accumulator = createSeededAccumulator({
+		getFeedCacheKey: () => feedCacheKey,
+		getArtworks: () => artworks,
+		getLoadMoreArtworks: () => loadMoreArtworks,
+		getPageInfo: () => pageInfo,
+		transformSeed: (items) => items.slice(3)
 	});
 </script>
 
@@ -172,6 +151,8 @@
 							}
 							onSelect(artwork);
 						}}
+						onkeydown={() => onPrefetch?.(artwork.id)}
+						onpointerdown={() => onPrefetch?.(artwork.id)}
 					>
 						<div class="h-full transition duration-200 hover:-translate-y-2 hover:scale-105">
 							<ArtworkFrame

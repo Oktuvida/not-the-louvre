@@ -1,34 +1,41 @@
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type {
+	GalleryArtworkPage,
+	GalleryPageInfo
+} from '$lib/features/gallery-exploration/model/discovery';
+
+/*
+ * The paging engine behind every gallery room, including the Mystery reel —
+ * which used to run a byte-identical fork of this module (`streaming-accumulator`)
+ * whose only addition was a write-only `progress` field.
+ *
+ * The base/appended split is what lets a streamed seed refresh (a realtime vote,
+ * an `invalidateAll`) patch the first page in place without discarding the pages
+ * infinite scroll has already fetched.
+ */
 
 export interface ArtworkAccumulatorOptions {
 	initialArtworks: Artwork[];
-	initialPageInfo: { hasMore: boolean; nextCursor: string | null };
-	fetchPage: (cursor: string) => Promise<{
-		artworks: Artwork[];
-		pageInfo: { hasMore: boolean; nextCursor: string | null };
-	}>;
+	initialPageInfo: GalleryPageInfo;
+	fetchPage: (cursor: string) => Promise<GalleryArtworkPage>;
 }
 
 export interface ArtworkAccumulator {
 	readonly allArtworks: Artwork[];
+	readonly pageInfo: GalleryPageInfo;
 	readonly hasMore: boolean;
 	readonly isLoading: boolean;
 	readonly error: string | null;
 	loadMore(): Promise<void>;
 	retry(): Promise<void>;
-	reseed(
-		initialArtworks: Artwork[],
-		initialPageInfo: { hasMore: boolean; nextCursor: string | null }
-	): void;
+	reseed(initialArtworks: Artwork[], initialPageInfo: GalleryPageInfo): void;
 	syncSeedArtworks(initialArtworks: Artwork[]): void;
-	reset(): void;
 }
 
 export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): ArtworkAccumulator {
 	let baseArtworks = $state<Artwork[]>([...options.initialArtworks]);
-	let basePageInfo = $state({ ...options.initialPageInfo });
 	let appendedArtworks = $state<Artwork[]>([]);
-	let pageInfo = $state({ ...options.initialPageInfo });
+	let pageInfo = $state<GalleryPageInfo>({ ...options.initialPageInfo });
 	let isLoading = $state(false);
 	let error = $state<string | null>(null);
 
@@ -61,19 +68,8 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 		await loadMore();
 	}
 
-	function reset(): void {
-		appendedArtworks = [];
-		pageInfo = { ...basePageInfo };
-		isLoading = false;
-		error = null;
-	}
-
-	function reseed(
-		initialArtworks: Artwork[],
-		initialPageInfo: { hasMore: boolean; nextCursor: string | null }
-	): void {
+	function reseed(initialArtworks: Artwork[], initialPageInfo: GalleryPageInfo): void {
 		baseArtworks = [...initialArtworks];
-		basePageInfo = { ...initialPageInfo };
 		appendedArtworks = [];
 		pageInfo = { ...initialPageInfo };
 		isLoading = false;
@@ -93,6 +89,9 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 		get allArtworks() {
 			return allArtworks;
 		},
+		get pageInfo() {
+			return pageInfo;
+		},
 		get hasMore() {
 			return pageInfo.hasMore;
 		},
@@ -105,7 +104,6 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 		loadMore,
 		retry,
 		reseed,
-		syncSeedArtworks,
-		reset
+		syncSeedArtworks
 	};
 }

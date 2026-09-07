@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
@@ -7,13 +8,6 @@ vi.mock('$app/environment', () => ({
 }));
 
 vi.mock('$lib/client/gsap', () => {
-	const tweens: Array<{
-		onUpdate?: () => void;
-		onComplete?: () => void;
-		proxy: Record<string, number>;
-		target: number;
-	}> = [];
-
 	return {
 		gsap: {
 			to: (proxy: Record<string, number>, config: Record<string, unknown>) => {
@@ -30,8 +24,6 @@ vi.mock('$lib/client/gsap', () => {
 					kill: vi.fn()
 				};
 
-				tweens.push(tween);
-
 				// Immediately complete the tween for testing
 				proxy.value = targetValue;
 				tween.onUpdate?.();
@@ -43,28 +35,34 @@ vi.mock('$lib/client/gsap', () => {
 	};
 });
 
-import FilmReelHarness from './FilmReelHarness.svelte';
+import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import FilmReel from './FilmReel.svelte';
+import RoomHarness from './RoomHarness.svelte';
 
-const createArtwork = (id: string): Artwork => ({
-	id,
-	title: `Artwork ${id}`,
-	artist: `Artist ${id}`,
-	authorId: `user-${id}`,
-	imageUrl: `https://example.com/${id}.avif`,
-	score: 50,
-	upvotes: 50,
-	downvotes: 0,
-	timestamp: Date.now(),
-	isNsfw: false,
-	comments: []
-});
+const createArtwork = (id: string): Artwork =>
+	makeArtwork({ id, score: 50, upvotes: 50, imageUrl: `https://example.com/${id}.avif` });
+
+type FilmReelProps = ComponentProps<typeof FilmReel>;
+
+const renderReel = (
+	props: Partial<FilmReelProps> & Pick<FilmReelProps, 'artworks'>,
+	onInstance?: (instance: Record<string, unknown> | undefined) => void
+) =>
+	render(RoomHarness, {
+		props: {
+			component: FilmReel,
+			onInstance,
+			roomProps: { onLand: () => {}, ...props },
+			style: 'width: 800px; height: 400px;'
+		}
+	});
 
 describe('FilmReel', () => {
 	it('renders frame images with width and height attributes matching frameSize', async () => {
 		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
 
-		render(FilmReelHarness, { artworks });
+		renderReel({ artworks });
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
@@ -78,14 +76,31 @@ describe('FilmReel', () => {
 			expect(htmlImg.hasAttribute('height')).toBe(true);
 			// Width and height should match (square frames)
 			expect(htmlImg.getAttribute('width')).toBe(htmlImg.getAttribute('height'));
+			// Every rendered frame is in or next to the viewport: lazy loading only
+			// buys intersection bookkeeping and a late decode mid-spin.
+			expect(htmlImg.hasAttribute('loading')).toBe(false);
 		}
+	});
+
+	it('keeps only transform and opacity in the per-tick inline style', async () => {
+		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
+
+		renderReel({ artworks });
+
+		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+
+		const frame = document.querySelector<HTMLElement>('.reel-frame');
+		expect(frame).not.toBeNull();
+
+		const inlineProperties = Array.from(frame!.style);
+		expect(inlineProperties.toSorted()).toEqual(['opacity', 'transform']);
 	});
 
 	it('accepts onIdleProgress callback prop', async () => {
 		const onIdleProgress = vi.fn();
 		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
 
-		render(FilmReelHarness, { artworks, onIdleProgress });
+		renderReel({ artworks, onIdleProgress });
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
@@ -95,18 +110,51 @@ describe('FilmReel', () => {
 		expect(typeof onIdleProgress).toBe('function');
 	});
 
-	it('exports spinToArtwork method', async () => {
+	it('exports the spin API the mystery room drives it with', async () => {
 		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
+		let reel: Record<string, unknown> | undefined;
 
-		render(FilmReelHarness, { artworks });
+		renderReel({ artworks }, (instance) => {
+			reel = instance;
+		});
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
-		// Verify the component exposes the spinToArtwork method
-		// This is validated by TypeScript compilation — the harness can bind to it
-		// and call it. We verify the img elements are rendered as a proxy for the
-		// component being functional.
-		const images = document.querySelectorAll('.reel-frame-image');
-		expect(images.length).toBeGreaterThan(0);
+		await vi.waitFor(() => {
+			expect(reel).toBeDefined();
+		});
+
+		expect(typeof reel?.spin).toBe('function');
+		expect(typeof reel?.spinToArtwork).toBe('function');
+		expect(typeof reel?.resetToIdle).toBe('function');
+		expect(typeof reel?.isSpinning).toBe('function');
+	});
+
+	it('does not blur an author’s own sensitive artwork on the reel', async () => {
+		const artworks = [
+			makeArtwork({ authorId: 'user-1', id: 'own', isNsfw: true }),
+			createArtwork('f2'),
+			createArtwork('f3')
+		];
+
+		renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
+
+		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+
+		expect(document.querySelectorAll('.nsfw-badge').length).toBe(0);
+	});
+
+	it('blurs a sensitive artwork the viewer does not own', async () => {
+		const artworks = [
+			makeArtwork({ authorId: 'user-2', id: 'theirs', isNsfw: true }),
+			createArtwork('f2'),
+			createArtwork('f3')
+		];
+
+		renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
+
+		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+
+		expect(document.querySelectorAll('.nsfw-badge').length).toBeGreaterThan(0);
 	});
 });

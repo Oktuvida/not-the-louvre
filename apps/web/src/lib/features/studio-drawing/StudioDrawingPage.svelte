@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { gsap } from '$lib/client/gsap';
 	import {
 		checkTextContent as defaultCheckTextContent,
@@ -133,6 +133,10 @@
 			return prepareDrawingDocumentForPublish(documentState);
 		},
 		forkParent = null,
+		// Seeded from the request's client hints so a phone is not served the
+		// desktop book stage and then swapped whole after mount; the matchMedia
+		// sync in onMount stays the authority and corrects a wrong guess.
+		initialIsMobile = false,
 		openingDurationMs = 950,
 		publishDrawing = async (
 			drawingDocument: string,
@@ -171,6 +175,7 @@
 		createArtworkPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		draftStore?: IndexedDbDrawingDraftStore;
 		forkParent?: DrawForkParent | null;
+		initialIsMobile?: boolean;
 		openingDurationMs?: number;
 		publishDrawing?: (
 			drawingDocument: string,
@@ -187,10 +192,9 @@
 	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
 	let initialDrawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
 	let artworkBaselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
-	let forkPreloadSettled = $state(true);
 	let isPublishing = $state(false);
-	let isMobileViewport = $state(false);
-	let pendingStudioUnlock = $state(false);
+	// Seed only: onMount's matchMedia sync owns the value from then on.
+	let isMobileViewport = $state(untrack(() => initialIsMobile));
 	let publishedArtwork = $state<DrawPublishedArtwork | null>(null);
 	let sceneState = $state<'closed' | 'opening' | 'open' | 'closing'>('closed');
 	let seededForkParent = $state(false);
@@ -202,6 +206,7 @@
 	let isExitingToHome = $state(false);
 	let showExitFade = $state(false);
 	let exitFadeOpacity = $state(0);
+	let exitFadeTween: gsap.core.Tween | null = null;
 	let forkContextHydrated = $state(false);
 	const EXIT_FADE_DURATION_S = 0.5;
 	const forkContextStorageKey = $derived(getForkContextStorageKey(user));
@@ -283,26 +288,29 @@
 	});
 
 	$effect(() => {
-		if (isExitingToHome) {
-			pendingStudioUnlock = false;
-			return;
-		}
+		if (isExitingToHome) return;
 
 		if (isMobileViewport) {
-			forkPreloadSettled = true;
-			pendingStudioUnlock = false;
-			if (sceneState !== 'open') {
+			if (untrack(() => sceneState) !== 'open') {
 				sceneState = 'open';
 			}
 			return;
 		}
 
-		forkPreloadSettled = !hasForkParent;
-		pendingStudioUnlock = false;
+		if (!hasForkParent || untrack(() => sceneState) !== 'closed') return;
 
-		if (hasForkParent && sceneState === 'closed') {
+		// Arriving by Fork must still play the book-open transition. The cover flip
+		// and the frame zoom are CSS transitions, so they need the closed pose to be
+		// computed first: flipping the state inside the mount flush leaves them with
+		// no start value and the book snaps open. One frame later it animates.
+		const openFrame = requestAnimationFrame(() => {
+			if (isExitingToHome || sceneState !== 'closed') return;
 			sceneState = 'opening';
-		}
+		});
+
+		return () => {
+			cancelAnimationFrame(openFrame);
+		};
 	});
 
 	onMount(() => {
@@ -445,39 +453,15 @@
 		sceneState = 'opening';
 	};
 
-	const completeStudioUnlock = () => {
-		sceneState = 'open';
-		pendingStudioUnlock = false;
-	};
-
-	const markForkPreloadSettled = () => {
-		if (forkPreloadSettled) return;
-		forkPreloadSettled = true;
-
-		if (pendingStudioUnlock && sceneState === 'opening') {
-			completeStudioUnlock();
-		}
-	};
-
 	const unlockStudio = () => {
 		if (sceneState !== 'opening') return;
-
-		if (!forkPreloadSettled) {
-			pendingStudioUnlock = true;
-			return;
-		}
-
-		completeStudioUnlock();
+		sceneState = 'open';
 	};
 
 	const handleBookClosed = () => {
 		if (sceneState !== 'closing') return;
 		sceneState = 'closed';
 		fadeAndExitHome();
-	};
-
-	const handleDrawingDocumentChange = (nextDocument: DrawingDocumentV2) => {
-		drawingDocument = nextDocument;
 	};
 
 	const handleStrokeCommitted = async (input: {
@@ -502,7 +486,8 @@
 		showExitFade = true;
 
 		const fade = { opacity: 0 };
-		gsap.to(fade, {
+		exitFadeTween?.kill();
+		exitFadeTween = gsap.to(fade, {
 			opacity: 1,
 			duration: EXIT_FADE_DURATION_S,
 			ease: 'power2.in',
@@ -510,10 +495,18 @@
 				exitFadeOpacity = fade.opacity;
 			},
 			onComplete: () => {
+				exitFadeTween = null;
 				void goto(resolve('/?from=studio'));
 			}
 		});
 	};
+
+	// An untracked tween whose onComplete navigates outlives the component: after
+	// an unmount mid-fade it would still pull the visitor to the home page.
+	$effect(() => () => {
+		exitFadeTween?.kill();
+		exitFadeTween = null;
+	});
 
 	const publishArtwork = async () => {
 		if (!canvasRef || isPublishing || !studioUnlocked) return;
@@ -601,6 +594,7 @@
 </script>
 
 <svelte:head>
+	<title>Studio · Not the Louvre</title>
 	<link rel="preload" as="image" href="/table.avif" type="image/avif" fetchpriority="high" />
 </svelte:head>
 
@@ -652,9 +646,7 @@
 							{clearVersion}
 							{initialDrawingDocument}
 							interactive={studioUnlocked}
-							onDocumentChange={handleDrawingDocumentChange}
 							onStrokeCommitted={handleStrokeCommitted}
-							onInitialImageSettled={markForkPreloadSettled}
 							{statusMessage}
 							{statusTone}
 						/>
@@ -733,10 +725,7 @@
 				</div>
 
 				{#if publishedArtwork}
-					<div
-						class="publish-postit studio-mobile-publish"
-						style="animation: studioPanelReveal 280ms ease-out both;"
-					>
+					<div class="publish-postit studio-mobile-publish">
 						<div class="postit-tape" aria-hidden="true"></div>
 						<p class="postit-label">Hung on the wall!</p>
 						<h2 class="publish-postit-title">{publishedArtwork.title}</h2>
@@ -744,8 +733,8 @@
 							<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
 								<span>Draw again</span>
 							</GameButton>
-							<GameLink href="/gallery" variant="secondary" size="sm">
-								<span>Open gallery</span>
+							<GameLink href="/gallery/your-studio" variant="secondary" size="sm">
+								<span>See it on the wall</span>
 							</GameLink>
 						</div>
 						<div class="postit-curl" aria-hidden="true"></div>
@@ -835,9 +824,7 @@
 								{clearVersion}
 								{initialDrawingDocument}
 								interactive={studioUnlocked}
-								onDocumentChange={handleDrawingDocumentChange}
 								onStrokeCommitted={handleStrokeCommitted}
-								onInitialImageSettled={markForkPreloadSettled}
 								{statusMessage}
 								{statusTone}
 							/>
@@ -853,7 +840,7 @@
 					<DrawingToolTray {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
 
 					{#if publishedArtwork}
-						<div class="publish-postit" style="animation: studioPanelReveal 280ms ease-out both;">
+						<div class="publish-postit">
 							<div class="postit-tape" aria-hidden="true"></div>
 							<p class="postit-label">Hung on the wall!</p>
 							<h2 class="publish-postit-title">{publishedArtwork.title}</h2>
@@ -861,8 +848,8 @@
 								<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
 									<span>Draw again</span>
 								</GameButton>
-								<GameLink href="/gallery" variant="secondary" size="sm">
-									<span>Open gallery</span>
+								<GameLink href="/gallery/your-studio" variant="secondary" size="sm">
+									<span>See it on the wall</span>
 								</GameLink>
 							</div>
 							<div class="postit-curl" aria-hidden="true"></div>
@@ -1184,6 +1171,11 @@
 		background: linear-gradient(160deg, #c8e6c9 0%, #a5d6a7 100%);
 		box-shadow: 2px 3px 8px rgb(0 0 0 / 0.18);
 		transform: rotate(-2deg);
+		/* The reveal has to be declared in this stylesheet: Svelte renames scoped
+		 * keyframes and only rewrites `animation` references inside the same block,
+		 * so the inline `style="animation: studioPanelReveal …"` this replaces never
+		 * resolved and both post-its appeared with no entrance. */
+		animation: studioPanelReveal 280ms ease-out both;
 	}
 
 	.publish-postit-title {
@@ -1259,7 +1251,9 @@
 		}
 	}
 
-	@media (max-width: 1279px) {
+	/* .98 rather than 1279px: Tailwind's `xl:` starts at 1280px, so a whole
+	 * integer leaves fractional widths (zoom, DPR scaling) matching neither. */
+	@media (max-width: 1279.98px) {
 		.studio-book-frame {
 			--book-frame-h: clamp(27rem, 74vh, 52rem);
 			height: var(--book-frame-h);
@@ -1277,6 +1271,10 @@
 		}
 	}
 
+	/* 700px is this app's own studio breakpoint — deliberately not Tailwind's
+	 * `md:` (768px). It is shared by MOBILE_STUDIO_MEDIA_QUERY above,
+	 * DrawingToolTray, DrawingBookStage and the root layout, and pinned by
+	 * StudioDrawingPage.svelte.spec.ts. Do not "align" it without moving all five. */
 	@media (max-width: 700px) {
 		main {
 			overflow: hidden;

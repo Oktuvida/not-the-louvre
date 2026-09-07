@@ -16,7 +16,7 @@ import {
 } from './raster';
 
 export type { RawImage, RgbColor };
-export { applyRoundedRectAlpha, cropCenter, flattenOntoBackground, parseHexColor } from './raster';
+export { applyRoundedRectAlpha, cropCenter, parseHexColor } from './raster';
 
 export type ImageFormat = 'avif' | 'jpeg' | 'png' | 'webp';
 

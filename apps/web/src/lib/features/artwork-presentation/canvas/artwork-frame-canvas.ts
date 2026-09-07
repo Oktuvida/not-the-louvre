@@ -58,6 +58,19 @@ const normalizeOptions = (options: ArtworkFrameRenderOptions = {}) => ({
 	mouldingRatio: options.mouldingRatio ?? 0.08
 });
 
+/**
+ * The moulding, its inner lip and the mat all measure off the shorter side, so
+ * the opening is inset by a single ratio of `min(width, height)` per edge.
+ * ArtworkFrame renders that ratio as a CSS percentage during SSR, which is how
+ * the frame paints at the right proportions instead of shipping the artwork at
+ * 100% of the frame box and snapping it into place at hydration.
+ */
+export const getArtworkFrameOpeningRatio = (options: ArtworkFrameRenderOptions = {}) => {
+	const normalized = normalizeOptions(options);
+
+	return normalized.mouldingRatio * (1 + normalized.innerMouldingRatio + normalized.matRatio);
+};
+
 export const getArtworkFrameOpening = (
 	width: number,
 	height: number,

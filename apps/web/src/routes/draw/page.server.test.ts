@@ -75,6 +75,16 @@ const createActionEvent = (
 	} as unknown as DrawPublishActionEvent;
 };
 
+const createLoadEvent = (
+	url: string,
+	options: { headers?: Record<string, string>; user?: typeof authenticatedUser | null } = {}
+) =>
+	({
+		locals: { user: options.user === undefined ? authenticatedUser : options.user },
+		request: new Request(url, { headers: options.headers }),
+		url: new URL(url)
+	}) as never;
+
 describe('draw route page', () => {
 	beforeEach(() => {
 		vi.resetModules();
@@ -127,7 +137,7 @@ describe('draw route page', () => {
 		const { load } = await import('./+page.server');
 
 		await expect(
-			load({ locals: {}, url: new URL('http://localhost/draw') } as never)
+			load(createLoadEvent('http://localhost/draw', { user: null }))
 		).rejects.toMatchObject({
 			location: '/',
 			status: 302
@@ -137,13 +147,51 @@ describe('draw route page', () => {
 	it('returns the authenticated canonical user for the draw route', async () => {
 		const { load } = await import('./+page.server');
 
-		await expect(
-			load({ locals: { user: authenticatedUser }, url: new URL('http://localhost/draw') } as never)
-		).resolves.toMatchObject({
+		await expect(load(createLoadEvent('http://localhost/draw'))).resolves.toMatchObject({
 			user: {
 				nickname: 'journey_artist'
 			}
 		});
+	});
+
+	it('seeds the mobile studio layout from the client hint', async () => {
+		const { load } = await import('./+page.server');
+
+		// Without this the phone paints the desktop book stage and swaps the whole
+		// main region after mount.
+		await expect(
+			load(createLoadEvent('http://localhost/draw', { headers: { 'sec-ch-ua-mobile': '?1' } }))
+		).resolves.toMatchObject({ initialIsMobile: true });
+
+		await expect(
+			load(createLoadEvent('http://localhost/draw', { headers: { 'sec-ch-ua-mobile': '?0' } }))
+		).resolves.toMatchObject({ initialIsMobile: false });
+	});
+
+	it('falls back to the user agent when no client hint is sent', async () => {
+		const { load } = await import('./+page.server');
+
+		await expect(
+			load(
+				createLoadEvent('http://localhost/draw', {
+					headers: {
+						'user-agent':
+							'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+					}
+				})
+			)
+		).resolves.toMatchObject({ initialIsMobile: true });
+
+		await expect(
+			load(
+				createLoadEvent('http://localhost/draw', {
+					headers: {
+						'user-agent':
+							'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+					}
+				})
+			)
+		).resolves.toMatchObject({ initialIsMobile: false });
 	});
 
 	it('loads fork parent artwork metadata when opening the draw route for a fork', async () => {
@@ -167,10 +215,7 @@ describe('draw route page', () => {
 		const { load } = await import('./+page.server');
 
 		await expect(
-			load({
-				locals: { user: authenticatedUser },
-				url: new URL('http://localhost/draw?fork=artwork-parent')
-			} as never)
+			load(createLoadEvent('http://localhost/draw?fork=artwork-parent'))
 		).resolves.toMatchObject({
 			forkParent: {
 				drawingDocument: {

@@ -12,8 +12,7 @@ import {
 	parseDrawingDocumentV2,
 	serializeCanonicalDrawingDocument
 } from '$lib/features/stroke-json/document';
-import { decodeCompressedDrawingDocument } from '$lib/features/stroke-json/storage';
-import { gzipSync, strToU8 } from 'fflate';
+import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import { ArtworkFlowError } from './errors';
 import {
 	createAvifTestFile,
@@ -30,6 +29,11 @@ import type {
 	ContentReportRecord,
 	PublishRateLimitRecord
 } from './types';
+
+// storage.ts is gone: gzip/base64 is the Rust runtime's job in production, so
+// these suites unwrap the payload they gzipped themselves.
+const gunzipBase64 = (payload: string) =>
+	strFromU8(gunzipSync(new Uint8Array(Buffer.from(payload, 'base64'))));
 
 type ModerationCheckResult = { status: 'allowed' } | { message: string; status: 'blocked' };
 
@@ -405,7 +409,7 @@ describe('artwork service', () => {
 		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(drawingDocument);
 		expect(uploads).toHaveLength(1);
 		expect(uploads[0]?.file.type).toBe('image/avif');
-		expect(decodeCompressedDrawingDocument(artworks.get('artwork-1')!.drawingDocument!)).toBe(
+		expect(gunzipBase64(artworks.get('artwork-1')!.drawingDocument!)).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
 		expect(artworks.get('artwork-1')).toMatchObject({
@@ -705,7 +709,7 @@ describe('artwork service', () => {
 			parentId: 'artwork-parent',
 			forkCount: 0
 		});
-		expect(decodeCompressedDrawingDocument(artworks.get('artwork-child')!.drawingDocument!)).toBe(
+		expect(gunzipBase64(artworks.get('artwork-child')!.drawingDocument!)).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(childDocument))
 		);
 		expect(artworks.get('artwork-parent')).toMatchObject({
@@ -1589,7 +1593,7 @@ describe('artwork service', () => {
 			Math.ceil(storedDocument.length / 16)
 		);
 		expect(result.drawingVersion).toBe(2);
-		expect(decodeCompressedDrawingDocument(storedDocument)).toBe(
+		expect(gunzipBase64(storedDocument)).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
 		expect(result.drawingDocument).toBeUndefined();
@@ -1640,7 +1644,7 @@ describe('artwork service', () => {
 		);
 
 		expect(result.drawingVersion).toBe(2);
-		expect(decodeCompressedDrawingDocument(artworks.get('artwork-1')!.drawingDocument!)).toBe(
+		expect(gunzipBase64(artworks.get('artwork-1')!.drawingDocument!)).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
 	});
