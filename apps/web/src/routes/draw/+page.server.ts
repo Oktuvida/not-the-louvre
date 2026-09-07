@@ -3,6 +3,7 @@ import { getIp } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/features/stroke-json/runtime.server';
+import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
 import { ArtworkFlowError, logArtworkFlowFailure } from '$lib/server/artwork/errors';
 import { getArtworkDetail } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';
@@ -82,6 +83,9 @@ export const load: PageServerLoad = async (event) => {
 	return {
 		forkParent,
 		initialIsMobile: isMobileRequest(event.request),
+		// The root layout renders the only <title> in the document from
+		// `page.data.meta`; a page-level <svelte:head><title> would lose to it.
+		meta: { title: 'Studio' } satisfies RouteMeta,
 		user: event.locals.user
 	};
 };

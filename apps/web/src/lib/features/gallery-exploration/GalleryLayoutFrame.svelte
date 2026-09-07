@@ -11,7 +11,8 @@
 		setGalleryLayoutContext,
 		type GalleryLayoutContext
 	} from '$lib/features/gallery-exploration/gallery-layout-context';
-	import { createMuseumWallPatternUrl } from '$lib/features/home-entry-scene/canvas/museum-canvas';
+	import { museumWallPatternAssetUrl } from '$lib/features/shared-ui/generated-art';
+	import { warmStudioBackground } from '$lib/features/shared-ui/studio-background-warmup';
 	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 
 	let {
@@ -28,7 +29,9 @@
 
 	const galleryLayout = (() => context ?? createGalleryLayoutContext())();
 	setGalleryLayoutContext(galleryLayout);
-	const museumWallPatternUrl = createMuseumWallPatternUrl();
+	// A build-time file, not a 42.7KB `data:` URL inlined into every gallery
+	// document: the browser caches one copy across rooms, routes and visitors.
+	const museumWallPatternUrl = museumWallPatternAssetUrl;
 	const panelBindings = galleryLayout.panelBindings;
 	const actionBindings = galleryLayout.actionBindings;
 
@@ -102,6 +105,8 @@
 					size="sm"
 					className="h-11 min-w-11 rotate-1 px-0 shadow-xl md:h-auto md:min-w-0 md:px-[var(--sticker-padding-x)]"
 					contentClassName="px-0 md:px-[calc(var(--sticker-padding-x)-2px)]"
+					onfocusin={warmStudioBackground}
+					onpointerenter={warmStudioBackground}
 				>
 					<Paintbrush class="h-5 w-5 md:mr-1" />
 					<span class="sr-only">Create Art</span>
@@ -110,7 +115,7 @@
 				<GameButton
 					variant="secondary"
 					size="sm"
-					className="relative z-20 !h-11 !min-w-11 rotate-1 !px-0 shadow-xl md:!h-auto md:!min-w-0 md:!px-[var(--sticker-padding-x)]"
+					className="relative z-20 h-11 min-w-11 rotate-1 px-0 shadow-xl md:h-auto md:min-w-0 md:px-[var(--sticker-padding-x)]"
 					disabled={$actionBindings?.isRefreshingGallery ?? false}
 					onclick={() => $actionBindings?.onRefresh?.()}
 				>
@@ -118,10 +123,10 @@
 						class={`h-5 w-5 md:mr-1 ${$actionBindings?.isRefreshingGallery ? 'animate-spin' : ''}`}
 					/>
 					<span class="sr-only"
-						>{$actionBindings?.isRefreshingGallery ? 'Refreshing' : 'Refresh'}</span
+						>{$actionBindings?.isRefreshingGallery ? 'Refreshing…' : 'Refresh'}</span
 					>
 					<div aria-hidden="true" class="hidden font-semibold md:inline-flex">
-						{$actionBindings?.isRefreshingGallery ? 'Refreshing' : 'Refresh'}
+						{$actionBindings?.isRefreshingGallery ? 'Refreshing…' : 'Refresh'}
 					</div>
 				</GameButton>
 			{:else}
@@ -159,6 +164,7 @@
 			onArtworkChange={$panelBindings.onArtworkChange}
 			onArtworkPatch={$panelBindings.onArtworkPatch}
 			onClose={$panelBindings.onClose}
+			onNotify={$panelBindings.onNotify}
 			revealedArtworkIds={$panelBindings.revealedArtworkIds}
 			viewer={$panelBindings.viewer}
 		/>

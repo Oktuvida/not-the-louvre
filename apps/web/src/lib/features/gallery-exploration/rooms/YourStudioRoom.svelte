@@ -17,6 +17,7 @@
 		adultContentEnabled?: boolean;
 		feedCacheKey?: GalleryRoomId | null;
 		loadMoreArtworks?: LoadMoreArtworks;
+		onPrefetch?: (artworkId: string) => void;
 		onSelect: (artwork: Artwork) => void;
 		viewerId?: string | null;
 	}
@@ -27,6 +28,7 @@
 		adultContentEnabled = false,
 		feedCacheKey = null,
 		loadMoreArtworks,
+		onPrefetch,
 		onSelect,
 		viewerId = null
 	}: Props = $props();
@@ -52,6 +54,7 @@
 					{adultContentEnabled}
 					imageLoading="eager"
 					onclick={() => onSelect(artwork)}
+					onPointerIntent={() => onPrefetch?.(artwork.id)}
 				/>
 			</div>
 		{/snippet}

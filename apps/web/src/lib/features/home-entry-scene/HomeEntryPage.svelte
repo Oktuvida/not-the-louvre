@@ -23,6 +23,7 @@
 	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
 	import type { EntryFlowState } from '$lib/features/home-entry-scene/state/entry-state.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import { scheduleStudioBackgroundWarmup } from '$lib/features/shared-ui/studio-background-warmup';
 
 	let {
 		children,
@@ -100,6 +101,15 @@
 	onMount(() => {
 		let cancelled = false;
 
+		/*
+		 * The 109KB /draw table background used to be warmed by the root layout,
+		 * so /gallery and /admin paid for it too. The Studio button below is the
+		 * primary path to /draw, so the warm-up belongs here; the module-level
+		 * guard in the helper keeps this and the gallery's own warm-up from
+		 * fetching it twice.
+		 */
+		const cancelStudioBackgroundWarmup = scheduleStudioBackgroundWarmup();
+
 		void import('$lib/features/home-entry-scene/scene/StudioScene.svelte')
 			.then((module) => {
 				if (!cancelled) {
@@ -114,6 +124,7 @@
 
 		return () => {
 			cancelled = true;
+			cancelStudioBackgroundWarmup();
 		};
 	});
 

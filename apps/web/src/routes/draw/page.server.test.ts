@@ -154,6 +154,16 @@ describe('draw route page', () => {
 		});
 	});
 
+	it('contributes the studio document title to the root layout head', async () => {
+		const { load } = await import('./+page.server');
+
+		// The head is rendered once, by the root layout, from `page.data.meta`;
+		// a second <title> in the page would silently lose to it.
+		await expect(load(createLoadEvent('http://localhost/draw'))).resolves.toMatchObject({
+			meta: { title: 'Studio' }
+		});
+	});
+
 	it('seeds the mobile studio layout from the client hint', async () => {
 		const { load } = await import('./+page.server');
 

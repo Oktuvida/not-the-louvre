@@ -51,10 +51,7 @@ vi.mock('$app/navigation', async (importOriginal) => {
 
 vi.mock('$lib/features/home-entry-scene/canvas/museum-canvas', () => ({
 	museumWindowOpening: { x: 0, y: 0, width: 100, height: 100 },
-	museumWindowAspectRatio: '16/9',
-	createMuseumWallPatternUrl: () => 'data:image/png;base64,mock',
-	drawStickerBackground: vi.fn(),
-	createStickerBackgroundUrl: () => 'data:image/png;base64,mock'
+	museumWindowAspectRatio: '16/9'
 }));
 
 import GalleryRoomSwitchHarness from './GalleryRoomSwitchHarness.svelte';

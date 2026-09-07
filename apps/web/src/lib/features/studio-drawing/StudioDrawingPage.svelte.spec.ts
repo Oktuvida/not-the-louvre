@@ -172,12 +172,20 @@ describe('StudioDrawingPage', () => {
 		expect(preloadLink?.getAttribute('type')).toBe('image/avif');
 	});
 
-	it('titles the studio route so open tabs are distinguishable', async () => {
+	it('leaves the document title to the root layout instead of adding a second one', async () => {
+		// The route contributes `meta.title` from its load (routes/draw/+page.server.ts)
+		// and the root layout renders the document's only <title>. A page-level
+		// <title> here is a duplicate the SSR head resolves in favour of the first
+		// one, while on the client Svelte compiles it to a `document.title`
+		// assignment that races the layout's — so the page must not declare one.
+		const titleBeforeRender = document.title;
+
 		render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await vi.waitFor(() => {
-			expect(document.title).toBe('Studio · Not the Louvre');
+			expect(document.head.querySelector('link[rel="preload"][href="/table.avif"]')).not.toBeNull();
 		});
+		expect(document.title).toBe(titleBeforeRender);
 	});
 
 	it('starts with a closed sketchbook and hides active studio controls', async () => {

@@ -13,6 +13,10 @@ export const load: PageServerLoad = async ({ locals, params, parent, platform })
 
 	return {
 		...shell,
+		// The root layout owns the only <title> in the document; a route says who
+		// it is by contributing `meta` here. Four rooms used to share one tab
+		// title and one share card.
+		meta: { description: shell.room.description, title: shell.room.name },
 		lazy: {
 			roomContent: runWithRequestDbConnection(
 				async () =>

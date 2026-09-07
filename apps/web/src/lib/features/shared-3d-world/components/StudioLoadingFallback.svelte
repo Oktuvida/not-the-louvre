@@ -18,7 +18,7 @@
 				class={`h-14 w-14 rounded-full border-4 border-[var(--color-ink)] bg-[var(--color-primary)] shadow-[var(--shadow-card)] ${failed ? '' : 'animate-[bob_2s_ease-in-out_infinite]'}`}
 			></div>
 			<div class="space-y-2">
-				<p class="font-display text-lg tracking-[0.16em] uppercase">Loading Studio...</p>
+				<p class="font-display text-lg tracking-[0.16em] uppercase">Loading Studio…</p>
 				<p class="text-sm leading-5 text-[color:rgba(38,26,18,0.76)]">
 					{failed
 						? 'The gallery is still open while the 3D studio preview takes a break.'

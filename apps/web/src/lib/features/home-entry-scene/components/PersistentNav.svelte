@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
 	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
+	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
 	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
 	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
@@ -176,6 +177,7 @@
 		<div class="relative flex flex-col items-end gap-7 pb-[13.5rem]">
 			{#each previewCards as card (card.id)}
 				{@const frame = resolveArtworkFrame({ artworkId: card.id, podiumPosition: card.rank })}
+				{@const blurred = isArtworkBlurred(card, { adultContentEnabled: adultContentAllowed })}
 				<a
 					href={resolve('/gallery')}
 					class="group relative block cursor-pointer"
@@ -193,11 +195,13 @@
 								<img
 									src={card.imageUrl}
 									alt={card.title}
-									class={`h-full w-full object-cover transition duration-200 ${card.isNsfw && !adultContentAllowed ? 'scale-[1.08] blur-xl saturate-0' : ''}`}
+									decoding="async"
+									class="h-full w-full object-cover transition duration-200"
+									class:nsfw-blurred={blurred}
 								/>
-								{#if card.isNsfw && !adultContentAllowed}
+								{#if blurred}
 									<div
-										class="absolute inset-0 flex flex-col items-center justify-center border-2 border-dashed border-[#2d2420] bg-[rgba(45,36,32,0.68)] px-2 text-center text-[#fdfbf7]"
+										class="nsfw-scrim absolute inset-0 flex flex-col items-center justify-center border-2 border-dashed border-[#2d2420] px-2 text-center text-[#fdfbf7]"
 									>
 										<span
 											class="rounded-full border-2 border-[#fdfbf7] px-2 py-0.5 text-xs font-black"
@@ -212,7 +216,13 @@
 						</ArtworkFrame>
 						{#if card.artistAvatar}
 							<div class="absolute -bottom-3 -left-3">
-								<WaxSealAvatar alt={card.artist} seed={card.id} size="lg" src={card.artistAvatar} />
+								<WaxSealAvatar
+									alt={card.artist}
+									loading="eager"
+									seed={card.id}
+									size="lg"
+									src={card.artistAvatar}
+								/>
 							</div>
 						{/if}
 					</div>
@@ -364,6 +374,21 @@
 {/if}
 
 <style>
+	/*
+	 * One NSFW treatment for the whole museum: the blur radius and the scrim
+	 * live in `routes/layout.css` as --nsfw-*, and the fallbacks here are the
+	 * same values NsfwImage carries, so the preview stack can never drift into
+	 * a fourth alpha again.
+	 */
+	.nsfw-blurred {
+		scale: 1.08;
+		filter: blur(var(--nsfw-blur, 20px)) saturate(0);
+	}
+
+	.nsfw-scrim {
+		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
+	}
+
 	.avatar-sheet {
 		background-color: #fbf7f0;
 		border-radius: 3px;

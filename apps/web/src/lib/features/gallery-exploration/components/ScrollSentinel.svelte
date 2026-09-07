@@ -1,5 +1,6 @@
 <script lang="ts">
 	import PolaroidSkeletonGrid from '$lib/features/gallery-exploration/components/PolaroidSkeletonGrid.svelte';
+	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 
 	interface Props {
 		onTrigger?: () => void;
@@ -76,25 +77,27 @@
 	/>
 {/if}
 
+<!--
+	Both notices sit on the dark museum wall (#252018), where the stone greys they
+	used to wear resolved to ~2.1:1. The palette here is the wall's own paper and
+	dust tones, and the retry is the same sticker control every other action in the
+	gallery uses instead of a lone flat grey button.
+-->
 {#if error}
 	<div
 		data-testid="scroll-sentinel-error"
 		class="flex flex-col items-center gap-3 py-8 text-center"
 	>
-		<p class="text-sm text-stone-600">{error}</p>
-		<button
-			type="button"
-			class="rounded-md bg-stone-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-stone-700"
-			onclick={() => onRetry?.()}
-		>
-			Retry
-		</button>
+		<p class="wall-text text-sm text-[#f7eadf]">{error}</p>
+		<GameButton variant="secondary" size="sm" onclick={() => onRetry?.()}>
+			<span class="font-semibold">Retry</span>
+		</GameButton>
 	</div>
 {/if}
 
 {#if !hasMore && !isLoading && !error}
 	<div data-testid="scroll-sentinel-end" class="py-8 text-center">
-		<p class="text-sm text-stone-400">You've seen it all — nothing more to show.</p>
+		<p class="wall-text text-sm text-[#c4b5a6]">You've seen it all — nothing more to show.</p>
 	</div>
 {/if}
 
@@ -104,3 +107,11 @@
 	style="height: 1px; width: 100%;"
 	aria-hidden="true"
 ></div>
+
+<style>
+	/* The wall is a photographic texture, not a flat fill; the same shadow the
+	 * room empty states use keeps the text readable over its lighter bricks. */
+	.wall-text {
+		text-shadow: 0 1px 2px rgba(45, 36, 32, 0.5);
+	}
+</style>

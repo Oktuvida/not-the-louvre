@@ -46,15 +46,28 @@
 	 */
 	const MAX_SPIN_FRAMES = 12;
 
-	type ReelState = 'idle' | 'spinning' | 'stopped';
+	/*
+	 * `free-spinning` is the gap the visitor used to stare at: the artwork the
+	 * reel lands on comes from the network, and until it answered the reel sat
+	 * perfectly still with the button disabled. The reel now leaves at a
+	 * constant velocity on the click and `spinToArtwork` retargets that motion
+	 * into its decelerating landing when the artwork arrives.
+	 */
+	type ReelState = 'idle' | 'free-spinning' | 'spinning' | 'stopped';
 	// The only thing this component ever does with a tween handle is kill it,
 	// so it needs no gsap type — which keeps the module out of the type graph
 	// as well as out of the bundle.
 	type ReelTween = { kill: () => void };
 	let reelState = $state<ReelState>('idle');
 	let idleTween: ReelTween | null = null;
+	let freeSpinTween: ReelTween | null = null;
 	let spinTween: ReelTween | null = null;
 	let idleRestartTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Brisk but not a blur, and long enough that no realistic round trip
+	// outlives it.
+	const FREE_SPIN_FRAMES_PER_SECOND = 8;
+	const FREE_SPIN_FRAMES = 600;
 
 	const fallbackRevealedIds = writable<Set<string>>(new Set());
 	const revealedIds = $derived(revealedArtworkIds ?? fallbackRevealedIds);
@@ -213,6 +226,55 @@
 		}
 	};
 
+	const stopFreeSpin = () => {
+		if (!freeSpinTween) return;
+		freeSpinTween.kill();
+		freeSpinTween = null;
+	};
+
+	/**
+	 * Leaves the gate at a constant velocity while the caller fetches the
+	 * artwork to land on. Safe to call and forget: `spinToArtwork` takes the
+	 * motion over, and `cancelFreeSpin` puts the reel back if nothing arrives.
+	 */
+	export const startFreeSpin = async () => {
+		if (reelState !== 'idle' || reelArtworks.length === 0 || !viewportEl) return;
+		// A constant-velocity blur is precisely what reduced motion asks us not
+		// to do; those visitors get the short landing tween and nothing else.
+		if (prefersReducedMotion.current) return;
+
+		reelState = 'free-spinning';
+		stopIdle();
+
+		const { gsap } = await loadGsap();
+		// The reel may have been retargeted, cancelled or destroyed while the
+		// module loaded.
+		if (reelState !== 'free-spinning') return;
+
+		const { frameStep } = reelMetrics;
+		proxy.value = offset;
+
+		freeSpinTween = gsap.to(proxy, {
+			value: `+=${FREE_SPIN_FRAMES * frameStep}`,
+			duration: FREE_SPIN_FRAMES / FREE_SPIN_FRAMES_PER_SECOND,
+			ease: 'none',
+			onUpdate() {
+				offset = proxy.value;
+			},
+			onComplete() {
+				offset = proxy.value;
+				freeSpinTween = null;
+			}
+		});
+	};
+
+	/** Puts a free-spinning reel back to idle when the artwork never arrives. */
+	export const cancelFreeSpin = () => {
+		if (reelState !== 'free-spinning') return;
+		stopFreeSpin();
+		reelState = 'idle';
+	};
+
 	const runSpin = async (targetIndex: number, pool: Artwork[], landOn: Artwork) => {
 		const { frameSize, frameStep } = reelMetrics;
 		const vpWidth = viewportWidth || viewportEl?.offsetWidth || 0;
@@ -268,8 +330,13 @@
 
 	export const isSpinning = () => reelState === 'spinning';
 
-	export const spinToArtwork = (artwork: Artwork) => {
-		if (reelState === 'spinning' || reelArtworks.length === 0 || !viewportEl) return;
+	/**
+	 * Retargets whatever the reel is doing — resting or free-spinning — onto a
+	 * decelerating landing. Returns false when the reel cannot take the artwork,
+	 * so the caller can stop pretending a spin is under way.
+	 */
+	export const spinToArtwork = (artwork: Artwork): boolean => {
+		if (reelState === 'spinning' || reelArtworks.length === 0 || !viewportEl) return false;
 
 		// Check if artwork is already in the pool; otherwise append it locally
 		let targetIndex = reelArtworks.findIndex((a) => a.id === artwork.id);
@@ -277,14 +344,17 @@
 		if (targetIndex === -1) {
 			injectedArtwork = artwork;
 			targetIndex = reelArtworks.findIndex((a) => a.id === artwork.id);
-			if (targetIndex === -1) return;
+			if (targetIndex === -1) return false;
 		}
 
 		const pool = reelArtworks;
 		reelState = 'spinning';
 		stopIdle();
+		// Freeze the run-up before runSpin reads `offset` to compute the landing.
+		stopFreeSpin();
 
 		void runSpin(targetIndex, pool, artwork);
+		return true;
 	};
 
 	$effect(() => {
@@ -329,12 +399,18 @@
 	 */
 	$effect(() => () => {
 		stopIdle();
+		stopFreeSpin();
 		spinTween?.kill();
 		spinTween = null;
 	});
 </script>
 
-<div class="reel-container" data-reel-orientation="horizontal" data-testid="film-reel">
+<div
+	class="reel-container"
+	data-reel-orientation="horizontal"
+	data-reel-state={reelState}
+	data-testid="film-reel"
+>
 	<div
 		class="reel-viewport"
 		bind:this={viewportEl}
@@ -408,9 +484,13 @@
 		display: block;
 	}
 
+	/* The one censoring treatment, defined in routes/layout.css. The reel cannot
+	 * use <NsfwImage> — its slots are recycled mid-spin and the per-src fade
+	 * would blank frames — so it reads the same two properties instead of
+	 * carrying its own blur radius and scrim alpha. */
 	.nsfw-blurred {
 		scale: 1.04;
-		filter: blur(20px) saturate(0);
+		filter: blur(var(--nsfw-blur, 20px)) saturate(0);
 	}
 
 	.nsfw-overlay {
@@ -420,7 +500,7 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		background: rgba(45, 36, 32, 0.72);
+		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
 		border-radius: 8px;
 	}
 

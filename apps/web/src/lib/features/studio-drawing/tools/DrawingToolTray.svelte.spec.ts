@@ -27,7 +27,7 @@ describe('DrawingToolTray', () => {
 	it('disables publish while a publish request is in flight', async () => {
 		render(DrawingToolTray, { isPublishing: true });
 
-		await expect.element(page.getByRole('button', { name: 'Publishing...' })).toBeDisabled();
+		await expect.element(page.getByRole('button', { name: 'Publishing…' })).toBeDisabled();
 	});
 
 	it('shows the full color palette directly on mobile', async () => {

@@ -47,19 +47,36 @@
 
 	let filmReel: ReturnType<typeof FilmReel> | undefined = $state();
 	let isSpinning = $state(false);
+	let spinErrorMessage = $state<string | null>(null);
 	let resetToIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const LOAD_MORE_THRESHOLD = 0.8;
+	// The room's own voice: the visitor does not care that a fetch rejected.
+	const SPIN_FAILURE_MESSAGE = 'That spin came up empty — give it another go.';
 
 	const handleSpin = async () => {
 		if (isSpinning || !fetchRandomArtwork) return;
 		isSpinning = true;
+		spinErrorMessage = null;
+
+		/*
+		 * The reel leaves on the click and the fetch retargets it when it
+		 * lands. Waiting for the round trip first left the button disabled over
+		 * a completely still reel, which reads as a broken control on any
+		 * connection slower than localhost.
+		 */
+		void filmReel?.startFreeSpin();
 
 		try {
 			const artwork = await fetchRandomArtwork();
-			filmReel?.spinToArtwork(artwork);
+			// The reel refuses an artwork it cannot place; without this the room
+			// would sit disabled over a run-up that never lands.
+			if (filmReel?.spinToArtwork(artwork) === false) {
+				throw new Error(SPIN_FAILURE_MESSAGE);
+			}
 		} catch {
-			// Spin failed — re-enable the button and keep idle
+			filmReel?.cancelFreeSpin();
+			spinErrorMessage = SPIN_FAILURE_MESSAGE;
 			isSpinning = false;
 		}
 	};
@@ -121,13 +138,32 @@
 		disabled={isSpinning}
 		onclick={handleSpin}
 	>
-		<span>{isSpinning ? 'SPINNING...' : 'Spin!'}</span>
+		<span>{isSpinning ? 'SPINNING…' : 'Spin!'}</span>
 	</GameButton>
+
+	{#if spinErrorMessage}
+		<p class="spin-error" data-testid="mystery-spin-error" role="alert">
+			{spinErrorMessage}
+		</p>
+	{/if}
 
 	<div
 		class="pointer-events-none absolute -bottom-4 left-1/2 z-20 w-full max-w-[16rem] -translate-x-1/2 text-center text-xs text-[#f7eadf] italic transition-all duration-700 ease-[cubic-bezier(0.4,0,1,1)] md:-bottom-7 md:max-w-none md:text-sm"
 		style="font-family: 'Baloo 2', sans-serif; letter-spacing: 0.01em; text-shadow: 0 1px 1px rgba(45,36,32,.7), 0 2px 8px rgba(45,36,32,.35);"
 	>
-		Discover a random masterpiece... hopefully
+		Discover a random masterpiece… hopefully
 	</div>
 </div>
+
+<style>
+	/* Paper-on-wall, like the room's other copy — a failure on the dark museum
+	 * wall still has to be readable. */
+	.spin-error {
+		max-width: 22rem;
+		text-align: center;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: #f7c8b8;
+		text-shadow: 0 1px 2px rgba(45, 36, 32, 0.6);
+	}
+</style>

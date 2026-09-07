@@ -2,6 +2,19 @@
 @import '../lib/features/shared-ui/styles/tokens.css';
 @import '../lib/features/shared-ui/styles/utilities.css';
 
+/*
+ * One censoring treatment for the whole app. Every surface that hides
+ * sensitive artwork — the grid cards through NsfwImage, the Mystery reel and
+ * the home preview stack — reads these instead of carrying its own blur radius
+ * and its own scrim alpha, which is how the three drifted to 16/20/24px and
+ * 0.60/0.68/0.72 in the first place.
+ */
+:root {
+	--nsfw-blur: 20px;
+	--nsfw-scrim: rgba(45, 36, 32, 0.68);
+	--nsfw-placeholder-blur: 12px;
+}
+
 :global(html) {
 	background: var(--color-ink);
 	color: var(--color-paper);

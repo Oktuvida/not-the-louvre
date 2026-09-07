@@ -177,6 +177,43 @@ describe('MysteryRoom', () => {
 		expect(calledWith.id).toBe('random-1');
 	});
 
+	it('starts the reel moving on the click instead of waiting for the artwork', async () => {
+		// Never resolves: the reel has to move on its own until it is retargeted.
+		const fetchRandomArtwork = vi.fn(() => new Promise<Artwork>(() => {}));
+
+		renderRoom({
+			artworks: sampleArtworks,
+			pageInfo: defaultPageInfo,
+			fetchRandomArtwork
+		});
+
+		const reel = page.getByTestId('film-reel');
+		await expect.element(reel).toHaveAttribute('data-reel-state', 'idle');
+
+		await page.getByRole('button', { name: /spin/i }).click();
+
+		await expect.element(reel).toHaveAttribute('data-reel-state', 'free-spinning');
+	});
+
+	it('surfaces a failed spin instead of swallowing it', async () => {
+		const fetchRandomArtwork = vi.fn().mockRejectedValue(new Error('Network error'));
+
+		renderRoom({
+			artworks: sampleArtworks,
+			pageInfo: defaultPageInfo,
+			fetchRandomArtwork
+		});
+
+		await page.getByRole('button', { name: /spin/i }).click();
+
+		const notice = page.getByTestId('mystery-spin-error');
+		await expect.element(notice).toBeVisible();
+		await expect.element(notice).toHaveAttribute('role', 'alert');
+		await expect.element(notice).toHaveTextContent(/give it another go/i);
+		// The run-up is wound back down rather than left turning forever.
+		await expect.element(page.getByTestId('film-reel')).toHaveAttribute('data-reel-state', 'idle');
+	});
+
 	it('spin error keeps FilmReel in idle and re-enables the spin button', async () => {
 		const fetchRandomArtwork = vi.fn().mockRejectedValue(new Error('Network error'));
 

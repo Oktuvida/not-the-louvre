@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { museumWindowFrameAssetUrl } from '$lib/features/shared-ui/generated-art';
 import MuseumWindowFrame from './MuseumWindowFrame.svelte';
 
 describe('MuseumWindowFrame', () => {
@@ -9,7 +10,9 @@ describe('MuseumWindowFrame', () => {
 		const frameImage = document.querySelector('[data-testid="museum-window-frame"]');
 
 		expect(frameImage?.tagName).toBe('IMG');
-		expect(frameImage?.getAttribute('src')).toMatch(/^data:image\/(png|svg\+xml)/);
+		// The 29.7KB frame is a committed static file, not markup inlined into
+		// every home document.
+		expect(frameImage?.getAttribute('src')).toBe(museumWindowFrameAssetUrl);
 		expect(document.querySelector('canvas')).toBeNull();
 	});
 

@@ -61,6 +61,24 @@ describe('NsfwImage', () => {
 		await expect.element(badge).not.toBeInTheDocument();
 	});
 
+	it('keeps the blur but drops the badge when the caller paints its own scrim', async () => {
+		render(NsfwImage, {
+			src: 'https://example.com/nsfw.avif',
+			alt: 'Sensitive artwork',
+			blurred: true,
+			showScrim: false
+		});
+
+		const image = page.getByAltText('Sensitive artwork');
+
+		await expect.element(image).toBeInTheDocument();
+		// The shared treatment still applies — only the built-in badge is gone,
+		// so a richer scrim above it never announces "18+" twice.
+		expect(image.element().className).toContain('is-sensitive');
+		await expect.element(page.getByText('18+', { exact: true })).not.toBeInTheDocument();
+		expect(document.querySelector('.nsfw-scrim')).toBeNull();
+	});
+
 	it('keeps the placeholder mounted but drops its blur once the photo is opaque', async () => {
 		render(NsfwImage, {
 			src: PIXEL,

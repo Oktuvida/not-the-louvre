@@ -280,6 +280,43 @@ describe('AuthOverlay', () => {
 		}
 	});
 
+	it('exposes the live auth sheet as a modal dialog that keeps Tab inside it', async () => {
+		render(AuthOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'auth-login',
+			form: undefined
+		});
+
+		const dialog = await vi.waitFor(() => {
+			const element = document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+			expect(element).not.toBeNull();
+			return element!;
+		});
+
+		const label = dialog.getAttribute('aria-labelledby');
+		expect(label).toBeTruthy();
+		expect(document.getElementById(label!)?.textContent?.trim()).toBe('Welcome back');
+
+		await vi.waitFor(() => {
+			expect(dialog.contains(document.activeElement)).toBe(true);
+		});
+
+		document.activeElement?.dispatchEvent(
+			new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Tab', shiftKey: true })
+		);
+		expect(dialog.contains(document.activeElement)).toBe(true);
+	});
+
+	it('drops the dialog semantics while the overlay is not the live auth surface', async () => {
+		render(AuthOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'inside',
+			form: undefined
+		});
+
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
+	});
+
 	it('submits signup only once after successful validation', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const requestSubmit = vi.fn();

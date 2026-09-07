@@ -5,14 +5,14 @@
 <script lang="ts">
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import { hashString } from '$lib/features/artwork-presentation/model/frame';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/gallery-adapter';
+	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
 	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
 
 	let {
 		artwork,
 		className = '',
 		onclick,
-		onPrefetch,
+		onPointerIntent,
 		testId,
 		viewerId = null,
 		adultContentEnabled = false,
@@ -23,7 +23,7 @@
 		artwork: Artwork;
 		className?: string;
 		onclick?: () => void;
-		onPrefetch?: () => void;
+		onPointerIntent?: () => void;
 		testId?: string;
 		viewerId?: string | null;
 		adultContentEnabled?: boolean;
@@ -58,10 +58,19 @@
 
 	// Intent, not hover: pointerdown lands 80-150ms before the click on every
 	// input type, so the detail request is already in flight when the panel
-	// opens — and a pointer sweeping the wall costs nothing.
-	const handlePointerDown = () => {
+	// opens — and a pointer sweeping the wall costs nothing. A press that only
+	// uncovers a blurred card is not intent to open it.
+	const signalIntent = () => {
 		if (blurred && canReveal) return;
-		onPrefetch?.();
+		onPointerIntent?.();
+	};
+
+	// The keyboard equivalent. Space activates the button on keyup, so this is
+	// the same 80-150ms head start; Enter activates on keydown, where it costs
+	// nothing and still beats the panel's own request.
+	const handleKeydown = (event: KeyboardEvent) => {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		signalIntent();
 	};
 
 	const seed = $derived(hashString(artwork.id));
@@ -94,7 +103,8 @@
 	data-testid={testId}
 	style={`--card-rotate: ${rotation}deg;`}
 	onclick={handleClick}
-	onpointerdown={handlePointerDown}
+	onpointerdown={signalIntent}
+	onkeydown={handleKeydown}
 >
 	<div
 		class="polaroid relative bg-[#f8f4ed] p-[8px] pb-0 shadow-[3px_4px_12px_rgba(0,0,0,0.22),0_1px_3px_rgba(0,0,0,0.1)] transition duration-200 group-hover:z-[5] group-hover:scale-[1.06] group-active:scale-[0.97]"

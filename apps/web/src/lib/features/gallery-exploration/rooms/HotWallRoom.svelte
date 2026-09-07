@@ -140,6 +140,7 @@
 								imageLoading="eager"
 								testId={`hot-wall-polaroid-${artwork.id}`}
 								onclick={() => onSelect(artwork)}
+								onPointerIntent={() => onPrefetch?.(artwork.id)}
 							/>
 						</div>
 					{/snippet}

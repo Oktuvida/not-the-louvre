@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { museumWallPatternAssetUrl } from '$lib/features/shared-ui/generated-art';
 import MuseumWallOverlay from './MuseumWallOverlay.svelte';
 
 type MockTimelineCall = {
@@ -106,6 +107,25 @@ describe('MuseumWallOverlay', () => {
 		expect(rightSlab?.getAttribute('style')).toContain(
 			'calc(50% - (0.5 * clamp(19rem, 80vw, 49rem)) + (0.819444 * clamp(19rem, 80vw, 49rem)))'
 		);
+
+		authOverlayElement.remove();
+	});
+
+	it('references the committed wall texture by URL instead of inlining the svg', () => {
+		const authOverlayElement = document.createElement('div');
+		document.body.append(authOverlayElement);
+
+		render(MuseumWallOverlay, {
+			authOverlayElement,
+			dispatch: vi.fn(),
+			entryState: 'outside'
+		});
+
+		const leftSlab = document.querySelector('[data-testid="museum-wall-slab-left"]');
+		const style = leftSlab?.getAttribute('style') ?? '';
+
+		expect(style).toContain(museumWallPatternAssetUrl);
+		expect(style).not.toContain('data:image/svg+xml');
 
 		authOverlayElement.remove();
 	});

@@ -15,6 +15,8 @@ import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelt
 import AvatarSketchpad from './AvatarSketchpad.svelte';
 
 const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
+/** The shared AvatarUploadResult carries the saved URL back to the caller. */
+const AVATAR_URL = '/api/users/product-user-1/avatar';
 
 const DRAWING_DRAFTS_DB_NAME = 'drawing-drafts';
 const DRAWING_DRAFTS_JOURNAL_STORE = 'journal';
@@ -221,7 +223,7 @@ describe('AvatarSketchpad', () => {
 		const onContinue = vi.fn();
 		const avatarPayload = serializeDrawingDocument(createEmptyDrawingDocument('avatar'));
 		const createAvatarPayload = vi.fn(async () => avatarPayload);
-		const saveAvatar = vi.fn(async () => ({ success: true as const }));
+		const saveAvatar = vi.fn(async () => ({ avatarUrl: AVATAR_URL, success: true as const }));
 
 		render(AvatarSketchpad, {
 			createAvatarPayload,
@@ -266,7 +268,7 @@ describe('AvatarSketchpad', () => {
 			async (document: Parameters<typeof serializeDrawingDocument>[0]) =>
 				serializeDrawingDocument(document)
 		);
-		const saveAvatar = vi.fn(async () => ({ success: true as const }));
+		const saveAvatar = vi.fn(async () => ({ avatarUrl: AVATAR_URL, success: true as const }));
 
 		render(AvatarSketchpad, {
 			createAvatarPayload,
@@ -303,7 +305,7 @@ describe('AvatarSketchpad', () => {
 			async (document: Parameters<typeof serializeDrawingDocument>[0]) =>
 				serializeDrawingDocument(document)
 		);
-		const saveAvatar = vi.fn(async () => ({ success: true as const }));
+		const saveAvatar = vi.fn(async () => ({ avatarUrl: AVATAR_URL, success: true as const }));
 
 		render(AvatarSketchpad, {
 			createAvatarPayload,
@@ -591,7 +593,7 @@ describe('AvatarSketchpad', () => {
 			async (document: Parameters<typeof serializeDrawingDocument>[0]) =>
 				serializeDrawingDocument(document)
 		);
-		const saveAvatar = vi.fn(async () => ({ success: true as const }));
+		const saveAvatar = vi.fn(async () => ({ avatarUrl: AVATAR_URL, success: true as const }));
 
 		render(AvatarSketchpad, {
 			clearMode: 'blank',
@@ -715,7 +717,7 @@ describe('AvatarSketchpad', () => {
 
 				return originalGetContext.call(this, contextId);
 			} as HTMLCanvasElement['getContext']);
-		const saveAvatar = vi.fn(async () => ({ success: true as const }));
+		const saveAvatar = vi.fn(async () => ({ avatarUrl: AVATAR_URL, success: true as const }));
 		const createAvatarPayload = vi.fn(
 			async (document: Parameters<typeof serializeDrawingDocument>[0]) =>
 				serializeDrawingDocument(document)

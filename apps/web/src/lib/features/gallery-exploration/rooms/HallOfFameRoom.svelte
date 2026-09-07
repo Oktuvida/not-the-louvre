@@ -224,6 +224,7 @@
 					imageLoading="eager"
 					testId={`ranked-polaroid-${artwork.id}`}
 					onclick={() => onSelect(artwork)}
+					onPointerIntent={() => onPrefetch?.(artwork.id)}
 				/>
 			{/snippet}
 		</VirtualizedGrid>

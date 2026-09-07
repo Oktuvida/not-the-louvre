@@ -17,6 +17,7 @@
 		alt,
 		className = '',
 		blurred = false,
+		showScrim = true,
 		ariaLabel = undefined,
 		loading = 'lazy',
 		decoding = 'async',
@@ -27,6 +28,14 @@
 		alt: string;
 		className?: string;
 		blurred?: boolean;
+		/**
+		 * The built-in "18+ / Sensitive content" scrim. Surfaces that paint their
+		 * own, richer scrim over the same box — the artwork detail panel, whose
+		 * scrim also carries the "Reveal 18+ artworks" call to action — opt out of
+		 * it so the badge is not announced twice, while still reading the shared
+		 * blur treatment from the `--nsfw-*` tokens.
+		 */
+		showScrim?: boolean;
 		ariaLabel?: string;
 		loading?: 'eager' | 'lazy';
 		decoding?: 'async' | 'sync';
@@ -101,7 +110,7 @@
 			isLoaded ? 'is-loaded' : ''
 		}`}
 	/>
-	{#if blurred}
+	{#if blurred && showScrim}
 		<div class="nsfw-scrim">
 			<span class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black">18+</span>
 			<p class="mt-2 text-[0.65rem] font-semibold tracking-wide uppercase opacity-80">

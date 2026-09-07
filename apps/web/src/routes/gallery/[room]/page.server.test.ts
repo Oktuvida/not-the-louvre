@@ -63,6 +63,15 @@ describe('gallery room route', () => {
 
 		expect(result).toMatchObject({ roomId: 'hot-wall' });
 
+		// Four rooms used to share one tab title and one share card; the root
+		// layout renders the only <title> from what the route contributes here.
+		expect(result).toMatchObject({
+			meta: {
+				description: 'Fresh pieces rising fast through the current gallery heat.',
+				title: 'The Hot Wall'
+			}
+		});
+
 		const roomContent = await result.lazy.roomContent;
 
 		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
