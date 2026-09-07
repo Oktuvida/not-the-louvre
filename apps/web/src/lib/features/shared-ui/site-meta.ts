@@ -19,7 +19,7 @@ export type RouteMeta = {
 
 export const SITE_NAME = 'Not the Louvre';
 
-export const SITE_ORIGIN = 'https://not-the-louvre.art';
+const SITE_ORIGIN = 'https://not-the-louvre.art';
 
 export const SITE_DESCRIPTION =
 	'A playful studio-world where sketchy masterpieces, strange rankings, and a 3D room all collide.';

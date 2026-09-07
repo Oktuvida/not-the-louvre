@@ -24,6 +24,15 @@ const sketchFaviconSvg = `
 
 export const sketchFaviconHref = `data:image/svg+xml,${encodeURIComponent(sketchFaviconSvg)}`;
 
+/**
+ * The one place that spells the avatar favicon endpoint's URL. Kept exported —
+ * with `tags: ["-knipignore"]` in `knip.json` teaching knip to accept the tag —
+ * because it is this module's URL builder, next to `sketchFaviconHref`: the
+ * alternative to importing it is hand-writing `/api/users/…/favicon?v=…` at a
+ * new call site, which is exactly the drift this function exists to prevent.
+ *
+ * @knipignore
+ */
 export const resolveAvatarFaviconHref = (userId: string, version: number | string) =>
 	`/api/users/${userId}/favicon?v=${encodeURIComponent(String(version))}`;
 

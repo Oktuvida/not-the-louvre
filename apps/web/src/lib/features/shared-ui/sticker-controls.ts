@@ -32,7 +32,7 @@ const STICKER_SIZE_PRESETS: Record<
 
 export const getStickerControlPreset = (size: StickerControlSize) => STICKER_SIZE_PRESETS[size];
 
-export const getStickerTextColor = (variant: StickerControlVariant) => STICKER_TEXT_COLORS[variant];
+const getStickerTextColor = (variant: StickerControlVariant) => STICKER_TEXT_COLORS[variant];
 
 export const getStickerControlVars = (size: StickerControlSize, variant: StickerControlVariant) => {
 	const preset = getStickerControlPreset(size);

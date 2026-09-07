@@ -55,7 +55,7 @@ const wallTransform = ({ finalScale, translateX, translateY }: WallZoomGeometry)
 
 const IDENTITY_TRANSFORM = 'translate(0px, 0px) scale(1)';
 
-export const cancelWallZoom = (elements: WallZoomElements) => {
+const cancelWallZoom = (elements: WallZoomElements) => {
 	for (const element of allElements(elements)) {
 		for (const animation of element.getAnimations()) {
 			animation.cancel();

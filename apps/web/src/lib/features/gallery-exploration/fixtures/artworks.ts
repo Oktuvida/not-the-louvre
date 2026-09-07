@@ -1,5 +1,4 @@
 import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-import type { GalleryPageInfo } from '$lib/features/gallery-exploration/model/discovery';
 
 /*
  * The one Artwork factory for the gallery specs.
@@ -44,11 +43,3 @@ export const makeArtworks = (
 		makeArtwork({ id: `${prefix}${index + 1}`, ...options.overrides?.(index) })
 	);
 };
-
-export const makeArtworkPage = (
-	artworks: Artwork[],
-	pageInfo: Partial<GalleryPageInfo> = {}
-): { artworks: Artwork[]; pageInfo: GalleryPageInfo } => ({
-	artworks,
-	pageInfo: { hasMore: false, nextCursor: null, ...pageInfo }
-});

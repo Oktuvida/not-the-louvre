@@ -14,7 +14,6 @@ export const AVATAR_DRAWING_DIMENSIONS = {
 
 export const DRAWING_DOCUMENT_VERSION = 1 as const;
 export const DRAWING_DOCUMENT_V2_VERSION = 2 as const;
-export const LATEST_DRAWING_DOCUMENT_VERSION = DRAWING_DOCUMENT_V2_VERSION;
 
 export const drawingColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 

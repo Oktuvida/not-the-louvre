@@ -20,6 +20,14 @@ import {
 } from '../../shared/content/report-reasons';
 import { ARTWORK_VOTE_VALUES } from '../../shared/content/votes';
 
+/*
+ * Every export in this module is consumed by a module scan, not by an import:
+ * drizzle-kit reads the whole file and treats each exported table, enum and
+ * `relations()` object as part of the schema. knip cannot see that, so
+ * `knip.json` silences `exports` for this file by path — the ignore is exact,
+ * because "unused export" is not a meaningful verdict here.
+ */
+
 const appSchema = pgSchema('app');
 
 export const userRole = appSchema.enum('user_role', PRODUCT_ROLES);

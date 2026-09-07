@@ -1,22 +1,18 @@
 import { access, copyFile, cp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 
-export const DEFAULT_CLOUDFLARE_BUILD_DIR = join('.svelte-kit', 'cloudflare');
-export const DEFAULT_CLOUDFLARE_MANIFEST_PATH = join(
-	'.svelte-kit',
-	'cloudflare-tmp',
-	'manifest.js'
-);
+const DEFAULT_CLOUDFLARE_BUILD_DIR = join('.svelte-kit', 'cloudflare');
+const DEFAULT_CLOUDFLARE_MANIFEST_PATH = join('.svelte-kit', 'cloudflare-tmp', 'manifest.js');
 export const SERVER_WASM_IMPORT_SPECIFIER = '@not-the-louvre/stroke-json-runtime/server.wasm';
-export const GENERATED_SERVER_WASM_RELATIVE_PATH = join(
+const GENERATED_SERVER_WASM_RELATIVE_PATH = join(
 	'generated',
 	'wasm',
 	'server',
 	'stroke_json_wasm_bg.wasm'
 );
-export const DEFAULT_SVELTEKIT_OUTPUT_DIR = join('.svelte-kit', 'output');
+const DEFAULT_SVELTEKIT_OUTPUT_DIR = join('.svelte-kit', 'output');
 // The generated wasm lives in the workspace package, two levels above apps/web.
-export const WORKSPACE_GENERATED_SERVER_WASM_PATH = join(
+const WORKSPACE_GENERATED_SERVER_WASM_PATH = join(
 	'..',
 	'..',
 	'packages',
@@ -137,10 +133,7 @@ export const syncGeneratedServerWasmAsset = async (
 	return targetWasmPath;
 };
 
-export const ensureManifestFileExcludesRoutePrefix = async (
-	manifestPath: string,
-	routePrefix: string
-) => {
+const ensureManifestFileExcludesRoutePrefix = async (manifestPath: string, routePrefix: string) => {
 	const manifestContents = await readFile(manifestPath, 'utf8');
 	const escapedRoutePrefix = routePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	const routePattern = new RegExp(`id:\\s+['"]${escapedRoutePrefix}(?:/|['"])`, 'u');

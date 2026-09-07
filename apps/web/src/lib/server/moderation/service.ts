@@ -258,7 +258,7 @@ export const getViewerContentPreferences = async (
 	};
 };
 
-export const updateViewerContentPreferences = async (
+const updateViewerContentPreferences = async (
 	input: UpdateViewerContentPreferencesInput,
 	context: ModerationContext,
 	dependencies: ServiceDependencies = {}

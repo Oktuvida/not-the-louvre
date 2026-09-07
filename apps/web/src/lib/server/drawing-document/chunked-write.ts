@@ -35,7 +35,7 @@ export const isRetryableConnectionError = (error: unknown) =>
 // attempt actually committed before the socket died and only the ack was lost.
 export const isUniqueViolation = (error: unknown) => hasErrorCode(error, '23505');
 
-export const errorCode = (error: unknown): string | null => {
+const errorCode = (error: unknown): string | null => {
 	let current: unknown = error;
 	while (current instanceof Error) {
 		const code = (current as { code?: unknown }).code;

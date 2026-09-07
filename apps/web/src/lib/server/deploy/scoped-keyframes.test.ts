@@ -39,6 +39,24 @@ describe('findDeadKeyframeReferences', () => {
 		expect(names.toSorted()).toEqual(['drift', 'fade-in', 'pop-in', 'slide-up']);
 	});
 
+	it('flags markup that names a keyframe this component scopes', () => {
+		// The bug the guard exists for: the keyframes *are* declared, but Svelte
+		// renamed them, and it only rewrites `animation` inside the same <style>.
+		const source = [
+			'<div class="animate-[drift_2s_ease]"></div>',
+			'<div style="animation: drift 2s"></div>',
+			'',
+			'<style>',
+			'\t@keyframes drift { from { opacity: 0 } }',
+			'</style>'
+		].join('\n');
+
+		expect(findDeadKeyframeReferences(source, globals)).toEqual([
+			{ kind: 'utility', name: 'drift' },
+			{ kind: 'inline', name: 'drift' }
+		]);
+	});
+
 	it('leaves the shapes that do resolve alone', () => {
 		const source = [
 			'<script lang="ts">',

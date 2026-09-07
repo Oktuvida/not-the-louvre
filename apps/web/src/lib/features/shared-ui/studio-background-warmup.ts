@@ -10,7 +10,7 @@
  * its own `<link rel="preload" fetchpriority="high">`.
  */
 
-export const STUDIO_BACKGROUND_URL = '/table.avif';
+const STUDIO_BACKGROUND_URL = '/table.avif';
 
 const STUDIO_BACKGROUND_WARMUP_DELAY_MS = 1200;
 

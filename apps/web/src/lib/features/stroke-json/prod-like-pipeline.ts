@@ -11,10 +11,3 @@ export type ProdLikePipelineIterationResult = {
 	rawBytes: number;
 	strokeCount: number;
 };
-
-export type ProdLikePipelineResult = {
-	baselineDocument: DrawingDocumentV2;
-	finalDocument: DrawingDocumentV2;
-	iterations: ProdLikePipelineIterationResult[];
-	totalDurationMs: number;
-};
