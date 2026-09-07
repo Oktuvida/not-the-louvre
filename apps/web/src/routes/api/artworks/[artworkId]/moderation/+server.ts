@@ -1,14 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { moderateArtwork, withoutDrawingDocument } from '$lib/server/artwork/service';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 
-const toErrorResponse = (error: unknown) => {
-	if (error instanceof ArtworkFlowError) {
-		return json({ code: error.code, message: error.message }, { status: error.status });
-	}
-
-	return json({ code: 'PUBLISH_FAILED', message: 'Artwork request failed' }, { status: 500 });
+const MODERATION_ERROR = {
+	fallbackCode: 'MODERATION_FAILED',
+	fallbackMessage: 'Artwork moderation failed',
+	scope: 'artwork moderation'
 };
 
 export const PATCH: RequestHandler = async (event) => {
@@ -23,7 +21,7 @@ export const PATCH: RequestHandler = async (event) => {
 
 		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, MODERATION_ERROR);
 	}
 };
 
@@ -36,6 +34,6 @@ export const DELETE: RequestHandler = async (event) => {
 
 		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, MODERATION_ERROR);
 	}
 };

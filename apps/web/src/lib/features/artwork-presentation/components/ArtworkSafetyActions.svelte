@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { apiErrorMessage, requestJson } from '$lib/client/api';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import WashiTape from '$lib/features/shared-ui/components/WashiTape.svelte';
 	import {
 		ARTWORK_REPORT_REASONS,
 		ARTWORK_REPORT_REASON_LABELS,
@@ -45,20 +47,6 @@
 		statusMessage = message;
 	};
 
-	const parseResponse = async (response: Response) => {
-		const raw = await response.text();
-
-		if (!raw) {
-			return null;
-		}
-
-		try {
-			return JSON.parse(raw);
-		} catch {
-			return raw;
-		}
-	};
-
 	const stopEvent = (event: Event) => {
 		event.preventDefault();
 		event.stopPropagation();
@@ -91,25 +79,16 @@
 		isBusy = true;
 
 		try {
-			const response = await request(`/api/artworks/${artwork.id}/reports`, {
-				body: JSON.stringify({ reason }),
-				headers: { 'content-type': 'application/json' },
+			await requestJson(`/api/artworks/${artwork.id}/reports`, {
+				fetch: request,
+				json: { reason },
 				method: 'POST'
 			});
-			const payload = await parseResponse(response);
-
-			if (!response.ok) {
-				throw new Error(
-					typeof payload === 'object' && payload && 'message' in payload
-						? String(payload.message)
-						: 'Report failed'
-				);
-			}
 
 			isReportMenuOpen = false;
 			setStatus('success', 'Report submitted.');
 		} catch (error) {
-			setStatus('error', error instanceof Error ? error.message : 'Report failed');
+			setStatus('error', apiErrorMessage(error, 'Report failed'));
 		} finally {
 			isBusy = false;
 		}
@@ -132,39 +111,24 @@
 		isBusy = true;
 
 		try {
-			const response = await request(`/api/artworks/${artwork.id}/moderation`, {
-				body: JSON.stringify({ action }),
-				headers: { 'content-type': 'application/json' },
+			const payload = await requestJson<{
+				artwork?: { isHidden?: boolean; isNsfw?: boolean };
+			} | null>(`/api/artworks/${artwork.id}/moderation`, {
+				fetch: request,
+				json: { action },
 				method: 'PATCH'
 			});
-			const payload = (await parseResponse(response)) as
-				| { artwork?: { isHidden?: boolean; isNsfw?: boolean }; message?: string }
-				| string;
-
-			if (!response.ok) {
-				throw new Error(
-					typeof payload === 'object' && payload && 'message' in payload
-						? String(payload.message)
-						: 'Moderation failed'
-				);
-			}
 
 			const patch = {
-				isHidden:
-					typeof payload === 'object' && payload?.artwork?.isHidden !== undefined
-						? payload.artwork.isHidden
-						: artwork.isHidden,
-				isNsfw:
-					typeof payload === 'object' && payload?.artwork?.isNsfw !== undefined
-						? payload.artwork.isNsfw
-						: artwork.isNsfw
+				isHidden: payload?.artwork?.isHidden ?? artwork.isHidden,
+				isNsfw: payload?.artwork?.isNsfw ?? artwork.isNsfw
 			} satisfies ArtworkPatch;
 
 			onArtworkPatch?.(patch);
 			isModMenuOpen = false;
 			setStatus('success', MODERATION_SUCCESS_COPY[action]);
 		} catch (error) {
-			setStatus('error', error instanceof Error ? error.message : 'Moderation failed');
+			setStatus('error', apiErrorMessage(error, 'Moderation failed'));
 		} finally {
 			isBusy = false;
 		}
@@ -175,10 +139,9 @@
 	<div class="action-row">
 		{#if canReport}
 			<div class="report-group">
-				<button
-					type="button"
-					class="action-button report"
-					class:icon-only={compact}
+				<WashiTape
+					class={compact ? 'action-button report icon-only' : 'action-button report'}
+					rotate="-2deg"
 					aria-expanded={isReportMenuOpen}
 					aria-label="Report artwork"
 					disabled={isBusy}
@@ -198,7 +161,7 @@
 					{:else}
 						Report
 					{/if}
-				</button>
+				</WashiTape>
 
 				<div
 					class="report-menu"
@@ -222,16 +185,16 @@
 
 		{#if canModerate}
 			<div class="mod-group">
-				<button
-					type="button"
+				<WashiTape
 					class="action-button mod"
+					rotate="2deg"
 					aria-expanded={isModMenuOpen}
 					aria-label="Moderation menu"
 					disabled={isBusy}
 					onclick={toggleModMenu}
 				>
 					Mod
-				</button>
+				</WashiTape>
 
 				<div
 					class="mod-menu"
@@ -339,53 +302,21 @@
 		position: relative;
 	}
 
-	/* washi-tape chips, same species as the postcard flip tape */
-	.action-button {
-		border: 0;
+	/*
+	 * The chips are `<WashiTape>` now — same strip as the auth and avatar close
+	 * buttons — so only the chip lettering and the moderation variant's darker
+	 * stripes live here. `:global()` under `.action-row` is what reaches a child
+	 * component's root without leaking the rules out of this component.
+	 */
+	.action-row :global(.action-button) {
 		padding: 8px 13px;
 		font-family: 'Fredoka', sans-serif;
 		font-size: 0.68rem;
-		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: #5d4e37;
-		cursor: pointer;
-		background: repeating-linear-gradient(
-			-45deg,
-			rgba(238, 228, 205, 0.94) 0 9px,
-			rgba(248, 240, 222, 0.94) 9px 18px
-		);
-		box-shadow: 0 2px 5px rgba(45, 36, 32, 0.28);
-		/* torn tape ends — drop this line if it ghosts */
-		clip-path: polygon(
-			3% 0%,
-			97% 2%,
-			100% 26%,
-			98% 52%,
-			100% 78%,
-			96% 100%,
-			4% 98%,
-			0% 70%,
-			2% 44%,
-			0% 22%
-		);
-		transition: translate 140ms ease;
 	}
 
-	.action-button:hover {
-		translate: 0 -2px;
-	}
-
-	.action-button:focus-visible {
-		outline: 3px solid #4ecdc4;
-		outline-offset: 2px;
-	}
-
-	.action-button.report {
-		rotate: -2deg;
-	}
-
-	.action-button.icon-only {
+	.action-row :global(.action-button.icon-only) {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -394,13 +325,13 @@
 		padding: 0;
 	}
 
-	.action-button.icon-only :global(svg) {
+	.action-row :global(.action-button.icon-only svg) {
 		width: 1rem;
 		height: 1rem;
 	}
 
-	.action-button.mod {
-		rotate: 2deg;
+	/* Darker tape so the moderator strip reads apart from the report strip. */
+	.action-row :global(.action-button.mod) {
 		background: repeating-linear-gradient(
 			-45deg,
 			rgba(224, 207, 180, 0.94) 0 9px,
@@ -473,7 +404,7 @@
 		outline-offset: -1px;
 	}
 
-	.action-button:disabled,
+	.action-row :global(.action-button:disabled),
 	.reason-button:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;

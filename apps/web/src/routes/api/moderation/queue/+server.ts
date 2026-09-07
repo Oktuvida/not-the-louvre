@@ -1,6 +1,12 @@
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { listModerationQueue } from '$lib/server/artwork/read.service';
+import { toApiErrorResponse } from '$lib/server/http/errors';
+
+const MODERATION_QUEUE_ERROR = {
+	fallbackCode: 'MODERATION_QUEUE_FAILED',
+	fallbackMessage: 'Moderation queue read failed',
+	scope: 'moderation queue read'
+};
 
 export const GET: RequestHandler = async (event) => {
 	try {
@@ -12,10 +18,6 @@ export const GET: RequestHandler = async (event) => {
 
 		return Response.json(page);
 	} catch (error) {
-		if (error instanceof ArtworkFlowError) {
-			return new Response(error.message, { status: error.status });
-		}
-
-		return new Response('Moderation queue read failed', { status: 500 });
+		return toApiErrorResponse(error, MODERATION_QUEUE_ERROR);
 	}
 };

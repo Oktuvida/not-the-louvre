@@ -1,3 +1,5 @@
+import { requestJson } from '$lib/client/api';
+import { TEXT_MODERATION_BLOCKED_MESSAGES } from '$lib/shared/moderation/messages';
 import type { TextContentChecker, TextFilterContext } from './types';
 
 // The text-policy module carries the full profanity wordlist, so it loads on
@@ -34,12 +36,6 @@ const getBaselineMatcher = () => {
 	return baselineMatcherPromise;
 };
 
-const blockedMessages: Record<TextFilterContext, string> = {
-	artwork_title: 'Choose a different artwork title.',
-	comment: 'This comment breaks the gallery rules.',
-	nickname: 'Choose a different nickname.'
-};
-
 const shouldBypassClientContentFilters = () =>
 	typeof window !== 'undefined' && Boolean(window.__ntlBypassClientContentFilters);
 
@@ -47,17 +43,9 @@ const createMatchers = async (): Promise<MatcherMap> => {
 	const { buildPhraseMatcher } = await getTextPolicyModule();
 
 	try {
-		const response = await fetch('/api/moderation/text-policy', {
-			headers: { accept: 'application/json' }
-		});
-
-		if (!response.ok) {
-			throw new Error('Moderation policy snapshot failed');
-		}
-
-		const snapshot = (await response.json()) as {
+		const snapshot = await requestJson<{
 			policies: Record<TextFilterContext, { allowlist: string[]; blocklist: string[] }>;
-		};
+		}>('/api/moderation/text-policy');
 
 		return {
 			artwork_title: buildPhraseMatcher(snapshot.policies.artwork_title),
@@ -96,7 +84,7 @@ export const checkTextContent: TextContentChecker = async (value, context) => {
 
 		if (baselineMatcher.hasMatch(value)) {
 			return {
-				message: blockedMessages[context],
+				message: TEXT_MODERATION_BLOCKED_MESSAGES[context],
 				status: 'blocked'
 			};
 		}
@@ -107,7 +95,7 @@ export const checkTextContent: TextContentChecker = async (value, context) => {
 		}
 
 		return {
-			message: blockedMessages[context],
+			message: TEXT_MODERATION_BLOCKED_MESSAGES[context],
 			status: 'blocked'
 		};
 	} catch {

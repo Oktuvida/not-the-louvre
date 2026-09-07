@@ -9,11 +9,9 @@ import {
 	isGalleryRoomId,
 	type GalleryRoomId
 } from '$lib/features/gallery-exploration/model/rooms';
+import type { Viewer } from '$lib/shared/viewer';
 
-type ProductUser = {
-	id: string;
-	role: 'admin' | 'moderator' | 'user';
-};
+type ProductUser = Viewer;
 
 // The room payload shape is shared with the page component that consumes it.
 export type { GalleryRoomContent };

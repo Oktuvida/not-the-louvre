@@ -520,6 +520,7 @@ describe('AuthOverlay', () => {
 
 		expect(fetchSpy).toHaveBeenCalledWith('/api/users/product-user-1/avatar', {
 			body: expect.any(FormData),
+			headers: { accept: 'application/json' },
 			method: 'PUT'
 		});
 	});

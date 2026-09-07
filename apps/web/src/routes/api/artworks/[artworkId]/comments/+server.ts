@@ -2,16 +2,20 @@ import { json } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
 import type { RequestHandler } from './$types';
 import { auth } from '$lib/server/auth';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { listArtworkCommentsForViewer } from '$lib/server/artwork/read.service';
 import { createArtworkComment } from '$lib/server/artwork/service';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 
-const toErrorResponse = (error: unknown) => {
-	if (error instanceof ArtworkFlowError) {
-		return json({ code: error.code, message: error.message }, { status: error.status });
-	}
+const COMMENT_CREATE_ERROR = {
+	fallbackCode: 'COMMENT_FAILED',
+	fallbackMessage: 'Artwork comment failed',
+	scope: 'artwork comment create'
+};
 
-	return json({ code: 'PUBLISH_FAILED', message: 'Artwork request failed' }, { status: 500 });
+const COMMENT_LIST_ERROR = {
+	fallbackCode: 'COMMENT_LISTING_FAILED',
+	fallbackMessage: 'Artwork comment listing failed',
+	scope: 'artwork comment listing'
 };
 
 export const POST: RequestHandler = async (event) => {
@@ -24,7 +28,7 @@ export const POST: RequestHandler = async (event) => {
 
 		return json({ comment }, { status: 201 });
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, COMMENT_CREATE_ERROR);
 	}
 };
 
@@ -35,6 +39,6 @@ export const GET: RequestHandler = async (event) => {
 		});
 		return json({ comments });
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, COMMENT_LIST_ERROR);
 	}
 };

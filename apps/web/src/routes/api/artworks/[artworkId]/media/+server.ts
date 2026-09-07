@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError, logArtworkFlowFailure } from '$lib/server/artwork/errors';
 import { getArtworkMedia } from '$lib/server/artwork/read.service';
 import { streamArtworkStorageObject } from '$lib/server/artwork/storage';
 import { etagMatches, notModified } from '$lib/server/http/conditional';
@@ -56,6 +56,10 @@ export const GET: RequestHandler = async (event) => {
 
 		return response;
 	} catch (error) {
+		// The only endpoint left answering errors as text: it backs an <img src>,
+		// so nothing ever reads the body. It still logs like the JSON routes do.
+		logArtworkFlowFailure('artwork media read', error);
+
 		if (error instanceof ArtworkFlowError) {
 			return new Response(error.message, { status: error.status });
 		}

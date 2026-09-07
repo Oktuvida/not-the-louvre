@@ -37,6 +37,7 @@ describe('uploadViewerAvatar', () => {
 		});
 		expect(fetchSpy).toHaveBeenCalledWith('/api/users/product-user-1/avatar', {
 			body: expect.any(FormData),
+			headers: { accept: 'application/json' },
 			method: 'PUT'
 		});
 
@@ -96,7 +97,7 @@ describe('setAdultContentEnabled', () => {
 
 		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
 			body: JSON.stringify({ adultContentEnabled: true }),
-			headers: { 'content-type': 'application/json' },
+			headers: { accept: 'application/json', 'content-type': 'application/json' },
 			method: 'PATCH'
 		});
 	});

@@ -1,14 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { deleteArtworkComment } from '$lib/server/artwork/service';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 
-const toErrorResponse = (error: unknown) => {
-	if (error instanceof ArtworkFlowError) {
-		return json({ code: error.code, message: error.message }, { status: error.status });
-	}
-
-	return json({ code: 'PUBLISH_FAILED', message: 'Artwork request failed' }, { status: 500 });
+const COMMENT_DELETE_ERROR = {
+	fallbackCode: 'COMMENT_DELETE_FAILED',
+	fallbackMessage: 'Artwork comment delete failed',
+	scope: 'artwork comment delete'
 };
 
 export const DELETE: RequestHandler = async (event) => {
@@ -20,6 +18,6 @@ export const DELETE: RequestHandler = async (event) => {
 
 		return json({ comment });
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, COMMENT_DELETE_ERROR);
 	}
 };

@@ -2,32 +2,15 @@ import { error, fail, isRedirect, redirect } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { getArtworkDetail, listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';
+import { toActionFailure } from '$lib/server/http/errors';
 
-const toFailure = (errorValue: unknown, fallback: string) => {
-	if (
-		errorValue instanceof ArtworkFlowError ||
-		(typeof errorValue === 'object' &&
-			errorValue !== null &&
-			'status' in errorValue &&
-			'message' in errorValue &&
-			'code' in errorValue)
-	) {
-		const artworkError = errorValue as Pick<ArtworkFlowError, 'status' | 'message' | 'code'>;
-		return fail(artworkError.status, {
-			code: artworkError.code,
-			message: artworkError.message
-		});
-	}
-
-	if (errorValue instanceof Error) {
-		return fail(500, { message: errorValue.message || fallback });
-	}
-
-	return fail(500, { message: fallback });
-};
+const toFailure = (errorValue: unknown, fallback: string) =>
+	toActionFailure(errorValue, {
+		fallbackMessage: fallback,
+		scope: 'demo artwork publish action'
+	});
 
 export const load: PageServerLoad = async (event) => {
 	if (event.locals.integrityFailure) {

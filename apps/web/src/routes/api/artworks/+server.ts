@@ -2,10 +2,10 @@ import { json } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
 import type { RequestHandler } from './$types';
 import { auth } from '$lib/server/auth';
-import { ArtworkFlowError, logArtworkFlowFailure } from '$lib/server/artwork/errors';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
 import { publishArtwork, withoutDrawingDocument } from '$lib/server/artwork/service';
 import { edgeCacheControl, readEdgeCache, storeInEdgeCache } from '$lib/server/http/edge-cache';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 
 // Anonymous discovery pages are viewer-independent: `viewerVote` collapses to a
 // literal null and the visibility filter ignores the moderator flag, so every
@@ -18,14 +18,16 @@ const ANONYMOUS_EDGE_TTL_SECONDS = 30;
 const ANONYMOUS_CACHE_CONTROL = edgeCacheControl(ANONYMOUS_EDGE_TTL_SECONDS, 120);
 const SIGNED_IN_CACHE_CONTROL = 'private, no-store';
 
-const toErrorResponse = (error: unknown, scope: string) => {
-	logArtworkFlowFailure(scope, error);
+const PUBLISH_ERROR = {
+	fallbackCode: 'PUBLISH_FAILED',
+	fallbackMessage: 'Artwork publish failed',
+	scope: 'artwork publish'
+};
 
-	if (error instanceof ArtworkFlowError) {
-		return json({ code: error.code, message: error.message }, { status: error.status });
-	}
-
-	return json({ code: 'PUBLISH_FAILED', message: 'Artwork publish failed' }, { status: 500 });
+const DISCOVERY_ERROR = {
+	fallbackCode: 'DISCOVERY_FAILED',
+	fallbackMessage: 'Artwork discovery failed',
+	scope: 'artwork discovery'
 };
 
 export const POST: RequestHandler = async (event) => {
@@ -55,7 +57,7 @@ export const POST: RequestHandler = async (event) => {
 
 		return json({ artwork: withoutDrawingDocument(artwork) }, { status: 201 });
 	} catch (error) {
-		return toErrorResponse(error, 'artwork publish');
+		return toApiErrorResponse(error, PUBLISH_ERROR);
 	}
 };
 
@@ -96,6 +98,6 @@ export const GET: RequestHandler = async (event) => {
 
 		return response;
 	} catch (error) {
-		return toErrorResponse(error, 'artwork discovery');
+		return toApiErrorResponse(error, DISCOVERY_ERROR);
 	}
 };

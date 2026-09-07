@@ -10,6 +10,9 @@
  * callback.
  */
 
+import { ApiError, apiErrorMessage, requestJson } from '$lib/client/api';
+import { resolveUserAvatarPath } from '$lib/user/avatar-url';
+
 export type AvatarUploadResult =
 	| { avatarUrl: string; success: true }
 	| { code?: string; message: string; success: false };
@@ -30,44 +33,37 @@ export const uploadViewerAvatar = async (
 	const formData = new FormData();
 	formData.set('drawingDocument', drawingDocument);
 
-	const response = await fetch(`/api/users/${userId}/avatar`, {
-		body: formData,
-		method: 'PUT'
-	});
-
-	if (response.ok) {
-		const data = (await response.json()) as { avatarUrl?: string };
+	try {
+		const data = await requestJson<{ avatarUrl?: string }>(resolveUserAvatarPath(userId), {
+			formData,
+			method: 'PUT'
+		});
 
 		if (!data.avatarUrl) {
 			return { message: AVATAR_MISSING_URL_MESSAGE, success: false };
 		}
 
 		return { avatarUrl: data.avatarUrl, success: true };
-	}
-
-	try {
-		const data = (await response.json()) as { code?: string; message?: string };
+	} catch (error) {
+		// A dropped connection is still the caller's to handle; only an answer
+		// the API actually wrote becomes a rendered failure here.
+		if (!(error instanceof ApiError)) throw error;
 
 		return {
-			code: data.code,
-			message: data.message ?? AVATAR_FAILURE_MESSAGE,
+			...(error.code ? { code: error.code } : {}),
+			message: apiErrorMessage(error, AVATAR_FAILURE_MESSAGE),
 			success: false
 		};
-	} catch {
-		// Ignore invalid error bodies and fall back to a generic message.
 	}
-
-	return { message: AVATAR_FAILURE_MESSAGE, success: false };
 };
 
 export const setAdultContentEnabled = async (enabled: boolean): Promise<void> => {
-	const response = await fetch('/api/viewer/content-preferences', {
-		body: JSON.stringify({ adultContentEnabled: enabled }),
-		headers: { 'content-type': 'application/json' },
-		method: 'PATCH'
-	});
-
-	if (!response.ok) {
-		throw new Error(ADULT_CONTENT_FAILURE_MESSAGE);
+	try {
+		await requestJson('/api/viewer/content-preferences', {
+			json: { adultContentEnabled: enabled },
+			method: 'PATCH'
+		});
+	} catch (error) {
+		throw new Error(apiErrorMessage(error, ADULT_CONTENT_FAILURE_MESSAGE), { cause: error });
 	}
 };

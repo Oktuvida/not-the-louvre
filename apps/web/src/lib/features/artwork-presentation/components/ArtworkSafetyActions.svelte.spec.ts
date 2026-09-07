@@ -47,7 +47,7 @@ describe('ArtworkSafetyActions', () => {
 		await vi.waitFor(() => {
 			expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/reports', {
 				body: JSON.stringify({ reason: 'spam' }),
-				headers: { 'content-type': 'application/json' },
+				headers: { accept: 'application/json', 'content-type': 'application/json' },
 				method: 'POST'
 			});
 		});
@@ -81,7 +81,7 @@ describe('ArtworkSafetyActions', () => {
 		await vi.waitFor(() => {
 			expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/moderation', {
 				body: JSON.stringify({ action: 'hide' }),
-				headers: { 'content-type': 'application/json' },
+				headers: { accept: 'application/json', 'content-type': 'application/json' },
 				method: 'PATCH'
 			});
 			expect(onArtworkPatch).toHaveBeenCalledWith({ isHidden: true, isNsfw: false });
@@ -115,7 +115,7 @@ describe('ArtworkSafetyActions', () => {
 		await vi.waitFor(() => {
 			expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/moderation', {
 				body: JSON.stringify({ action: 'unhide' }),
-				headers: { 'content-type': 'application/json' },
+				headers: { accept: 'application/json', 'content-type': 'application/json' },
 				method: 'PATCH'
 			});
 			expect(onArtworkPatch).toHaveBeenCalledWith({ isHidden: false, isNsfw: true });

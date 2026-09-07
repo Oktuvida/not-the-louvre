@@ -3,6 +3,7 @@
 	import { fade, scale } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { Download, GitFork } from 'lucide-svelte';
+	import { ApiError, requestJson } from '$lib/client/api';
 	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
 	import ArtworkSafetyActions from '$lib/features/artwork-presentation/components/ArtworkSafetyActions.svelte';
 	import {
@@ -15,6 +16,8 @@
 	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import type { ArtworkVoteValue } from '$lib/shared/content/votes';
+	import type { Viewer } from '$lib/shared/viewer';
 
 	/* The visitor never reads a stack trace. Codes whose server message is
 	 * already written for them (moderation reasons, rate-limit countdowns) pass
@@ -39,20 +42,17 @@
 	 * instead of leaking the browser's own wording. */
 	class ActionFailure extends Error {}
 
-	const describeActionFailure = (
-		payload: { code?: string; message?: string } | null,
-		fallback: string
-	) => {
-		const code = payload?.code;
+	/* An API answer becomes museum copy here: its own wording only for the codes
+	 * written for visitors, the house line for the codes that are not, and the
+	 * fallback for everything else — a 500, an HTML error page from a proxy, or
+	 * a request that never reached the API at all. */
+	const toActionError = (error: unknown, fallback: string) => {
+		if (error instanceof ActionFailure) return error.message;
+		if (!(error instanceof ApiError) || !error.code) return fallback;
+		if (PASS_THROUGH_ERROR_CODES.has(error.code)) return error.message;
 
-		if (code && PASS_THROUGH_ERROR_CODES.has(code) && payload?.message) return payload.message;
-		if (code && HOUSE_ERROR_MESSAGES[code]) return HOUSE_ERROR_MESSAGES[code]!;
-
-		return fallback;
+		return HOUSE_ERROR_MESSAGES[error.code] ?? fallback;
 	};
-
-	const toActionError = (error: unknown, fallback: string) =>
-		error instanceof ActionFailure ? error.message : fallback;
 
 	let {
 		artwork,
@@ -72,7 +72,7 @@
 		checkTextContent?: TextContentChecker;
 		isHydrating?: boolean;
 		onAdultContentToggle?: (enabled: boolean) => Promise<void> | void;
-		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
+		viewer?: Viewer | null;
 		onArtworkChange?: (artwork: Artwork) => void;
 		onArtworkPatch?: (
 			artworkId: string,
@@ -436,7 +436,7 @@
 		}
 	};
 
-	const submitVote = async (value: 'down' | 'up') => {
+	const submitVote = async (value: ArtworkVoteValue) => {
 		if (!artwork || isSubmittingVote) return;
 
 		notify(null);
@@ -466,21 +466,10 @@
 		});
 
 		try {
-			const response = await fetch(`/api/artworks/${previousArtwork.id}/vote`, {
-				body: method === 'POST' ? JSON.stringify({ value }) : undefined,
-				headers: method === 'POST' ? { 'content-type': 'application/json' } : undefined,
-				method
-			});
-
-			if (!response.ok) {
-				const payload = (await response.json().catch(() => null)) as {
-					code?: string;
-					message?: string;
-				} | null;
-				throw new ActionFailure(describeActionFailure(payload, VOTE_FAILED_MESSAGE));
-			}
-
-			const payload = (await response.json()) as { artwork: { score: number } };
+			const payload = await requestJson<{ artwork: { score: number } }>(
+				`/api/artworks/${previousArtwork.id}/vote`,
+				{ ...(method === 'POST' ? { json: { value } } : {}), method }
+			);
 
 			if (artwork && artwork.id === previousArtwork.id) {
 				syncArtwork({ ...artwork, score: payload.artwork.score });
@@ -514,28 +503,14 @@
 		isSubmittingComment = true;
 
 		try {
-			const response = await fetch(`/api/artworks/${artwork.id}/comments`, {
-				body: JSON.stringify({ body }),
-				headers: { 'content-type': 'application/json' },
-				method: 'POST'
-			});
-
-			if (!response.ok) {
-				const payload = (await response.json().catch(() => null)) as {
-					code?: string;
-					message?: string;
-				} | null;
-				throw new ActionFailure(describeActionFailure(payload, COMMENT_FAILED_MESSAGE));
-			}
-
-			const payload = (await response.json()) as {
+			const payload = await requestJson<{
 				comment: {
 					author: { nickname: string };
 					body: string;
 					createdAt?: string;
 					id: string;
 				};
-			};
+			}>(`/api/artworks/${artwork.id}/comments`, { json: { body }, method: 'POST' });
 
 			syncArtwork({
 				...artwork,
@@ -624,7 +599,7 @@
 				>
 					<div class="postcard" class:is-flipped={isFlipped} class:is-lifting={isLifting}>
 						<!-- FRONT: the photo side -->
-						<div class="postcard-face postcard-front paper-noise" inert={isFlipped}>
+						<div class="postcard-face postcard-front paper-sheet paper-noise" inert={isFlipped}>
 							<div class="postcard-stain postcard-stain-front-a" aria-hidden="true"></div>
 							<div class="postcard-stain postcard-stain-front-b" aria-hidden="true"></div>
 							<div class="relative">
@@ -808,7 +783,7 @@
 						</div>
 
 						<!-- BACK: the written side -->
-						<div class="postcard-face postcard-back paper-noise" inert={!isFlipped}>
+						<div class="postcard-face postcard-back paper-sheet paper-noise" inert={!isFlipped}>
 							<div class="postcard-stain postcard-stain-back" aria-hidden="true"></div>
 							<div class="postcard-airmail" aria-hidden="true"></div>
 
@@ -1111,8 +1086,12 @@
 	}
 
 	/* Polaroid language: cut paper + hard offset shadow, no ink outline */
+	/*
+	 * `.paper-sheet` (utilities.css) carries the position, radius and the
+	 * two-layer sheet shadow — this was the fifth copy of it. The postcard's own
+	 * stock is a shade cooler than a note's, so only that stays local.
+	 */
 	.postcard-face {
-		position: relative;
 		grid-area: 1 / 1;
 		/* Without an explicit minimum, the face's automatic min size is its
 		 * min-content and the artwork image's natural width blows the card
@@ -1123,11 +1102,7 @@
 		flex-direction: column;
 		backface-visibility: hidden;
 		-webkit-backface-visibility: hidden;
-		border-radius: 3px;
 		background-color: #f8f4ed;
-		box-shadow:
-			4px 6px 16px rgba(0, 0, 0, 0.32),
-			1px 2px 4px rgba(0, 0, 0, 0.18);
 	}
 
 	.postcard-front {

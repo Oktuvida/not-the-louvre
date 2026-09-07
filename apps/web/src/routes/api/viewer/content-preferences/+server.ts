@@ -1,28 +1,29 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 import {
 	getViewerContentPreferences,
 	setViewerAdultContentEnabled,
 	setViewerAmbientAudioEnabled
 } from '$lib/server/moderation/service';
 
-const toErrorResponse = (error: unknown) => {
-	if (error instanceof ArtworkFlowError) {
-		return json({ code: error.code, message: error.message }, { status: error.status });
-	}
+const PREFERENCE_READ_ERROR = {
+	fallbackCode: 'PREFERENCE_READ_FAILED',
+	fallbackMessage: 'Viewer preference request failed',
+	scope: 'viewer preference read'
+};
 
-	return json(
-		{ code: 'PUBLISH_FAILED', message: 'Viewer preference request failed' },
-		{ status: 500 }
-	);
+const PREFERENCE_UPDATE_ERROR = {
+	fallbackCode: 'PREFERENCE_UPDATE_FAILED',
+	fallbackMessage: 'Viewer preference update failed',
+	scope: 'viewer preference update'
 };
 
 export const GET: RequestHandler = async (event) => {
 	try {
 		return json(await getViewerContentPreferences({ user: event.locals.user ?? null }));
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, PREFERENCE_READ_ERROR);
 	}
 };
 
@@ -49,6 +50,6 @@ export const PATCH: RequestHandler = async (event) => {
 			)
 		);
 	} catch (error) {
-		return toErrorResponse(error);
+		return toApiErrorResponse(error, PREFERENCE_UPDATE_ERROR);
 	}
 };

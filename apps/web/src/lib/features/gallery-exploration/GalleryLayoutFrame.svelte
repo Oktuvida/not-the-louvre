@@ -14,6 +14,7 @@
 	import { museumWallPatternAssetUrl } from '$lib/features/shared-ui/generated-art';
 	import { warmStudioBackground } from '$lib/features/shared-ui/studio-background-warmup';
 	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
+	import type { Viewer } from '$lib/shared/viewer';
 
 	let {
 		children,
@@ -23,7 +24,7 @@
 	}: {
 		children: Snippet;
 		roomId: GalleryRoomId;
-		viewer: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
+		viewer: Viewer | null;
 		context?: GalleryLayoutContext;
 	} = $props();
 

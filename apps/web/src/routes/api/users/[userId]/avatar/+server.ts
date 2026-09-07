@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestEvent, RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { etagMatches, notModified } from '$lib/server/http/conditional';
+import { toApiErrorResponse } from '$lib/server/http/errors';
 import { avatarService } from '$lib/server/user/avatar.service';
 import { userRepository } from '$lib/server/user/repository';
 import { streamAvatarStorageObject } from '$lib/server/user/storage';
@@ -12,12 +12,22 @@ import { resolveUserAvatarPath, resolveUserAvatarUrl } from '$lib/user/avatar-ur
 // purge the uploader's own datacenter below (remote colos wait out the TTL).
 const CACHE_CONTROL = 'public, max-age=300, s-maxage=3600';
 
-const toErrorResponse = (error: unknown, fallback: { code: string; message: string }) => {
-	if (error instanceof ArtworkFlowError) {
-		return json({ code: error.code, message: error.message }, { status: error.status });
-	}
+const AVATAR_READ_ERROR = {
+	fallbackCode: 'AVATAR_READ_FAILED',
+	fallbackMessage: 'Avatar media read failed',
+	scope: 'avatar media read'
+};
 
-	return json(fallback, { status: 500 });
+const AVATAR_UPLOAD_ERROR = {
+	fallbackCode: 'AVATAR_UPLOAD_FAILED',
+	fallbackMessage: 'Avatar upload failed',
+	scope: 'avatar upload'
+};
+
+const AVATAR_DELETE_ERROR = {
+	fallbackCode: 'AVATAR_DELETE_FAILED',
+	fallbackMessage: 'Avatar deletion failed',
+	scope: 'avatar delete'
 };
 
 // cache.delete only reaches the local datacenter, which is exactly where the
@@ -81,10 +91,7 @@ export const GET: RequestHandler = async (event) => {
 
 		return response;
 	} catch (error) {
-		return toErrorResponse(error, {
-			code: 'AVATAR_READ_FAILED',
-			message: 'Avatar media read failed'
-		});
+		return toApiErrorResponse(error, AVATAR_READ_ERROR);
 	}
 };
 
@@ -107,10 +114,7 @@ export const PUT: RequestHandler = async (event) => {
 			avatarUrl: resolveUserAvatarUrl(updated.id, updated.avatarUrl, updated.updatedAt.getTime())
 		});
 	} catch (error) {
-		return toErrorResponse(error, {
-			code: 'PUBLISH_FAILED',
-			message: 'Avatar upload failed'
-		});
+		return toApiErrorResponse(error, AVATAR_UPLOAD_ERROR);
 	}
 };
 
@@ -121,9 +125,6 @@ export const DELETE: RequestHandler = async (event) => {
 
 		return json({ avatarUrl: updated.avatarUrl });
 	} catch (error) {
-		return toErrorResponse(error, {
-			code: 'PUBLISH_FAILED',
-			message: 'Avatar deletion failed'
-		});
+		return toApiErrorResponse(error, AVATAR_DELETE_ERROR);
 	}
 };
