@@ -1,4 +1,13 @@
 <script lang="ts">
+	/*
+	 * The root stylesheet goes FIRST. It declares the cascade-layer order
+	 * (`@layer theme, base, components, utilities`), and the browser fixes that
+	 * order at the first `@layer` it meets — a component stylesheet evaluated
+	 * earlier would create `components` ahead of `base` and let Tailwind's
+	 * preflight override component geometry. Keep it above every component and
+	 * font import.
+	 */
+	import './layout.css';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
@@ -50,7 +59,6 @@
 	 */
 	import balooBodyFontUrl from '@fontsource/baloo-2/files/baloo-2-latin-400-normal.woff2?url';
 	import fredokaDisplayFontUrl from '@fontsource/fredoka/files/fredoka-latin-700-normal.woff2?url';
-	import './layout.css';
 	import type { LayoutProps } from './$types';
 	import { faviconUpdateEventName } from '$lib/favicon';
 

@@ -96,6 +96,19 @@
 	 * layer's declaration of the same property outright — which threw away every
 	 * seeded angle and left whole rows of stickers at an identical tilt.
 	 */
+	/*
+	 * Pin the cascade-layer order here as well as in routes/layout.css. Layer
+	 * precedence is decided by the FIRST `@layer` statement the browser sees,
+	 * and this component's stylesheet can reach the document before the root
+	 * stylesheet does (Vite's dev client appends styles in module-evaluation
+	 * order, and the root layout imports components before its CSS). When
+	 * that happened, `components` was created first, Tailwind's `base` landed
+	 * above it, and preflight's `img { height: auto }` beat `.sticker-bg` —
+	 * every sticker grew a 150px paper tail with its label stuck at the top.
+	 * Restating the same order is a no-op when layout.css was first.
+	 */
+	@layer theme, base, components, utilities;
+
 	@layer components {
 		.sticker-control {
 			position: relative;
