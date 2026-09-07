@@ -1,7 +1,14 @@
 import { page } from 'vitest/browser';
+import { createRawSnippet } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import GameButton from './GameButton.svelte';
 import GameControlsHarness from './GameControlsHarness.svelte';
+
+// The shared harness covers the size/variant presets; the toggle cases below
+// need one button at a time, so they supply their own label snippet instead.
+const stickerLabel = (text: string) =>
+	createRawSnippet<[]>(() => ({ render: () => `<span>${text}</span>` }));
 
 describe('GameButton', () => {
 	it('supports reference-aligned size and variant presets', async () => {
@@ -32,5 +39,29 @@ describe('GameButton', () => {
 		// a per-pixel canvas repaint after it, on a ResizeObserver. One shared,
 		// cacheable file replaces both.
 		expect(document.querySelectorAll('canvas')).toHaveLength(0);
+	});
+
+	it('announces a pressed toggle through aria-pressed', async () => {
+		render(GameButton, { ariaPressed: true, children: stickerLabel('Upvote') });
+
+		await expect
+			.element(page.getByRole('button', { name: 'Upvote' }))
+			.toHaveAttribute('aria-pressed', 'true');
+	});
+
+	it('announces the unpressed half of a toggle rather than dropping the attribute', async () => {
+		render(GameButton, { ariaPressed: false, children: stickerLabel('Downvote') });
+
+		await expect
+			.element(page.getByRole('button', { name: 'Downvote' }))
+			.toHaveAttribute('aria-pressed', 'false');
+	});
+
+	it('never claims a toggle state on a plain sticker button', async () => {
+		render(GameButton, { children: stickerLabel('Fork') });
+
+		await expect
+			.element(page.getByRole('button', { name: 'Fork' }))
+			.not.toHaveAttribute('aria-pressed');
 	});
 });

@@ -16,11 +16,11 @@
 	import { waitForPageLayoutReady } from '$lib/features/home-entry-scene/components/page-layout-ready';
 	import MuseumWindowFrame from '$lib/features/home-entry-scene/components/MuseumWindowFrame.svelte';
 	import {
-		createMuseumWallPatternUrl,
 		museumWindowAspectRatio,
 		museumWindowOpening
 	} from '$lib/features/home-entry-scene/canvas/museum-canvas';
 	import { rasterizeSvgUrl } from '$lib/features/home-entry-scene/canvas/svg-bitmap';
+	import { museumWallPatternAssetUrl } from '$lib/features/shared-ui/generated-art';
 	import type {
 		EntryFlowEvent,
 		EntryFlowState
@@ -73,7 +73,9 @@
 	const WALL_TILE_CSS_PX = 512;
 	const LOGO_MAX_WIDTH_CSS_PX = 544; // clamp(24rem, 36vw, 34rem) upper bound
 	const LOGO_VIEWBOX_RATIO = 440 / 680;
-	const wallPatternSvgUrl = createMuseumWallPatternUrl();
+	// A committed static file rather than an inlined data: URL — the pattern is
+	// 42.7KB of markup and it was serialized into the home document twice.
+	const wallPatternSvgUrl = museumWallPatternAssetUrl;
 	let wallPatternUrl = $state(wallPatternSvgUrl);
 	let logoUrl = $state(graffitiLogoUrl);
 	let wallOpeningBounds = $state({

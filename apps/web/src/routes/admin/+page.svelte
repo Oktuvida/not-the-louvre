@@ -361,10 +361,6 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Operations | Not the Louvre</title>
-</svelte:head>
-
 <div class="ops-shell">
 	<section class="hero-panel">
 		<div>

@@ -13,6 +13,11 @@ export const load: PageServerLoad = async ({ locals, parent, platform }) => {
 
 	return {
 		...shell,
+		// The root layout owns the only <title> in the document; a route says who
+		// it is by contributing `meta` here. This is the shareable entry point to
+		// the whole gallery, so it is named for the gallery, not for the one room
+		// it happens to open on.
+		meta: { title: 'Gallery' },
 		lazy: {
 			roomContent: runWithRequestDbConnection(
 				async () =>

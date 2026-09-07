@@ -8,6 +8,7 @@ import { userRepository } from '$lib/server/user/repository';
 import { AuthFlowError } from '$lib/server/auth/errors';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import {
+	homeSceneArtworkSlotNames,
 	toHomePreviewCards,
 	toHomeSceneArtworkSlots
 } from '$lib/features/home-entry-scene/state/home-entry.svelte';
@@ -29,9 +30,9 @@ import { resolveUserAvatarUrl } from '$lib/user/avatar-url';
 
 const INTEGRITY_FAILURE_MESSAGE = 'Authenticated session is missing its product user profile';
 
-// Mirrors homeSceneArtworkSlotNames in home-entry.svelte.ts: the studio wall
-// has eleven frames and toHomeSceneArtworkSlots drops everything past them.
-const HOME_SCENE_ARTWORK_SLOT_COUNT = 11;
+// The studio wall has exactly one frame per slot name, and
+// toHomeSceneArtworkSlots drops everything past them.
+const HOME_SCENE_ARTWORK_SLOT_COUNT = homeSceneArtworkSlotNames.length;
 
 type HomeActionName = 'checkNickname' | 'recover' | 'saveAvatar' | 'signIn' | 'signOut' | 'signUp';
 

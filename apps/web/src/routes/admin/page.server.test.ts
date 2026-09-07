@@ -94,6 +94,23 @@ describe('admin dashboard load', () => {
 		expect(result.moderationPage).toBeTruthy();
 	});
 
+	it('contributes the ops document title to the root layout head', async () => {
+		mocked.listModerationQueue.mockResolvedValue({
+			items: [],
+			pageInfo: { hasMore: false, nextCursor: null }
+		});
+
+		const { load } = await import('./+page.server');
+		const result = (await load({ locals: { user: makeUser('moderator') } } as never)) as Exclude<
+			Awaited<ReturnType<typeof load>>,
+			void
+		>;
+
+		// The head is rendered once, by the root layout, from `page.data.meta`;
+		// the page's own <svelte:head><title> was a duplicate that never won.
+		expect(result.meta).toEqual({ title: 'Ops' });
+	});
+
 	it('rejects non-privileged users', async () => {
 		const { load } = await import('./+page.server');
 

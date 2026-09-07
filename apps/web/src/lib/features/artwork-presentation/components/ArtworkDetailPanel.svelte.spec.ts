@@ -1,4 +1,5 @@
 import { page } from 'vitest/browser';
+import { writable } from 'svelte/store';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 
@@ -335,14 +336,15 @@ describe('ArtworkDetailPanel', () => {
 
 		const photo = page.getByAltText('Detail artwork');
 
+		await expect.element(photo).toHaveAttribute('loading', 'eager');
 		await expect.element(photo).toHaveAttribute('decoding', 'async');
 		await expect.element(photo).toHaveAttribute('fetchpriority', 'high');
 
-		const placeholder = document.querySelector('.postcard-photo-lqip');
+		const placeholder = document.querySelector('.nsfw-placeholder');
 		expect(placeholder?.getAttribute('src')).toBe('data:image/webp;base64,lqip');
 	});
 
-	it('blurs the LQIP as well when the piece is sensitive', async () => {
+	it('censors the detail with the same treatment as every grid card', async () => {
 		render(ArtworkDetailPanel, {
 			artwork: {
 				...artwork,
@@ -353,7 +355,27 @@ describe('ArtworkDetailPanel', () => {
 		});
 
 		await expect.element(page.getByText('Sensitive artwork')).toBeVisible();
-		expect(document.querySelector('.postcard-photo-lqip')?.className).toContain('blur-xl');
+
+		// The photo and the LQIP under it both carry the shared blur, so no sharp
+		// thumbnail reads around the scrim.
+		expect(page.getByAltText('Detail artwork').element().className).toContain('is-sensitive');
+		expect(document.querySelector('.nsfw-placeholder')?.className).toContain('is-sensitive');
+
+		// The panel paints its own scrim — the one with the reveal CTA — so the
+		// shared component's badge must not be announced underneath it.
+		await expect.element(page.getByText('Sensitive content')).not.toBeInTheDocument();
+		expect(document.querySelector('.nsfw-scrim')).toBeNull();
+		await expect.element(page.getByRole('button', { name: 'Reveal 18+ artworks' })).toBeVisible();
+	});
+
+	it('stops censoring a piece the visitor revealed in the grid', async () => {
+		render(ArtworkDetailPanel, {
+			artwork: { ...artwork, isNsfw: true },
+			revealedArtworkIds: writable(new Set(['artwork-1'])),
+			viewer: { id: 'user-other', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Sensitive artwork')).not.toBeInTheDocument();
 	});
 
 	it('shows the viewer their own vote and locks both buttons while one is in flight', async () => {
@@ -378,6 +400,22 @@ describe('ArtworkDetailPanel', () => {
 
 		await expect.element(upvote).toBeDisabled();
 		await expect.element(downvote).toBeDisabled();
+	});
+
+	it('exposes the cast vote as a pressed toggle, not only as a ring', async () => {
+		render(ArtworkDetailPanel, {
+			artwork: { ...artwork, upvotes: 3, viewerVote: 'up' as const },
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		// The ring is the only visual signal of the viewer's own vote, so without
+		// aria-pressed a screen reader hears nothing at all about it.
+		await expect
+			.element(page.getByRole('button', { name: /👍/ }))
+			.toHaveAttribute('aria-pressed', 'true');
+		await expect
+			.element(page.getByRole('button', { name: /👎/ }))
+			.toHaveAttribute('aria-pressed', 'false');
 	});
 
 	it('answers a failed vote in the museum voice instead of the server code', async () => {
@@ -422,6 +460,37 @@ describe('ArtworkDetailPanel', () => {
 		// The message survives the flip instead of changing face with the card.
 		await openCommentsSide();
 		await expect.element(notice).toBeVisible();
+	});
+
+	it('hands failures to the host status region when one is wired up', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(JSON.stringify({ code: 'FORBIDDEN' }), {
+						status: 403
+					})
+			)
+		);
+		const onNotify = vi.fn();
+
+		render(ArtworkDetailPanel, {
+			artwork,
+			onNotify,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByRole('button', { name: /👍/ }).click();
+
+		await vi.waitFor(() => {
+			expect(onNotify).toHaveBeenCalledWith('The attendants will not let you do that.');
+		});
+
+		// Nothing is said twice: the panel's own line is not even reserved.
+		expect(document.querySelectorAll('.postcard-notice')).toHaveLength(0);
+		await expect
+			.element(page.getByText('The attendants will not let you do that.'))
+			.not.toBeInTheDocument();
 	});
 
 	it('keeps Tab inside the dialog instead of walking into the gallery behind it', async () => {

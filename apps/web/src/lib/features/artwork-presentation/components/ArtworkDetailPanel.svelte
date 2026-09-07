@@ -10,6 +10,8 @@
 		type TextContentChecker
 	} from '$lib/client/content-filter';
 	import { resolve } from '$app/paths';
+	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
+	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
 	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
@@ -62,6 +64,7 @@
 		onArtworkChange,
 		onArtworkPatch,
 		onClose,
+		onNotify,
 		revealedArtworkIds
 	}: {
 		artwork: Artwork | null;
@@ -76,6 +79,13 @@
 			patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>
 		) => void;
 		onClose?: () => void;
+		/**
+		 * Hands every transient outcome to the host page instead of the panel's
+		 * own notice. The gallery owns a status region that outlives the dialog,
+		 * so a failure raised on the last click is still readable after the panel
+		 * closes; without this the panel keeps saying it itself.
+		 */
+		onNotify?: (message: string) => void;
 		revealedArtworkIds?: import('svelte/store').Writable<Set<string>>;
 	} = $props();
 
@@ -89,9 +99,19 @@
 	let commentInput: HTMLInputElement | undefined = $state();
 	let dialogElement: HTMLDivElement | undefined = $state();
 	let avatarTriggerElement: HTMLButtonElement | undefined = $state();
-	let photoElement: HTMLImageElement | undefined = $state();
-	let isPhotoLoaded = $state(true);
 	let restoreFocusTimer: ReturnType<typeof setTimeout> | undefined;
+
+	/* One writer for the panel's transient outcomes. With a host region wired up
+	 * the panel says nothing itself, so a failure is never announced twice; a
+	 * `null` there is a no-op because the region dismisses itself. */
+	const notify = (message: string | null) => {
+		if (onNotify) {
+			if (message) onNotify(message);
+			return;
+		}
+
+		actionError = message;
+	};
 
 	// --- Postcard flip + tilt ---
 	let isFlipped = $state(false);
@@ -186,14 +206,6 @@
 		cancelAnimationFrame(tiltFrame);
 		tiltX = 0;
 		tiltY = 0;
-	});
-
-	// The postcard flies in over a blurred LQIP and cross-fades to the real
-	// photo. Cached media (the usual case — the grid card behind uses the same
-	// URL) resolves before hydration, so `complete` skips the fade entirely.
-	$effect(() => {
-		void openArtworkId;
-		isPhotoLoaded = photoElement?.complete ?? false;
 	});
 
 	// Lock background scrolling while the dialog is open, compensating for the
@@ -296,10 +308,12 @@
 			revealedIds = ids;
 		});
 	});
-	const isRevealed = $derived(Boolean(artwork?.id) && revealedIds.has(artwork!.id));
-	const viewerIsAuthor = $derived(Boolean(viewer) && viewer?.id === artwork?.authorId);
+	// The one predicate every surface shares: the author always sees their own
+	// piece, and a reveal made in the grid carries into the dialog.
 	const isSensitiveBlurred = $derived(
-		Boolean(artwork?.isNsfw) && !adultContentEnabled && !isRevealed && !viewerIsAuthor
+		artwork
+			? isArtworkBlurred(artwork, { adultContentEnabled, id: viewer?.id, revealedIds })
+			: false
 	);
 	const forkAttribution = $derived.by(() => {
 		if (!artwork?.lineage?.isFork) return null;
@@ -310,9 +324,12 @@
 		return `Forked from ${artwork.lineage.parent.title} by ${artwork.lineage.parent.author.nickname}`;
 	});
 
+	/* Every caller clears the notice BEFORE this runs: clearing after it would
+	 * wipe the sign-in prompt it just wrote, and a signed-out visitor would
+	 * never see why nothing happened. */
 	const requireViewer = () => {
 		if (!viewer) {
-			actionError = 'Sign in to interact with artworks.';
+			notify('Sign in to interact with artworks.');
 			return false;
 		}
 
@@ -358,19 +375,22 @@
 		if (!onAdultContentToggle || isUpdatingAdultContentPreference) return;
 
 		isUpdatingAdultContentPreference = true;
-		actionError = null;
+		notify(null);
 
 		try {
 			await onAdultContentToggle(enabled);
 		} catch (error) {
-			actionError = toActionError(error, ADULT_PREFERENCE_FAILED_MESSAGE);
+			notify(toActionError(error, ADULT_PREFERENCE_FAILED_MESSAGE));
 		} finally {
 			isUpdatingAdultContentPreference = false;
 		}
 	};
 
 	const goToFork = async () => {
-		if (!artwork || !requireViewer()) return;
+		if (!artwork) return;
+
+		notify(null);
+		if (!requireViewer()) return;
 
 		await goto(resolve(`/draw?fork=${artwork.id}`));
 	};
@@ -387,7 +407,7 @@
 		if (!artwork || isDownloading) return;
 
 		isDownloading = true;
-		actionError = null;
+		notify(null);
 
 		try {
 			const response = await fetch(artwork.imageUrl);
@@ -410,17 +430,19 @@
 			anchor.click();
 			URL.revokeObjectURL(objectUrl);
 		} catch (error) {
-			actionError = toActionError(error, DOWNLOAD_FAILED_MESSAGE);
+			notify(toActionError(error, DOWNLOAD_FAILED_MESSAGE));
 		} finally {
 			isDownloading = false;
 		}
 	};
 
 	const submitVote = async (value: 'down' | 'up') => {
-		if (!artwork || isSubmittingVote || !requireViewer()) return;
+		if (!artwork || isSubmittingVote) return;
+
+		notify(null);
+		if (!requireViewer()) return;
 
 		isSubmittingVote = true;
-		actionError = null;
 
 		const previousArtwork = artwork;
 		const method = artwork.viewerVote === value ? 'DELETE' : 'POST';
@@ -465,29 +487,31 @@
 			}
 		} catch (error) {
 			syncArtwork(previousArtwork);
-			actionError = toActionError(error, VOTE_FAILED_MESSAGE);
+			notify(toActionError(error, VOTE_FAILED_MESSAGE));
 		} finally {
 			isSubmittingVote = false;
 		}
 	};
 
 	const submitComment = async () => {
-		if (!artwork || isSubmittingComment || !requireViewer()) return;
+		if (!artwork || isSubmittingComment) return;
+
+		notify(null);
+		if (!requireViewer()) return;
 
 		const body = commentBody.trim();
 		if (!body) {
-			actionError = 'Comment cannot be empty.';
+			notify('Comment cannot be empty.');
 			return;
 		}
 
 		const moderationResult = await checkTextContent(body, 'comment');
 		if (moderationResult.status !== 'allowed') {
-			actionError = moderationResult.message;
+			notify(moderationResult.message);
 			return;
 		}
 
 		isSubmittingComment = true;
-		actionError = null;
 
 		try {
 			const response = await fetch(`/api/artworks/${artwork.id}/comments`, {
@@ -531,7 +555,7 @@
 			commentBody = '';
 			commentInput?.focus();
 		} catch (error) {
-			actionError = toActionError(error, COMMENT_FAILED_MESSAGE);
+			notify(toActionError(error, COMMENT_FAILED_MESSAGE));
 		} finally {
 			isSubmittingComment = false;
 		}
@@ -620,32 +644,25 @@
 									</div>
 								{/if}
 								<div class="postcard-photo border border-[#d6cfc5]">
-									{#if artwork.imagePlaceholder}
-										<!-- The same blur-to-sharp handoff every grid card gets. The LQIP
-										     is blurred with the photo when the piece is sensitive: an
-										     un-blurred thumbnail would still read around the overlay. -->
-										<img
-											class={`postcard-photo-lqip ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''}`}
-											src={artwork.imagePlaceholder}
-											alt=""
-											aria-hidden="true"
-											draggable="false"
-										/>
-									{/if}
-									<img
-										bind:this={photoElement}
-										class={`relative h-full w-full object-cover transition duration-200 ${isSensitiveBlurred ? 'scale-[1.04] blur-xl saturate-0' : ''} ${isPhotoLoaded ? 'opacity-100' : 'opacity-0'}`}
+									<!-- The same blur-to-sharp handoff, and the same censoring radius
+									     and scrim, every grid card gets: one treatment, read from the
+									     shared `--nsfw-*` tokens. The built-in badge is switched off
+									     because this surface paints a richer scrim below, the one that
+									     carries the "Reveal 18+ artworks" call to action. -->
+									<NsfwImage
+										className="postcard-photo-layer"
 										src={artwork.imageUrl}
 										alt={artwork.title}
+										placeholder={artwork.imagePlaceholder ?? null}
+										blurred={isSensitiveBlurred}
+										showScrim={false}
+										loading="eager"
 										decoding="async"
 										fetchpriority="high"
-										onload={() => {
-											isPhotoLoaded = true;
-										}}
 									/>
 									{#if isSensitiveBlurred}
 										<div
-											class="absolute inset-0 flex flex-col items-center justify-center bg-[rgba(45,36,32,0.72)] px-6 text-center text-[#fdfbf7]"
+											class="postcard-photo-scrim absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-[#fdfbf7]"
 										>
 											<span
 												class="rounded-full border-2 border-[#fdfbf7] px-3 py-1 text-xs font-black"
@@ -728,6 +745,7 @@
 									<GameButton
 										variant="secondary"
 										size="sm"
+										ariaPressed={artwork.viewerVote === 'up'}
 										className={artwork.viewerVote === 'up' ? 'vote-cast' : ''}
 										disabled={isSubmittingVote}
 										onclick={() => submitVote('up')}>👍 {artwork.upvotes}</GameButton
@@ -735,6 +753,7 @@
 									<GameButton
 										variant="danger"
 										size="sm"
+										ariaPressed={artwork.viewerVote === 'down'}
 										className={artwork.viewerVote === 'down' ? 'vote-cast' : ''}
 										disabled={isSubmittingVote}
 										onclick={() => submitVote('down')}>👎 {artwork.downvotes}</GameButton
@@ -980,10 +999,14 @@
 
 			<!-- One notice for the whole dialog, outside the card so it neither
 			     changes face with the flip nor pushes the postcard around, and
-			     always in the DOM so a screen reader actually announces it. -->
-			<p class="postcard-notice" class:is-visible={Boolean(actionError)} role="alert">
-				{actionError ?? ''}
-			</p>
+			     always in the DOM so a screen reader actually announces it. A host
+			     that passes `onNotify` owns the notice instead, so nothing here
+			     duplicates it — not even the reserved line. -->
+			{#if !onNotify}
+				<p class="postcard-notice" class:is-visible={Boolean(actionError)} role="alert">
+					{actionError ?? ''}
+				</p>
+			{/if}
 			<p class="sr-only" aria-live="polite">{pendingStatus}</p>
 
 			{#if isAvatarPreviewOpen && artwork.artistAvatar}
@@ -1245,16 +1268,17 @@
 		overflow: hidden;
 	}
 
-	/* The LQIP sits under the real photo and stays there: the window is never
-	 * blank paper while the full-size media is on the wire. */
-	.postcard-photo-lqip {
+	/* Same reason as the block above: the shared image component sizes itself
+	 * with utility classes, so pin its box here rather than relying on them. */
+	.postcard-photo :global(.postcard-photo-layer) {
 		position: absolute;
 		inset: 0;
-		height: 100%;
-		width: 100%;
-		object-fit: cover;
-		scale: 1.06;
-		filter: blur(var(--nsfw-placeholder-blur, 12px));
+	}
+
+	/* The panel paints its own scrim because it also carries the reveal CTA, but
+	 * it censors at the same strength as every other surface. */
+	.postcard-photo-scrim {
+		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
 	}
 
 	/* A single notice for the dialog. It keeps its box whether or not there is
@@ -1633,12 +1657,17 @@
 		rotate: -3deg;
 	}
 
+	/* `geometricPrecision` used to sit on `body`, where it softened small text
+	 * across every route. Here it earns its place: 8.4px glyphs with 1.6px
+	 * tracking, laid along a 32px-radius `textPath`, are the one place the hinted
+	 * default quantises advances and visibly bunches letters on the arc. */
 	.postmark-text {
 		font-family: 'Fredoka', sans-serif;
 		font-size: 8.4px;
 		font-weight: 600;
 		letter-spacing: 1.6px;
 		fill: currentColor;
+		text-rendering: geometricPrecision;
 	}
 
 	.postmark-date {
@@ -1646,6 +1675,7 @@
 		font-size: 9.5px;
 		font-weight: 700;
 		fill: currentColor;
+		text-rendering: geometricPrecision;
 	}
 
 	.postcard-address {

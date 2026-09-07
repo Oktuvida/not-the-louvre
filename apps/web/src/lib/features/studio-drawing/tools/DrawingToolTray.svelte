@@ -133,7 +133,7 @@
 			disabled={isPublishing}
 		>
 			<ImageUp size={20} />
-			<span>{isPublishing ? 'Publishing...' : 'Publish'}</span>
+			<span>{isPublishing ? 'Publishing…' : 'Publish'}</span>
 		</GameButton>
 
 		<GameButton

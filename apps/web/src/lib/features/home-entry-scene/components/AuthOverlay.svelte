@@ -15,6 +15,7 @@
 		HomeAuthAvailability
 	} from '$lib/features/home-entry-scene/auth-contract';
 	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
+	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 	import type {
 		EntryFlowEvent,
@@ -83,9 +84,12 @@
 	let recoveryFormElement = $state<HTMLFormElement | null>(null);
 	let allowValidatedSignupSubmit = $state(false);
 	let backdropElement = $state<HTMLDivElement | null>(null);
+	let authSheetElement = $state<HTMLDivElement | null>(null);
 	let pageLayoutReady = $state(!browser || document.readyState === 'complete');
 	/** Well under WALL_ZOOM_IN_DURATION_MS (2080), so the panel always beats the reveal. */
 	const PAGE_LAYOUT_READY_TIMEOUT_MS = 600;
+	/** The sheet's heading is its accessible name, so it needs a stable id. */
+	const AUTH_SHEET_TITLE_ID = 'auth-sheet-title';
 
 	const isInteractive = $derived(
 		pageLayoutReady &&
@@ -354,7 +358,7 @@
 	const runAvailabilityCheck = async (value: string) => {
 		checkToken = value;
 		availabilityState = 'checking';
-		availabilityMessage = 'Checking nickname...';
+		availabilityMessage = 'Checking nickname…';
 
 		try {
 			if (checkToken !== value) return;
@@ -494,6 +498,20 @@
 			if (debounceHandle) clearTimeout(debounceHandle);
 		};
 	});
+
+	/*
+	 * The overlay is mounted on every home visit, so it only becomes a dialog
+	 * once it is the live auth surface — otherwise the museum behind it would
+	 * report a permanently open modal. Focus lands on the sheet itself rather
+	 * than the first field, so the heading is announced before the form; the
+	 * trap installed below then keeps Tab inside it.
+	 */
+	$effect(() => {
+		if (!isInteractive || !authSheetElement) return;
+		if (authSheetElement.contains(document.activeElement)) return;
+
+		authSheetElement.focus();
+	});
 </script>
 
 <div
@@ -509,7 +527,13 @@
 			style="transform: scale(0.95);"
 		>
 			<div
+				bind:this={authSheetElement}
 				class={`auth-sheet relative ${panelClassName} ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
+				role={isInteractive ? 'dialog' : undefined}
+				aria-modal={isInteractive ? 'true' : undefined}
+				aria-labelledby={isInteractive ? AUTH_SHEET_TITLE_ID : undefined}
+				tabindex="-1"
+				use:focusTrap={{ enabled: isInteractive }}
 			>
 				<div class={`auth-sheet-inner relative pl-8 md:pl-11 ${contentClassName}`}>
 					<div class="flex items-start justify-between gap-4">
@@ -520,6 +544,7 @@
 								Studio Access
 							</p>
 							<h2
+								id={AUTH_SHEET_TITLE_ID}
 								class="font-display text-2xl tracking-[0.06em] text-[var(--color-ink)] uppercase md:text-3xl"
 							>
 								{view === 'signup-account'

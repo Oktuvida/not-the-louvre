@@ -5,6 +5,15 @@ export type FocusTrapOptions = {
 	autoFocus?: boolean;
 	/** Turn the trap off without tearing it down (a nested dialog owns focus). */
 	enabled?: boolean;
+	/**
+	 * Hand focus back to whatever was focused when the trap was installed, on
+	 * destroy. Opt-in rather than automatic: a dialog that plays an outro paints
+	 * itself over the page after the action is gone, so its opener is not there
+	 * to receive focus yet and it has to schedule the hand-back itself
+	 * (ArtworkDetailPanel does exactly that). Turn this on for the dialogs that
+	 * simply disappear.
+	 */
+	restoreFocus?: boolean;
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -37,6 +46,10 @@ const isReachable = (element: HTMLElement) => {
 
 export const focusTrap: Action<HTMLElement, FocusTrapOptions | undefined> = (node, parameters) => {
 	let options: FocusTrapOptions = parameters ?? {};
+
+	// Captured before `autoFocus` moves focus, so this is the control the
+	// visitor was on when the dialog opened.
+	const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
 	const tabbables = () =>
 		Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(isReachable);
@@ -78,6 +91,21 @@ export const focusTrap: Action<HTMLElement, FocusTrapOptions | undefined> = (nod
 		}
 	};
 
+	/**
+	 * Focus is ours to give back while it still sits inside the trap — and also
+	 * when it sits nowhere, because the control that had it was torn down with
+	 * the dialog and the browser fell back to `<body>`. Anything else means the
+	 * visitor has already moved on and taking focus would be a hijack.
+	 */
+	const restoreFocusToOpener = () => {
+		if (!options.restoreFocus || !opener?.isConnected) return;
+
+		const active = document.activeElement;
+		if (active !== null && active !== document.body && !node.contains(active)) return;
+
+		opener.focus();
+	};
+
 	if (options.enabled !== false && options.autoFocus) {
 		focusFirst();
 	}
@@ -90,6 +118,7 @@ export const focusTrap: Action<HTMLElement, FocusTrapOptions | undefined> = (nod
 		},
 		destroy() {
 			node.removeEventListener('keydown', handleKeydown);
+			restoreFocusToOpener();
 		}
 	};
 };

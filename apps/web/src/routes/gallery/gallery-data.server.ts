@@ -42,12 +42,13 @@ const roomDiscoveryRequest = (roomId: GalleryRoomId, user?: ProductUser) => {
 	return { cursor: null, limit: SCALABLE_GALLERY_PAGE_SIZE, sort: 'recent' as const, window: null };
 };
 
+// The Hot Wall is deliberately absent: it renders its own two-line empty state
+// (`HotWallRoom.svelte`) and the page never falls back to this copy for it, so a
+// hot-wall branch here was a second, unreachable voice for the same moment.
 const emptyStateMessageForRoom = (roomId: GalleryRoomId) =>
 	roomId === 'your-studio'
 		? 'You have not published any artworks yet.'
-		: roomId === 'hot-wall'
-			? 'Nothing is heating up on the wall right now.'
-			: 'No artworks have reached this gallery room yet.';
+		: 'No artworks have reached this gallery room yet.';
 
 /*
  * A missing anon key degrades silently: the browser never opens a realtime

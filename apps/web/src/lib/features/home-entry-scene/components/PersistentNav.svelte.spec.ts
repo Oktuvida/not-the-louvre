@@ -135,6 +135,40 @@ describe('PersistentNav', () => {
 		await expect.element(page.getByText('Sign in to reveal 18+ artworks.')).toBeVisible();
 	});
 
+	it('decodes the above-the-fold preview imagery without deferring it', async () => {
+		render(PersistentNav, {
+			previewCards: [{ ...topArtworks[0], artistAvatar: '/api/users/artist-1/avatar' }],
+			user: null
+		});
+
+		const preview = page.getByAltText('Sunset Over Mountains');
+		await expect.element(preview).toHaveAttribute('decoding', 'async');
+		expect(preview.element().getAttribute('loading')).toBeNull();
+
+		await expect.element(page.getByAltText('PaintMaster42')).toHaveAttribute('loading', 'eager');
+	});
+
+	it('censors sensitive previews with the one shared NSFW treatment', async () => {
+		render(PersistentNav, {
+			adultContentEnabled: false,
+			previewCards: [{ ...topArtworks[0], isNsfw: true, title: 'Adults only study' }],
+			user: null
+		});
+
+		const image = page.getByAltText('Adults only study');
+		await expect.element(image).toBeVisible();
+
+		// Same blur and scrim as every other room, read from --nsfw-* with the
+		// shared fallbacks — not a fourth set of numbers.
+		const treatment = getComputedStyle(image.element());
+		expect(treatment.filter).toContain('blur(20px)');
+		expect(image.element().className).not.toContain('blur-xl');
+
+		const scrim = document.querySelector('.nsfw-scrim');
+		expect(scrim).not.toBeNull();
+		expect(getComputedStyle(scrim!).backgroundColor).toBe('rgba(45, 36, 32, 0.68)');
+	});
+
 	it('does not render fake preview cards when the homepage teaser is empty', async () => {
 		render(PersistentNav, { previewCards: [], user: null });
 

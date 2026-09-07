@@ -12,6 +12,8 @@ export type GalleryPanelBindings = {
 	onArtworkChange: (artwork: Artwork) => void;
 	onArtworkPatch: (artworkId: string, patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>) => void;
 	onClose: () => void;
+	/** Transient panel outcomes, routed into the room's single status region. */
+	onNotify: (message: string) => void;
 	revealedArtworkIds: Writable<Set<string>>;
 	viewer: Viewer;
 };

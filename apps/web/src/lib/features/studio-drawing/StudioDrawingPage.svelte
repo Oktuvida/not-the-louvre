@@ -594,7 +594,8 @@
 </script>
 
 <svelte:head>
-	<title>Studio · Not the Louvre</title>
+	<!-- No title element here on purpose: the route contributes `meta.title`
+	from its load and the root layout renders the document's only one. -->
 	<link rel="preload" as="image" href="/table.avif" type="image/avif" fetchpriority="high" />
 </svelte:head>
 

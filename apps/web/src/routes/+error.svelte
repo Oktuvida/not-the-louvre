@@ -13,10 +13,6 @@
 	);
 </script>
 
-<svelte:head>
-	<title>{status} | Not the Louvre</title>
-</svelte:head>
-
 <div class="relative flex h-screen w-full items-center justify-center overflow-hidden bg-[#f5f0e8]">
 	<!-- Paint splotches background -->
 	<div class="pointer-events-none absolute inset-0">

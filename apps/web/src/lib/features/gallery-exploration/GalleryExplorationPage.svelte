@@ -6,6 +6,7 @@
 	import { fade } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { get } from 'svelte/store';
+	import { setAdultContentEnabled } from '$lib/client/avatar-upload';
 	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
 	import { getGalleryLayoutContext } from '$lib/features/gallery-exploration/gallery-layout-context';
 	import { onMount } from 'svelte';
@@ -423,6 +424,16 @@
 		detailOrigin = null;
 	};
 
+	/*
+	 * The detail panel used to render its own failure notice twice — once per
+	 * postcard face — so a message written on the front vanished the moment the
+	 * card flipped. It now hands every transient outcome up here instead, and it
+	 * lands in the same single status region the room's own failures use.
+	 */
+	const notifyFromPanel = (message: string) => {
+		detailErrorMessage = message;
+	};
+
 	const syncArtwork = (nextArtwork: Artwork) => {
 		selectedArtwork = nextArtwork;
 		const index = artworks.findIndex((candidate) => candidate.id === nextArtwork.id);
@@ -467,16 +478,7 @@
 		detailErrorMessage = null;
 
 		try {
-			const response = await fetch('/api/viewer/content-preferences', {
-				body: JSON.stringify({ adultContentEnabled: enabled }),
-				headers: { 'content-type': 'application/json' },
-				method: 'PATCH'
-			});
-
-			if (!response.ok) {
-				throw new Error('18+ artwork preference could not be updated.');
-			}
-
+			await setAdultContentEnabled(enabled);
 			adultContentPreferenceOverride = enabled;
 		} catch (error) {
 			detailErrorMessage =
@@ -698,6 +700,7 @@
 			onArtworkChange: syncArtwork,
 			onArtworkPatch: patchArtwork,
 			onClose: closeArtworkDetail,
+			onNotify: notifyFromPanel,
 			revealedArtworkIds,
 			viewer
 		};
@@ -790,6 +793,7 @@
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
 			loadMoreArtworks={roomLoadMoreArtworks}
+			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}
 			viewerId={viewer?.id ?? null}
 		/>

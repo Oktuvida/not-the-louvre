@@ -51,6 +51,9 @@ describe('gallery root route', () => {
 		// streams from the nested promise.
 		expect(result).toMatchObject({ roomId: 'hall-of-fame', viewer: null });
 
+		// The root layout renders the only <title>; the route names itself.
+		expect(result).toMatchObject({ meta: { title: 'Gallery' } });
+
 		const roomContent = (await result.lazy.roomContent) as {
 			artworks: Array<Record<string, unknown>>;
 		};

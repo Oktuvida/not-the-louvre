@@ -188,12 +188,12 @@ describe('PolaroidCard', () => {
 		await expect.element(avatar).toHaveAttribute('fetchpriority', 'low');
 	});
 
-	it('signals prefetch intent on pointerdown, but not on a reveal press', async () => {
-		const onPrefetch = vi.fn();
+	it('signals intent on pointerdown, but not on a reveal press', async () => {
+		const onPointerIntent = vi.fn();
 
 		const { unmount } = render(PolaroidCard, {
 			artwork,
-			onPrefetch,
+			onPointerIntent,
 			testId: 'prefetch-card'
 		});
 
@@ -201,12 +201,12 @@ describe('PolaroidCard', () => {
 		await expect.element(card).toBeVisible();
 		card.element().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
 
-		expect(onPrefetch).toHaveBeenCalledTimes(1);
+		expect(onPointerIntent).toHaveBeenCalledTimes(1);
 		unmount();
 
 		render(PolaroidCard, {
 			artwork: { ...artwork, isNsfw: true },
-			onPrefetch,
+			onPointerIntent,
 			viewerId: 'other-user',
 			testId: 'blurred-prefetch-card'
 		});
@@ -215,7 +215,29 @@ describe('PolaroidCard', () => {
 		await expect.element(blurredCard).toBeVisible();
 		blurredCard.element().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
 
-		expect(onPrefetch).toHaveBeenCalledTimes(1);
+		expect(onPointerIntent).toHaveBeenCalledTimes(1);
+	});
+
+	it('signals intent on an activating keypress, and only on those keys', async () => {
+		const onPointerIntent = vi.fn();
+
+		render(PolaroidCard, {
+			artwork,
+			onPointerIntent,
+			testId: 'keyboard-intent-card'
+		});
+
+		const card = page.getByTestId('keyboard-intent-card');
+		await expect.element(card).toBeVisible();
+
+		card.element().dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Tab' }));
+		expect(onPointerIntent).not.toHaveBeenCalled();
+
+		card.element().dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: ' ' }));
+		expect(onPointerIntent).toHaveBeenCalledTimes(1);
+
+		card.element().dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+		expect(onPointerIntent).toHaveBeenCalledTimes(2);
 	});
 
 	it('honors an externally revealed state so reveals survive virtualization remounts', async () => {

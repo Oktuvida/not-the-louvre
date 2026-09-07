@@ -234,7 +234,7 @@ describe('GalleryExplorationPage', () => {
 	it('renders the hot wall own empty state instead of a generic empty state', async () => {
 		render(GalleryExplorationPage, {
 			artworks: [],
-			emptyStateMessage: 'Nothing is heating up on the wall right now.',
+			emptyStateMessage: 'No artworks have reached this gallery room yet.',
 			room: getGalleryRoom('hot-wall'),
 			roomId: 'hot-wall'
 		});
@@ -242,7 +242,7 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByTestId('hot-wall-empty')).toBeVisible();
 		await expect.element(page.getByText('Nothing heating up right now')).toBeVisible();
 		await expect
-			.element(page.getByText('Nothing is heating up on the wall right now.'))
+			.element(page.getByText('No artworks have reached this gallery room yet.'))
 			.not.toBeInTheDocument();
 	});
 
@@ -1616,6 +1616,49 @@ describe('GalleryExplorationPage', () => {
 
 		await expect
 			.element(page.getByRole('dialog', { name: 'Artwork details for Champion Study' }))
+			.toBeVisible();
+
+		// The open consumed the warm entry instead of firing a second round trip.
+		expect(loadArtworkDetail).toHaveBeenCalledTimes(1);
+	});
+
+	it('warms the detail from a grid card too, not just the room heroes', async () => {
+		const loadArtworkDetail = vi.fn(async (artworkId: string) => ({
+			...baseArtwork,
+			id: artworkId,
+			title: 'Artwork 3'
+		}));
+
+		render(GalleryExplorationPage, {
+			artworks: Array.from({ length: 6 }, (_, index) => ({
+				...baseArtwork,
+				id: `artwork-${index + 1}`,
+				title: `Artwork ${index + 1}`
+			})),
+			discovery: {
+				pageInfo: { hasMore: false, nextCursor: null },
+				request: { authorId: 'user-1', limit: 24, sort: 'recent', window: null }
+			},
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		const card = page.getByRole('button', { name: /Artwork 3/ });
+		await expect.element(card).toBeVisible();
+
+		card.element().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+
+		await vi.waitFor(() => {
+			expect(loadArtworkDetail).toHaveBeenCalledTimes(1);
+		});
+
+		await card.click();
+
+		await expect
+			.element(page.getByRole('dialog', { name: 'Artwork details for Artwork 3' }))
 			.toBeVisible();
 
 		// The open consumed the warm entry instead of firing a second round trip.

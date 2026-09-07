@@ -35,6 +35,7 @@
 	} from '$lib/features/studio-drawing/pointer-drawing';
 	import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
 	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
+	import type { AvatarUploadResult } from '$lib/client/avatar-upload';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
 
 	const palette = drawingPalette;
@@ -54,14 +55,6 @@
 	const CANVAS_WIDTH = AVATAR_DRAWING_DIMENSIONS.width;
 	const CANVAS_HEIGHT = AVATAR_DRAWING_DIMENSIONS.height;
 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
-
-	type AvatarSaveResult =
-		| { success: true }
-		| {
-				code?: string;
-				message: string;
-				success: false;
-		  };
 
 	let {
 		clearMode = 'initial',
@@ -103,7 +96,7 @@
 		initialDrawingDocument?: DrawingDocumentV2 | null;
 		nickname: string;
 		onContinue?: () => void;
-		saveAvatar?: (drawingDocument: string) => Promise<AvatarSaveResult>;
+		saveAvatar?: (drawingDocument: string) => Promise<AvatarUploadResult>;
 		submitLabel?: string;
 	} = $props();
 
@@ -723,7 +716,7 @@
 			<span>Clear</span>
 		</GameButton>
 		<GameButton onclick={handleEnterGallery} disabled={isSaving} size="md">
-			<span>{isSaving ? 'Saving...' : submitLabel}</span>
+			<span>{isSaving ? 'Saving…' : submitLabel}</span>
 		</GameButton>
 	</div>
 </div>

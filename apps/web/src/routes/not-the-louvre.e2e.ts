@@ -498,7 +498,7 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/');
 
-		await expect(page.getByText('Loading Studio...')).toBeVisible();
+		await expect(page.getByText(/Loading Studio(\.\.\.|…)/)).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
 		await page.getByRole('button', { name: 'Come In' }).click();
 		await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
@@ -513,7 +513,7 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/');
 
-		await expect(page.getByText('Loading Studio...')).toBeVisible();
+		await expect(page.getByText(/Loading Studio(\.\.\.|…)/)).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
 	});
 
@@ -870,7 +870,10 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Fresh Paint' })).toBeVisible();
-		await expect(page.getByRole('link', { name: 'Open gallery' })).toBeVisible();
+		await expect(page.getByRole('link', { name: 'See it on the wall' })).toHaveAttribute(
+			'href',
+			'/gallery/your-studio'
+		);
 	});
 
 	test('draw route stores editable V2 drafts locally and publishes a compacted V2 payload smaller than V1', async ({

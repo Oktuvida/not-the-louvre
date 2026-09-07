@@ -56,23 +56,3 @@ export const toGalleryArtworkDetail = (
 	...baseArtwork(artwork),
 	rank
 });
-
-/**
- * The single NSFW predicate. `authorId` and `revealedIds` are optional so the
- * home preview cards, which have neither, can ask the same question as the
- * gallery rooms, the detail panel and the Mystery reel.
- */
-export const isArtworkBlurred = (
-	artwork: { authorId?: string | null; id: string; isNsfw: boolean },
-	viewer: {
-		adultContentEnabled: boolean;
-		id?: string | null;
-		revealedIds?: ReadonlySet<string>;
-	}
-): boolean => {
-	if (!artwork.isNsfw || viewer.adultContentEnabled) return false;
-	// Authors always see their own work, and a reveal is honoured everywhere.
-	if (artwork.authorId != null && viewer.id === artwork.authorId) return false;
-
-	return !viewer.revealedIds?.has(artwork.id);
-};
