@@ -173,7 +173,7 @@
 				{@const frame = resolveArtworkFrame({ artworkId: card.id, podiumPosition: card.rank })}
 				{@const blurred = isArtworkBlurred(card, { adultContentEnabled: adultContentAllowed })}
 				<a
-					href={resolve('/gallery')}
+					href={resolve('/gallery/[[room]]', {})}
 					class="group relative block cursor-pointer"
 					style={`transform: rotate(${card.rotation}deg);`}
 				>

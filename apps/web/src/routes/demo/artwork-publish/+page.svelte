@@ -5,10 +5,6 @@
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
-<svelte:head>
-	<title>Artwork Publish Demo</title>
-</svelte:head>
-
 <nav>
 	<a href={resolve('/demo')}>Back to demo index</a>
 	<a href={resolve('/demo/better-auth')}>Back to auth demo</a>

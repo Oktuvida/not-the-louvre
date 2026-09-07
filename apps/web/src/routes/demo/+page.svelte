@@ -27,10 +27,6 @@
 	] as const;
 </script>
 
-<svelte:head>
-	<title>Backend Journey Demos</title>
-</svelte:head>
-
 <h1>Backend Journey Demos</h1>
 <p>Minimal browser surfaces for backend end-to-end journeys.</p>
 

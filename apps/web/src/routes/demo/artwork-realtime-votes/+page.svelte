@@ -269,10 +269,6 @@
 	});
 </script>
 
-<svelte:head>
-	<title>Artwork Realtime Vote Demo</title>
-</svelte:head>
-
 <nav>
 	<a href={resolve('/demo')}>Back to demo index</a>
 	<a href={resolve('/demo/better-auth')}>Back to auth demo</a>
