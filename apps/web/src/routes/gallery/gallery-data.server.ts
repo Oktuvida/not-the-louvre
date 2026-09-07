@@ -14,7 +14,8 @@ type ProductUser = {
 	role: 'admin' | 'moderator' | 'user';
 };
 
-type GalleryRoomData = {
+export type GalleryRoomContent = {
+	adultContentEnabled: boolean;
 	artworks: ReturnType<typeof toGalleryArtwork>[];
 	discovery: {
 		pageInfo: {
@@ -29,14 +30,6 @@ type GalleryRoomData = {
 		};
 	};
 	emptyStateMessage: string | null;
-	realtimeConfig: {
-		anonKey: string | null;
-		url: string | null;
-	};
-	room: ReturnType<typeof getGalleryRoom>;
-	roomId: GalleryRoomId;
-	adultContentEnabled: boolean;
-	viewer: ProductUser | null;
 };
 
 const SCALABLE_GALLERY_PAGE_SIZE = 24;
@@ -92,19 +85,23 @@ export const loadGalleryRoomShell = (roomId: string, user?: ProductUser) => {
 	};
 };
 
-export type GalleryRoomContent = Pick<
-	GalleryRoomData,
-	'adultContentEnabled' | 'artworks' | 'discovery' | 'emptyStateMessage'
->;
-
 export const loadGalleryRoomContent = async (
 	roomId: GalleryRoomId,
-	user?: ProductUser
+	user?: ProductUser,
+	// The root layout already read the viewer's preference row for this
+	// request; when the caller passes it down, the room content stops issuing
+	// the identical single-row query a second time (on Workers, on its own
+	// connection). Omitting it falls back to reading the row here.
+	options: { adultContentEnabled?: boolean } = {}
 ): Promise<GalleryRoomContent> => {
 	const discoveryRequest = roomDiscoveryRequest(roomId, user);
 	const [discovery, viewerContentPreferences] = await Promise.all([
 		listArtworkDiscovery(discoveryRequest, { user }),
-		user ? getViewerContentPreferences({ user }) : Promise.resolve({ adultContentEnabled: false })
+		options.adultContentEnabled !== undefined
+			? Promise.resolve({ adultContentEnabled: options.adultContentEnabled })
+			: user
+				? getViewerContentPreferences({ user })
+				: Promise.resolve({ adultContentEnabled: false })
 	]);
 
 	const visibleItems = (
@@ -129,14 +126,4 @@ export const loadGalleryRoomContent = async (
 		emptyStateMessage: visibleItems.length === 0 ? emptyStateMessageForRoom(roomId) : null,
 		adultContentEnabled: viewerContentPreferences.adultContentEnabled
 	};
-};
-
-export const loadGalleryRoomData = async (
-	roomId: string,
-	user?: ProductUser
-): Promise<GalleryRoomData> => {
-	const shell = loadGalleryRoomShell(roomId, user);
-	const content = await loadGalleryRoomContent(shell.roomId, user);
-
-	return { ...shell, ...content };
 };

@@ -33,14 +33,29 @@ reads the bytes from disk instead. The branch is chosen at runtime by detecting
    wrangler secret put DATABASE_URL
    wrangler secret put BETTER_AUTH_SECRET
    wrangler secret put SUPABASE_PUBLIC_URL
+   wrangler secret put SUPABASE_ANON_KEY        # browser realtime client — see below
    wrangler secret put SUPABASE_SECRET_KEY
    wrangler secret put SERVICE_ROLE_KEY
+   wrangler secret put SUPABASE_JWT_SECRET      # signs realtime tokens
    wrangler secret put ARTWORK_STORAGE_BUCKET   # e.g. "artworks"
    wrangler secret put ORIGIN                   # public https origin of the deployment
    ```
 
-   (Match the keys in `apps/web/.env.example`. `JWT_SECRET`/`SUPABASE_JWT_SECRET`
-   too if your auth config reads it.)
+   Two of these fail quietly rather than loudly, so check them on every new
+   deployment:
+
+   - **`SUPABASE_ANON_KEY`** is the key the server hands to the browser so it can
+     open a Supabase realtime channel (`src/routes/gallery/gallery-data.server.ts`).
+     If it is missing, `realtimeConfig.anonKey` is `null`, the gallery simply never
+     creates a realtime client, and live votes and comments stop arriving with no
+     error anywhere. The first gallery request logs a warning to `wrangler tail`.
+   - **`SUPABASE_JWT_SECRET`** signs the realtime tokens
+     (`src/lib/server/realtime/auth.ts`). Without it `/api/realtime/token`
+     returns 500.
+
+   Optional: `SUPABASE_JWT_ISSUER` overrides the issuer claim on those realtime
+   tokens; it defaults to `supabase-demo`, which is only correct for the local
+   Supabase stack. Match the rest of the keys against `apps/web/.env.example`.
 
 3. **Database connectivity**: the Worker connects to Postgres over TCP using
    `postgres.js` + the `nodejs_compat` flag (already set in `wrangler.jsonc`).

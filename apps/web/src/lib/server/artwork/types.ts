@@ -207,13 +207,24 @@ export type ArtworkEngagementRateLimitRecord = {
 	windowStartedAt: Date;
 };
 
+// The vote endpoints return this verbatim and the detail panel reads only
+// `score`, so it deliberately excludes the drawing document (and everything
+// else the browser never touches) rather than shipping a full ArtworkRecord.
+export type ArtworkVoteSummary = {
+	commentCount: number;
+	forkCount: number;
+	id: string;
+	score: number;
+	updatedAt: Date;
+};
+
 export type ArtworkVoteMutationResult = {
-	artwork: ArtworkRecord;
+	artwork: ArtworkVoteSummary;
 	vote: ArtworkVoteRecord;
 };
 
 export type ArtworkVoteRemovalResult = {
-	artwork: ArtworkRecord;
+	artwork: ArtworkVoteSummary;
 	removed: ArtworkVoteRecord | null;
 };
 
@@ -433,10 +444,17 @@ export type ListModerationQueueInput = {
 	limit: number;
 };
 
+export type ArtworkDetailReadOptions = {
+	// Off by default: only the /draw fork loader reads the drawing document,
+	// and it is the one column on app.artworks large enough to be TOASTed.
+	withDrawingDocument?: boolean;
+};
+
 export type ArtworkReadRepository = {
 	findArtworkDetailById(
 		id: string,
-		viewer?: ArtworkVisibilityActor
+		viewer?: ArtworkVisibilityActor,
+		options?: ArtworkDetailReadOptions
 	): Promise<ArtworkReadRecord | null>;
 	findArtworkMediaById(
 		id: string,

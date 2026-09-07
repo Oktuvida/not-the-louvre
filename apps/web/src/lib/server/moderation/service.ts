@@ -95,8 +95,18 @@ const buildPolicyMap = (records: TextModerationPolicyRecord[]) => {
 	>;
 };
 
-export const getTextModerationSnapshot = async (dependencies: ServiceDependencies = {}) => {
-	const { repository } = getDependencies(dependencies);
+type TextModerationSnapshot = {
+	policies: Record<
+		TextModerationContext,
+		{ allowlist: string[]; blocklist: string[]; version: number }
+	>;
+};
+
+type PhraseMatchers = Record<TextModerationContext, ReturnType<typeof buildPhraseMatcher>>;
+
+const readTextModerationSnapshot = async (
+	repository: ModerationRepository
+): Promise<TextModerationSnapshot> => {
 	const records = buildPolicyMap(await repository.listTextPolicies());
 
 	return {
@@ -112,12 +122,68 @@ export const getTextModerationSnapshot = async (dependencies: ServiceDependencie
 					}
 				];
 			})
-		) as Record<
-			TextModerationContext,
-			{ allowlist: string[]; blocklist: string[]; version: number }
-		>
+		) as TextModerationSnapshot['policies']
 	};
 };
+
+const buildPhraseMatchers = (snapshot: TextModerationSnapshot): PhraseMatchers =>
+	Object.fromEntries(
+		POLICY_CONTEXTS.map((context) => [
+			context,
+			buildPhraseMatcher({
+				allowlist: snapshot.policies[context].allowlist,
+				blocklist: snapshot.policies[context].blocklist
+			})
+		])
+	) as PhraseMatchers;
+
+// The table holds one row per context and only changes when an admin edits a
+// policy, yet every comment, published title and signup used to re-read it and
+// recompile a regex per phrase. Worker isolates are reused across requests, so
+// memoising both here makes most of those checks free. The window stays short
+// because a stale entry lets a newly blocklisted phrase through, and other
+// isolates only converge once their own entry expires.
+const POLICY_CACHE_TTL_MS = 60_000;
+
+let policyCache: {
+	expiresAt: number;
+	matchers: PhraseMatchers;
+	snapshot: TextModerationSnapshot;
+} | null = null;
+
+// Exported for tests: module-scope state outlives `vi.resetModules()` only when
+// the module is not re-imported, and a suite that seeds different policies
+// needs a way back to a cold cache.
+export const resetTextModerationPolicyCache = () => {
+	policyCache = null;
+};
+
+const readCachedPolicies = async () => {
+	const currentTime = Date.now();
+
+	if (policyCache && policyCache.expiresAt > currentTime) {
+		return policyCache;
+	}
+
+	const snapshot = await readTextModerationSnapshot(moderationRepository);
+	policyCache = {
+		expiresAt: currentTime + POLICY_CACHE_TTL_MS,
+		matchers: buildPhraseMatchers(snapshot),
+		snapshot
+	};
+
+	return policyCache;
+};
+
+// Only the default repository is cached. Callers that inject one — the service
+// tests build a fresh fake per case — always read straight through, so an
+// injected repository never sees another case's policies.
+export const getTextModerationSnapshot = async (
+	dependencies: ServiceDependencies = {}
+): Promise<TextModerationSnapshot> =>
+	dependencies.repository
+		? readTextModerationSnapshot(dependencies.repository)
+		: (await readCachedPolicies()).snapshot;
 
 export const checkTextModeration = async (
 	value: string,
@@ -131,12 +197,9 @@ export const checkTextModeration = async (
 		};
 	}
 
-	const snapshot = await getTextModerationSnapshot(dependencies);
-	const policy = snapshot.policies[context];
-	const matcher = buildPhraseMatcher({
-		allowlist: policy.allowlist,
-		blocklist: policy.blocklist
-	});
+	const matcher = dependencies.repository
+		? buildPhraseMatchers(await readTextModerationSnapshot(dependencies.repository))[context]
+		: (await readCachedPolicies()).matchers[context];
 
 	if (!matcher.hasMatch(value)) {
 		return { status: 'allowed' as const };
@@ -176,6 +239,10 @@ export const updateTextModerationPolicies = async (
 			throw new ArtworkFlowError(409, 'Policy version conflict', 'INVALID_POLICY_VERSION');
 		}
 	}
+
+	// This isolate serves the admin who just changed the policy, so it converges
+	// immediately; the rest wait out their own TTL.
+	resetTextModerationPolicyCache();
 
 	return getTextModerationSnapshot({ repository });
 };

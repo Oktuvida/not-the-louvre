@@ -54,6 +54,7 @@ describe('gallery room route', () => {
 		const { load } = await import('./+page.server');
 		const result = (await load({
 			locals: {},
+			parent: async () => ({ adultContentEnabled: false }),
 			params: { room: 'hot-wall' }
 		} as never)) as {
 			lazy: { roomContent: Promise<{ discovery: Record<string, unknown> }> };
@@ -83,6 +84,7 @@ describe('gallery room route', () => {
 		const { load } = await import('./+page.server');
 		const result = (await load({
 			locals: {},
+			parent: async () => ({ adultContentEnabled: false }),
 			params: { room: 'mystery' }
 		} as never)) as {
 			lazy: { roomContent: Promise<{ discovery: Record<string, unknown> }> };
@@ -142,6 +144,7 @@ describe('gallery room route', () => {
 		const { load } = await import('./+page.server');
 		const result = (await load({
 			locals: { user: { id: 'user-1', role: 'user' } },
+			parent: async () => ({ adultContentEnabled: false }),
 			params: { room: 'your-studio' }
 		} as never)) as {
 			lazy: {
@@ -174,11 +177,29 @@ describe('gallery room route', () => {
 		});
 	});
 
+	it('takes the adult-content preference from the layout instead of re-reading the row', async () => {
+		const { load } = await import('./+page.server');
+		const result = (await load({
+			locals: { user: { id: 'user-1', role: 'user' } },
+			parent: async () => ({ adultContentEnabled: true }),
+			params: { room: 'hot-wall' }
+		} as never)) as {
+			lazy: { roomContent: Promise<{ adultContentEnabled: boolean }> };
+		};
+
+		await expect(result.lazy.roomContent).resolves.toMatchObject({ adultContentEnabled: true });
+		expect(mocked.getViewerContentPreferences).not.toHaveBeenCalled();
+	});
+
 	it('redirects signed-out visitors away from the personal studio room', async () => {
 		const { load } = await import('./+page.server');
 
 		await expect(
-			load({ locals: {}, params: { room: 'your-studio' } } as never)
+			load({
+				locals: {},
+				parent: async () => ({ adultContentEnabled: false }),
+				params: { room: 'your-studio' }
+			} as never)
 		).rejects.toMatchObject({
 			location: '/gallery',
 			status: 302
@@ -189,7 +210,11 @@ describe('gallery room route', () => {
 		const { load } = await import('./+page.server');
 
 		await expect(
-			load({ locals: {}, params: { room: 'unknown-room' } } as never)
+			load({
+				locals: {},
+				parent: async () => ({ adultContentEnabled: false }),
+				params: { room: 'unknown-room' }
+			} as never)
 		).rejects.toMatchObject({
 			status: 404
 		});

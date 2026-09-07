@@ -3,6 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import EntrySceneController from './EntrySceneController.svelte';
 
+// The scene mounts a Threlte `<Canvas>`, which the headless browser cannot give
+// a WebGL context. These specs cover the auth/onboarding state machine, so the
+// scene is swapped for an inert stub. An explicit factory is required: the bare
+// auto-mock does not produce a mountable Svelte 5 component.
+vi.mock('$lib/features/home-entry-scene/scene/StudioScene.svelte', async () => ({
+	default: (await import('./StudioSceneStub.svelte')).default
+}));
+
+// The wall zoom runs on GSAP for ~2.2s before the auth panel is revealed, so the
+// assertions that wait on it need more than the 1s default retry window.
+const TRANSITION_TIMEOUT = 8000;
+
 const authenticatedUser = {
 	authUserId: 'auth-user-1',
 	avatarOnboardingCompletedAt: new Date('2026-03-28T10:00:00.000Z'),
@@ -25,9 +37,10 @@ describe('EntrySceneController', () => {
 		await expect.element(page.getByRole('button', { name: 'Come In' })).toBeVisible();
 
 		await page.getByRole('button', { name: 'Come In' }).click();
-		await new Promise((resolve) => setTimeout(resolve, 2400));
 
-		await expect.element(page.getByText('Welcome back')).toBeVisible();
+		await expect
+			.element(page.getByText('Welcome back'), { timeout: TRANSITION_TIMEOUT })
+			.toBeVisible();
 	});
 
 	it('bootstraps directly into the signed-in scene when the server session already exists', async () => {
@@ -173,9 +186,8 @@ describe('EntrySceneController', () => {
 
 		await expect.element(page.getByText('Finish your avatar')).toBeVisible();
 		await page.getByRole('button', { name: 'Close' }).click();
-		await new Promise((resolve) => setTimeout(resolve, 1800));
 
-		await expect.element(page.getByText('HELLO')).toBeVisible();
+		await expect.element(page.getByText('HELLO'), { timeout: TRANSITION_TIMEOUT }).toBeVisible();
 		await expect
 			.element(page.getByRole('button', { name: /Edit avatar for artist_1/ }))
 			.toBeVisible();

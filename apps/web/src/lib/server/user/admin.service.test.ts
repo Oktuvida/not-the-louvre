@@ -40,6 +40,24 @@ const createRepository = (record = createUserRecord()): UserRepository => {
 	let stored = record;
 
 	return {
+		appendUserAvatarDocumentChunk: vi.fn(async () => false),
+		finalizeUserAvatarDocument: vi.fn(async () => null),
+		findUserAvatarDocumentLength: vi.fn(async () => null),
+		findUserAvatarDocumentRef: vi.fn(async () => null),
+		findUserAvatarRefById: vi.fn(async (id) =>
+			stored.id === id
+				? {
+						avatarIsHidden: stored.avatarIsHidden,
+						avatarIsNsfw: stored.avatarIsNsfw,
+						avatarUrl: stored.avatarUrl,
+						createdAt: stored.createdAt,
+						id: stored.id,
+						nickname: stored.nickname,
+						role: stored.role,
+						updatedAt: stored.updatedAt
+					}
+				: null
+		),
 		findUserById: vi.fn(async (id) => (stored.id === id ? stored : null)),
 		listUsers: vi.fn(async () => [stored]),
 		updateAvatarModeration: vi.fn(async () => null),

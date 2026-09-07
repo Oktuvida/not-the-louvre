@@ -1,4 +1,21 @@
-import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
+import {
+	and,
+	asc,
+	count,
+	desc,
+	eq,
+	gt,
+	gte,
+	isNotNull,
+	lt,
+	lte,
+	or,
+	sql,
+	type AnyColumn,
+	type SQL,
+	type SQLWrapper
+} from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db } from '$lib/server/db';
 import { artworkComments, artworks, contentReports, users } from '$lib/server/db/schema';
 import type {
@@ -10,6 +27,7 @@ import type {
 	ListModerationQueueInput,
 	ListRecentArtworksInput,
 	ListTopArtworksInput,
+	ModerationQueueCursor,
 	ModerationQueueItem
 } from './types';
 
@@ -47,19 +65,26 @@ const hotRankingSql = (now: Date) => {
 	return sql<number>`(${artworks.score}::double precision / power(((${nowEpochSeconds} - extract(epoch from ${artworks.createdAt})) / 3600.0) + 2, ${HOT_RANKING_GRAVITY}))`;
 };
 
+// The keyset predicate compares whatever expression the feed ranks by. The top
+// feed hands in the bare `artworks.score` column and casts the cursor value
+// instead: a cast on the column side is not sargable, so a btree on score could
+// serve the ordering but never the cursor filter.
 const rankedCursorWhere = (
 	cursor:
 		| Extract<ArtworkDiscoveryCursor, { sort: 'hot' }>
 		| Extract<ArtworkDiscoveryCursor, { sort: 'top' }>
 		| null,
-	rankingExpression: ReturnType<typeof sql<number>>
+	rankingExpression: SQLWrapper,
+	toCursorValue: (rankingValue: number) => SQL | number = (rankingValue) => rankingValue
 ) => {
 	if (!cursor) return undefined;
 
+	const rankingValue = toCursorValue(cursor.rankingValue);
+
 	return or(
-		lt(rankingExpression, cursor.rankingValue),
+		lt(rankingExpression, rankingValue),
 		and(
-			eq(rankingExpression, cursor.rankingValue),
+			eq(rankingExpression, rankingValue),
 			or(
 				lt(artworks.createdAt, cursor.createdAt),
 				and(eq(artworks.createdAt, cursor.createdAt), lt(artworks.id, cursor.id))
@@ -92,10 +117,30 @@ const discoverySelect = {
 	authorAvatarUrl: users.avatarUrl
 };
 
-const baseSelect = {
-	...discoverySelect,
+const drawingDocumentSelect = {
 	drawingDocument: artworks.drawingDocument,
 	drawingVersion: artworks.drawingVersion
+};
+
+const parentArtworks = alias(artworks, 'parent_artwork');
+const parentAuthors = alias(users, 'parent_author');
+
+// The fork parent rides along on the feed statement instead of a second serial
+// round trip. `is_hidden = false` belongs in the join condition, not the WHERE:
+// in the WHERE it would collapse the outer join into an inner one and drop
+// every fork of a hidden parent out of the feed entirely.
+const parentJoinCondition = and(
+	eq(parentArtworks.id, artworks.parentId),
+	eq(parentArtworks.isHidden, false)
+);
+
+const parentAuthorJoinCondition = eq(parentAuthors.id, parentArtworks.authorId);
+
+const parentSelect = {
+	parentAuthorAvatarUrl: parentAuthors.avatarUrl,
+	parentAuthorId: parentArtworks.authorId,
+	parentAuthorNickname: parentAuthors.nickname,
+	parentTitle: parentArtworks.title
 };
 
 const voteCountSql = (value: 'down' | 'up') =>
@@ -123,13 +168,21 @@ const engagementSelect = (viewer: { isModerator: boolean; userId: string | null 
 	viewerVote: viewerVoteSql(viewer).as('viewerVote')
 });
 
-const buildBaseSelect = (viewer: { isModerator: boolean; userId: string | null }) => ({
-	...baseSelect,
+// The multi-hundred-KiB drawing document is only ever read by the /draw fork
+// loader, so it stays off every other statement — the detail route nulls it out
+// one function later anyway.
+const buildDetailSelect = (
+	viewer: { isModerator: boolean; userId: string | null },
+	options: { withDrawingDocument?: boolean } = {}
+) => ({
+	...discoverySelect,
+	...(options.withDrawingDocument ? drawingDocumentSelect : {}),
 	...engagementSelect(viewer)
 });
 
 const buildDiscoverySelect = (viewer: { isModerator: boolean; userId: string | null }) => ({
 	...discoverySelect,
+	...parentSelect,
 	...engagementSelect(viewer)
 });
 
@@ -223,43 +276,38 @@ const buildRankedDiscoverySelect = (
 	rankingValue: rankingExpression.as('rankingValue')
 });
 
-const hydrateDiscoveryParents = async (records: ArtworkReadRecord[]) => {
-	const parentIds = Array.from(
-		new Set(records.flatMap((record) => (record.parentId ? [record.parentId] : [])))
-	);
+const moderationQueueReportCount = () => count(contentReports.id);
 
-	if (parentIds.length === 0) {
-		return records;
+// Mirrors the (report_count DESC, target_type ASC, id ASC) ordering the service's
+// cursor encodes. target_type is constant inside each aggregate, so the branch
+// that matches the cursor breaks ties on the id while the other one only has to
+// compare report counts — which is what lets both aggregates carry a LIMIT.
+const moderationQueueHaving = (
+	cursor: ModerationQueueCursor | null,
+	targetType: 'artwork' | 'comment',
+	idColumn: AnyColumn
+) => {
+	const reportCount = moderationQueueReportCount();
+	const nonEmpty = gt(reportCount, 0);
+
+	if (!cursor) return nonEmpty;
+
+	if (cursor.targetType === targetType) {
+		return and(
+			nonEmpty,
+			or(
+				lt(reportCount, cursor.reportCount),
+				and(eq(reportCount, cursor.reportCount), gt(idColumn, cursor.id))
+			)
+		);
 	}
 
-	const parentRows = await db
-		.select({
-			authorAvatarUrl: users.avatarUrl,
-			authorId: artworks.authorId,
-			authorNickname: users.nickname,
-			id: artworks.id,
-			title: artworks.title
-		})
-		.from(artworks)
-		.innerJoin(users, eq(users.id, artworks.authorId))
-		.where(and(inArray(artworks.id, parentIds), eq(artworks.isHidden, false)));
-
-	const parentsById = new Map(parentRows.map((row) => [row.id, row]));
-
-	return records.map((record) => {
-		if (!record.parentId) return record;
-
-		const parent = parentsById.get(record.parentId);
-		if (!parent) return record;
-
-		return {
-			...record,
-			parentAuthorAvatarUrl: parent.authorAvatarUrl,
-			parentAuthorId: parent.authorId,
-			parentAuthorNickname: parent.authorNickname,
-			parentTitle: parent.title
-		};
-	});
+	return and(
+		nonEmpty,
+		targetType > cursor.targetType
+			? lte(reportCount, cursor.reportCount)
+			: lt(reportCount, cursor.reportCount)
+	);
 };
 
 export const artworkReadRepository: ArtworkReadRepository = {
@@ -269,6 +317,8 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.select(buildDiscoverySelect(viewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
+			.leftJoin(parentArtworks, parentJoinCondition)
+			.leftJoin(parentAuthors, parentAuthorJoinCondition)
 			.where(
 				and(
 					artworkVisibilityWhere(),
@@ -279,7 +329,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.orderBy(desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
-		return hydrateDiscoveryParents(rows.map(mapRow));
+		return rows.map(mapRow);
 	},
 	async listHotArtworks(input: ListHotArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
@@ -288,6 +338,8 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.select(buildRankedDiscoverySelect(viewer, rankingExpression))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
+			.leftJoin(parentArtworks, parentJoinCondition)
+			.leftJoin(parentAuthors, parentAuthorJoinCondition)
 			.where(
 				and(
 					artworkVisibilityWhere(),
@@ -297,7 +349,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.orderBy(desc(rankingExpression), desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
-		return hydrateDiscoveryParents(rows.map(mapRow));
+		return rows.map(mapRow);
 	},
 	async listTopArtworks(input: ListTopArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
@@ -307,23 +359,29 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.select(buildRankedDiscoverySelect(viewer, rankingExpression))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
+			.leftJoin(parentArtworks, parentJoinCondition)
+			.leftJoin(parentAuthors, parentAuthorJoinCondition)
 			.where(
 				and(
 					artworkVisibilityWhere(),
 					input.authorId ? eq(artworks.authorId, input.authorId) : undefined,
 					windowStart ? gte(artworks.createdAt, windowStart) : undefined,
-					rankedCursorWhere(input.cursor, rankingExpression) ?? undefined
+					rankedCursorWhere(
+						input.cursor,
+						artworks.score,
+						(rankingValue) => sql`${Math.trunc(rankingValue)}::integer`
+					) ?? undefined
 				)
 			)
 			.orderBy(desc(artworks.score), desc(artworks.createdAt), desc(artworks.id))
 			.limit(input.limit);
 
-		return hydrateDiscoveryParents(rows.map(mapRow));
+		return rows.map(mapRow);
 	},
-	async findArtworkDetailById(id, viewer) {
+	async findArtworkDetailById(id, viewer, options) {
 		const activeViewer = defaultViewer(viewer);
 		const row = await db
-			.select(buildBaseSelect(activeViewer))
+			.select(buildDetailSelect(activeViewer, options))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
 			.where(and(eq(artworks.id, id), artworkVisibilityWhere()))
@@ -386,12 +444,27 @@ export const artworkReadRepository: ArtworkReadRepository = {
 	},
 	async findRandomArtwork(viewer) {
 		const activeViewer = defaultViewer(viewer);
+		// Draw the id on its own first. Sorting by random() has to read every
+		// visible row whatever the projection is, so keeping the tuple narrow
+		// means the users join and the three correlated vote subqueries are
+		// evaluated once, for the winner, instead of once per artwork.
+		const drawn = await db
+			.select({ id: artworks.id })
+			.from(artworks)
+			.where(artworkVisibilityWhere())
+			.orderBy(sql`random()`)
+			.limit(1);
+
+		const drawnId = drawn[0]?.id;
+		if (!drawnId) return null;
+
 		const rows = await db
 			.select(buildDiscoverySelect(activeViewer))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(artworkVisibilityWhere())
-			.orderBy(sql`random()`)
+			.leftJoin(parentArtworks, parentJoinCondition)
+			.leftJoin(parentAuthors, parentAuthorJoinCondition)
+			.where(and(eq(artworks.id, drawnId), artworkVisibilityWhere()))
 			.limit(1);
 
 		return rows[0] ? mapRow(rows[0]) : null;
@@ -405,14 +478,16 @@ export const artworkReadRepository: ArtworkReadRepository = {
 					authorNickname: users.nickname,
 					contentSummary: artworks.title,
 					isHidden: artworks.isHidden,
-					reportCount: count(contentReports.id)
+					reportCount: moderationQueueReportCount()
 				})
 				.from(contentReports)
 				.innerJoin(artworks, eq(artworks.id, contentReports.artworkId))
 				.innerJoin(users, eq(users.id, artworks.authorId))
 				.where(and(isNotNull(contentReports.artworkId), eq(contentReports.status, 'pending')))
 				.groupBy(artworks.id, users.id)
-				.having(gt(count(contentReports.id), 0)),
+				.having(moderationQueueHaving(input.cursor, 'artwork', artworks.id))
+				.orderBy(desc(moderationQueueReportCount()), asc(artworks.id))
+				.limit(input.limit),
 
 			db
 				.select({
@@ -422,14 +497,16 @@ export const artworkReadRepository: ArtworkReadRepository = {
 					commentId: artworkComments.id,
 					contentSummary: artworkComments.body,
 					isHidden: artworkComments.isHidden,
-					reportCount: count(contentReports.id)
+					reportCount: moderationQueueReportCount()
 				})
 				.from(contentReports)
 				.innerJoin(artworkComments, eq(artworkComments.id, contentReports.commentId))
 				.innerJoin(users, eq(users.id, artworkComments.authorId))
 				.where(and(isNotNull(contentReports.commentId), eq(contentReports.status, 'pending')))
 				.groupBy(artworkComments.id, users.id)
-				.having(gt(count(contentReports.id), 0))
+				.having(moderationQueueHaving(input.cursor, 'comment', artworkComments.id))
+				.orderBy(desc(moderationQueueReportCount()), asc(artworkComments.id))
+				.limit(input.limit)
 		]);
 
 		const allItems: ModerationQueueItem[] = [
@@ -455,6 +532,10 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			}))
 		];
 
+		// Both aggregates are already cursor-filtered and capped at the page
+		// size in SQL, and target_type only breaks ties, so the global page is
+		// contained in their union: merging at most 2 * limit rows here is
+		// enough to restore the exact order the service's cursor encodes.
 		allItems.sort((a, b) => {
 			if (b.reportCount !== a.reportCount) return b.reportCount - a.reportCount;
 			if (a.targetType !== b.targetType) return a.targetType < b.targetType ? -1 : 1;
@@ -463,17 +544,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			return aId < bId ? -1 : aId > bId ? 1 : 0;
 		});
 
-		const filtered = input.cursor
-			? allItems.filter((item) => {
-					const cursor = input.cursor!;
-					if (item.reportCount !== cursor.reportCount) return item.reportCount < cursor.reportCount;
-					if (item.targetType !== cursor.targetType) return item.targetType > cursor.targetType;
-					const itemId = item.commentId ?? item.artworkId;
-					return itemId > cursor.id;
-				})
-			: allItems;
-
-		return filtered.slice(0, input.limit);
+		return allItems.slice(0, input.limit);
 	},
 
 	async listArtworkCommentsByArtworkId(artworkId, viewer) {

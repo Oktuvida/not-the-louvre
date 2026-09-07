@@ -1,9 +1,9 @@
 name: Commit Lint
 
+# Every branch, main included: the owner commits straight to main, so excluding
+# it meant the convention was never actually enforced anywhere.
 on:
   push:
-    branches-ignore:
-      - main
   pull_request:
 
 jobs:

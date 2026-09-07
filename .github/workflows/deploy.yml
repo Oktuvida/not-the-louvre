@@ -1,19 +1,81 @@
-name: Deploy to Cloudflare Workers
+name: Quality and deploy
 
 on:
   push:
     branches:
       - main
+  pull_request:
   workflow_dispatch:
 
-# A single in-flight deployment at a time; newer pushes supersede older runs.
+# A single in-flight run per ref: pushes to main still serialize (so two deploys
+# never race), while pull requests get their own lane instead of queueing behind
+# a deployment.
 concurrency:
-  group: deploy-cloudflare-workers
+  group: quality-and-deploy-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  quality:
+    name: Lint, typecheck and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The *root* lint/check scripts shell out to `cargo fmt`, `cargo clippy`
+      # and `cargo check`, and this runner has no Rust toolchain — so gate on the
+      # web workspace scripts, which need only Bun. Both of them run
+      # `svelte-kit sync` first, so `./$types` resolves on a clean checkout.
+      - name: Lint
+        run: bun run --filter @not-the-louvre/web lint
+
+      - name: Typecheck
+        run: bun run --filter @not-the-louvre/web check
+
+      # Integration suites opt in through RUN_INTEGRATION=1 and are skipped here:
+      # they need the local Supabase stack.
+      - name: Server unit tests
+        run: bun run --filter @not-the-louvre/web test:unit:server
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Chromium for the browser test project
+        working-directory: apps/web
+        run: bunx playwright install --with-deps chromium
+
+      # The client project runs the component specs in a headless Chromium. It
+      # is green locally; keep it non-blocking until it has been green twice on
+      # Actions, then drop `continue-on-error` to promote it into the gate.
+      - name: Client component tests (non-blocking)
+        continue-on-error: true
+        run: bun run --filter @not-the-louvre/web test:unit:client
+
   deploy:
     name: Build and deploy worker
+    needs: [quality]
+    # Pull requests get the quality job only; they must never touch production.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # GitHub environment "production" can gate this with required reviewers and
     # is where the Cloudflare credentials below are stored.
@@ -25,6 +87,14 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.11
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -47,6 +117,7 @@ jobs:
           ORIGIN: https://build.invalid
 
       - name: Deploy with Wrangler
+        id: deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -54,3 +125,28 @@ jobs:
           workingDirectory: apps/web
           # The build already ran above; just upload the prebuilt output.
           command: deploy
+
+      # The unit and e2e suites never exercise workerd, so this is the only check
+      # that the artifact actually boots on the real runtime. Set the repository
+      # variable PRODUCTION_URL to smoke-test the custom domain instead of the
+      # workers.dev URL wrangler reports.
+      - name: Smoke-test the deployed worker
+        env:
+          SMOKE_URL: ${{ vars.PRODUCTION_URL || steps.deploy.outputs.deployment-url }}
+        run: |
+          if [ -z "$SMOKE_URL" ]; then
+            echo "No PRODUCTION_URL variable and no deployment URL reported; skipping smoke test."
+            exit 0
+          fi
+
+          for attempt in 1 2 3 4 5; do
+            status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SMOKE_URL/" || echo 000)
+            echo "attempt ${attempt}: GET ${SMOKE_URL}/ -> ${status}"
+            if [ "$status" = "200" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "::error::Deployed worker never answered 200 at ${SMOKE_URL}/"
+          exit 1

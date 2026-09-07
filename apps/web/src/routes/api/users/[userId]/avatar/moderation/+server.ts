@@ -15,7 +15,16 @@ export const PATCH: RequestHandler = async (event) => {
 			body.action ?? 'hide'
 		);
 
-		return json({ user });
+		// The admin UI refreshes its own list from this call, so the response only
+		// needs the moderated flags — never the target's avatar drawing document.
+		return json({
+			user: {
+				avatarIsHidden: user.avatarIsHidden,
+				avatarIsNsfw: user.avatarIsNsfw,
+				avatarUrl: user.avatarUrl,
+				id: user.id
+			}
+		});
 	} catch (error) {
 		if (error instanceof ArtworkFlowError) {
 			return json({ code: error.code, message: error.message }, { status: error.status });

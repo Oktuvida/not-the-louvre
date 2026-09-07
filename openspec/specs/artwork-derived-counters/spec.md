@@ -1,4 +1,9 @@
-## ADDED Requirements
+# artwork-derived-counters Specification
+
+## Purpose
+Keep the denormalized artwork counters (score, public comment count, public fork count) canonical under every mutation that can affect them.
+
+## Requirements
 
 ### Requirement: Artwork score remains canonical under vote mutations
 The system SHALL maintain each artwork `score` as a database-owned derived value that remains correct after vote creation, vote replacement, vote removal, and concurrent vote mutations.

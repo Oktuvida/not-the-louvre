@@ -11,7 +11,7 @@ const mocked = vi.hoisted(() => ({
 		uploadAvatar: vi.fn(),
 		deleteAvatar: vi.fn()
 	},
-	findUserById: vi.fn(),
+	findUserAvatarRefById: vi.fn(),
 	streamAvatarStorageObject: vi.fn()
 }));
 
@@ -21,7 +21,7 @@ vi.mock('$lib/server/user/avatar.service', () => ({
 
 vi.mock('$lib/server/user/repository', () => ({
 	userRepository: {
-		findUserById: mocked.findUserById,
+		findUserAvatarRefById: mocked.findUserAvatarRefById,
 		updateUserAvatarUrl: vi.fn()
 	}
 }));
@@ -64,12 +64,14 @@ const makeLocalUser = (overrides = {}) => ({
 
 describe('GET /api/users/[userId]/avatar', () => {
 	beforeEach(() => {
-		mocked.findUserById.mockReset();
+		mocked.findUserAvatarRefById.mockReset();
 		mocked.streamAvatarStorageObject.mockReset();
 	});
 
 	it('streams the avatar for a user with an uploaded avatar', async () => {
-		mocked.findUserById.mockResolvedValue(makeUserRecord({ avatarUrl: 'avatars/user-1.avif' }));
+		mocked.findUserAvatarRefById.mockResolvedValue(
+			makeUserRecord({ avatarUrl: 'avatars/user-1.avif' })
+		);
 		mocked.streamAvatarStorageObject.mockResolvedValue(
 			new Response(new Uint8Array([1, 2, 3]), { status: 200 })
 		);
@@ -88,7 +90,7 @@ describe('GET /api/users/[userId]/avatar', () => {
 	});
 
 	it('returns 404 for a user without an avatar', async () => {
-		mocked.findUserById.mockResolvedValue(makeUserRecord({ avatarUrl: null }));
+		mocked.findUserAvatarRefById.mockResolvedValue(makeUserRecord({ avatarUrl: null }));
 
 		const { GET } = await import('./+server');
 		const response = await GET({
@@ -101,7 +103,7 @@ describe('GET /api/users/[userId]/avatar', () => {
 	});
 
 	it('returns 404 for a hidden avatar', async () => {
-		mocked.findUserById.mockResolvedValue(
+		mocked.findUserAvatarRefById.mockResolvedValue(
 			makeUserRecord({ avatarIsHidden: true, avatarUrl: 'avatars/user-1.avif' })
 		);
 
@@ -117,7 +119,7 @@ describe('GET /api/users/[userId]/avatar', () => {
 	});
 
 	it('returns 404 for a nonexistent user', async () => {
-		mocked.findUserById.mockResolvedValue(null);
+		mocked.findUserAvatarRefById.mockResolvedValue(null);
 
 		const { GET } = await import('./+server');
 		const response = await GET({
@@ -130,7 +132,9 @@ describe('GET /api/users/[userId]/avatar', () => {
 	});
 
 	it('returns a JSON error envelope when avatar streaming fails with a domain error', async () => {
-		mocked.findUserById.mockResolvedValue(makeUserRecord({ avatarUrl: 'avatars/user-1.avif' }));
+		mocked.findUserAvatarRefById.mockResolvedValue(
+			makeUserRecord({ avatarUrl: 'avatars/user-1.avif' })
+		);
 		mocked.streamAvatarStorageObject.mockRejectedValue(
 			new ArtworkFlowError(404, 'Avatar not found', 'NOT_FOUND')
 		);
@@ -150,7 +154,9 @@ describe('GET /api/users/[userId]/avatar', () => {
 		});
 	});
 	it('answers matching if-none-match revalidations without touching storage', async () => {
-		mocked.findUserById.mockResolvedValue(makeUserRecord({ avatarUrl: 'avatars/user-1.avif' }));
+		mocked.findUserAvatarRefById.mockResolvedValue(
+			makeUserRecord({ avatarUrl: 'avatars/user-1.avif' })
+		);
 
 		const { GET } = await import('./+server');
 		const response = await GET({
@@ -184,7 +190,7 @@ describe('GET /api/users/[userId]/avatar', () => {
 		} as never);
 
 		expect(response).toBe(cachedResponse);
-		expect(mocked.findUserById).not.toHaveBeenCalled();
+		expect(mocked.findUserAvatarRefById).not.toHaveBeenCalled();
 	});
 });
 

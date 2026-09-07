@@ -61,6 +61,14 @@ const createConnectionClosedError = () =>
 		})
 	});
 
+// Mirrors the repository's RETURNING projection: every artworks column except
+// drawing_document, which no writer's caller reads back.
+const asReturnedRecord = (record: ArtworkRecord): ArtworkRecord => {
+	const returned = { ...record };
+	delete returned.drawingDocument;
+	return returned;
+};
+
 const createRepository = () => {
 	const artworks = new Map<string, ArtworkRecord>();
 	const reports = new Map<string, ContentReportRecord>();
@@ -97,7 +105,7 @@ const createRepository = () => {
 				if ((current.drawingDocument ?? '').length !== expectedTotalLength) return null;
 				const next = { ...current, drawingVersion: version, updatedAt };
 				artworks.set(id, next);
-				return next;
+				return asReturnedRecord(next);
 			}
 		),
 		findArtworkDrawingDocumentLength: vi.fn(async (id: string) => {
@@ -167,7 +175,7 @@ const createRepository = () => {
 				}
 			}
 
-			return record;
+			return asReturnedRecord(record);
 		}),
 		updateArtworkTitle: vi.fn(async (id: string, title: string, updatedAt: Date) => {
 			const current = artworks.get(id);
@@ -175,7 +183,7 @@ const createRepository = () => {
 
 			const next = { ...current, title, updatedAt };
 			artworks.set(id, next);
-			return next;
+			return asReturnedRecord(next);
 		}),
 		deleteArtwork: vi.fn(async (id: string) => {
 			const current = artworks.get(id) ?? null;
@@ -191,21 +199,21 @@ const createRepository = () => {
 					}
 				}
 			}
-			return current;
+			return current ? asReturnedRecord(current) : null;
 		}),
 		setArtworkHiddenState: vi.fn(async (id: string, input) => {
 			const current = artworks.get(id);
 			if (!current) return null;
 			const next = { ...current, ...input };
 			artworks.set(id, next);
-			return next;
+			return asReturnedRecord(next);
 		}),
 		updateArtworkModeration: vi.fn(async (id: string, input) => {
 			const current = artworks.get(id);
 			if (!current) return null;
 			const next = { ...current, ...input };
 			artworks.set(id, next);
-			return next;
+			return asReturnedRecord(next);
 		}),
 		setCommentHiddenState: vi.fn(async (id: string, input) => {
 			const current = comments.get(id);
@@ -391,11 +399,13 @@ describe('artwork service', () => {
 
 		expect(result.storageKey).toBe('artworks/user-1/artwork-1.avif');
 		expect(result.drawingVersion).toBe(2);
-		expect(result.drawingDocument).toBeTruthy();
+		// The finalize RETURNING must not hand the ~100 KB document back over the
+		// pooler that the chunked write just fed it 16 KiB at a time.
+		expect(result.drawingDocument).toBeUndefined();
 		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(drawingDocument);
 		expect(uploads).toHaveLength(1);
 		expect(uploads[0]?.file.type).toBe('image/avif');
-		expect(decodeCompressedDrawingDocument(result.drawingDocument!)).toBe(
+		expect(decodeCompressedDrawingDocument(artworks.get('artwork-1')!.drawingDocument!)).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
 		expect(artworks.get('artwork-1')).toMatchObject({
@@ -403,6 +413,62 @@ describe('artwork service', () => {
 			title: 'Vector First'
 		});
 	});
+
+	// The studio only ever posts a drawing document, so a null placeholder here
+	// means every real artwork loads from an empty grey card instead of a
+	// blur-up.
+	it('stores a blur-up placeholder for artworks published from a drawing document', async () => {
+		const { publishArtwork } = await import('./service');
+		const { repository } = createRepository();
+		const { storage } = createStorage();
+		const now = new Date('2026-03-26T10:00:00.000Z');
+		const drawingDocument = JSON.stringify({
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [
+						[48, 48] as [number, number],
+						[320, 320] as [number, number],
+						[540, 220] as [number, number]
+					],
+					size: 12
+				}
+			]
+		});
+
+		await publishArtwork(
+			{
+				drawingDocument,
+				title: 'Blurred Up'
+			},
+			{
+				ipAddress: '127.0.0.1',
+				user: {
+					id: 'user-1',
+					authUserId: 'user-1',
+					nickname: 'artist_1',
+					role: 'user',
+					avatarUrl: null,
+					name: 'artist_1',
+					email: 'artist_1@not-the-louvre.local',
+					emailVerified: true,
+					image: null,
+					createdAt: now,
+					updatedAt: now
+				}
+			},
+			{
+				generateId: () => 'artwork-1',
+				now: () => now,
+				repository,
+				storage
+			}
+		);
+
+		const created = vi.mocked(repository.createArtwork).mock.calls[0]![0];
+		expect(created.mediaPlaceholder).toMatch(/^data:image\/png;base64,/);
+	}, 10000);
 
 	it('rejects runtime-prepared avatar payloads on artwork publish', async () => {
 		const { publishArtwork } = await import('./service');
@@ -639,7 +705,7 @@ describe('artwork service', () => {
 			parentId: 'artwork-parent',
 			forkCount: 0
 		});
-		expect(decodeCompressedDrawingDocument(fork.drawingDocument!)).toBe(
+		expect(decodeCompressedDrawingDocument(artworks.get('artwork-child')!.drawingDocument!)).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(childDocument))
 		);
 		expect(artworks.get('artwork-parent')).toMatchObject({
@@ -1526,9 +1592,7 @@ describe('artwork service', () => {
 		expect(decodeCompressedDrawingDocument(storedDocument)).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
-		expect(decodeCompressedDrawingDocument(result.drawingDocument!)).toBe(
-			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
-		);
+		expect(result.drawingDocument).toBeUndefined();
 	});
 
 	it('resumes chunk appends after a lost-ack append via the length read-back', async () => {
@@ -1577,7 +1641,7 @@ describe('artwork service', () => {
 
 		expect(result.drawingVersion).toBe(2);
 		expect(decodeCompressedDrawingDocument(artworks.get('artwork-1')!.drawingDocument!)).toBe(
-			decodeCompressedDrawingDocument(result.drawingDocument!)
+			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
 	});
 
@@ -1712,7 +1776,7 @@ describe('artwork service', () => {
 		);
 
 		expect(result.id).toBe('artwork-1');
-		expect(result.drawingDocument).toBeNull();
+		expect(result.drawingDocument ?? null).toBeNull();
 		expect(artworks.get('artwork-1')?.drawingVersion).toBeNull();
 		expect(deletes).toEqual([]);
 	});

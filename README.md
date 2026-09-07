@@ -87,57 +87,64 @@ Notes:
 - leaving `devenv up` does not automatically stop the Docker Compose stack; stop it explicitly with `devenv tasks run ntl:db-stop` or `bun run db:stop`.
 - `devenv` does not auto-generate `apps/web/.env`; app env files remain user-managed.
 
+## Commit hooks
+
+Commit messages follow the emoji + Conventional Commits convention documented in
+`AGENTS.md`, and CI validates every commit message. Install the local hook once so a bad
+message is caught before you push:
+
+```sh
+bun run hooks:install   # git config core.hooksPath .githooks
+```
+
 ## Production deployment
 
-The MVP production target is a single VPS running:
+Production is **Cloudflare Workers with static assets**, built with
+`@sveltejs/adapter-cloudflare` (`apps/web/svelte.config.js`, `apps/web/wrangler.jsonc`). CI
+builds and deploys on every push to `main` (`.github/workflows/deploy.yml`). The full
+runbook — one-time Worker setup, Hyperdrive, CPU limits, local `wrangler dev` — lives in
+[`docs/deploy-cloudflare-workers.md`](./docs/deploy-cloudflare-workers.md).
 
-- `Caddy` on `:443` for HTTPS termination and automatic certificate renewal
-- the SvelteKit app as a `systemd` service on `127.0.0.1:3000`
-- managed Supabase for database, storage, and realtime services
+The committed stroke-json WASM runtime under `packages/stroke-json-runtime/generated/wasm/`
+is the deployable artifact; Wrangler uploads it into the Worker. Neither CI nor the runtime
+needs the Rust toolchain — you only need it to regenerate the WASM after changing the Rust
+crates.
 
-The production runtime uses `@sveltejs/adapter-node`, so the deployed server starts with `node build` after `bun run build` completes.
+### Worker secrets
 
-The committed stroke-json WASM runtime under `packages/stroke-json-runtime/generated/wasm/` is the deployable artifact. Production hosts only need Bun and Node to install dependencies and run the app; they do not need the Rust toolchain unless you are regenerating the WASM after changing the Rust crates.
+Production secrets never live in the repository. Set them once per Worker with
+`wrangler secret put KEY`, run from `apps/web`:
 
-### Production env file
-
-Production secrets should not live in the repository. Store them in an env file such as `/etc/not-the-louvre/not-the-louvre.env` and load that file through `systemd`.
-
-Canonical keys:
-
-- `ORIGIN=https://app.example.com`
+- `ORIGIN=https://not-the-louvre.art`
 - `DATABASE_URL=...`
 - `BETTER_AUTH_SECRET=...`
 - `SUPABASE_PUBLIC_URL=...`
-- `SUPABASE_ANON_KEY=...`
+- `SUPABASE_ANON_KEY=...` (without it the browser never gets a realtime client and live votes and comments stop arriving, silently)
 - exactly one of `SUPABASE_SECRET_KEY=...` or `SERVICE_ROLE_KEY=...`
 - `SUPABASE_JWT_SECRET=...`
-- optional `HOST=127.0.0.1`, `PORT=3000`, `ARTWORK_STORAGE_BUCKET=artworks`
+- optional `ARTWORK_STORAGE_BUCKET=artworks`
+
+The deploy workflow itself needs two repository secrets, ideally scoped to a `production`
+environment: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
 Values intentionally exposed to browser realtime clients today:
 
 - `SUPABASE_PUBLIC_URL`
 - `SUPABASE_ANON_KEY`
 
-### VPS helper script
-
-The repo includes a VPS helper at `scripts/deploy/vps.sh` with these subcommands:
-
-- `scripts/deploy/vps.sh install --domain app.example.com --email ops@example.com`
-- `scripts/deploy/vps.sh deploy`
-- `scripts/deploy/vps.sh env:set KEY=value`
-- `scripts/deploy/vps.sh env:edit`
-- `scripts/deploy/vps.sh status`
-- `scripts/deploy/vps.sh uninstall`
-
 ### Rollback
 
-If a deploy fails after a build or restart:
+Every deploy publishes a new Worker version, so a rollback is a Cloudflare operation rather
+than a server one:
 
-1. restore the previous working tree or release directory contents
-2. restore the previous env file if it changed
-3. restart the app service
-4. confirm the site is healthy through Caddy
+```sh
+cd apps/web
+bunx wrangler deployments list   # find the previous version
+bunx wrangler rollback           # or: bunx wrangler rollback <version-id>
+```
+
+If the regression is in the code rather than in the configuration, revert the commit on
+`main`; the push redeploys automatically.
 
 ## 📜 The philosophy
 

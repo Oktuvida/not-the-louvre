@@ -1,23 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocked = vi.hoisted(() => ({
-	findUserById: vi.fn()
+	findUserAvatarRefById: vi.fn()
 }));
 
 vi.mock('$lib/server/user/repository', () => ({
 	userRepository: {
-		findUserById: mocked.findUserById,
+		findUserAvatarRefById: mocked.findUserAvatarRefById,
 		updateUserAvatarUrl: vi.fn()
 	}
 }));
 
 describe('GET /api/users/[userId]', () => {
 	beforeEach(() => {
-		mocked.findUserById.mockReset();
+		mocked.findUserAvatarRefById.mockReset();
 	});
 
 	it('returns the public profile for an existing user', async () => {
-		mocked.findUserById.mockResolvedValue({
+		mocked.findUserAvatarRefById.mockResolvedValue({
 			avatarUrl: 'avatars/user-1.avif',
 			createdAt: new Date('2026-01-01T00:00:00.000Z'),
 			id: 'user-1',
@@ -46,7 +46,7 @@ describe('GET /api/users/[userId]', () => {
 	});
 
 	it('returns null avatar URL when user has no avatar', async () => {
-		mocked.findUserById.mockResolvedValue({
+		mocked.findUserAvatarRefById.mockResolvedValue({
 			avatarUrl: null,
 			createdAt: new Date('2026-01-01T00:00:00.000Z'),
 			id: 'user-2',
@@ -67,7 +67,7 @@ describe('GET /api/users/[userId]', () => {
 	});
 
 	it('returns 404 for a nonexistent user', async () => {
-		mocked.findUserById.mockResolvedValue(null);
+		mocked.findUserAvatarRefById.mockResolvedValue(null);
 
 		const { GET } = await import('./+server');
 		const response = await GET({
@@ -79,7 +79,7 @@ describe('GET /api/users/[userId]', () => {
 	});
 
 	it('does not require authentication', async () => {
-		mocked.findUserById.mockResolvedValue({
+		mocked.findUserAvatarRefById.mockResolvedValue({
 			avatarUrl: null,
 			createdAt: new Date('2026-01-01T00:00:00.000Z'),
 			id: 'user-1',

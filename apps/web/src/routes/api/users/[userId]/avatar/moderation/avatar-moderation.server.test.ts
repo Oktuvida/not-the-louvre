@@ -61,6 +61,38 @@ describe('PATCH /api/users/[userId]/avatar/moderation', () => {
 		expect(mocked.moderateAvatar).toHaveBeenCalledWith(makeModerator().user, 'user-1', 'mark_nsfw');
 	});
 
+	it('returns only the moderated avatar flags, never the raw user record', async () => {
+		mocked.moderateAvatar.mockResolvedValue({
+			avatarDocument: 'a'.repeat(2048),
+			avatarDocumentVersion: 2,
+			avatarIsHidden: true,
+			avatarIsNsfw: true,
+			avatarUrl: 'avatars/user-1.avif',
+			id: 'user-1',
+			nickname: 'artist'
+		});
+
+		const { PATCH } = await import('./+server');
+		const response = await PATCH({
+			locals: makeModerator(),
+			params: { userId: 'user-1' },
+			request: new Request('http://localhost', {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ action: 'hide' })
+			})
+		} as never);
+
+		expect(await response.json()).toEqual({
+			user: {
+				avatarIsHidden: true,
+				avatarIsNsfw: true,
+				avatarUrl: 'avatars/user-1.avif',
+				id: 'user-1'
+			}
+		});
+	});
+
 	it('returns domain errors for forbidden access', async () => {
 		mocked.moderateAvatar.mockRejectedValue(
 			new ArtworkFlowError(403, 'Moderator access required', 'FORBIDDEN')

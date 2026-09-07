@@ -23,6 +23,13 @@ const strokeJsonRuntimeRoot = resolve(workspaceRoot, 'packages/stroke-json-runti
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+	// Build-time constant so Rollup dead-code-eliminates the Playwright-only
+	// in-memory storage branches from the production worker. `bun run build:e2e`
+	// runs with PLAYWRIGHT=1 (playwright.config.ts), `bun run build` never does,
+	// so the deployed bundle can no longer be flipped by a stray Worker variable.
+	define: {
+		__PLAYWRIGHT__: JSON.stringify(process.env.PLAYWRIGHT === '1')
+	},
 	build: {
 		rollupOptions: {
 			// .wasm imports stay external so wrangler bundles them as

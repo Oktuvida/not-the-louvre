@@ -9,7 +9,8 @@ const mocked = {
 vi.mock('$lib/server/artwork/service', () => ({
 	moderateComment: vi.fn(),
 	submitContentReport: vi.fn(),
-	moderateArtwork: mocked.moderateArtwork
+	moderateArtwork: mocked.moderateArtwork,
+	withoutDrawingDocument: <T>(artwork: T) => ({ ...artwork, drawingDocument: null })
 }));
 
 describe('artwork moderation endpoint', () => {
@@ -108,6 +109,33 @@ describe('artwork moderation endpoint', () => {
 			{ user: { id: 'moderator-1', role: 'moderator' } }
 		);
 		expect(await response.json()).toMatchObject({ artwork: { id: 'artwork-1' } });
+	});
+
+	it('keeps the drawing document out of the moderation response', async () => {
+		mocked.moderateArtwork.mockResolvedValue({
+			drawingDocument: 'a'.repeat(2048),
+			drawingVersion: 2,
+			id: 'artwork-1',
+			isHidden: true,
+			isNsfw: false
+		});
+
+		const { PATCH } = await import('./moderation/+server');
+		const response = await PATCH({
+			locals: { user: { id: 'moderator-1', role: 'moderator' } },
+			params: { artworkId: 'artwork-1' },
+			request: new Request('http://localhost/api/artworks/artwork-1/moderation', {
+				body: JSON.stringify({ action: 'hide' }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			})
+		} as never);
+
+		// ArtworkSafetyActions reads isHidden/isNsfw off this response, so those
+		// must survive while the ~100 KB document does not.
+		expect(await response.json()).toMatchObject({
+			artwork: { drawingDocument: null, id: 'artwork-1', isHidden: true, isNsfw: false }
+		});
 	});
 
 	it('rejects non-moderator artwork moderation requests', async () => {

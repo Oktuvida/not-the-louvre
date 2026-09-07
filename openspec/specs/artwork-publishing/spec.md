@@ -1,76 +1,95 @@
-## Requirement: Authenticated artwork publishing
-The system SHALL allow an authenticated product user to publish a new artwork by submitting compliant artwork media and optional title metadata through the application backend. On success, the system SHALL persist a backend-sanitized artwork record with its author ownership and storage reference.
+# artwork-publishing Specification
 
-### Scenario: Successful publish with sanitized valid media and title
+## Purpose
+Authenticated artwork publishing: media sanitization contract, stable storage references, author-controlled title updates and deletion, and publish abuse protection.
+
+## Requirements
+
+### Requirement: Authenticated artwork publishing
+The system SHALL allow an authenticated product user to publish a new artwork by submitting compliant artwork media and optional title metadata through the application backend. On success, the system SHALL persist a backend-sanitized artwork record with its author ownership and storage reference. Product-owned publishing surfaces such as the draw route MAY submit a supported source image format that is not already canonical AVIF, provided the backend still sanitizes it into the canonical persisted artwork representation before storage. For the draw route, the preferred browser-export source order SHALL be WebP first, JPEG second, and PNG only as the final fallback.
+
+#### Scenario: Successful publish with sanitized valid media and title
 - **WHEN** an authenticated user submits compliant artwork media and a valid optional title
 - **THEN** the system sanitizes the media into the canonical persisted artwork representation, stores that sanitized media, creates the artwork record owned by that user, and returns the persisted artwork identity and metadata needed by the application
 
-### Scenario: Publish rejected for unauthenticated requester
+#### Scenario: Product draw route publishes browser-exported source media successfully
+- **WHEN** an authenticated user submits a supported source image exported from the product draw route using the available browser fallback order
+- **THEN** the system sanitizes that source media into the canonical persisted artwork representation, stores the canonical output, and returns the created artwork identity to the product flow
+
+#### Scenario: Publish rejected for unauthenticated requester
 - **WHEN** a request to publish artwork is made without an authenticated product user
 - **THEN** the system rejects the request and does not create storage or database records
 
-## Requirement: Artwork media contract enforcement
-The system SHALL enforce the persisted artwork media contract at the backend boundary. Persisted artwork media MUST be backend-sanitized AVIF, MUST decode successfully as a single still image, MUST match the configured canonical artwork dimensions, MUST satisfy the configured maximum size budget for stored images after sanitization, and MUST not retain client-provided metadata outside the canonical persisted representation.
+### Requirement: Artwork media contract enforcement
+The system SHALL enforce the persisted artwork media contract at the backend boundary. Persisted artwork media MUST be backend-sanitized AVIF, MUST decode successfully as a single still image, MUST match the configured canonical artwork dimensions, MUST satisfy the configured maximum size budget for stored images after sanitization, and MUST not retain client-provided metadata outside the canonical persisted representation. The backend MAY accept explicitly supported non-AVIF source media from product-owned creation surfaces if that media can be safely decoded and sanitized into the canonical persisted artwork output. For the draw route, the explicitly supported browser-export source formats SHALL include WebP, JPEG, and PNG.
 
-### Scenario: Publish sanitizes canonical artwork media before storage
+#### Scenario: Publish sanitizes canonical artwork media before storage
 - **WHEN** an authenticated user submits artwork media that satisfies the artwork upload contract
 - **THEN** the system decodes the upload, re-encodes a canonical AVIF output for persistence, and stores only the backend-generated sanitized media bytes
 
-### Scenario: Publish rejected for non-AVIF media
-- **WHEN** an authenticated user submits artwork media that is not AVIF
+#### Scenario: Product draw route source media is normalized into canonical persisted artwork media
+- **WHEN** an authenticated user submits supported non-AVIF source media from the product draw route
+- **THEN** the system decodes that source media, re-encodes a canonical AVIF output for persistence, and stores only the backend-generated sanitized media bytes
+
+#### Scenario: Draw route prefers smaller browser-export formats before PNG fallback
+- **WHEN** the draw route exports canvas media for publish
+- **THEN** the product flow tries WebP first, JPEG second, and PNG only if the earlier browser export formats are unavailable
+
+#### Scenario: Publish rejected for unsupported source media
+- **WHEN** an authenticated user submits media that is neither canonical AVIF nor an explicitly supported source format for the active product flow
 - **THEN** the system rejects the publish request and does not persist the artwork
 
-### Scenario: Publish rejected for undecodable or malformed AVIF media
-- **WHEN** an authenticated user submits artwork media whose AVIF container or pixel payload cannot be decoded safely into the canonical artwork image
+#### Scenario: Publish rejected for undecodable or malformed source media
+- **WHEN** an authenticated user submits media whose container or pixel payload cannot be decoded safely into the canonical artwork image
 - **THEN** the system rejects the publish request and does not persist the artwork
 
-### Scenario: Publish rejected for non-canonical artwork dimensions
-- **WHEN** an authenticated user submits artwork media whose decoded dimensions do not match the configured canonical artwork dimensions
+#### Scenario: Publish rejected for non-canonical artwork dimensions after normalization
+- **WHEN** an authenticated user submits source media whose decoded content cannot be normalized into the configured canonical artwork dimensions
 - **THEN** the system rejects the publish request and does not persist the artwork
 
-### Scenario: Publish rejected when sanitized output exceeds budget
+#### Scenario: Publish rejected when sanitized output exceeds budget
 - **WHEN** an authenticated user submits artwork media that cannot be sanitized into a canonical AVIF output within the configured maximum stored-image budget
 - **THEN** the system rejects the publish request and does not persist the artwork
 
-## Requirement: Stable storage-backed artwork references
+### Requirement: Stable storage-backed artwork references
 The system SHALL persist a stable storage-backed media reference for each artwork rather than a deployment-specific public bucket URL. The persisted artwork reference SHALL be suitable for later application-controlled media delivery and cache-layer integration.
 
-### Scenario: Publish stores stable media reference
+#### Scenario: Publish stores stable media reference
 - **WHEN** an artwork is successfully published
 - **THEN** the persisted artwork record stores a stable storage reference that is independent of any direct public bucket URL
 
-## Requirement: Safe publish failure handling across storage and database persistence
+### Requirement: Safe publish failure handling across storage and database persistence
 The system SHALL handle partial publish failures so that media storage and database persistence do not drift silently. If media storage succeeds but artwork record creation fails, the system SHALL attempt compensating cleanup of the newly written media object before returning an error.
 
-### Scenario: Database failure after media upload
+#### Scenario: Database failure after media upload
 - **WHEN** artwork media storage succeeds but the artwork record cannot be persisted
 - **THEN** the system attempts to remove the newly written media object and returns a safe publish failure response
 
-## Requirement: Author-controlled artwork title updates
+### Requirement: Author-controlled artwork title updates
 The system SHALL allow the author of an artwork to update its title after publishing, subject to the configured title validation rules.
 
-### Scenario: Author updates artwork title
+#### Scenario: Author updates artwork title
 - **WHEN** the author of an artwork submits a valid replacement title
 - **THEN** the system updates the stored title for that artwork
 
-### Scenario: Non-author cannot update artwork title
+#### Scenario: Non-author cannot update artwork title
 - **WHEN** a user who does not own an artwork attempts to change its title
 - **THEN** the system rejects the update and leaves the stored artwork unchanged
 
-## Requirement: Author-controlled artwork deletion
+### Requirement: Author-controlled artwork deletion
 The system SHALL allow the author of an artwork to delete that artwork through the application backend. Deletion SHALL remove or invalidate the storage-backed media reference according to the backend's deletion policy so the artwork is no longer available as active content.
 
-### Scenario: Author deletes artwork
+#### Scenario: Author deletes artwork
 - **WHEN** the author of an artwork requests deletion
 - **THEN** the system removes the artwork from active content and applies the configured media cleanup or invalidation behavior
 
-### Scenario: Non-author cannot delete artwork
+#### Scenario: Non-author cannot delete artwork
 - **WHEN** a user who does not own an artwork attempts to delete it
 - **THEN** the system rejects the deletion and leaves the artwork unchanged
 
-## Requirement: Publish abuse protection
+### Requirement: Publish abuse protection
 The system SHALL enforce server-side rate limiting for artwork publishing so repeated publish attempts from the same authenticated actor cannot exceed the configured publish budget window.
 
-### Scenario: Too many publish attempts within active window
+#### Scenario: Too many publish attempts within active window
 - **WHEN** an authenticated user exceeds the configured publish threshold within the active publish window
 - **THEN** the system temporarily rejects further publish attempts for that user until the limit window expires

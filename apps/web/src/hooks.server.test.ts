@@ -156,3 +156,61 @@ describe('server handle hardening', () => {
 		vi.unstubAllEnvs();
 	});
 });
+
+describe('session resolution allowlist', () => {
+	beforeEach(() => {
+		vi.resetModules();
+		mocked.resolveSessionContext.mockReset();
+		mocked.resolveSessionContext.mockResolvedValue(null);
+		mocked.svelteKitHandler.mockReset();
+		mocked.svelteKitHandler.mockImplementation(async ({ event, resolve }) => resolve(event));
+		mocked.logSecurityEvent.mockReset();
+	});
+
+	const runHandle = async (routeId: string, method: string, pathname: string) => {
+		const { handle } = await import('./hooks.server');
+
+		return handle({
+			event: {
+				locals: {},
+				platform: undefined,
+				request: new Request(`http://localhost${pathname}`, {
+					headers: { origin: 'http://localhost' },
+					method
+				}),
+				route: { id: routeId },
+				url: new URL(`http://localhost${pathname}`)
+			},
+			resolve: vi.fn(async () => new Response(null, { status: 200 }))
+		} as never);
+	};
+
+	it.each([
+		['/api/artworks/[artworkId]/media', '/api/artworks/artwork-1/media'],
+		['/api/users/[userId]/avatar', '/api/users/user-1/avatar'],
+		['/api/users/[userId]/favicon', '/api/users/user-1/favicon']
+	])('skips session resolution for GET %s', async (routeId, pathname) => {
+		const response = await runHandle(routeId, 'GET', pathname);
+
+		expect(response.status).toBe(200);
+		expect(mocked.resolveSessionContext).not.toHaveBeenCalled();
+	});
+
+	it('still resolves the session for writes on an allowlisted route', async () => {
+		await runHandle('/api/users/[userId]/avatar', 'POST', '/api/users/user-1/avatar');
+
+		expect(mocked.resolveSessionContext).toHaveBeenCalledOnce();
+	});
+
+	it('still resolves the session for GET requests outside the allowlist', async () => {
+		await runHandle('/api/artworks', 'GET', '/api/artworks');
+
+		expect(mocked.resolveSessionContext).toHaveBeenCalledOnce();
+	});
+
+	it('resolves the session when the route could not be matched', async () => {
+		await runHandle(null as unknown as string, 'GET', '/api/artworks/artwork-1/media');
+
+		expect(mocked.resolveSessionContext).toHaveBeenCalledOnce();
+	});
+});

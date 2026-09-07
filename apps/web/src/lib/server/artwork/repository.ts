@@ -17,6 +17,7 @@ import type {
 	ArtworkRepository,
 	ArtworkVoteMutationResult,
 	ArtworkVoteRecord,
+	ArtworkVoteSummary,
 	CreatePublishRateLimitInput,
 	CreateArtworkCommentInput,
 	CreateContentReportInput,
@@ -28,12 +29,49 @@ import type {
 	UpdatePublishRateLimitInput
 } from './types';
 
+// Every `artworks` column except `drawing_document`. The document can be
+// hundreds of KiB and no writer's caller reads it back, so RETURNING it only
+// drags it across the pooler again — the exact traffic the chunked write
+// exists to avoid.
+const artworkRecordProjection = {
+	authorId: artworks.authorId,
+	commentCount: artworks.commentCount,
+	createdAt: artworks.createdAt,
+	drawingVersion: artworks.drawingVersion,
+	forkCount: artworks.forkCount,
+	hiddenAt: artworks.hiddenAt,
+	id: artworks.id,
+	isHidden: artworks.isHidden,
+	isNsfw: artworks.isNsfw,
+	mediaContentType: artworks.mediaContentType,
+	mediaPlaceholder: artworks.mediaPlaceholder,
+	mediaSizeBytes: artworks.mediaSizeBytes,
+	nsfwLabeledAt: artworks.nsfwLabeledAt,
+	nsfwSource: artworks.nsfwSource,
+	parentId: artworks.parentId,
+	score: artworks.score,
+	storageKey: artworks.storageKey,
+	title: artworks.title,
+	updatedAt: artworks.updatedAt
+};
+
+// The vote routes serialise this straight to the browser and the client reads
+// only `score`, so the transaction reads back five columns instead of the
+// whole row (three times, document included, before this narrowing).
+const artworkVoteSummaryProjection = {
+	commentCount: artworks.commentCount,
+	forkCount: artworks.forkCount,
+	id: artworks.id,
+	score: artworks.score,
+	updatedAt: artworks.updatedAt
+};
+
 export const artworkRepository: ArtworkRepository = {
 	async findArtworkById(id) {
 		return (await db.query.artworks.findFirst({ where: eq(artworks.id, id) })) ?? null;
 	},
 	async createArtwork(input) {
-		const [record] = await db.insert(artworks).values(input).returning();
+		const [record] = await db.insert(artworks).values(input).returning(artworkRecordProjection);
 		return record as ArtworkRecord;
 	},
 	// The expected-length guard makes each append exactly-once under ambiguous
@@ -63,7 +101,7 @@ export const artworkRepository: ArtworkRepository = {
 			.where(
 				and(eq(artworks.id, id), sql`length(${artworks.drawingDocument}) = ${expectedTotalLength}`)
 			)
-			.returning();
+			.returning(artworkRecordProjection);
 
 		return (record as ArtworkRecord | undefined) ?? null;
 	},
@@ -84,12 +122,15 @@ export const artworkRepository: ArtworkRepository = {
 			.update(artworks)
 			.set({ title, updatedAt })
 			.where(eq(artworks.id, id))
-			.returning();
+			.returning(artworkRecordProjection);
 
 		return (record as ArtworkRecord | undefined) ?? null;
 	},
 	async deleteArtwork(id) {
-		const [record] = await db.delete(artworks).where(eq(artworks.id, id)).returning();
+		const [record] = await db
+			.delete(artworks)
+			.where(eq(artworks.id, id))
+			.returning(artworkRecordProjection);
 		return (record as ArtworkRecord | undefined) ?? null;
 	},
 	async findChildForksByParentId(parentId) {
@@ -119,8 +160,13 @@ export const artworkRepository: ArtworkRepository = {
 						eq(artworkVotes.userId, input.userId)
 					)
 				})) ?? null;
-			const artwork =
-				(await tx.query.artworks.findFirst({ where: eq(artworks.id, input.artworkId) })) ?? null;
+			// Existence check stays, but reads one column instead of the whole row:
+			// without it the vote insert would raise an FK violation and turn a
+			// clean 404 into a 500.
+			const [artwork] = await tx
+				.select({ id: artworks.id })
+				.from(artworks)
+				.where(eq(artworks.id, input.artworkId));
 			if (!artwork) return null;
 
 			const [vote] = existing
@@ -131,20 +177,26 @@ export const artworkRepository: ArtworkRepository = {
 						.returning()
 				: await tx.insert(artworkVotes).values(input).returning();
 
-			const updatedArtwork =
-				(await tx.query.artworks.findFirst({ where: eq(artworks.id, input.artworkId) })) ?? null;
+			// `score` is maintained by sync_artwork_score_trigger, so the count has
+			// to be re-read — but only the five columns the callers use.
+			const [updatedArtwork] = await tx
+				.select(artworkVoteSummaryProjection)
+				.from(artworks)
+				.where(eq(artworks.id, input.artworkId));
 			if (!updatedArtwork) return null;
 
 			return {
-				artwork: updatedArtwork as ArtworkRecord,
+				artwork: updatedArtwork as ArtworkVoteSummary,
 				vote: vote as ArtworkVoteRecord
 			} satisfies ArtworkVoteMutationResult;
 		});
 	},
 	async removeVote(artworkId, userId) {
 		return db.transaction(async (tx) => {
-			const artwork =
-				(await tx.query.artworks.findFirst({ where: eq(artworks.id, artworkId) })) ?? null;
+			const [artwork] = await tx
+				.select(artworkVoteSummaryProjection)
+				.from(artworks)
+				.where(eq(artworks.id, artworkId));
 			if (!artwork) return null;
 
 			const existing =
@@ -153,16 +205,18 @@ export const artworkRepository: ArtworkRepository = {
 				})) ?? null;
 
 			if (!existing) {
-				return { artwork: artwork as ArtworkRecord, removed: null };
+				return { artwork: artwork as ArtworkVoteSummary, removed: null };
 			}
 
 			await tx.delete(artworkVotes).where(eq(artworkVotes.id, existing.id));
-			const updatedArtwork =
-				(await tx.query.artworks.findFirst({ where: eq(artworks.id, artworkId) })) ?? null;
+			const [updatedArtwork] = await tx
+				.select(artworkVoteSummaryProjection)
+				.from(artworks)
+				.where(eq(artworks.id, artworkId));
 			if (!updatedArtwork) return null;
 
 			return {
-				artwork: updatedArtwork as ArtworkRecord,
+				artwork: updatedArtwork as ArtworkVoteSummary,
 				removed: existing as ArtworkVoteRecord
 			};
 		});
@@ -283,12 +337,22 @@ export const artworkRepository: ArtworkRepository = {
 		});
 	},
 	async setArtworkHiddenState(id: string, input: HiddenStateUpdate) {
-		const [record] = await db.update(artworks).set(input).where(eq(artworks.id, id)).returning();
+		// Keeps isHidden/isNsfw/hiddenAt flowing: ArtworkSafetyActions reads them
+		// off the moderation response.
+		const [record] = await db
+			.update(artworks)
+			.set(input)
+			.where(eq(artworks.id, id))
+			.returning(artworkRecordProjection);
 
 		return (record as ArtworkRecord | undefined) ?? null;
 	},
 	async updateArtworkModeration(id: string, input) {
-		const [record] = await db.update(artworks).set(input).where(eq(artworks.id, id)).returning();
+		const [record] = await db
+			.update(artworks)
+			.set(input)
+			.where(eq(artworks.id, id))
+			.returning(artworkRecordProjection);
 
 		return (record as ArtworkRecord | undefined) ?? null;
 	},

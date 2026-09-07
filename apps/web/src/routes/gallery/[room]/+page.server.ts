@@ -6,15 +6,23 @@ import { loadGalleryRoomContent, loadGalleryRoomShell } from '../gallery-data.se
 // content is a nested promise SvelteKit streams once the queries resolve.
 // The streamed work outlives the request's own DB connection (hooks close it
 // when the response headers go out), so it runs on a connection of its own.
-export const load: PageServerLoad = async ({ locals, params, platform }) => {
+// `parent()` is awaited inside that promise, never in front of the shell: the
+// layout already read the viewer's content preferences for this request.
+export const load: PageServerLoad = async ({ locals, params, parent, platform }) => {
 	const shell = loadGalleryRoomShell(params.room, locals.user);
 
 	return {
 		...shell,
 		lazy: {
 			roomContent: runWithRequestDbConnection(
-				() => loadGalleryRoomContent(shell.roomId, locals.user),
-				{ connectionString: platform?.env?.HYPERDRIVE?.connectionString }
+				async () =>
+					loadGalleryRoomContent(shell.roomId, locals.user, {
+						adultContentEnabled: (await parent()).adultContentEnabled
+					}),
+				{
+					connectionString: platform?.env?.HYPERDRIVE?.connectionString,
+					context: platform?.context
+				}
 			)
 		}
 	};

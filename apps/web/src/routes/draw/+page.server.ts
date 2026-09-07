@@ -44,7 +44,12 @@ export const load: PageServerLoad = async (event) => {
 
 	const forkArtworkId = event.url.searchParams.get('fork');
 	const forkParent = forkArtworkId
-		? await getArtworkDetail(forkArtworkId, { user: event.locals.user }).then(async (artwork) => ({
+		? await getArtworkDetail(forkArtworkId, {
+				user: event.locals.user,
+				// The studio is the only reader of the drawing document: every
+				// other detail read leaves that column in Postgres.
+				withDrawingDocument: true
+			}).then(async (artwork) => ({
 				drawingDocument: artwork.drawingDocument
 					? await decodeCompressedDrawingDocumentToEditableDocument(artwork.drawingDocument)
 					: null,

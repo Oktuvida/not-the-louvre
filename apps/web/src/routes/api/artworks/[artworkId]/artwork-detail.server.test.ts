@@ -94,6 +94,77 @@ describe('artwork detail endpoints', () => {
 		expect(await response.json()).toMatchObject({ code: 'NOT_FOUND' });
 	});
 
+	it('serves the anonymous detail payload from the edge cache without a query', async () => {
+		const cachedResponse = new Response(JSON.stringify({ artwork: { id: 'artwork-1' } }), {
+			headers: { 'content-type': 'application/json' },
+			status: 200
+		});
+		const edgeCache = {
+			match: vi.fn(async () => cachedResponse),
+			put: vi.fn(async () => undefined)
+		};
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: {},
+			params: { artworkId: 'artwork-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			request: new Request('https://gallery.test/api/artworks/artwork-1')
+		} as never);
+
+		expect(response).toBe(cachedResponse);
+		expect(mocked.getArtworkDetail).not.toHaveBeenCalled();
+	});
+
+	it('never reads or writes the edge cache for a signed-in viewer', async () => {
+		mocked.getArtworkDetail.mockResolvedValue({ id: 'artwork-1', viewerVote: 'up' });
+		const edgeCache = {
+			match: vi.fn(async () => undefined),
+			put: vi.fn(async () => undefined)
+		};
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: { user: { id: 'user-1' } },
+			params: { artworkId: 'artwork-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			request: new Request('https://gallery.test/api/artworks/artwork-1')
+		} as never);
+
+		// A viewer-specific payload must never reach a shared cache entry, and a
+		// signed-in viewer must never be served the anonymous one.
+		expect(edgeCache.match).not.toHaveBeenCalled();
+		expect(edgeCache.put).not.toHaveBeenCalled();
+		expect(response.headers.get('cache-control')).toBe('private, no-store');
+	});
+
+	it('stores the anonymous detail payload in the edge cache', async () => {
+		mocked.getArtworkDetail.mockResolvedValue({ id: 'artwork-1', viewerVote: null });
+		const edgeCache = {
+			match: vi.fn(async () => undefined),
+			put: vi.fn(async () => undefined)
+		};
+		const waitUntil = vi.fn();
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: {},
+			params: { artworkId: 'artwork-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			request: new Request('https://gallery.test/api/artworks/artwork-1')
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get('cache-control')).toBe(
+			'public, max-age=0, s-maxage=30, stale-while-revalidate=120'
+		);
+		expect(edgeCache.put).toHaveBeenCalledWith(
+			'https://gallery.test/api/artworks/artwork-1',
+			expect.any(Response)
+		);
+		expect(waitUntil).toHaveBeenCalled();
+	});
+
 	it('proxies media through an application-controlled endpoint', async () => {
 		mocked.getArtworkMedia.mockResolvedValue({
 			id: 'artwork-1',

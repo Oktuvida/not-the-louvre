@@ -58,7 +58,10 @@ const resolveConnection = (): DbConnection => {
 // connections, so per-request connections stay correct on Workers and cheap.
 export const runWithRequestDbConnection = async <T>(
 	fn: () => Promise<T>,
-	options: { connectionString?: string } = {}
+	options: {
+		connectionString?: string;
+		context?: { waitUntil(promise: Promise<unknown>): void };
+	} = {}
 ): Promise<T> => {
 	if (!runningInCloudflareWorkers) {
 		return fn();
@@ -70,7 +73,16 @@ export const runWithRequestDbConnection = async <T>(
 		return await requestScopedConnection.run(connection, fn);
 	} finally {
 		// Waits for in-flight queries before closing the request's connection.
-		void connection.client.end({ timeout: 5 }).catch(() => undefined);
+		// Registered with waitUntil so the drain outlives the response instead
+		// of being cut short when the isolate is suspended; the timeout stays
+		// at 5s because waitUntil work is billed as wall time.
+		const closing = connection.client.end({ timeout: 5 }).catch(() => undefined);
+
+		if (options.context) {
+			options.context.waitUntil(closing);
+		} else {
+			void closing;
+		}
 	}
 };
 

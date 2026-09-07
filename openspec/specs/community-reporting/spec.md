@@ -1,4 +1,9 @@
-## ADDED Requirements
+# community-reporting Specification
+
+## Purpose
+User reporting of artworks and comments, auto-hide thresholds, moderator visibility controls and hidden-content semantics.
+
+## Requirements
 
 ### Requirement: Authenticated users can report artworks and comments
 The system SHALL allow an authenticated product user to report an artwork or a comment by submitting a structured report reason and optional free-text context against exactly one active moderation target. The system SHALL allow at most one active pending report per reporter and target at a time.

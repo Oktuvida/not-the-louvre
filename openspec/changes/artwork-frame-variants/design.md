@@ -1,6 +1,6 @@
 ## Context
 
-The gallery already has strong museum-themed styling, but artwork presentation is still mostly a shared card shell with minor rotation and leaderboard embellishments. Separately, `apps/web/static/html-objects/museum-frame.html` captures a richer gilded-frame visual direction with variantable proportions, matting, and aging, but it exists only as a standalone reference artifact and is not wired into the product.
+The gallery already has strong museum-themed styling, but artwork presentation is still mostly a shared card shell with minor rotation and leaderboard embellishments. Separately, `apps/web/playground/html-objects/museum-frame.html` captures a richer gilded-frame visual direction with variantable proportions, matting, and aging, but it exists only as a standalone reference artifact and is not wired into the product.
 
 This change needs a production-ready framing system that can be reused across gallery surfaces without introducing visual rerolls, leaking preview-only code into the app, or overcomplicating the current ranked-artwork flow. The system also needs an explicit premium tier for the podium top three while leaving room for a more refined premium art direction later.
 
@@ -46,7 +46,7 @@ Alternative considered:
 - Persist frame metadata in the backend: rejected for now because the requested behavior is deterministic and purely presentational.
 
 ### 5. Roll out through shared presentation primitives
-The first consumers should be `ArtworkCard.svelte` and the hall-of-fame podium/grid surfaces in `GalleryExplorationPage.svelte`. If the resulting frame primitive composes cleanly, `ArtworkDetailPanel.svelte` can optionally reuse it; if not, that panel should remain out of scope for the first pass.
+The first consumers should be `ArtworkCard.svelte` and the hall-of-fame podium/grid surfaces in `GalleryExplorationPage.svelte`. (2026-09-07: `ArtworkCard.svelte` has since been deleted as dead code; the live consumers are `ArtworkFrame.svelte` and `PolaroidCard.svelte`.) If the resulting frame primitive composes cleanly, `ArtworkDetailPanel.svelte` can optionally reuse it; if not, that panel should remain out of scope for the first pass.
 
 Alternative considered:
 - Require every artwork surface to adopt frames in the first change: rejected because it widens scope before the shared primitive is proven.

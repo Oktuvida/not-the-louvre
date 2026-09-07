@@ -6,6 +6,7 @@ import type {
 	ArtworkAuthorSummary,
 	ArtworkChildForkSummary,
 	ArtworkDetail,
+	ArtworkDetailReadOptions,
 	ArtworkDiscoveryCursor,
 	ArtworkDiscoveryPage,
 	ArtworkDiscoverySort,
@@ -338,14 +339,16 @@ export const listArtworkDiscovery = async (
 
 export const getArtworkDetail = async (
 	artworkId: string,
-	contextAndDependencies: ReadContextAndDependencies = {},
+	contextAndDependencies: ReadContextAndDependencies & ArtworkDetailReadOptions = {},
 	dependencies: ReadServiceDependencies = {}
 ): Promise<ArtworkDetail> => {
 	const { repository } = getDependencies({
 		repository: contextAndDependencies.repository ?? dependencies.repository
 	});
 	const viewer = toViewer(contextAndDependencies);
-	const record = await repository.findArtworkDetailById(artworkId, viewer);
+	const record = await repository.findArtworkDetailById(artworkId, viewer, {
+		withDrawingDocument: contextAndDependencies.withDrawingDocument === true
+	});
 
 	if (!record) {
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');

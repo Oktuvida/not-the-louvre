@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { moderateArtwork } from '$lib/server/artwork/service';
+import { moderateArtwork, withoutDrawingDocument } from '$lib/server/artwork/service';
 
 const toErrorResponse = (error: unknown) => {
 	if (error instanceof ArtworkFlowError) {
@@ -21,7 +21,7 @@ export const PATCH: RequestHandler = async (event) => {
 			{ user: event.locals.user }
 		);
 
-		return json({ artwork });
+		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
 		return toErrorResponse(error);
 	}
@@ -34,7 +34,7 @@ export const DELETE: RequestHandler = async (event) => {
 			{ user: event.locals.user }
 		);
 
-		return json({ artwork });
+		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
 		return toErrorResponse(error);
 	}

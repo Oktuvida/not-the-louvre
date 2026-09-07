@@ -16,6 +16,7 @@ import type {
 	ArtworkActorContext,
 	ArtworkCommentView,
 	ArtworkEngagementRateLimitKind,
+	ArtworkRecord,
 	ArtworkReportReason,
 	ArtworkRepository,
 	ArtworkStorage,
@@ -27,6 +28,15 @@ import type {
 	ArtworkVoteValue
 } from './types';
 import { sanitizeArtworkMedia } from '../media/sanitization';
+import {
+	CONNECTION_RETRY_DELAYS_MS,
+	DRAWING_DOCUMENT_CHUNK_CHARS,
+	isConnectionClosedError,
+	isRetryableConnectionError,
+	isUniqueViolation,
+	writeDrawingDocumentInChunks,
+	type DrawingDocumentChunkStore
+} from '$lib/server/drawing-document/chunked-write';
 import { createArtworkDrawingDocumentMedia } from '$lib/server/drawing-document/media';
 import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
@@ -98,13 +108,6 @@ type ServiceDependencies = {
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-// Supavisor kills sessions that receive a large Bind in one message: a
-// 99,684-char document died deterministically (2026-08-18) while 50,380 chars
-// succeeded historically, so the kill threshold sits somewhere in between.
-// 16 KiB chunks stay far below both bounds. Multiple of 4 so an interrupted
-// write still ends on a base64 boundary.
-const DRAWING_DOCUMENT_CHUNK_CHARS = 16384;
-
 const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	drawingDocumentChunkChars: dependencies.drawingDocumentChunkChars ?? DRAWING_DOCUMENT_CHUNK_CHARS,
 	generateId: dependencies.generateId ?? generateId,
@@ -116,6 +119,17 @@ const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	sanitizeMedia: dependencies.sanitizeMedia ?? sanitizeArtworkMedia,
 	sleep: dependencies.sleep ?? defaultSleep,
 	storage: dependencies.storage ?? supabaseArtworkStorage
+});
+
+// The gallery client renders from the media endpoint; the drawing document
+// (up to hundreds of KiB) only serves the server-side /draw fork loader, so it
+// stays off the wire while the response keeps its shape. Every HTTP handler
+// that serialises an artwork record goes through this.
+export const withoutDrawingDocument = <T extends { drawingDocument?: string | null }>(
+	artwork: T
+) => ({
+	...artwork,
+	drawingDocument: null
 });
 
 const requireActor = (context: Partial<ArtworkActorContext>): ArtworkActorContext => {
@@ -274,6 +288,9 @@ const recordPublishAttempt = async (
 		return;
 	}
 
+	// No throw here: `blockedUntil` is always `windowStartedAt + windowMs`, i.e.
+	// strictly in the future, so the attempt that trips the limit still
+	// completes and `assertPublishRateLimit` rejects the next one.
 	await repository.updatePublishRateLimit(record.id, {
 		attemptCount,
 		blockedUntil,
@@ -281,49 +298,13 @@ const recordPublishAttempt = async (
 		updatedAt: now,
 		windowStartedAt
 	});
-	if (blockedUntil && blockedUntil.getTime() === now.getTime()) {
-		throw new ArtworkFlowError(
-			429,
-			'Too many publish attempts. Please wait before trying again.',
-			'RATE_LIMITED'
-		);
-	}
 };
 
-const hasErrorCode = (error: unknown, code: string): boolean => {
-	let current: unknown = error;
-	while (current instanceof Error) {
-		if ((current as { code?: unknown }).code === code) {
-			return true;
-		}
-		current = current.cause;
-	}
-
-	return false;
-};
-
-const isConnectionClosedError = (error: unknown) => hasErrorCode(error, 'CONNECTION_CLOSED');
-
-// A redial that cannot complete (pooler restarting) surfaces CONNECT_TIMEOUT
-// now that connect_timeout is set on the client; the next delayed attempt
-// should still run. Unlike CONNECTION_CLOSED it is unambiguous: the query
-// never reached Postgres.
-const isRetryableConnectionError = (error: unknown) =>
-	isConnectionClosedError(error) || hasErrorCode(error, 'CONNECT_TIMEOUT');
-
-// Postgres unique_violation. After a closed-mid-query attempt it means that
-// attempt actually committed before the socket died and only the ack was lost.
-const isUniqueViolation = (error: unknown) => hasErrorCode(error, '23505');
-
-// CONNECTION_CLOSED means the pooler dropped the session while the insert was
-// in flight, which an immediate reissue cannot outrun (prod evidence: the
-// zero-delay retry failed identically), so retries back off. A closed-mid-query
-// insert is ambiguous — it may have committed with only the ack lost — so every
-// ambiguous exit re-reads the row (the id is generated per request, so a found
-// row or a unique violation can only be this request's own insert) and the
-// result reports whether the uploaded media may belong to a committed row.
-const INSERT_RETRY_DELAYS_MS = [500, 2000];
-
+// A closed-mid-query insert is ambiguous — it may have committed with only the
+// ack lost — so every ambiguous exit re-reads the row (the id is generated per
+// request, so a found row or a unique violation can only be this request's own
+// insert) and the result reports whether the uploaded media may belong to a
+// committed row. The backoff schedule is shared with the chunked document write.
 const insertWithConnectionRetries = async <T>(
 	run: () => Promise<T>,
 	options: {
@@ -348,9 +329,9 @@ const insertWithConnectionRetries = async <T>(
 	let lastError: unknown;
 	let sawAmbiguousClose = false;
 
-	for (let attempt = 0; attempt <= INSERT_RETRY_DELAYS_MS.length; attempt += 1) {
+	for (let attempt = 0; attempt <= CONNECTION_RETRY_DELAYS_MS.length; attempt += 1) {
 		if (attempt > 0) {
-			const delayMs = INSERT_RETRY_DELAYS_MS[attempt - 1]!;
+			const delayMs = CONNECTION_RETRY_DELAYS_MS[attempt - 1]!;
 			console.warn(
 				JSON.stringify({
 					attempt,
@@ -404,173 +385,21 @@ const insertWithConnectionRetries = async <T>(
 	}
 };
 
-const errorCode = (error: unknown): string | null => {
-	let current: unknown = error;
-	while (current instanceof Error) {
-		const code = (current as { code?: unknown }).code;
-		if (typeof code === 'string') {
-			return code;
-		}
-		current = current.cause;
+// Binds the shared chunked-write ladder to the artworks table. The avatar path
+// implements the same three-method port over app.users.
+const createArtworkDrawingDocumentStore = (
+	repository: ArtworkRepository
+): DrawingDocumentChunkStore<ArtworkRecord> => ({
+	appendChunk: (id, chunk, expectedLength, updatedAt) =>
+		repository.appendArtworkDrawingDocumentChunk(id, chunk, expectedLength, updatedAt),
+	finalize: (id, version, expectedTotalLength, updatedAt) =>
+		repository.finalizeArtworkDrawingDocument(id, version, expectedTotalLength, updatedAt),
+	findDocumentLength: (id) => repository.findArtworkDrawingDocumentLength(id),
+	findFinalized: async (id, version) => {
+		const committed = await repository.findArtworkById(id);
+		return committed?.drawingVersion === version ? committed : null;
 	}
-
-	return null;
-};
-
-// Appends one chunk with the delayed-retry ladder. An ambiguous connection
-// failure (or a guard mismatch after one) is resolved by reading the stored
-// length back: advanced by exactly this chunk means the lost-ack append
-// landed; unchanged means it never applied and the next attempt is safe. A
-// read-back that itself fails leaves the question open for the next rung
-// instead of aborting the write.
-const appendDrawingDocumentChunk = async (
-	repository: ArtworkRepository,
-	artworkId: string,
-	chunk: string,
-	chunkIndex: number,
-	expectedLength: number,
-	now: Date,
-	sleep: (ms: number) => Promise<void>
-): Promise<boolean> => {
-	for (let attempt = 0; attempt <= INSERT_RETRY_DELAYS_MS.length; attempt += 1) {
-		if (attempt > 0) {
-			await sleep(INSERT_RETRY_DELAYS_MS[attempt - 1]!);
-		}
-
-		let appendError: unknown;
-		try {
-			if (
-				await repository.appendArtworkDrawingDocumentChunk(artworkId, chunk, expectedLength, now)
-			) {
-				return true;
-			}
-		} catch (error) {
-			if (!isRetryableConnectionError(error)) {
-				throw error;
-			}
-			appendError = error;
-		}
-
-		console.warn(
-			JSON.stringify({
-				artworkId,
-				attempt,
-				category: 'artwork',
-				chunkChars: chunk.length,
-				chunkIndex,
-				code: appendError ? (errorCode(appendError) ?? 'UNKNOWN') : 'GUARD_MISMATCH',
-				event: 'drawing_document_chunk_retry'
-			})
-		);
-
-		try {
-			const storedLength = await repository.findArtworkDrawingDocumentLength(artworkId);
-			if (storedLength === expectedLength + chunk.length) {
-				return true;
-			}
-			if (storedLength !== expectedLength) {
-				// null (row gone) or a length this writer never produced.
-				return false;
-			}
-		} catch {
-			// Unresolved; the next rung retries the append, whose guard makes a
-			// duplicate delivery harmless either way.
-		}
-	}
-
-	return false;
-};
-
-const writeDrawingDocumentInChunks = async (
-	repository: ArtworkRepository,
-	artworkId: string,
-	documentBase64: string,
-	version: number,
-	chunkChars: number,
-	now: Date,
-	sleep: (ms: number) => Promise<void>
-) => {
-	let chunkCount = 0;
-	for (let offset = 0; offset < documentBase64.length; offset += chunkChars) {
-		const chunk = documentBase64.slice(offset, offset + chunkChars);
-		if (
-			!(await appendDrawingDocumentChunk(
-				repository,
-				artworkId,
-				chunk,
-				chunkCount,
-				offset,
-				now,
-				sleep
-			))
-		) {
-			return null;
-		}
-		chunkCount += 1;
-	}
-
-	const logWritten = () =>
-		console.log(
-			JSON.stringify({
-				artworkId,
-				category: 'artwork',
-				chunkCount,
-				drawingDocumentChars: documentBase64.length,
-				event: 'drawing_document_written'
-			})
-		);
-
-	// Setting drawing_version marks the document complete; readers treat a
-	// document without a version as absent. Idempotent under retry: after a
-	// committed run the length guard still matches and rewrites the same
-	// version.
-	for (let attempt = 0; attempt <= INSERT_RETRY_DELAYS_MS.length; attempt += 1) {
-		if (attempt > 0) {
-			await sleep(INSERT_RETRY_DELAYS_MS[attempt - 1]!);
-		}
-
-		try {
-			const finalized = await repository.finalizeArtworkDrawingDocument(
-				artworkId,
-				version,
-				documentBase64.length,
-				now
-			);
-			if (finalized) {
-				logWritten();
-			}
-			return finalized;
-		} catch (error) {
-			if (!isRetryableConnectionError(error)) {
-				throw error;
-			}
-			console.warn(
-				JSON.stringify({
-					artworkId,
-					attempt,
-					category: 'artwork',
-					code: errorCode(error) ?? 'UNKNOWN',
-					event: 'drawing_document_finalize_retry'
-				})
-			);
-		}
-	}
-
-	// Ladder exhausted on ambiguous failures: the last finalize may have
-	// committed with only the ack lost, so read the row back before reporting
-	// the document as failed.
-	try {
-		const committed = await repository.findArtworkById(artworkId);
-		if (committed?.drawingVersion === version) {
-			logWritten();
-			return committed;
-		}
-	} catch {
-		// unresolved; report as failed and leave the versionless doc inert
-	}
-
-	return null;
-};
+});
 
 const getArtworkOrThrow = async (artworkId: string, repository: ArtworkRepository) => {
 	const artwork = await repository.findArtworkById(artworkId);
@@ -816,15 +645,17 @@ export const publishArtwork = async (
 	// readers ignore documents whose drawing_version was never set.
 	if (drawingDocument) {
 		try {
-			const finalized = await writeDrawingDocumentInChunks(
-				repository,
-				artworkId,
-				drawingDocument,
-				drawingVersion!,
-				drawingDocumentChunkChars,
+			const finalized = await writeDrawingDocumentInChunks({
+				category: 'artwork',
+				chunkChars: drawingDocumentChunkChars,
+				documentBase64: drawingDocument,
+				logFields: { artworkId },
 				now,
-				sleep
-			);
+				sleep,
+				store: createArtworkDrawingDocumentStore(repository),
+				targetId: artworkId,
+				version: drawingVersion!
+			});
 			if (finalized) {
 				artwork = finalized;
 			} else {
@@ -914,8 +745,10 @@ export const applyArtworkVote = async (
 	const actor = requireActor(context);
 	const { generateId: nextId, now: getNow, repository } = getDependencies(dependencies);
 	const now = getNow();
-	const artwork = await getArtworkOrThrow(input.artworkId, repository);
 
+	// No existence pre-read: `upsertVote` checks inside its transaction and
+	// returns null, which maps to the same 404 below. The only shift is that a
+	// vote on a deleted artwork now consumes a rate-limit attempt first.
 	await recordEngagementAttempt(
 		'vote',
 		actor,
@@ -927,7 +760,7 @@ export const applyArtworkVote = async (
 	);
 
 	const result = await repository.upsertVote({
-		artworkId: artwork.id,
+		artworkId: input.artworkId,
 		createdAt: now,
 		id: nextId(),
 		updatedAt: now,

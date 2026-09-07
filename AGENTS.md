@@ -67,7 +67,7 @@ Local development must be reproducible from a clean clone:
 - **Dependencies**: `bun install` from root. Lockfile is committed.
 - **Environment**: `.env.example` documents every required variable.
 - **Schema**: Drizzle migrations define the database state (see below).
-- **CI**: Same scripts locally and in CI — no hidden steps.
+- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check` and `test:unit:server` on every pull request and before every deploy.
 
 ---
 

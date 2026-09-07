@@ -1,0 +1,4 @@
+DROP INDEX "app"."artwork_votes_artwork_id_idx";--> statement-breakpoint
+CREATE INDEX "artworks_visible_recent_idx" ON "app"."artworks" USING btree ("created_at" DESC NULLS FIRST,"id" DESC NULLS FIRST) WHERE "app"."artworks"."is_hidden" = false;--> statement-breakpoint
+CREATE INDEX "artworks_visible_score_idx" ON "app"."artworks" USING btree ("score" DESC NULLS FIRST,"created_at" DESC NULLS FIRST,"id" DESC NULLS FIRST) WHERE "app"."artworks"."is_hidden" = false;--> statement-breakpoint
+CREATE INDEX "artworks_visible_author_recent_idx" ON "app"."artworks" USING btree ("author_id","created_at" DESC NULLS FIRST,"id" DESC NULLS FIRST) WHERE "app"."artworks"."is_hidden" = false;

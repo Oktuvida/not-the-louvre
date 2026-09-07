@@ -20,5 +20,6 @@ The gallery route already benefits from SvelteKit route-level code splitting, bu
 ## Impact
 
 - Affected code: `apps/web/src/lib/features/gallery-exploration/GalleryExplorationPage.svelte`, room components under `apps/web/src/lib/features/gallery-exploration/rooms/`, and artwork card components such as `ArtworkCard.svelte` and `PolaroidCard.svelte`.
+- Note (2026-09-07): `ArtworkCard.svelte` was deleted as dead code; `PolaroidCard.svelte` is the only artwork card the gallery renders.
 - Affected behavior: gallery route startup cost, image loading behavior, room-specific bundle composition, and regression coverage for gallery interaction.
 - Dependencies: existing gallery route server loads, current artwork detail API routes, and SvelteKit route-level code splitting that remains unchanged.

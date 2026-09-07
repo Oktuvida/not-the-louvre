@@ -1,9 +1,8 @@
-# gallery-layout-persistence Specification
+# Delta for gallery-layout-persistence
 
-## Purpose
 Prevent full-route teardown and preserve continuity across gallery room navigation.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Shared gallery layout
 The `/gallery/+layout.svelte` SHALL persist `GalleryRoomNav`, header, and `ArtworkDetailPanel` across subroute changes while replacing only the room content area.
@@ -20,7 +19,7 @@ The `/gallery/+layout.svelte` SHALL persist `GalleryRoomNav`, header, and `Artwo
 - THEN the previous scroll position is preserved
 
 ### Requirement: Preload room data on hover
-Gallery room navigation links SHOULD use `data-sveltekit-preload-data="hover"` to fetch route data before the user clicks.
+Gallery room navigation links SHALL carry `data-sveltekit-preload-data="hover"` so route data MAY be fetched before the user clicks.
 
 #### Scenario: Hover preloads room
 - GIVEN a room nav link is rendered

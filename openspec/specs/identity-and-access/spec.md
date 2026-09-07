@@ -1,3 +1,10 @@
+# identity-and-access Specification
+
+## Purpose
+Nickname-based registration, availability lookup, login/logout, recovery-key reset, canonical authenticated product identity, roles and auth abuse protection.
+
+## Requirements
+
 ### Requirement: Nickname-based account registration
 The system SHALL allow a visitor to create an account using a unique nickname and password instead of an email address. During successful signup, the system SHALL normalize the nickname to lowercase, create the credential and session records required by the auth engine, create the companion product user record, assign the default role `user`, generate a recovery key, persist only its hash, and return the raw recovery key exactly once for user confirmation.
 
@@ -44,11 +51,11 @@ The system SHALL authenticate users by nickname and password, using the normaliz
 - **THEN** the system invalidates the current session so subsequent authenticated requests are no longer authorized by that session
 
 ### Requirement: Canonical authenticated product identity
-The system SHALL resolve authenticated requests to a canonical product identity that combines auth-session state with the application-owned user record. This canonical identity SHALL include the product user id, auth user id, normalized nickname, role, and avatar state so later backend capabilities can enforce ownership, authorization, and avatar resolution consistently. Requests backed by expired or otherwise invalid auth sessions SHALL resolve without authenticated product identity, while valid auth sessions missing their companion product user record SHALL remain integrity failures.
+The system SHALL resolve authenticated requests to a canonical product identity that combines auth-session state with the application-owned user record. This canonical identity SHALL include the product user id, auth user id, normalized nickname, role, avatar state, and any product-owned onboarding completion state needed to resume or bypass authenticated onboarding surfaces consistently. Requests backed by expired or otherwise invalid auth sessions SHALL resolve without authenticated product identity, while valid auth sessions missing their companion product user record SHALL remain integrity failures.
 
 #### Scenario: Authenticated request with companion product user
 - **WHEN** an incoming request carries a valid authenticated session and the corresponding product user record exists
-- **THEN** the system exposes the canonical authenticated product identity to server-side request handling, including the current avatar storage reference if one exists
+- **THEN** the system exposes the canonical authenticated product identity to server-side request handling, including the current avatar storage reference if one exists and the current onboarding completion state if one is tracked
 
 #### Scenario: Expired or invalid session does not produce authenticated identity
 - **WHEN** an incoming request carries an expired or otherwise invalid auth session
@@ -102,3 +109,21 @@ The system SHALL enforce rate limits for failed login attempts and failed recove
 #### Scenario: Durable auth abuse protection
 - **WHEN** the application process restarts after failed-attempt counters have already been recorded within an active limit window
 - **THEN** the system continues enforcing the active limit window instead of resetting the counters to zero
+
+### Requirement: Product auth entry bootstraps from canonical session state
+The system SHALL resolve the product home auth experience from canonical server auth state on page load so the frontend does not invent signed-in identity separately from the backend session contract.
+
+#### Scenario: Existing authenticated session enters the home route as signed in
+- **WHEN** a request to the home route carries a valid authenticated product session with a companion product user
+- **THEN** the system renders the home experience from that canonical authenticated identity and bypasses the signed-out auth entry flow
+
+#### Scenario: Signed-out request enters the home route as a visitor
+- **WHEN** a request to the home route does not carry a valid authenticated product session
+- **THEN** the system renders the signed-out visitor entry state and does not expose signed-in identity chrome
+
+### Requirement: Product auth entry handles integrity failure safely
+The system SHALL prevent the product auth entry flow from rendering a partial signed-in state when request auth resolution produces an integrity failure.
+
+#### Scenario: Authenticated session missing companion product user on the home route
+- **WHEN** a request to the home route carries a valid auth session but no companion product user record exists
+- **THEN** the system renders a safe auth error state and withholds the normal signed-in experience until the integrity issue is resolved

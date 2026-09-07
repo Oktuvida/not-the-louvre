@@ -1,9 +1,8 @@
-# nsfw-reusable-component Specification
+# Delta for nsfw-reusable-component
 
-## Purpose
 Shared NSFW image behavior: blur, reveal, author exemption, and accessibility.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Consistent NSFW blur and reveal
 The `NsfwImage.svelte` component SHALL render images with a CSS blur when the artwork is flagged NSFW and the viewer is not the author. The user MAY click the image to reveal it.

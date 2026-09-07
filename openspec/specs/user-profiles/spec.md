@@ -1,4 +1,9 @@
-## ADDED Requirements
+# user-profiles Specification
+
+## Purpose
+Public, unauthenticated read access to user profiles.
+
+## Requirements
 
 ### Requirement: Public user profile read
 The system SHALL expose a public user profile for any existing user, returning the user's nickname, avatar serving URL, role, and account creation date. Sensitive fields (recovery hash, auth user ID, email) SHALL NOT be included.
