@@ -29,6 +29,18 @@ export const auth = betterAuth({
 		enabled: true,
 		requireEmailVerification: false
 	},
+	session: {
+		// Serves getSession from the signed session_data cookie instead of a
+		// session+user join on every request. The window is deliberately short:
+		// the cookie rides on all ~48 image requests a gallery room fires, and a
+		// revoked session keeps working until it expires. Ban and role changes
+		// are unaffected — those come from the app.users profile, which
+		// resolveSessionContext still reads.
+		cookieCache: {
+			enabled: true,
+			maxAge: 60
+		}
+	},
 	user: {
 		additionalFields: {
 			nickname: createFieldAttribute('string', {

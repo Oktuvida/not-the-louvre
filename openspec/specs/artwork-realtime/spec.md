@@ -1,4 +1,9 @@
-## ADDED Requirements
+# artwork-realtime Specification
+
+## Purpose
+Realtime delivery of artwork vote and comment updates under least-privilege, policy-protected subscriptions.
+
+## Requirements
 
 ### Requirement: Artwork detail vote updates are delivered in realtime
 The system SHALL expose secure realtime vote-change events for a single artwork detail context so authenticated clients can observe score-affecting vote transitions without polling.

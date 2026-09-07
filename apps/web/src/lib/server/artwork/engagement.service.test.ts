@@ -100,6 +100,16 @@ const createUser = (id: string, role: 'admin' | 'moderator' | 'user' = 'user') =
 	};
 };
 
+// Mirrors the narrowed SELECT the vote transaction now issues: the five
+// columns the vote endpoints serialise, never the drawing document.
+const toVoteSummary = (artwork: ArtworkWithSummary) => ({
+	commentCount: artwork.commentCount,
+	forkCount: artwork.forkCount,
+	id: artwork.id,
+	score: artwork.score,
+	updatedAt: artwork.updatedAt
+});
+
 const createRepository = () => {
 	const artworks = new Map<string, ArtworkWithSummary>();
 	const votes = new Map<string, ArtworkVoteRecord>();
@@ -177,7 +187,7 @@ const createRepository = () => {
 				});
 
 				return {
-					artwork: artworks.get(input.artworkId)!,
+					artwork: toVoteSummary(artworks.get(input.artworkId)!),
 					vote: nextVote
 				};
 			}
@@ -189,7 +199,7 @@ const createRepository = () => {
 			const key = voteKey(artworkId, userId);
 			const current = votes.get(key) ?? null;
 			if (!current) {
-				return { artwork, removed: null };
+				return { artwork: toVoteSummary(artwork), removed: null };
 			}
 
 			votes.delete(key);
@@ -200,7 +210,7 @@ const createRepository = () => {
 			});
 
 			return {
-				artwork: artworks.get(artworkId)!,
+				artwork: toVoteSummary(artworks.get(artworkId)!),
 				removed: current
 			};
 		}),
@@ -408,6 +418,50 @@ describe('artwork engagement service', () => {
 
 		expect(removal.artwork.score).toBe(0);
 		expect(votes.has('artwork-1:user-1')).toBe(false);
+	});
+
+	it('keeps vote responses free of the artwork drawing document', async () => {
+		const { applyArtworkVote, removeArtworkVote } = await import('./service');
+		const { artworks, repository } = createRepository();
+		artworks.set(
+			'artwork-1',
+			createArtworkRecord({ drawingDocument: 'a'.repeat(2048), drawingVersion: 2 })
+		);
+		const now = new Date('2026-03-26T12:00:00.000Z');
+
+		const upvote = await applyArtworkVote(
+			{ artworkId: 'artwork-1', value: 'up' },
+			{ ipAddress: '127.0.0.1', user: createUser('user-1') },
+			{ generateId: () => 'vote-1', now: () => now, repository }
+		);
+		const removal = await removeArtworkVote(
+			{ artworkId: 'artwork-1' },
+			{ ipAddress: '127.0.0.1', user: createUser('user-1') },
+			{ now: () => now, repository }
+		);
+
+		expect(Object.keys(upvote.artwork).sort()).toEqual([
+			'commentCount',
+			'forkCount',
+			'id',
+			'score',
+			'updatedAt'
+		]);
+		expect(Object.keys(removal.artwork)).not.toContain('drawingDocument');
+	});
+
+	it('404s a vote on a missing artwork without a separate existence read', async () => {
+		const { applyArtworkVote } = await import('./service');
+		const { repository } = createRepository();
+
+		await expect(
+			applyArtworkVote(
+				{ artworkId: 'artwork-gone', value: 'up' },
+				{ ipAddress: '127.0.0.1', user: createUser('user-1') },
+				{ generateId: () => 'vote-1', repository }
+			)
+		).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
+		expect(repository.findArtworkById).not.toHaveBeenCalled();
 	});
 
 	it('treats vote removal without an existing vote as a safe no-op', async () => {

@@ -237,6 +237,77 @@ describe('artwork publish endpoint', () => {
 		);
 	});
 
+	it('shares an anonymous discovery page with the edge and serves the stored copy back', async () => {
+		mocked.listArtworkDiscovery.mockResolvedValue({
+			items: [],
+			pageInfo: { hasMore: false, nextCursor: null },
+			sort: 'recent'
+		});
+
+		const stored = new Map<string, Response>();
+		const waitUntil = vi.fn(async (promise: Promise<unknown>) => promise);
+		const platform = {
+			caches: {
+				default: {
+					match: async (url: string) => stored.get(url),
+					put: async (url: string, response: Response) => {
+						stored.set(url, response);
+					}
+				}
+			},
+			context: { waitUntil }
+		};
+		const request = () => new Request('http://localhost/api/artworks?sort=recent');
+
+		const { GET } = await import('./+server');
+		const miss = await GET({
+			locals: {},
+			platform,
+			request: request(),
+			url: new URL('http://localhost/api/artworks?sort=recent')
+		} as never);
+
+		expect(miss.headers.get('cache-control')).toBe(
+			'public, max-age=0, s-maxage=30, stale-while-revalidate=120'
+		);
+		await Promise.all(waitUntil.mock.calls.map(([promise]) => promise));
+
+		const hit = await GET({
+			locals: {},
+			platform,
+			request: request(),
+			url: new URL('http://localhost/api/artworks?sort=recent')
+		} as never);
+
+		expect(hit.status).toBe(200);
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledOnce();
+	});
+
+	it('never shares a signed-in discovery page with the edge', async () => {
+		mocked.listArtworkDiscovery.mockResolvedValue({
+			items: [],
+			pageInfo: { hasMore: false, nextCursor: null },
+			sort: 'recent'
+		});
+
+		const put = vi.fn();
+		const match = vi.fn();
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: { user: { id: 'user-1', role: 'user' } },
+			platform: {
+				caches: { default: { match, put } },
+				context: { waitUntil: vi.fn() }
+			},
+			request: new Request('http://localhost/api/artworks?sort=recent'),
+			url: new URL('http://localhost/api/artworks?sort=recent')
+		} as never);
+
+		expect(response.headers.get('cache-control')).toBe('private, no-store');
+		expect(match).not.toHaveBeenCalled();
+		expect(put).not.toHaveBeenCalled();
+	});
+
 	it('passes an optional fork parent reference through the publish endpoint', async () => {
 		const { POST } = await import('./+server');
 		const formData = new FormData();

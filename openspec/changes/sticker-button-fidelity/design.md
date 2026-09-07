@@ -1,6 +1,6 @@
 ## Context
 
-The project already contains the right visual artifact for buttons in `apps/web/static/html-objects/museum-sticker-button.html`, and the production canvas renderer already lives in `apps/web/src/lib/features/home-entry-scene/canvas/museum-canvas.ts`. The current gap is not the underlying sticker background artwork but the production wrappers around it: shared controls do not expose the same sizing and content rules as the reference, and many product-facing actions still use raw buttons or links with unrelated styling.
+The project already contains the right visual artifact for buttons in `apps/web/playground/html-objects/museum-sticker-button.html`, and the production canvas renderer already lives in `apps/web/src/lib/features/home-entry-scene/canvas/museum-canvas.ts`. The current gap is not the underlying sticker background artwork but the production wrappers around it: shared controls do not expose the same sizing and content rules as the reference, and many product-facing actions still use raw buttons or links with unrelated styling.
 
 This change should make sticker controls feel like a real system instead of a partial experiment. It must improve the fidelity of the shared primitives and spread them to the places where users actually encounter product actions, without forcing decorative sticker treatment onto low-level canvas tool toggles or unrelated demo pages.
 

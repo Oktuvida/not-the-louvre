@@ -47,7 +47,9 @@ export const GET: RequestHandler = async (event) => {
 			return cachedResponse;
 		}
 
-		const user = await userRepository.findUserById(event.params.userId);
+		// Narrow read: this runs on every avatar image request that misses the
+		// edge cache, and the compressed avatar document has no business here.
+		const user = await userRepository.findUserAvatarRefById(event.params.userId);
 
 		if (!user || !user.avatarUrl || user.avatarIsHidden) {
 			return json({ code: 'NOT_FOUND', message: 'Avatar not found' }, { status: 404 });

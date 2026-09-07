@@ -17,17 +17,19 @@ describe('root layout favicon data', () => {
 		const { load } = await import('./+layout.server');
 
 		await expect(load({ locals: {} } as never)).resolves.toMatchObject({
+			adultContentEnabled: false,
 			ambientAudioEnabled: null,
 			favicon: {
 				kind: 'sketch'
 			}
 		});
+		expect(mocked.getViewerContentPreferences).not.toHaveBeenCalled();
 	});
 
 	it('returns the avatar favicon for authenticated users with a completed avatar', async () => {
 		mocked.getViewerContentPreferences.mockResolvedValue({
 			adultContentConsentedAt: null,
-			adultContentEnabled: false,
+			adultContentEnabled: true,
 			ambientAudioEnabled: false,
 			adultContentRevokedAt: null
 		});
@@ -46,11 +48,15 @@ describe('root layout favicon data', () => {
 				}
 			} as never)
 		).resolves.toMatchObject({
+			// The whole preference row is resolved once here so the home and
+			// gallery loads can read it from `parent()` instead of re-querying.
+			adultContentEnabled: true,
 			ambientAudioEnabled: false,
 			favicon: {
 				href: '/api/users/product-user-1/favicon?v=1774782000000',
 				kind: 'avatar'
 			}
 		});
+		expect(mocked.getViewerContentPreferences).toHaveBeenCalledOnce();
 	});
 });

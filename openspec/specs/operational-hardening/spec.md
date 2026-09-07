@@ -1,4 +1,9 @@
-## ADDED Requirements
+# operational-hardening Specification
+
+## Purpose
+Origin hardening for cookie-backed state-changing requests and operational visibility of security-relevant backend denials.
+
+## Requirements
 
 ### Requirement: Cookie-backed state-changing requests are origin-hardened
 The system SHALL reject unsafe state-changing backend requests that do not demonstrate trusted same-origin intent when those requests rely on cookie-backed session authority.

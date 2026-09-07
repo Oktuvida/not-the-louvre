@@ -7,7 +7,7 @@ The gallery currently presents artworks with a mostly uniform card treatment, so
 - Introduce a product-facing artwork framing capability for gallery presentation surfaces.
 - Assign each non-podium artwork a stable frame variant chosen deterministically from a curated standard pool so the collection feels varied without rerolling between visits.
 - Reserve a separate premium frame tier for the top three ranked artworks only, with an explicit marker and future-friendly seam for richer styling later.
-- Use `apps/web/static/html-objects/museum-frame.html` as the visual reference for the production frame language rather than shipping that standalone preview directly.
+- Use `apps/web/playground/html-objects/museum-frame.html` as the visual reference for the production frame language rather than shipping that standalone preview directly.
 - Keep scope focused on presentation behavior and component integration; no ranking, voting, or discovery algorithm changes are included.
 
 ## Capabilities
@@ -21,5 +21,6 @@ The gallery currently presents artworks with a mostly uniform card treatment, so
 ## Impact
 
 - Affected code: `apps/web/src/lib/features/artwork-presentation/components/ArtworkCard.svelte`, `apps/web/src/lib/features/gallery-exploration/GalleryExplorationPage.svelte`, `apps/web/src/lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte` (if frame presentation is reused there), and new framing helpers/components under `apps/web/src/lib/features/artwork-presentation/`.
-- Affected assets/reference artifacts: `apps/web/static/html-objects/museum-frame.html` as the visual source for production frame variants.
+- Note (2026-09-07): `ArtworkCard.svelte` was deleted as dead code — no room or route ever rendered it. The live artwork surfaces are `shared-ui/components/PolaroidCard.svelte` (grid rooms), `artwork-presentation/components/ArtworkFrame.svelte` + `canvas/artwork-frame-canvas.ts` (framed presentation) and `ArtworkDetailPanel.svelte`. Read every `ArtworkCard` mention below as `PolaroidCard`/`ArtworkFrame`.
+- Affected assets/reference artifacts: `apps/web/playground/html-objects/museum-frame.html` as the visual source for production frame variants.
 - Affected systems: gallery card presentation, hall-of-fame podium presentation, and test coverage for deterministic variant assignment and premium top-three treatment.

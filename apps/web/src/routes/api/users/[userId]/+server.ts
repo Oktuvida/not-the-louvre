@@ -5,7 +5,7 @@ const resolveAvatarUrl = (userId: string, storageKey: string | null) =>
 	storageKey ? `/api/users/${userId}/avatar` : null;
 
 export const GET: RequestHandler = async (event) => {
-	const user = await userRepository.findUserById(event.params.userId);
+	const user = await userRepository.findUserAvatarRefById(event.params.userId);
 
 	if (!user) {
 		return new Response('User not found', { status: 404 });

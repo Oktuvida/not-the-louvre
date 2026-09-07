@@ -186,7 +186,8 @@ describe('draw route page', () => {
 			'persisted-parent-payload'
 		);
 		expect(mocked.getArtworkDetail).toHaveBeenCalledWith('artwork-parent', {
-			user: authenticatedUser
+			user: authenticatedUser,
+			withDrawingDocument: true
 		});
 	});
 

@@ -1,7 +1,7 @@
 ## 1. Shared Sticker Primitive Fidelity
 
 - [x] 1.1 Add failing component tests for `GameButton.svelte` and `GameLink.svelte` that cover reference-aligned sizing, icon-plus-text layout, ghost support, and disabled treatment.
-- [x] 1.2 Upgrade `GameButton.svelte` to better match `apps/web/static/html-objects/museum-sticker-button.html`, including size presets, typography, content layout, rotation behavior, and disabled styling.
+- [x] 1.2 Upgrade `GameButton.svelte` to better match `apps/web/playground/html-objects/museum-sticker-button.html`, including size presets, typography, content layout, rotation behavior, and disabled styling.
 - [x] 1.3 Upgrade `GameLink.svelte` to match the updated shared sticker button fidelity and API.
 
 ## 2. Product Adoption

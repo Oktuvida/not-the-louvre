@@ -1,7 +1,6 @@
 import { access, copyFile, cp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 
-export const DEFAULT_BUILD_DIR = 'build';
 export const DEFAULT_CLOUDFLARE_BUILD_DIR = join('.svelte-kit', 'cloudflare');
 export const DEFAULT_CLOUDFLARE_MANIFEST_PATH = join(
 	'.svelte-kit',
@@ -14,6 +13,15 @@ export const GENERATED_SERVER_WASM_RELATIVE_PATH = join(
 	'wasm',
 	'server',
 	'stroke_json_wasm_bg.wasm'
+);
+export const DEFAULT_SVELTEKIT_OUTPUT_DIR = join('.svelte-kit', 'output');
+// The generated wasm lives in the workspace package, two levels above apps/web.
+export const WORKSPACE_GENERATED_SERVER_WASM_PATH = join(
+	'..',
+	'..',
+	'packages',
+	'stroke-json-runtime',
+	GENERATED_SERVER_WASM_RELATIVE_PATH
 );
 
 const collectJavaScriptFiles = async (directory: string): Promise<string[]> => {
@@ -54,21 +62,6 @@ export const ensureServerDependencyBundled = async (
 			);
 		}
 	}
-};
-
-export const ensureBuildOutput = async (buildDirectory: string) => {
-	const entryPoint = join(buildDirectory, 'index.js');
-	const handlerFile = join(buildDirectory, 'handler.js');
-
-	try {
-		await Promise.all([access(entryPoint), access(handlerFile)]);
-	} catch {
-		throw new Error(
-			`Expected adapter-node build output at ${buildDirectory} (missing index.js or handler.js)`
-		);
-	}
-
-	return entryPoint;
 };
 
 export const ensureWorkerBuildOutput = async (cloudflareBuildDirectory: string) => {
@@ -190,4 +183,68 @@ export const syncProductionRoutes = async (
 	});
 
 	return targetRoutesDirectory;
+};
+
+type ValidateCloudflareBuildOptions = {
+	/** Path to the workspace-generated server wasm copied into the SSR output. */
+	generatedServerWasmPath?: string;
+	/** Assert the production manifest no longer carries the `/demo` routes. */
+	requireDemoExclusion?: boolean;
+	/** Assert gsap is bundled rather than imported at runtime by the SSR output. */
+	requireGsapBundled?: boolean;
+	/** Assert the stroke-json wasm stayed an external module import for wrangler. */
+	requireWasmExternalized?: boolean;
+	/** Assert the adapter-cloudflare worker entrypoint exists. */
+	requireWorkerOutput?: boolean;
+};
+
+/**
+ * Single implementation of the post-build contract for `apps/web`.
+ *
+ * The production build asserts everything; the e2e build (plain `vite build`,
+ * served by Node through `vite preview`, `/demo` intentionally kept) turns the
+ * Worker-only assertions off.
+ */
+export const validateCloudflareBuild = async (
+	projectRoot: string,
+	{
+		generatedServerWasmPath = resolve(projectRoot, WORKSPACE_GENERATED_SERVER_WASM_PATH),
+		requireDemoExclusion = true,
+		requireGsapBundled = true,
+		requireWasmExternalized = true,
+		requireWorkerOutput = true
+	}: ValidateCloudflareBuildOptions = {}
+) => {
+	const cloudflareBuildDirectory = resolve(projectRoot, DEFAULT_CLOUDFLARE_BUILD_DIR);
+	const cloudflareManifestPath = resolve(projectRoot, DEFAULT_CLOUDFLARE_MANIFEST_PATH);
+	const svelteKitOutputDirectory = resolve(projectRoot, DEFAULT_SVELTEKIT_OUTPUT_DIR);
+
+	if (requireWorkerOutput) {
+		await ensureWorkerBuildOutput(cloudflareBuildDirectory);
+	}
+
+	if (requireGsapBundled) {
+		await ensureServerDependencyBundled(svelteKitOutputDirectory, 'gsap');
+	}
+
+	await ensureServerDependencyBundled(
+		svelteKitOutputDirectory,
+		'@not-the-louvre/stroke-json-runtime/server'
+	);
+
+	if (requireDemoExclusion) {
+		await ensureManifestFileExcludesRoutePrefix(cloudflareManifestPath, '/demo');
+	}
+
+	if (requireWasmExternalized) {
+		await ensureServerWasmModuleExternalized(svelteKitOutputDirectory);
+	}
+
+	// `vite preview` still serves the SSR output with Node, which loads the wasm
+	// from disk relative to the emitted chunks.
+	await syncGeneratedServerWasmAsset(svelteKitOutputDirectory, generatedServerWasmPath);
+	await ensureServerWasmAsset(svelteKitOutputDirectory);
+	await ensureServerWasmReferenced(svelteKitOutputDirectory);
+
+	return cloudflareBuildDirectory;
 };

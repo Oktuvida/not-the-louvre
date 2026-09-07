@@ -11,7 +11,13 @@ import {
 } from '$lib/server/artwork/config';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import type { SanitizedMedia } from '$lib/server/artwork/types';
-import { encodeAvif, renderSvgToRaster, type AvifEncodeSettings } from '$lib/server/media/codecs';
+import {
+	encodeAvif,
+	renderSvgToRaster,
+	type AvifEncodeSettings,
+	type RawImage
+} from '$lib/server/media/codecs';
+import { encodeArtworkMediaPlaceholder } from '$lib/server/media/sanitization';
 import {
 	AVATAR_MEDIA_CONTENT_TYPE,
 	AVATAR_MEDIA_HEIGHT,
@@ -37,6 +43,9 @@ const renderDocumentToAvif = async (
 	options: {
 		attempts: ReadonlyArray<AvifEncodeSettings>;
 		contentType: string;
+		// Only the artwork variant has a placeholder column, so the avatar path
+		// leaves this unset instead of paying the extra resize plus PNG encode.
+		encodePlaceholder?: (raster: RawImage) => Promise<string>;
 		height: number;
 		kind: DrawingDocument['kind'];
 		label: 'artwork' | 'avatar';
@@ -62,6 +71,11 @@ const renderDocumentToAvif = async (
 		width: options.width
 	});
 
+	// Encoded from the same raster the AVIF attempts consume, and before them,
+	// so the blur-up colors always match the final media and no encoder call can
+	// have consumed the buffer first.
+	const placeholder = options.encodePlaceholder ? await options.encodePlaceholder(raster) : null;
+
 	for (const avifOptions of options.attempts) {
 		const outputBuffer = await encodeAvif(raster, avifOptions);
 
@@ -72,6 +86,7 @@ const renderDocumentToAvif = async (
 					type: options.contentType
 				}),
 				height: options.height,
+				placeholder,
 				sizeBytes: outputBuffer.byteLength,
 				width: options.width
 			};
@@ -89,6 +104,7 @@ export const createArtworkDrawingDocumentMedia = (document: DrawingDocument) =>
 	renderDocumentToAvif(document, {
 		attempts: ARTWORK_CANONICAL_AVIF_ATTEMPTS,
 		contentType: ARTWORK_MEDIA_CONTENT_TYPE,
+		encodePlaceholder: encodeArtworkMediaPlaceholder,
 		height: ARTWORK_MEDIA_HEIGHT,
 		kind: 'artwork',
 		label: 'artwork',

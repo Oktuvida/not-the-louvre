@@ -1,4 +1,9 @@
-## ADDED Requirements
+# moderation-queue Specification
+
+## Purpose
+Moderator-facing queue of reported content, with pagination and access control.
+
+## Requirements
 
 ### Requirement: Moderator report queue listing
 The system SHALL allow authenticated moderators to query a list of reported content pending review. The listing SHALL include both reported artworks and reported comments, ordered by active pending report count descending, with enough target context for the moderator to take action. Targets whose reports are fully resolved SHALL no longer appear in the active moderation queue unless new pending reports are submitted later.

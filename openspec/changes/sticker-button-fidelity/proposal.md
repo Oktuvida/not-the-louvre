@@ -1,6 +1,6 @@
 ## Why
 
-The app already has a museum sticker-button direction, but the production shared controls still fall short of the fidelity shown in `apps/web/static/html-objects/museum-sticker-button.html`, and several product surfaces still bypass the shared sticker primitives entirely. That leaves the UI feeling inconsistent just as the museum framing system is becoming more deliberate.
+The app already has a museum sticker-button direction, but the production shared controls still fall short of the fidelity shown in `apps/web/playground/html-objects/museum-sticker-button.html`, and several product surfaces still bypass the shared sticker primitives entirely. That leaves the UI feeling inconsistent just as the museum framing system is becoming more deliberate.
 
 ## What Changes
 
@@ -21,5 +21,5 @@ The app already has a museum sticker-button direction, but the production shared
 ## Impact
 
 - Affected code: `apps/web/src/lib/features/shared-ui/components/GameButton.svelte`, `apps/web/src/lib/features/shared-ui/components/GameLink.svelte`, product surfaces under `apps/web/src/lib/features/home-entry-scene/`, `apps/web/src/lib/features/gallery-exploration/`, `apps/web/src/lib/features/artwork-presentation/`, and `apps/web/src/lib/features/studio-drawing/` where custom buttons should be upgraded.
-- Affected assets/reference artifacts: `apps/web/static/html-objects/museum-sticker-button.html` and sticker drawing logic in `apps/web/src/lib/features/home-entry-scene/canvas/museum-canvas.ts`.
+- Affected assets/reference artifacts: `apps/web/playground/html-objects/museum-sticker-button.html` and sticker drawing logic in `apps/web/src/lib/features/home-entry-scene/canvas/museum-canvas.ts`.
 - Affected systems: shared UI primitives, navigation controls, auth CTA presentation, artwork action controls, and component test coverage for button fidelity and adoption.

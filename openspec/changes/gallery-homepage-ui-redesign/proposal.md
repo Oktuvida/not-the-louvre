@@ -43,6 +43,6 @@ The homepage and gallery pages use plain styled cards, emoji medals, flat backgr
 - **Components modified**: `PersistentNav.svelte`, `GalleryExplorationPage.svelte`, `ArtworkCard.svelte`, `ArtworkFrame.svelte`, `AuthOverlay.svelte`
 - **Canvas code modified**: `artwork-frame-canvas.ts` (add color schemes), `model/frame.ts` (add `colorScheme` to render options and resolve logic)
 - **Model modified**: `rooms.ts` (add post-it color and attachment metadata per room)
-- **Assets used**: `gallery-bg.webp` (already exists in `apps/web/static/`)
+- **Assets used**: `gallery-bg.webp` — now kept as a reference asset at `apps/web/playground/html-objects/gallery-bg.webp` (moved out of `apps/web/static/`, which is served publicly, because nothing in the app referenced it). Move it back into `apps/web/static/` if the wall-background task is implemented.
 - **Font dependency**: Caveat font (Google Fonts, already loaded in mockups — needs adding to the app)
 - **No API changes, no schema changes, no backend changes**

@@ -8,10 +8,12 @@
 
 ## Testing
 
+CI already runs `lint`, `check` and the server unit tests on this pull request. Tick what
+you ran locally beyond that:
+
 - [ ] `bun run format`
-- [ ] `bun run lint`
-- [ ] `bun run check`
-- [ ] `bun run test`
+- [ ] `bun run test` (includes the browser and e2e suites CI does not gate on yet)
+- [ ] `bun run test:integration` (needs the local Supabase stack)
 - [ ] Not run intentionally (explain why):
 
 ## Notes for review

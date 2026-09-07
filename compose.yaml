@@ -5,6 +5,7 @@ services:
     container_name: supabase-studio
     image: supabase/studio:2026.03.16-sha-5528817
     restart: unless-stopped
+    profiles: ['tools']
     healthcheck:
       test:
         [
@@ -59,7 +60,7 @@ services:
     image: kong/kong:3.9.1
     restart: unless-stopped
     depends_on:
-      studio:
+      db:
         condition: service_healthy
     ports:
       - ${KONG_HTTP_PORT}:8000/tcp
@@ -90,6 +91,7 @@ services:
     container_name: supabase-auth
     image: supabase/gotrue:v2.186.0
     restart: unless-stopped
+    profiles: ['tools']
     depends_on:
       db:
         condition: service_healthy
@@ -244,6 +246,7 @@ services:
     container_name: supabase-meta
     image: supabase/postgres-meta:v0.95.2
     restart: unless-stopped
+    profiles: ['tools']
     depends_on:
       db:
         condition: service_healthy
@@ -260,6 +263,7 @@ services:
     container_name: supabase-edge-functions
     image: supabase/edge-runtime:v1.71.2
     restart: unless-stopped
+    profiles: ['tools']
     depends_on:
       kong:
         condition: service_started
@@ -282,6 +286,7 @@ services:
     container_name: supabase-analytics
     image: supabase/logflare:1.31.2
     restart: unless-stopped
+    profiles: ['tools']
     depends_on:
       db:
         condition: service_healthy

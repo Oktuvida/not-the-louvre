@@ -1,10 +1,25 @@
 import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
+import type { RequestEvent, RequestHandler } from './$types';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import {
 	getTextModerationSnapshot,
 	updateTextModerationPolicies
 } from '$lib/server/moderation/service';
+
+// The public snapshot at /api/moderation/text-policy is stored in the colo
+// cache, so an admin edit has to drop the local copy or the admin keeps reading
+// their own stale policy right after saving it. cache.delete() only reaches the
+// local datacenter, which is exactly where the editing admin's next request
+// lands; remote colos wait out the short TTL.
+const purgeTextPolicyEdgeCache = (event: RequestEvent) => {
+	const edgeCache = event.platform?.caches?.default;
+	if (!edgeCache) return;
+
+	const purge = edgeCache
+		.delete(new URL('/api/moderation/text-policy', event.url.origin).href)
+		.catch(() => {});
+	event.platform?.context?.waitUntil(purge);
+};
 
 const toErrorResponse = (error: unknown) => {
 	if (error instanceof ArtworkFlowError) {
@@ -48,6 +63,7 @@ export const PUT: RequestHandler = async (event) => {
 			{ policies: body.policies ?? {} },
 			{ user: event.locals.user ?? null }
 		);
+		purgeTextPolicyEdgeCache(event);
 
 		return json(snapshot);
 	} catch (error) {

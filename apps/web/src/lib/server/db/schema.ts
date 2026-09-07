@@ -129,6 +129,25 @@ export const artworks = appSchema.table(
 		index('artworks_author_id_idx').on(table.authorId),
 		index('artworks_parent_id_idx').on(table.parentId),
 		uniqueIndex('artworks_storage_key_unique').on(table.storageKey),
+		// Every discovery feed filters on `is_hidden = false` and then sorts,
+		// so these partial indexes match the predicate exactly and let Postgres
+		// walk the ordering instead of scanning app.artworks and top-N sorting
+		// it (which also evaluates the per-row vote subqueries below the sort).
+		// `nullsFirst` is not cosmetic: an unqualified `order by ... desc` means
+		// DESC NULLS FIRST, and an index built NULLS LAST cannot supply it.
+		index('artworks_visible_recent_idx')
+			.on(table.createdAt.desc().nullsFirst(), table.id.desc().nullsFirst())
+			.where(sql`${table.isHidden} = false`),
+		index('artworks_visible_score_idx')
+			.on(
+				table.score.desc().nullsFirst(),
+				table.createdAt.desc().nullsFirst(),
+				table.id.desc().nullsFirst()
+			)
+			.where(sql`${table.isHidden} = false`),
+		index('artworks_visible_author_recent_idx')
+			.on(table.authorId, table.createdAt.desc().nullsFirst(), table.id.desc().nullsFirst())
+			.where(sql`${table.isHidden} = false`),
 		check('artworks_media_size_positive_check', sql`${table.mediaSizeBytes} > 0`),
 		check('artworks_fork_count_non_negative_check', sql`${table.forkCount} >= 0`)
 	]
@@ -152,8 +171,11 @@ export const artworkVotes = appSchema.table(
 			.notNull()
 	},
 	(table) => [
+		// artwork_id alone needs no index of its own: it is the leading column
+		// of the unique index below, which already serves every artwork_id
+		// lookup (the vote-count subqueries and the artworks cascade included).
+		// user_id is not a prefix, so that one stays.
 		uniqueIndex('artwork_votes_artwork_user_unique').on(table.artworkId, table.userId),
-		index('artwork_votes_artwork_id_idx').on(table.artworkId),
 		index('artwork_votes_user_id_idx').on(table.userId)
 	]
 );

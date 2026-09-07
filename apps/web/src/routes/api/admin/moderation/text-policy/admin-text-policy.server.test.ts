@@ -113,6 +113,29 @@ describe('admin text policy endpoint', () => {
 		);
 	});
 
+	it('purges the public policy snapshot from the local edge cache after an update', async () => {
+		mocked.updateTextModerationPolicies.mockResolvedValue({ policies: {} });
+		const edgeCache = { delete: vi.fn(async () => true), match: vi.fn(), put: vi.fn() };
+		const waitUntil = vi.fn();
+
+		const { PUT } = await import('./+server');
+		await PUT({
+			locals: makeAdminLocals(),
+			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			request: new Request('https://gallery.test/api/admin/moderation/text-policy', {
+				body: JSON.stringify({ policies: {} }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PUT'
+			}),
+			url: new URL('https://gallery.test/api/admin/moderation/text-policy')
+		} as never);
+
+		expect(edgeCache.delete).toHaveBeenCalledWith(
+			'https://gallery.test/api/moderation/text-policy'
+		);
+		expect(waitUntil).toHaveBeenCalled();
+	});
+
 	it('rejects non-admin updates', async () => {
 		mocked.updateTextModerationPolicies.mockRejectedValue(
 			new ArtworkFlowError(403, 'Admin access required', 'FORBIDDEN')

@@ -1,19 +1,8 @@
-import { resolve } from 'node:path';
 import process from 'node:process';
-import {
-	ensureServerDependencyBundled,
-	ensureServerWasmAsset,
-	ensureServerWasmReferenced,
-	syncGeneratedServerWasmAsset
-} from '../src/lib/server/deploy/build';
+import { validateCloudflareBuild } from '../src/lib/server/deploy/build';
 
 const projectRoot = process.cwd();
 const bunExecutablePath = process.execPath;
-const svelteKitOutputDirectory = resolve(projectRoot, '.svelte-kit/output');
-const generatedServerWasmPath = resolve(
-	projectRoot,
-	'../../packages/stroke-json-runtime/generated/wasm/server/stroke_json_wasm_bg.wasm'
-);
 
 const svelteKitSync = Bun.spawn([bunExecutablePath, 'run', 'prepare'], {
 	cwd: projectRoot,
@@ -37,12 +26,13 @@ if (exitCode !== 0) {
 	throw new Error(`vite build failed with exit code ${exitCode}`);
 }
 
-await syncGeneratedServerWasmAsset(svelteKitOutputDirectory, generatedServerWasmPath);
-await ensureServerWasmAsset(svelteKitOutputDirectory);
-await ensureServerDependencyBundled(
-	svelteKitOutputDirectory,
-	'@not-the-louvre/stroke-json-runtime/server'
-);
-await ensureServerWasmReferenced(svelteKitOutputDirectory);
+// The e2e build keeps the /demo routes and is served by Node through
+// `vite preview`, so the Worker-only assertions do not apply here.
+await validateCloudflareBuild(projectRoot, {
+	requireDemoExclusion: false,
+	requireGsapBundled: false,
+	requireWasmExternalized: false,
+	requireWorkerOutput: false
+});
 
-process.stdout.write(`Prepared e2e server runtime assets under ${svelteKitOutputDirectory}\n`);
+process.stdout.write('Prepared e2e server runtime assets under .svelte-kit/output\n');

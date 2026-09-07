@@ -151,7 +151,11 @@ describe('home route auth contract', () => {
 		const { load } = await import('./+page.server');
 
 		await expect(
-			load({ locals: {}, url: new URL('http://localhost/') } as never)
+			load({
+				locals: {},
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/')
+			} as never)
 		).resolves.toMatchObject({
 			auth: {
 				status: 'signed-out',
@@ -180,7 +184,11 @@ describe('home route auth contract', () => {
 		const { load } = await import('./+page.server');
 
 		await expect(
-			load({ locals: {}, url: new URL('http://localhost/') } as never)
+			load({
+				locals: {},
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/')
+			} as never)
 		).resolves.toMatchObject({
 			topArtworks: []
 		});
@@ -217,6 +225,7 @@ describe('home route auth contract', () => {
 						email: 'artist_1@not-the-louvre.local'
 					}
 				},
+				parent: async () => ({ adultContentEnabled: false }),
 				url: new URL('http://localhost/')
 			} as never)
 		).resolves.toMatchObject({
@@ -239,6 +248,35 @@ describe('home route auth contract', () => {
 		);
 	});
 
+	it('asks the studio feed for exactly the artworks the scene has frames for', async () => {
+		const { load } = await import('./+page.server');
+
+		await load({
+			locals: { user: { id: 'product-user-1', role: 'user' } },
+			parent: async () => ({ adultContentEnabled: false }),
+			url: new URL('http://localhost/')
+		} as never);
+
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
+			{ authorId: 'product-user-1', cursor: null, limit: 11, sort: 'top', window: 'all' },
+			{ user: { id: 'product-user-1', role: 'user' } }
+		);
+	});
+
+	it('reuses the layout content preference instead of re-reading the viewer row', async () => {
+		const { load } = await import('./+page.server');
+
+		await expect(
+			load({
+				locals: { user: { id: 'product-user-1', role: 'user' } },
+				parent: async () => ({ adultContentEnabled: true }),
+				url: new URL('http://localhost/')
+			} as never)
+		).resolves.toMatchObject({ adultContentEnabled: true });
+
+		expect(mocked.getViewerContentPreferences).not.toHaveBeenCalled();
+	});
+
 	it('returns avatar-onboarding bootstrap for authenticated users who have not completed signup onboarding', async () => {
 		const { load } = await import('./+page.server');
 
@@ -254,6 +292,7 @@ describe('home route auth contract', () => {
 						email: 'unfinished_artist@not-the-louvre.local'
 					}
 				},
+				parent: async () => ({ adultContentEnabled: false }),
 				url: new URL('http://localhost/')
 			} as never)
 		).resolves.toMatchObject({
@@ -281,6 +320,7 @@ describe('home route auth contract', () => {
 						session: { id: 'session-1' }
 					}
 				},
+				parent: async () => ({ adultContentEnabled: false }),
 				url: new URL('http://localhost/')
 			} as never)
 		).resolves.toMatchObject({

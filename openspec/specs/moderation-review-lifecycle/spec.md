@@ -1,4 +1,9 @@
-## ADDED Requirements
+# moderation-review-lifecycle Specification
+
+## Purpose
+Explicit moderation lifecycle state for reports, uniqueness of active reports, and atomic target-level review decisions.
+
+## Requirements
 
 ### Requirement: Reports carry explicit moderation lifecycle state
 The system SHALL persist each moderation report with an explicit lifecycle state so the backend can distinguish active review work from already-resolved moderation history. Each resolved report SHALL record which moderator reviewed it when moderator attribution is available.

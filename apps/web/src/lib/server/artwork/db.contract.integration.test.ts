@@ -3,7 +3,8 @@ import postgres from 'postgres';
 import type { Sql } from 'postgres';
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const describeWithDatabase = DATABASE_URL ? describe : describe.skip;
+// Same opt-in flag as the other integration suites: `bun run test:integration`.
+const describeWithDatabase = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
 
 type DbClient = Sql<Record<string, unknown>>;
 type ProductRole = 'admin' | 'moderator' | 'user';
@@ -942,5 +943,93 @@ describeWithDatabase('artwork DB contract', () => {
 
 		publicDetail = await getArtworkDetail('artwork-service');
 		expect(publicDetail.id).toBe('artwork-service');
+	});
+
+	it('resolves feed lineage in one statement without dropping forks of hidden parents', async () => {
+		const { listArtworkDiscovery } = await import('./read.service');
+
+		await insertUser(sql, 'author-2');
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-origin' });
+		await insertArtwork(sql, {
+			authorId: 'author-1',
+			id: 'artwork-hidden-origin',
+			isHidden: true
+		});
+		await insertArtwork(sql, {
+			authorId: 'author-2',
+			id: 'artwork-fork',
+			parentId: 'artwork-origin'
+		});
+		await insertArtwork(sql, {
+			authorId: 'author-2',
+			id: 'artwork-orphan-fork',
+			parentId: 'artwork-hidden-origin'
+		});
+
+		const discovery = await listArtworkDiscovery({ cursor: null, limit: 20, sort: 'recent' });
+		const byId = new Map(discovery.items.map((item) => [item.id, item]));
+
+		// A fork of a hidden parent must stay in the feed with the same
+		// 'deleted' lineage the two-query hydration produced; the visibility
+		// predicate lives in the join condition precisely so the LEFT JOIN does
+		// not silently become an inner join.
+		expect(byId.get('artwork-orphan-fork')?.lineage).toMatchObject({
+			isFork: true,
+			parent: null,
+			parentStatus: 'deleted'
+		});
+		expect(byId.get('artwork-fork')?.lineage).toMatchObject({
+			isFork: true,
+			parent: { id: 'artwork-origin', title: 'Artwork artwork-origin' },
+			parentStatus: 'available'
+		});
+		expect(byId.get('artwork-origin')?.lineage).toMatchObject({
+			isFork: false,
+			parent: null,
+			parentStatus: 'none'
+		});
+		expect(byId.get('artwork-hidden-origin')).toBeUndefined();
+	});
+
+	it('pages the top feed with a keyset predicate on the raw score column', async () => {
+		const { listArtworkDiscovery } = await import('./read.service');
+
+		for (const [index, id] of ['artwork-top-a', 'artwork-top-b', 'artwork-top-c'].entries()) {
+			await insertArtwork(sql, { authorId: 'author-1', id });
+			await sql`update app.artworks set score = ${3 - index} where id = ${id}`;
+		}
+
+		const firstPage = await listArtworkDiscovery({
+			cursor: null,
+			limit: 2,
+			sort: 'top',
+			window: 'all'
+		});
+
+		expect(firstPage.items.map((item) => item.id)).toEqual(['artwork-top-a', 'artwork-top-b']);
+		expect(firstPage.pageInfo.hasMore).toBe(true);
+
+		const secondPage = await listArtworkDiscovery({
+			cursor: firstPage.pageInfo.nextCursor,
+			limit: 2,
+			sort: 'top',
+			window: 'all'
+		});
+
+		expect(secondPage.items.map((item) => item.id)).toEqual(['artwork-top-c']);
+		expect(secondPage.pageInfo.hasMore).toBe(false);
+	});
+
+	it('draws a random artwork only from visible rows', async () => {
+		const { getRandomArtwork } = await import('./read.service');
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-visible' });
+		await insertArtwork(sql, {
+			authorId: 'author-1',
+			id: 'artwork-invisible',
+			isHidden: true
+		});
+
+		await expect(getRandomArtwork()).resolves.toMatchObject({ id: 'artwork-visible' });
 	});
 });

@@ -3,7 +3,6 @@ import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/features
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
-import { getViewerContentPreferences } from '$lib/server/moderation/service';
 import { avatarService } from '$lib/server/user/avatar.service';
 import { userRepository } from '$lib/server/user/repository';
 import { AuthFlowError } from '$lib/server/auth/errors';
@@ -29,6 +28,10 @@ import { getIp } from 'better-auth/api';
 import { resolveUserAvatarUrl } from '$lib/user/avatar-url';
 
 const INTEGRITY_FAILURE_MESSAGE = 'Authenticated session is missing its product user profile';
+
+// Mirrors homeSceneArtworkSlotNames in home-entry.svelte.ts: the studio wall
+// has eleven frames and toHomeSceneArtworkSlots drops everything past them.
+const HOME_SCENE_ARTWORK_SLOT_COUNT = 11;
 
 type HomeActionName = 'checkNickname' | 'recover' | 'saveAvatar' | 'signIn' | 'signOut' | 'signUp';
 
@@ -58,26 +61,33 @@ const toFailure = (action: HomeActionName, error: unknown, fallback: string) => 
 	return fail(500, { action, message: fallback });
 };
 
-export const load: PageServerLoad = async ({ locals }) => {
-	const [topDiscovery, viewerContentPreferences, studioDiscovery, avatarUserRecord] =
-		await Promise.all([
-			listArtworkDiscovery(
-				{ cursor: null, limit: 3, sort: 'top', window: 'all' },
-				{ user: locals.user }
-			),
-			locals.user
-				? getViewerContentPreferences({ user: locals.user })
-				: Promise.resolve({ adultContentEnabled: false }),
-			locals.user
-				? listArtworkDiscovery(
-						{ authorId: locals.user.id, cursor: null, limit: 50, sort: 'top', window: 'all' },
-						{ user: locals.user }
-					)
-				: Promise.resolve(null),
-			locals.user ? userRepository.findUserById(locals.user.id) : Promise.resolve(null)
-		]);
+export const load: PageServerLoad = async ({ locals, parent }) => {
+	const [topDiscovery, parentData, studioDiscovery, avatarUserRecord] = await Promise.all([
+		listArtworkDiscovery(
+			{ cursor: null, limit: 3, sort: 'top', window: 'all' },
+			{ user: locals.user }
+		),
+		parent(),
+		locals.user
+			? listArtworkDiscovery(
+					{
+						authorId: locals.user.id,
+						cursor: null,
+						// The studio wall has exactly HOME_SCENE_ARTWORK_SLOT_COUNT
+						// frames; asking for more pulled placeholder data URIs and
+						// vote subqueries for rows no mapper ever read, and left the
+						// wall showing the lowest-scoring slice of the page.
+						limit: HOME_SCENE_ARTWORK_SLOT_COUNT,
+						sort: 'top',
+						window: 'all'
+					},
+					{ user: locals.user }
+				)
+			: Promise.resolve(null),
+		locals.user ? userRepository.findUserById(locals.user.id) : Promise.resolve(null)
+	]);
 	const topArtworks = toHomePreviewCards(topDiscovery.items);
-	const adultContentEnabled = viewerContentPreferences.adultContentEnabled;
+	const adultContentEnabled = parentData.adultContentEnabled;
 	const studioArtworks = studioDiscovery ? toHomeSceneArtworkSlots(studioDiscovery.items) : [];
 
 	if (locals.integrityFailure) {

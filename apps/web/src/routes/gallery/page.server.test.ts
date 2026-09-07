@@ -40,6 +40,7 @@ describe('gallery root route', () => {
 
 		const result = (await load({
 			locals: {},
+			parent: async () => ({ adultContentEnabled: false }),
 			url: new URL('http://localhost/gallery')
 		} as never)) as {
 			lazy: { roomContent: Promise<Record<string, unknown>> };
@@ -79,6 +80,7 @@ describe('gallery root route', () => {
 		const { load } = await import('./+page.server');
 		const result = (await load({
 			locals: {},
+			parent: async () => ({ adultContentEnabled: false }),
 			url: new URL('http://localhost/gallery')
 		} as never)) as {
 			lazy: { roomContent: Promise<Record<string, unknown>> };

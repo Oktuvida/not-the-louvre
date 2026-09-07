@@ -63,6 +63,31 @@ describe('drawing-document backend media', () => {
 		expect(metadata.height).toBe(768);
 	});
 
+	it('derives the blur-up placeholder from the same raster as the artwork avif', async () => {
+		const media = await createArtworkDrawingDocumentMedia({
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [
+						[48, 48],
+						[320, 320],
+						[540, 220]
+					],
+					size: 12
+				}
+			]
+		});
+
+		expect(media.placeholder).toMatch(/^data:image\/png;base64,/);
+
+		const placeholderBuffer = Buffer.from(media.placeholder!.split(',')[1]!, 'base64');
+		const metadata = await sharp(placeholderBuffer).metadata();
+		expect(metadata.format).toBe('png');
+		expect(metadata.width).toBe(24);
+		expect(metadata.height).toBe(24);
+	});
+
 	it('derives canonical avatar avif from an avatar drawing document', async () => {
 		const media = await createAvatarDrawingDocumentMedia({
 			...createEmptyDrawingDocument('avatar'),
@@ -83,6 +108,9 @@ describe('drawing-document backend media', () => {
 		expect(media.width).toBe(256);
 		expect(media.height).toBe(256);
 		expect(media.sizeBytes).toBeGreaterThan(0);
+		// Avatars have no placeholder column, so they must not pay the extra
+		// resize plus PNG encode on every save.
+		expect(media.placeholder ?? null).toBeNull();
 
 		const metadata = await sharp(Buffer.from(await media.file.arrayBuffer())).metadata();
 		expect(metadata.width).toBe(256);

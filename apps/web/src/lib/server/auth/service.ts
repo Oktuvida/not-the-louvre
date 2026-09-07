@@ -44,8 +44,26 @@ const logAuthAbuseLimitDenied = (
 	});
 };
 
+// Exactly the columns mapProfileToCanonicalUser reads. Without this list the
+// relational query is a SELECT *, so every authenticated request — including
+// each of the ~48 image requests a gallery room fires — drags the viewer's whole
+// compressed avatar document and their recovery hash out of Postgres, only for
+// CanonicalUser to drop both.
+const CANONICAL_PROFILE_COLUMNS = {
+	avatarOnboardingCompletedAt: true,
+	avatarUrl: true,
+	createdAt: true,
+	id: true,
+	isBanned: true,
+	nickname: true,
+	role: true,
+	updatedAt: true
+} as const;
+
+type CanonicalUserProfile = Pick<typeof users.$inferSelect, keyof typeof CANONICAL_PROFILE_COLUMNS>;
+
 const mapProfileToCanonicalUser = (
-	profile: typeof users.$inferSelect,
+	profile: CanonicalUserProfile,
 	authUser: AuthUserLike
 ): CanonicalUser => ({
 	id: profile.id,
@@ -65,13 +83,17 @@ const mapProfileToCanonicalUser = (
 
 const buildSyntheticEmail = (nickname: string) => `${nickname}@not-the-louvre.local`;
 
+// Recovery is the only caller that needs the hash, and nothing on this path
+// ever needs the avatar document.
 const getProfileByNickname = async (nickname: string) =>
 	db.query.users.findFirst({
+		columns: { ...CANONICAL_PROFILE_COLUMNS, recoveryHash: true },
 		where: eq(users.nickname, nickname)
 	});
 
 const getProfileById = async (id: string) =>
 	db.query.users.findFirst({
+		columns: CANONICAL_PROFILE_COLUMNS,
 		where: eq(users.id, id)
 	});
 

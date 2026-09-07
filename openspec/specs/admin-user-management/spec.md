@@ -1,4 +1,9 @@
-## ADDED Requirements
+# admin-user-management Specification
+
+## Purpose
+Administrative listing of product users and administrative role assignment, restricted to admins.
+
+## Requirements
 
 ### Requirement: Admin user listing with pagination
 The system SHALL allow authenticated admins to list all users with cursor-based pagination, returning each user's ID, nickname, avatar URL, role, and creation date.
