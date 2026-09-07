@@ -4,7 +4,15 @@ import { ArtworkFlowError } from '$lib/server/artwork/errors';
 const mocked = vi.hoisted(() => ({
 	getArtworkMedia: vi.fn(),
 	getArtworkDetail: vi.fn(),
-	streamArtworkStorageObject: vi.fn()
+	deleteArtwork: vi.fn(),
+	streamArtworkStorageObject: vi.fn(),
+	updateArtworkTitle: vi.fn()
+}));
+
+vi.mock('$lib/server/artwork/service', () => ({
+	deleteArtwork: mocked.deleteArtwork,
+	updateArtworkTitle: mocked.updateArtworkTitle,
+	withoutDrawingDocument: <T>(artwork: T) => ({ ...artwork, drawingDocument: null })
 }));
 
 vi.mock('$lib/server/artwork/read.service', () => ({
@@ -20,7 +28,49 @@ describe('artwork detail endpoints', () => {
 	beforeEach(() => {
 		mocked.getArtworkMedia.mockReset();
 		mocked.getArtworkDetail.mockReset();
+		mocked.deleteArtwork.mockReset();
 		mocked.streamArtworkStorageObject.mockReset();
+		mocked.updateArtworkTitle.mockReset();
+	});
+
+	it('drops the shared copy of an artwork its author deleted', async () => {
+		mocked.deleteArtwork.mockResolvedValue({ id: 'artwork-1' });
+		const edgeCache = { delete: vi.fn(async () => true) };
+		const waitUntil = vi.fn();
+
+		const { DELETE } = await import('./+server');
+		await DELETE({
+			locals: { user: { id: 'user-1' } },
+			params: { artworkId: 'artwork-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			request: new Request('https://gallery.test/api/artworks/artwork-1', { method: 'DELETE' }),
+			url: new URL('https://gallery.test/api/artworks/artwork-1')
+		} as never);
+
+		// The GET below shares its anonymous payload at the edge, so a deleted
+		// artwork that is still stored there stays readable for the whole TTL.
+		expect(edgeCache.delete).toHaveBeenCalledWith('https://gallery.test/api/artworks/artwork-1');
+		expect(waitUntil).toHaveBeenCalled();
+	});
+
+	it('drops the shared copy of a retitled artwork', async () => {
+		mocked.updateArtworkTitle.mockResolvedValue({ id: 'artwork-1', title: 'New title' });
+		const edgeCache = { delete: vi.fn(async () => true) };
+
+		const { PATCH } = await import('./+server');
+		await PATCH({
+			locals: { user: { id: 'user-1' } },
+			params: { artworkId: 'artwork-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			request: new Request('https://gallery.test/api/artworks/artwork-1', {
+				body: JSON.stringify({ title: 'New title' }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			}),
+			url: new URL('https://gallery.test/api/artworks/artwork-1')
+		} as never);
+
+		expect(edgeCache.delete).toHaveBeenCalledWith('https://gallery.test/api/artworks/artwork-1');
 	});
 
 	it('returns the detail projection for an existing artwork', async () => {

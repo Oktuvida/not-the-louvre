@@ -48,6 +48,22 @@
 		revealedIds.update((ids) => new Set([...ids, artworkId]));
 	};
 
+	/*
+	 * The podium's own copy of PolaroidCard's intent handlers. Touch is left out
+	 * on purpose: `pointerdown` fires the moment a finger lands, before the
+	 * browser can tell a tap from the start of a scroll, and the `pointercancel`
+	 * a flick ends with cannot recall a request that already went out.
+	 */
+	const signalPointerIntent = (event: PointerEvent, artworkId: string) => {
+		if (event.pointerType === 'touch') return;
+		onPrefetch?.(artworkId);
+	};
+
+	const signalKeyboardIntent = (event: KeyboardEvent, artworkId: string) => {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		onPrefetch?.(artworkId);
+	};
+
 	const isPodiumBlurred = (artwork: Artwork) =>
 		isArtworkBlurred(artwork, {
 			adultContentEnabled,
@@ -151,8 +167,8 @@
 							}
 							onSelect(artwork);
 						}}
-						onkeydown={() => onPrefetch?.(artwork.id)}
-						onpointerdown={() => onPrefetch?.(artwork.id)}
+						onkeydown={(event) => signalKeyboardIntent(event, artwork.id)}
+						onpointerdown={(event) => signalPointerIntent(event, artwork.id)}
 					>
 						<div class="h-full transition duration-200 hover:-translate-y-2 hover:scale-105">
 							<ArtworkFrame

@@ -92,6 +92,8 @@
 	let allowValidatedSignupSubmit = $state(false);
 	let backdropElement = $state<HTMLDivElement | null>(null);
 	let authSheetElement = $state<HTMLDivElement | null>(null);
+	/** Whatever the visitor was on when the sheet took focus, to give it back. */
+	let opener: HTMLElement | null = null;
 	let pageLayoutReady = $state(!browser || document.readyState === 'complete');
 	/** Well under WALL_ZOOM_IN_DURATION_MS (2080), so the panel always beats the reveal. */
 	const PAGE_LAYOUT_READY_TIMEOUT_MS = 600;
@@ -115,6 +117,17 @@
 	const contentClassName = $derived(
 		isAvatarView ? 'space-y-5 p-6 md:p-8 lg:pl-16 lg:p-10' : 'min-h-[26rem] space-y-5 p-6 md:p-8'
 	);
+
+	/** One exit for the sheet: the close tape and Escape take the same one. */
+	const dismissSheet = () => {
+		if (view === 'signup-avatar') {
+			onAvatarDismiss?.();
+			dispatch('AUTH_SUCCESS');
+			return;
+		}
+
+		dispatch('AUTH_CANCEL');
+	};
 
 	const isValidNickname = (value: string) => NICKNAME_PATTERN.test(normalizeNickname(value));
 
@@ -529,7 +542,47 @@
 		if (!isInteractive || !authSheetElement) return;
 		if (authSheetElement.contains(document.activeElement)) return;
 
+		// Remembered here rather than in the trap: the overlay is never
+		// destroyed (the home page keeps it mounted), so the action's own
+		// destroy-time hand-back can never run.
+		opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		authSheetElement.focus();
+	});
+
+	/*
+	 * …and given back when the sheet stops being live, on the cancel path and on
+	 * the success path alike. Without this, focus stays on the Close tape of an
+	 * overlay that is now transparent and `aria-hidden`: a screen reader
+	 * announces nothing and the next Tab walks off the end of the document.
+	 */
+	$effect(() => {
+		if (isInteractive || !authSheetElement) return;
+		if (!authSheetElement.contains(document.activeElement)) return;
+
+		if (opener?.isConnected) {
+			opener.focus();
+		} else {
+			(document.activeElement as HTMLElement | null)?.blur();
+		}
+
+		opener = null;
+	});
+
+	/*
+	 * A dialog that declares `aria-modal` owes the visitor Escape. It closes the
+	 * sheet exactly the way its own close tape does — the avatar step counts as
+	 * finished, everything else as cancelled.
+	 */
+	$effect(() => {
+		if (!isInteractive) return;
+
+		const handleEscape = (event: KeyboardEvent) => {
+			if (event.key !== 'Escape' || event.defaultPrevented) return;
+			dismissSheet();
+		};
+
+		window.addEventListener('keydown', handleEscape);
+		return () => window.removeEventListener('keydown', handleEscape);
 	});
 </script>
 
@@ -538,6 +591,7 @@
 	data-testid="auth-overlay"
 	class={`absolute inset-0 z-40 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,240,214,0.24),rgba(24,15,8,0.58))] px-4 py-6 opacity-0 md:px-6 md:py-10 ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
 	aria-hidden={!isInteractive}
+	inert={!isInteractive}
 >
 	<div class="flex min-h-full w-full items-center justify-center">
 		<div
@@ -591,17 +645,7 @@
 											: 'One more step and you are in.'}
 							</p>
 						</div>
-						<WashiTape
-							onclick={() => {
-								if (view === 'signup-avatar') {
-									onAvatarDismiss?.();
-									dispatch('AUTH_SUCCESS');
-									return;
-								}
-
-								dispatch('AUTH_CANCEL');
-							}}
-						>
+						<WashiTape onclick={dismissSheet}>
 							<span class="sr-only">Close</span>
 							<span aria-hidden="true">✕</span>
 						</WashiTape>

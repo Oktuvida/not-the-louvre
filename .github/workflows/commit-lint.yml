@@ -23,9 +23,13 @@ jobs:
             echo "head=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
           else
             BASE="${{ github.event.before }}"
-            # New branch: before is all zeros — start from the first commit reachable from HEAD
+            # New branch: `before` is all zeros. Lint the commits this branch
+            # adds, not the history it inherits — the repository predates the
+            # convention, so walking back to the root commit failed every new
+            # branch on messages nobody in this push wrote.
             if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-              BASE="$(git rev-list --max-parents=0 HEAD)"
+              DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+              BASE="$(git merge-base "origin/${DEFAULT_BRANCH}" HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD)"
             fi
             echo "base=$BASE"                >> "$GITHUB_OUTPUT"
             echo "head=${{ github.sha }}"    >> "$GITHUB_OUTPUT"

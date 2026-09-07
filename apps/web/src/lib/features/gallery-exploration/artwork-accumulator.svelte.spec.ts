@@ -222,4 +222,34 @@ describe('createArtworkAccumulator', () => {
 		});
 		expect(acc.allArtworks[1].id).toBe('artwork-2');
 	});
+
+	it('merges a fresh seed into a restored feed instead of replacing it', async () => {
+		const acc = createArtworkAccumulator({
+			initialArtworks: [makeIndexedArtwork(1), makeIndexedArtwork(2)],
+			initialPageInfo: { hasMore: true, nextCursor: 'cursor-4' },
+			fetchPage: vi.fn().mockResolvedValueOnce({
+				artworks: [makeIndexedArtwork(3)],
+				pageInfo: { hasMore: true, nextCursor: 'cursor-5' }
+			})
+		});
+
+		await acc.loadMore();
+
+		// The server's first page after a restore: one artwork published since
+		// the snapshot, one the room already holds with fresher counts.
+		acc.mergeSeedArtworks([
+			makeIndexedArtwork(9),
+			{ ...makeIndexedArtwork(1), commentCount: 7, score: 99, upvotes: 99 }
+		]);
+
+		expect(acc.allArtworks.map((artwork) => artwork.id)).toEqual([
+			'artwork-9',
+			'artwork-1',
+			'artwork-2',
+			'artwork-3'
+		]);
+		expect(acc.allArtworks[1]).toMatchObject({ commentCount: 7, id: 'artwork-1', score: 99 });
+		// The cursor the restored pages were fetched with survives the merge.
+		expect(acc.pageInfo).toEqual({ hasMore: true, nextCursor: 'cursor-5' });
+	});
 });

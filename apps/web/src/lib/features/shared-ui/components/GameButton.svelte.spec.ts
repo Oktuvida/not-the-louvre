@@ -2,6 +2,10 @@ import { page } from 'vitest/browser';
 import { createRawSnippet } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+// The layered utilities the call sites pass in (`rotate-1`) only exist once the
+// root stylesheet is loaded, which the browser project does not do on its own.
+import '../../../../routes/layout.css';
+import { getStickerRotation } from '../sticker-controls';
 import GameButton from './GameButton.svelte';
 import GameControlsHarness from './GameControlsHarness.svelte';
 
@@ -25,7 +29,7 @@ describe('GameButton', () => {
 
 		const ctaBackground = document.querySelector('[data-testid="game-button-bg"]');
 		expect(ctaBackground?.getAttribute('src')).toMatch(
-			/^\/generated\/sticker-lg-accent\.v\d+\.svg$/
+			/^\/generated\/sticker-lg-accent\.[0-9a-f]{12}\.svg$/
 		);
 	});
 
@@ -39,6 +43,27 @@ describe('GameButton', () => {
 		// a per-pixel canvas repaint after it, on a ResizeObserver. One shared,
 		// cacheable file replaces both.
 		expect(document.querySelectorAll('canvas')).toHaveLength(0);
+	});
+
+	it('keeps its hand-placed tilt when a call site adds a rotate utility', async () => {
+		render(GameButton, { className: 'rotate-1', children: stickerLabel('Refresh') });
+
+		const button = page.getByRole('button', { name: 'Refresh' });
+		await expect.element(button).toBeVisible();
+
+		const styles = getComputedStyle(button.element());
+		const seededDegrees = getStickerRotation('button:primary:md:button');
+		const [a, b] = styles.transform
+			.replace(/^matrix\(|\)$/g, '')
+			.split(',')
+			.map(Number);
+
+		// The call site owns the standalone `rotate` property…
+		expect(styles.rotate).toBe('1deg');
+		// …so the seed has to ride `transform`, or the utility (a later cascade
+		// layer, same property) would replace it and flatten a whole row of
+		// stickers to one identical angle.
+		expect((Math.atan2(b ?? 0, a ?? 1) * 180) / Math.PI).toBeCloseTo(seededDegrees, 1);
 	});
 
 	it('announces a pressed toggle through aria-pressed', async () => {

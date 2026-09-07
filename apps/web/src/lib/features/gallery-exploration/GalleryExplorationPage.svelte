@@ -281,6 +281,45 @@
 
 	let artworks = $state<Artwork[]>(initialRoomContent ? [] : initialArtworks);
 
+	/*
+	 * What the room tells a screen reader while it streams.
+	 *
+	 * The text belongs here rather than in the skeleton because the skeleton is
+	 * mounted and unmounted whole by the `{#await}` below: a live region that
+	 * appears together with its message is announced unreliably, and it takes
+	 * its terminal message down with it before anything can read it. The region
+	 * that carries this lives in the room shell and outlives every branch.
+	 */
+	let roomStatusMessage = $state('');
+	let wasRoomBusy = false;
+
+	$effect(() => {
+		const isBusy = isRoomBusy;
+		const hasFailed = streamFailed || Boolean(loadError);
+		// The seed, not the room's own `artworks`: that one is filled by its own
+		// effect, which has not run yet when this one settles.
+		const count = seedArtworks.length;
+
+		if (isBusy) {
+			wasRoomBusy = true;
+			roomStatusMessage = 'Loading artworks…';
+			return;
+		}
+
+		// Nothing was ever awaited (route data arrived with the page): announcing
+		// a count nobody waited for is noise.
+		if (!wasRoomBusy) return;
+		wasRoomBusy = false;
+
+		// A failure announces itself from the alert below; saying both would
+		// queue two messages for one event.
+		roomStatusMessage = hasFailed
+			? ''
+			: count === 0
+				? 'This room is empty.'
+				: `${count} artworks loaded.`;
+	});
+
 	let adultContentPreferenceOverride = $state<boolean | null>(null);
 	let isSavingAdultContentPreference = $state(false);
 	let selectedArtwork = $state<Artwork | null>(null);
@@ -402,7 +441,10 @@
 	};
 
 	const closeArtworkDetail = () => {
-		detailErrorMessage = null;
+		// The message deliberately outlives the panel: a failure raised on the
+		// last click (a vote that did not land, a comment that bounced) is what
+		// the visitor is closing the postcard to go and read. The region retires
+		// it on its own timer.
 		detailLoadSequence += 1;
 		isHydratingDetail = false;
 
@@ -434,7 +476,7 @@
 	 * card flipped. It now hands every transient outcome up here instead, and it
 	 * lands in the same single status region the room's own failures use.
 	 */
-	const notifyFromPanel = (message: string) => {
+	const notifyFromPanel = (message: string | null) => {
 		detailErrorMessage = message;
 	};
 
@@ -716,9 +758,12 @@
 </script>
 
 {#snippet roomLoadFailure(message: string)}
+	<!-- `role="alert"` on the failure, never on the skeleton: a room that failed
+	     to load is the one room event worth interrupting a reader for. -->
 	<div
 		class="rounded-xl border-4 border-ink-warm bg-paper-bright p-10 text-center shadow-md"
 		data-testid="gallery-room-error"
+		role="alert"
 	>
 		<p class="font-display text-2xl text-ink-warm">Something went wrong</p>
 		<p class="mt-3 text-ink-faint">{message}</p>
@@ -801,6 +846,7 @@
 {/snippet}
 
 <div class="relative z-10" data-testid="gallery-room-content">
+	<p aria-live="polite" class="sr-only" data-testid="gallery-room-status">{roomStatusMessage}</p>
 	<div
 		class="relative z-10 mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8"
 	>
@@ -861,7 +907,7 @@
 			</div>
 		{/if}
 
-		<div class="space-y-5 md:space-y-6">
+		<div aria-busy={isRoomBusy} class="space-y-5 md:space-y-6">
 			{#if roomContent}
 				{#await roomContent}
 					<RoomLoadingSkeleton {roomId} />
@@ -881,8 +927,16 @@
 	</div>
 </div>
 
-<!-- Transient outcomes announce themselves instead of shoving the room down. -->
-<GalleryStatusRegion message={detailErrorMessage} onDismiss={() => (detailErrorMessage = null)} />
+<!-- Transient outcomes announce themselves instead of shoving the room down.
+     Everything routed here is a failure or a blocked action, so the region is
+     the assertive one: a vote that silently did not land is worth interrupting
+     a reader for, and the panel's own `role="alert"` is gone now that it hands
+     its outcomes up here. -->
+<GalleryStatusRegion
+	message={detailErrorMessage}
+	onDismiss={() => (detailErrorMessage = null)}
+	tone="error"
+/>
 
 <!-- Arriving from the home page: the veil the home page dropped, lifting. -->
 <PageFadeOverlay direction="out" visible={showEntryFade} />

@@ -56,8 +56,16 @@ After every change, run `bun run format`, `bun run lint`, `bun run check`, and `
 | `bun run test:unit` | Unit & component tests (Vitest) |
 | `bun run test:e2e` | End-to-end tests (Playwright) |
 | `bun run test` | Unit + e2e combined |
+| `bun run --filter @not-the-louvre/web test:integration` | Contract suites against the real database (release step, see below) |
 
 Before pushing code, all of the above must pass. Prefer running them in order: format → lint → check → test.
+
+The integration suites (`*.integration.test.ts` and `db.contract.integration.test.ts`) are
+gated on `RUN_INTEGRATION=1` and skip everywhere else, including CI, because they need the
+local Supabase stack. They are where the raw SQL this app ships — fork lineage, keyset
+paging, the rate-limit upsert — is actually executed, so **run them by hand against a local
+stack before a release**: `bun run db:start`, then
+`bun run --filter @not-the-louvre/web test:integration`.
 
 ### Reproducibility (Everything-as-Code)
 
@@ -68,7 +76,7 @@ Local development must be reproducible from a clean clone:
 - **Dependencies**: `bun install` from root. Lockfile is committed.
 - **Environment**: `.env.example` documents every required variable.
 - **Schema**: Drizzle migrations define the database state (see below).
-- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check` and `test:unit:server` on every pull request and before every deploy.
+- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check`, `test:unit:server` and `test:unit:client` on every pull request and before every deploy; the database-backed integration suites are the one gate CI cannot run, so they stay a manual release step (above).
 
 ---
 

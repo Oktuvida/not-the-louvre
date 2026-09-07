@@ -1,7 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getArtworkDetail } from '$lib/server/artwork/read.service';
-import { edgeCacheControl, readEdgeCache, storeInEdgeCache } from '$lib/server/http/edge-cache';
+import {
+	artworkDetailEdgeCacheKeys,
+	edgeCacheControl,
+	purgeFromEdgeCache,
+	readEdgeCache,
+	storeInEdgeCache
+} from '$lib/server/http/edge-cache';
 import { toApiErrorResponse } from '$lib/server/http/errors';
 import {
 	deleteArtwork,
@@ -27,6 +33,21 @@ const DETAIL_ERROR = {
 	scope: 'artwork detail'
 };
 
+/*
+ * Anything that changes what this artwork is — a retitle, a delete, a
+ * moderation hide — drops the shared copy of it. Without this the anonymous
+ * payload stored by GET below stays readable for the whole TTL after the row
+ * has gone, which for a hide is exactly the wrong direction.
+ */
+const purgeArtworkDetailEdgeCache = (event: Parameters<RequestHandler>[0]) => {
+	if (!event.platform?.caches?.default) return;
+
+	purgeFromEdgeCache(
+		event.platform,
+		artworkDetailEdgeCacheKeys(event.url.origin, event.params.artworkId)
+	);
+};
+
 export const PATCH: RequestHandler = async (event) => {
 	try {
 		const body = (await event.request.json()) as { title?: string };
@@ -37,6 +58,8 @@ export const PATCH: RequestHandler = async (event) => {
 			},
 			{ user: event.locals.user }
 		);
+
+		purgeArtworkDetailEdgeCache(event);
 
 		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
@@ -51,6 +74,8 @@ export const DELETE: RequestHandler = async (event) => {
 			{ user: event.locals.user }
 		);
 
+		purgeArtworkDetailEdgeCache(event);
+
 		return json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
 		return toApiErrorResponse(error, DELETE_ERROR);
@@ -61,9 +86,11 @@ export const DELETE: RequestHandler = async (event) => {
 // a literal null and the visibility filter ignores the moderator flag, so every
 // signed-out visitor gets the same bytes. Sharing is gated on `locals.user`
 // being null rather than on a `Vary` the Workers Cache API would not honour, so
-// a cross-viewer leak is impossible by construction. The TTL is short because
-// `caches.default.delete()` is colo-local: an artwork hidden by moderation
-// would otherwise stay readable elsewhere for the window.
+// a cross-viewer leak is impossible by construction. Every write to this
+// artwork purges the key (see above), but `caches.default.delete()` only
+// reaches the local datacenter — which is where the moderator is. The TTL is
+// what bounds a hidden artwork's readability in every other colo, so it stays
+// short.
 const ANONYMOUS_EDGE_TTL_SECONDS = 30;
 const ANONYMOUS_CACHE_CONTROL = edgeCacheControl(ANONYMOUS_EDGE_TTL_SECONDS, 120);
 const SIGNED_IN_CACHE_CONTROL = 'private, no-store';

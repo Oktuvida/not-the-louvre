@@ -60,15 +60,24 @@ export const writeRoomFeedSnapshot = (roomId: GalleryRoomId, snapshot: RoomFeedS
 		return;
 	}
 
+	// Past the cap, forget the room instead of half-remembering it. Truncating
+	// the tail would leave the restored feed holding pages whose cursor we no
+	// longer have: `{ hasMore: true, nextCursor: null }` is unusable state —
+	// `loadMore()` bails on the missing cursor while the sentinel keeps firing
+	// and suppresses its own end-of-feed line, so the visitor dead-ends with no
+	// spinner, no "you've seen it all" and no way forward. Refetching the first
+	// page is what the cap already says it prefers.
+	if (snapshot.artworks.length > MAX_CACHED_ARTWORKS) {
+		snapshots.delete(roomId);
+		return;
+	}
+
 	// Re-inserting moves the room to the end of the Map's insertion order, so
 	// the first key is always the least recently left room.
 	snapshots.delete(roomId);
 	snapshots.set(roomId, {
-		artworks: snapshot.artworks.slice(0, MAX_CACHED_ARTWORKS),
-		pageInfo:
-			snapshot.artworks.length > MAX_CACHED_ARTWORKS
-				? { hasMore: true, nextCursor: null }
-				: { ...snapshot.pageInfo },
+		artworks: [...snapshot.artworks],
+		pageInfo: { ...snapshot.pageInfo },
 		scrollY: Math.max(0, snapshot.scrollY)
 	});
 

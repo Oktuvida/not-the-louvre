@@ -138,6 +138,48 @@ describe('artwork moderation endpoint', () => {
 		});
 	});
 
+	it('drops the shared copy of an artwork it has just hidden', async () => {
+		mocked.moderateArtwork.mockResolvedValue({ id: 'artwork-1', isHidden: true });
+		const edgeCache = { delete: vi.fn(async () => true) };
+		const waitUntil = vi.fn();
+
+		const { PATCH } = await import('./moderation/+server');
+		await PATCH({
+			locals: { user: { id: 'moderator-1', role: 'moderator' } },
+			params: { artworkId: 'artwork-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			request: new Request('https://gallery.test/api/artworks/artwork-1/moderation', {
+				body: JSON.stringify({ action: 'hide' }),
+				headers: { 'content-type': 'application/json' },
+				method: 'PATCH'
+			}),
+			url: new URL('https://gallery.test/api/artworks/artwork-1/moderation')
+		} as never);
+
+		// Anonymous detail responses are shared at the edge; a hide that leaves
+		// the stored one in place is not a hide.
+		expect(edgeCache.delete).toHaveBeenCalledWith('https://gallery.test/api/artworks/artwork-1');
+		expect(waitUntil).toHaveBeenCalled();
+	});
+
+	it('drops the shared copy of an artwork a moderator deleted', async () => {
+		mocked.moderateArtwork.mockResolvedValue({ id: 'artwork-1', isHidden: true });
+		const edgeCache = { delete: vi.fn(async () => true) };
+
+		const { DELETE } = await import('./moderation/+server');
+		await DELETE({
+			locals: { user: { id: 'moderator-1', role: 'moderator' } },
+			params: { artworkId: 'artwork-1' },
+			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			request: new Request('https://gallery.test/api/artworks/artwork-1/moderation', {
+				method: 'DELETE'
+			}),
+			url: new URL('https://gallery.test/api/artworks/artwork-1/moderation')
+		} as never);
+
+		expect(edgeCache.delete).toHaveBeenCalledWith('https://gallery.test/api/artworks/artwork-1');
+	});
+
 	it('rejects non-moderator artwork moderation requests', async () => {
 		mocked.moderateArtwork.mockRejectedValue(
 			new ArtworkFlowError(403, 'Moderator access required', 'FORBIDDEN')

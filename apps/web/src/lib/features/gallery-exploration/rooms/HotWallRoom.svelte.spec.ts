@@ -173,6 +173,20 @@ describe('HotWallRoom', () => {
 		leadButton?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
 
 		expect(onPrefetch).toHaveBeenCalledWith('h1');
+
+		// A finger landing on the lead may be the start of a scroll, and the
+		// request a prefetch sends cannot be recalled by the `pointercancel`.
+		leadButton?.dispatchEvent(
+			new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' })
+		);
+		expect(onPrefetch).toHaveBeenCalledTimes(1);
+
+		// Tab moves through the wall; only an activating key is intent to open.
+		leadButton?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Tab' }));
+		expect(onPrefetch).toHaveBeenCalledTimes(1);
+
+		leadButton?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+		expect(onPrefetch).toHaveBeenCalledTimes(2);
 	});
 	it('comes back to the feed it left instead of restarting at the first page', async () => {
 		const seed = [createArtwork('h1', 100), createArtwork('h2', 90)];

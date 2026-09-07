@@ -14,8 +14,11 @@ export type GalleryPanelBindings = {
 	onArtworkChange: (artwork: Artwork) => void;
 	onArtworkPatch: (artworkId: string, patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>) => void;
 	onClose: () => void;
-	/** Transient panel outcomes, routed into the room's single status region. */
-	onNotify: (message: string) => void;
+	/**
+	 * Transient panel outcomes, routed into the room's single status region.
+	 * `null` clears it, so a retry that succeeds retires the failure it replaces.
+	 */
+	onNotify: (message: string | null) => void;
 	revealedArtworkIds: Writable<Set<string>>;
 	viewer: Viewer;
 };

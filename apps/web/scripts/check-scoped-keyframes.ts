@@ -1,20 +1,19 @@
 /**
- * Svelte renames every `@keyframes` declared in a component's scoped <style> and
- * rewrites `animation` declarations only inside that same block. A Tailwind
- * `animate-[name_…]` utility (emitted into the global sheet) and an inline
- * `style="animation: name …"` attribute therefore name a keyframe that does not
- * exist, and the animation silently never runs — the app shipped three of those.
- *
- * This guard fails the lint step when either shape appears.
+ * The lint step's dead-animation guard. The detection rules live in
+ * `src/lib/server/deploy/scoped-keyframes.ts`, where the vitest projects can
+ * reach them; this file is the file walk and the report.
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import process from 'node:process';
+import {
+	BUILT_IN_KEYFRAMES,
+	describeDeadKeyframeReference,
+	findDeadKeyframeReferences,
+	readKeyframeNames
+} from '../src/lib/server/deploy/scoped-keyframes';
 
 const SOURCE_ROOT = new URL('../src/', import.meta.url).pathname;
-
-// Tailwind ships these in the global sheet.
-const BUILT_IN_KEYFRAMES = new Set(['spin', 'ping', 'pulse', 'bounce']);
 
 const collectFiles = async (directory: string, extensions: string[]): Promise<string[]> => {
 	const entries = await readdir(directory, { withFileTypes: true });
@@ -29,11 +28,6 @@ const collectFiles = async (directory: string, extensions: string[]): Promise<st
 	return files.flat();
 };
 
-const readKeyframeNames = (source: string) =>
-	[...source.matchAll(/@keyframes\s+([\w-]+)/g)].map((match) => match[1]!);
-
-const stripStyleBlocks = (source: string) => source.replace(/<style[\s\S]*?<\/style>/g, '');
-
 const main = async () => {
 	const cssFiles = await collectFiles(SOURCE_ROOT, ['.css']);
 	const globalKeyframes = new Set(BUILT_IN_KEYFRAMES);
@@ -46,23 +40,10 @@ const main = async () => {
 	const violations: string[] = [];
 	for (const file of await collectFiles(SOURCE_ROOT, ['.svelte'])) {
 		const source = await readFile(file, 'utf8');
-		const markup = stripStyleBlocks(source);
 		const location = relative(process.cwd(), file);
 
-		for (const match of markup.matchAll(/animate-\[([A-Za-z][A-Za-z0-9-]*)[_\]]/g)) {
-			const name = match[1]!;
-			if (globalKeyframes.has(name)) continue;
-			violations.push(
-				`${location}: animate-[${name}…] resolves to no global @keyframes. Declare the keyframes in a .css file, or move the animation into a class inside this component's <style>.`
-			);
-		}
-
-		for (const match of markup.matchAll(/\banimation(-name)?\s*:\s*([\w-]+)/g)) {
-			const name = match[2]!;
-			if (name === 'none' || name === 'inherit' || name === 'initial' || name === 'unset') continue;
-			violations.push(
-				`${location}: inline "animation: ${name} …" can never resolve — Svelte does not rewrite keyframe names inside style attributes. Move it into a class in this component's <style>.`
-			);
+		for (const reference of findDeadKeyframeReferences(source, globalKeyframes)) {
+			violations.push(describeDeadKeyframeReference(location, reference));
 		}
 	}
 

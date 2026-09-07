@@ -128,6 +128,11 @@ Production secrets never live in the repository. Set them once per Worker with
 The deploy workflow itself needs two repository secrets, ideally scoped to a `production`
 environment: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
+It also reads one repository **variable** (not a secret), `PRODUCTION_URL` — e.g.
+`https://not-the-louvre.art`. The post-deploy smoke test uses it to check the custom domain
+instead of the workers.dev URL wrangler reports, and fails the run when neither is
+available: a deploy nobody verified is not a deploy that passed.
+
 Values intentionally exposed to browser realtime clients today:
 
 - `SUPABASE_PUBLIC_URL`

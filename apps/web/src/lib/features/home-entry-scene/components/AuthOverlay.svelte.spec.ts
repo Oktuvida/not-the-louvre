@@ -310,6 +310,61 @@ describe('AuthOverlay', () => {
 		expect(dialog.contains(document.activeElement)).toBe(true);
 	});
 
+	it('gives focus back to the opener and leaves nothing tabbable behind on close', async () => {
+		const opener = document.createElement('button');
+		opener.textContent = 'Come in';
+		document.body.append(opener);
+		opener.focus();
+
+		const { rerender } = render(AuthOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'auth-login',
+			form: undefined
+		});
+
+		const dialog = await vi.waitFor(() => {
+			const element = document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+			expect(element).not.toBeNull();
+			return element!;
+		});
+		await vi.waitFor(() => {
+			expect(dialog.contains(document.activeElement)).toBe(true);
+		});
+
+		try {
+			// Cancelling leaves the overlay mounted, transparent and aria-hidden:
+			// focus cannot stay on the close tape inside it.
+			await rerender({ dispatch: vi.fn(), entryState: 'transitioning-out', form: undefined });
+
+			await vi.waitFor(() => {
+				expect(document.activeElement).toBe(opener);
+			});
+			expect(document.querySelector('[data-testid="auth-overlay"]')?.hasAttribute('inert')).toBe(
+				true
+			);
+		} finally {
+			opener.remove();
+		}
+	});
+
+	it('closes the live sheet on Escape, as its modal semantics promise', async () => {
+		const dispatch = vi.fn();
+
+		render(AuthOverlay, {
+			dispatch,
+			entryState: 'auth-login',
+			form: undefined
+		});
+
+		await vi.waitFor(() => {
+			expect(document.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+		});
+
+		window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }));
+
+		expect(dispatch).toHaveBeenCalledWith('AUTH_CANCEL');
+	});
+
 	it('drops the dialog semantics while the overlay is not the live auth surface', async () => {
 		render(AuthOverlay, {
 			dispatch: vi.fn(),

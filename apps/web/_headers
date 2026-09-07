@@ -9,8 +9,11 @@
 #   bun run build && cat .svelte-kit/cloudflare/_headers
 # and after a deploy with `curl -I https://not-the-louvre.art/models/studio-transformed.glb`.
 
-# Versioned filenames (see GENERATED_ART_VERSION in shared-ui/generated-art.ts):
-# a change to the artwork ships under a new name, so these are immutable.
+# Content-addressed filenames: scripts/generate-static-art.ts names every file
+# after a digest of the artwork it holds (GENERATED_ART_VERSION in
+# shared-ui/generated-art-version.ts, regenerated at the start of every build),
+# so new bytes can only arrive under a new URL. That — not a hand-bumped
+# constant — is what makes `immutable` true here.
 /generated/*
   Cache-Control: public, max-age=31536000, immutable
 

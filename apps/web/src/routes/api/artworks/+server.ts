@@ -12,8 +12,10 @@ import { toApiErrorResponse } from '$lib/server/http/errors';
 // signed-out visitor gets the same bytes. Sharing them at the edge is gated on
 // `locals.user` being null rather than on a `Vary` the Workers Cache API would
 // not honour anyway, which makes a cross-viewer leak impossible by construction.
-// The TTL is short because `caches.default.delete()` is colo-local: an artwork
-// hidden by moderation would otherwise stay listed elsewhere for the window.
+// Unlike the detail key, a listing cannot be purged at all: the query fan-out
+// (sort, window, cursor, limit) is unbounded, so nothing can enumerate the keys
+// a hide would have to drop. The TTL is the only bound there is, so it stays
+// short.
 const ANONYMOUS_EDGE_TTL_SECONDS = 30;
 const ANONYMOUS_CACHE_CONTROL = edgeCacheControl(ANONYMOUS_EDGE_TTL_SECONDS, 120);
 const SIGNED_IN_CACHE_CONTROL = 'private, no-store';

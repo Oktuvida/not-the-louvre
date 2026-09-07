@@ -377,7 +377,11 @@
 			rgba(107, 74, 46, 0.18) var(--slider-pct, 30%),
 			rgba(107, 74, 46, 0.12) 100%
 		);
-		outline: none;
+		/* No `outline: none` here: a scoped, unlayered declaration beats every
+		   cascade layer regardless of specificity, so it would shadow the
+		   `focus-ring` utility (which lives in `@layer utilities`) and leave the
+		   control with no visible focus at all. An `appearance: none` range paints
+		   no UA outline of its own, so there is nothing to reset. */
 		cursor: pointer;
 	}
 

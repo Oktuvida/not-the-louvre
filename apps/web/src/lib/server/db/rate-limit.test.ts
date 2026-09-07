@@ -117,6 +117,62 @@ describe('rate-limit counting rule', () => {
 		expect(reopened.windowStartedAt).toEqual(at('13:30'));
 	});
 
+	/*
+	 * The four cases above run against `applyRateLimitAttempt`, the in-memory
+	 * twin the service tests use as their repository double. The rule that
+	 * actually ships is the SQL below, and grading the twin against itself
+	 * would let the two drift apart silently — so the shipped clause is read
+	 * back branch by branch.
+	 */
+	const render = (fragment: SQL) => dialect.sqlToQuery(fragment).sql.replace(/\s+/g, ' ').trim();
+
+	it('renders the freeze, the bump and the fresh window into the shipped clause', () => {
+		const set = rateLimitAttemptSet(artworkEngagementRateLimits, policy);
+		const attemptCount = render(set.attemptCount as SQL);
+		const windowStartedAt = render(set.windowStartedAt as SQL);
+
+		const isBlocked =
+			'"blocked_until" is not null and "blocked_until" > excluded."last_attempt_at"';
+		const isWithinWindow =
+			'excluded."last_attempt_at" <= "window_started_at" + make_interval(secs => $1::double precision)';
+
+		// Frozen while blocked: the stored count is kept, not bumped.
+		expect(attemptCount).toContain(`when ${isBlocked} then "attempt_count"`);
+		// Inside the window it bumps, outside it starts a fresh window at 1.
+		expect(attemptCount).toContain(`when ${isWithinWindow} then "attempt_count" + 1`);
+		expect(attemptCount).toContain('else 1 end');
+
+		// The window is kept in both of those cases and only re-anchored on the
+		// attempt that opens a new one, so hammering can neither extend a block
+		// nor reset it early.
+		expect(windowStartedAt).toContain(`when ${isBlocked} or ${isWithinWindow}`);
+		expect(windowStartedAt).toContain('then "window_started_at"');
+		expect(windowStartedAt).toContain('else excluded."window_started_at" end');
+	});
+
+	it('keeps a standing block untouched and anchors a new one per policy', () => {
+		const artworkBlockedUntil = render(
+			rateLimitAttemptSet(artworkEngagementRateLimits, policy).blockedUntil as SQL
+		);
+		const authBlockedUntil = render(
+			rateLimitAttemptSet(artworkEngagementRateLimits, { ...policy, blockAnchor: 'attempt' })
+				.blockedUntil as SQL
+		);
+
+		// An actor already blocked keeps the block they have.
+		expect(artworkBlockedUntil).toContain(
+			'when "blocked_until" is not null and "blocked_until" > excluded."last_attempt_at" then "blocked_until"'
+		);
+		expect(artworkBlockedUntil).toContain('else null end');
+
+		// Artwork limits anchor at the start of the window that filled up…
+		expect(artworkBlockedUntil).toContain('else excluded."window_started_at" end + make_interval');
+		// …auth at the failure that tripped it.
+		expect(authBlockedUntil).toContain(
+			'excluded."last_attempt_at" + make_interval(secs => $3::double precision)'
+		);
+	});
+
 	it('anchors an auth block at the failure that tripped it, not at the window start', () => {
 		const authPolicy: RateLimitPolicy = { ...policy, blockAnchor: 'attempt', maxAttempts: 2 };
 		const first = applyRateLimitAttempt(null, {

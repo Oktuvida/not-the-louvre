@@ -37,9 +37,13 @@
 	);
 </script>
 
+<!--
+	No live region here: this component is mounted and unmounted whole by the
+	room's `{#await}`, so a region inside it would appear together with its
+	message (announced unreliably) and disappear before it could say the wait is
+	over. The gallery page owns one that outlives every branch.
+-->
 <div data-testid="room-loading-skeleton" data-room-skeleton={roomId}>
-	<p class="sr-only" role="status">Loading artworks…</p>
-
 	{#if roomId === 'hall-of-fame'}
 		<div class="space-y-12">
 			<div

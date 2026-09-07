@@ -18,31 +18,28 @@
 	 * The accepted trade: user-generated text in a non-Latin script (a nickname,
 	 * a guestbook note) renders in the system fallback stack rather than in
 	 * Baloo 2 / Fredoka / Caveat.
+	 *
+	 * Only the latin entry points are imported from the package: they declare no
+	 * `unicode-range`, so each one is the family's universal fallback face. The
+	 * latin-ext faces are declared in `fonts-latin-ext.css` instead, with the
+	 * range their package entry points forgot — importing those alongside these
+	 * put two rangeless faces on the same family/style/weight, and the later one
+	 * (latin-ext) then owned the whole range and pulled both files down.
 	 */
 	import '@fontsource/baloo-2/latin-400.css';
-	import '@fontsource/baloo-2/latin-ext-400.css';
 	import '@fontsource/baloo-2/latin-500.css';
-	import '@fontsource/baloo-2/latin-ext-500.css';
 	import '@fontsource/baloo-2/latin-600.css';
-	import '@fontsource/baloo-2/latin-ext-600.css';
 	import '@fontsource/baloo-2/latin-700.css';
-	import '@fontsource/baloo-2/latin-ext-700.css';
 	// Weight 800 stays: `font-black` (900) has no 900 face anywhere and matches
 	// upward onto it, so dropping it would visibly lighten 11 call sites.
 	import '@fontsource/baloo-2/latin-800.css';
-	import '@fontsource/baloo-2/latin-ext-800.css';
 	import '@fontsource/caveat/latin-400.css';
-	import '@fontsource/caveat/latin-ext-400.css';
 	import '@fontsource/caveat/latin-700.css';
-	import '@fontsource/caveat/latin-ext-700.css';
 	import '@fontsource/fredoka/latin-400.css';
-	import '@fontsource/fredoka/latin-ext-400.css';
 	import '@fontsource/fredoka/latin-500.css';
-	import '@fontsource/fredoka/latin-ext-500.css';
 	import '@fontsource/fredoka/latin-600.css';
-	import '@fontsource/fredoka/latin-ext-600.css';
 	import '@fontsource/fredoka/latin-700.css';
-	import '@fontsource/fredoka/latin-ext-700.css';
+	import './fonts-latin-ext.css';
 	/*
 	 * The two faces that paint above the fold on every route: Baloo 2 400 is
 	 * the body font and Fredoka 700 letters every sticker control and the home
@@ -129,9 +126,9 @@
 		   is local, so the stroke clears the pill's own border. */
 		--focus-ring-offset: 3px;
 		position: fixed;
-		/* Stays top-right at every width: the mobile override used to move it
-		   into the bottom-right corner, straight on top of the ambient audio
-		   tab. */
+		/* Top-right from `md` up. The mobile override this replaced parked the
+		   pill in the bottom-right corner, straight on top of the ambient audio
+		   tab; the corner it moves to below is the one free corner left. */
 		top: 1rem;
 		right: 1rem;
 		z-index: var(--z-ops);
@@ -149,6 +146,22 @@
 		text-transform: uppercase;
 		backdrop-filter: blur(12px);
 		box-shadow: 0 14px 32px rgba(51, 43, 26, 0.18);
+	}
+
+	/*
+	 * On a phone the top-right corner belongs to the gallery header: its Create
+	 * Art and Refresh stickers are two 44px controls at `top-3 right-3`, and a
+	 * root-level fixed pill at `--z-ops` paints over them and swallows the tap,
+	 * so Refresh navigated to /admin instead. The bottom-right is the ambient
+	 * audio tab's, and both top corners are chrome — which leaves bottom-left.
+	 */
+	@media (max-width: 700px) {
+		.ops-link {
+			top: auto;
+			right: auto;
+			bottom: 1rem;
+			left: 1rem;
+		}
 	}
 
 	.ops-link:hover {
