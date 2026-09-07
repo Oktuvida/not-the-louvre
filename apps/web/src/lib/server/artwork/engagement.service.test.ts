@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { applyRateLimitAttempt } from '$lib/server/db/fixtures/rate-limit';
+import type { ProductRole } from '$lib/shared/viewer';
 import { ArtworkFlowError } from './errors';
 import {
 	ARTWORK_COMMENT_MAX_LENGTH,
@@ -12,7 +14,9 @@ import type {
 	ArtworkRecord,
 	ArtworkRepository,
 	ContentReportRecord,
-	ArtworkVoteRecord
+	ArtworkVoteRecord,
+	ArtworkVoteValue,
+	RecordEngagementRateLimitAttemptInput
 } from './types';
 
 type ModerationCheckResult = { status: 'allowed' } | { message: string; status: 'blocked' };
@@ -81,7 +85,7 @@ const createArtworkRecord = (overrides: Partial<ArtworkWithSummary> = {}): Artwo
 	isNsfw: overrides.isNsfw ?? false
 });
 
-const createUser = (id: string, role: 'admin' | 'moderator' | 'user' = 'user') => {
+const createUser = (id: string, role: ProductRole = 'user') => {
 	const now = new Date('2026-03-26T10:00:00.000Z');
 
 	return {
@@ -159,7 +163,7 @@ const createRepository = () => {
 				id: string;
 				updatedAt: Date;
 				userId: string;
-				value: 'down' | 'up';
+				value: ArtworkVoteValue;
 			}) => {
 				const artwork = artworks.get(input.artworkId);
 				if (!artwork) return null;
@@ -214,20 +218,17 @@ const createRepository = () => {
 				removed: current
 			};
 		}),
-		findEngagementRateLimit: vi.fn(async (kind: EngagementKind, actorKey: string) => {
-			return rateLimits.get(rateLimitKey(kind, actorKey)) ?? null;
-		}),
-		createEngagementRateLimit: vi.fn(async (input: EngagementRateLimitRecord) => {
-			rateLimits.set(rateLimitKey(input.kind, input.actorKey), input);
-			return input;
-		}),
-		updateEngagementRateLimit: vi.fn(
-			async (id: string, input: Partial<EngagementRateLimitRecord> & { updatedAt: Date }) => {
-				const current = Array.from(rateLimits.values()).find((candidate) => candidate.id === id);
-				if (!current) throw new Error(`Missing engagement rate limit ${id}`);
+		// The double runs the same counting rule as the `on conflict do update`
+		// clause, so a blocked actor stays frozen here exactly as it does in SQL.
+		recordEngagementRateLimitAttempt: vi.fn(
+			async (input: RecordEngagementRateLimitAttemptInput) => {
+				const key = rateLimitKey(input.kind, input.actorKey);
+				const next: EngagementRateLimitRecord = {
+					...applyRateLimitAttempt(rateLimits.get(key) ?? null, input),
+					kind: input.kind
+				};
 
-				const next = { ...current, ...input };
-				rateLimits.set(rateLimitKey(next.kind, next.actorKey), next);
+				rateLimits.set(key, next);
 				return next;
 			}
 		),
@@ -335,10 +336,7 @@ const createRepository = () => {
 			Array.from(artworks.values()).filter((artwork) => artwork.parentId === parentId)
 		),
 		findPublishRateLimit: vi.fn(async () => null),
-		createPublishRateLimit: vi.fn(async () => {
-			throw new Error('not implemented in engagement tests');
-		}),
-		updatePublishRateLimit: vi.fn(async () => {
+		recordPublishRateLimitAttempt: vi.fn(async () => {
 			throw new Error('not implemented in engagement tests');
 		}),
 		updateArtworkTitle: vi.fn(async () => null),

@@ -1,19 +1,3 @@
-export const resolveUserAvatarPath = (userId: string) => `/api/users/${userId}/avatar`;
-
-export const resolveUserAvatarUrl = (
-	userId: string,
-	storageKey: string | null | undefined,
-	version?: number | string | null
-) => {
-	if (!storageKey) {
-		return null;
-	}
-
-	const path = resolveUserAvatarPath(userId);
-
-	if (version === undefined || version === null) {
-		return path;
-	}
-
-	return `${path}?v=${encodeURIComponent(String(version))}`;
-};
+// Barrel kept for the existing `$lib/user/avatar-url` imports; the builders
+// themselves are shared vocabulary and live under $lib/shared.
+export { resolveUserAvatarPath, resolveUserAvatarUrl } from '$lib/shared/user/avatar-url';

@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { StoredRateLimit } from '$lib/server/db/fixtures/rate-limit';
+
+type StoredAuthRateLimit = StoredRateLimit & { kind: 'login' | 'recovery' };
 
 const mocked = vi.hoisted(() => {
 	const flattenConditions = (
@@ -36,16 +39,24 @@ const mocked = vi.hoisted(() => {
 			userId: 'account.userId'
 		},
 		authRateLimits: {
+			// The keys the `where` clauses match on stay strings, so `eq` can be
+			// compared by identity; the counter columns carry the `name` the
+			// upsert's `do update set` builder reads.
 			id: 'authRateLimits.id',
 			kind: 'authRateLimits.kind',
-			actorKey: 'authRateLimits.actorKey'
+			actorKey: 'authRateLimits.actorKey',
+			attemptCount: { name: 'attempt_count' },
+			blockedUntil: { name: 'blocked_until' },
+			lastAttemptAt: { name: 'last_attempt_at' },
+			updatedAt: { name: 'updated_at' },
+			windowStartedAt: { name: 'window_started_at' }
 		}
 	};
 
 	const state = {
 		profiles: new Map<string, Record<string, unknown>>(),
 		accounts: new Map<string, Record<string, unknown>>(),
-		rateLimits: new Map<string, Record<string, unknown>>(),
+		rateLimits: new Map<string, StoredAuthRateLimit>(),
 		authApi: {
 			signUpEmail: vi.fn(),
 			isUsernameAvailable: vi.fn(),
@@ -96,29 +107,63 @@ const mocked = vi.hoisted(() => {
 			}
 		},
 		insert: vi.fn((table: unknown) => ({
-			values: vi.fn(async (values: Record<string, unknown>) => {
-				if (table === schema.users) {
-					const profile: Record<string, unknown> = {
-						avatarUrl: null,
-						createdAt: new Date('2026-03-25T00:00:00.000Z'),
-						updatedAt: new Date('2026-03-25T00:00:00.000Z'),
-						...values
-					};
-					state.profiles.set(String(profile.id), profile);
-					return [profile];
-				}
+			values: vi.fn((values: Record<string, unknown>) => {
+				// The rate-limit write is one upsert, so the double has to answer
+				// `.onConflictDoUpdate(...).returning()` and apply the same counting
+				// rule the SQL clause does — that rule lives in the shared fixture.
+				const upsertRateLimit = async () => {
+					const { AUTH_RATE_LIMITS } = await import('./config');
+					const { applyRateLimitAttempt } = await import('$lib/server/db/fixtures/rate-limit');
 
-				if (table === schema.authRateLimits) {
-					const record: Record<string, unknown> = {
-						createdAt: new Date('2026-03-25T00:00:00.000Z'),
-						updatedAt: new Date('2026-03-25T00:00:00.000Z'),
-						...values
+					const kind = values.kind as 'login' | 'recovery';
+					const actorKey = String(values.actorKey);
+					const key = `${kind}:${actorKey}`;
+					const config = AUTH_RATE_LIMITS[kind];
+					const next: StoredAuthRateLimit = {
+						...applyRateLimitAttempt(state.rateLimits.get(key) ?? null, {
+							actorKey,
+							id: String(values.id),
+							now: values.lastAttemptAt as Date,
+							policy: {
+								blockAnchor: 'attempt',
+								blockMs: config.blockMs,
+								maxAttempts: config.maxFailures,
+								windowMs: config.windowMs
+							}
+						}),
+						kind
 					};
-					state.rateLimits.set(`${String(record.kind)}:${String(record.actorKey)}`, record);
-					return [record];
-				}
 
-				return [];
+					state.rateLimits.set(key, next);
+					return [next];
+				};
+
+				const insertRow = async () => {
+					if (table === schema.users) {
+						const profile: Record<string, unknown> = {
+							avatarUrl: null,
+							createdAt: new Date('2026-03-25T00:00:00.000Z'),
+							updatedAt: new Date('2026-03-25T00:00:00.000Z'),
+							...values
+						};
+						state.profiles.set(String(profile.id), profile);
+						return [profile];
+					}
+
+					if (table === schema.authRateLimits) {
+						return upsertRateLimit();
+					}
+
+					return [];
+				};
+
+				return {
+					onConflictDoUpdate: vi.fn(() => ({ returning: vi.fn(insertRow) })),
+					then: <TResult>(
+						onFulfilled: (rows: Array<Record<string, unknown>>) => TResult,
+						onRejected?: (reason: unknown) => TResult
+					) => insertRow().then(onFulfilled, onRejected)
+				};
 			})
 		})),
 		update: vi.fn((table: unknown) => ({
@@ -149,12 +194,17 @@ const mocked = vi.hoisted(() => {
 					}
 
 					if (table === schema.authRateLimits) {
-						const id = findValue(where, schema.authRateLimits.id);
-						const record = Array.from(state.rateLimits.values()).find((entry) => entry.id === id);
+						// `recordSuccess` clears by (kind, actor_key) now: with no read
+						// first there is no row id to key the update on.
+						const kind = findValue(where, schema.authRateLimits.kind);
+						const actorKey = findValue(where, schema.authRateLimits.actorKey);
+						if (typeof kind !== 'string' || typeof actorKey !== 'string') return [];
+
+						const record = state.rateLimits.get(`${kind}:${actorKey}`);
 						if (!record) return [];
 
-						const next = { ...record, ...values };
-						state.rateLimits.set(`${next.kind}:${next.actorKey}`, next);
+						const next = { ...record, ...values } as StoredAuthRateLimit;
+						state.rateLimits.set(`${kind}:${actorKey}`, next);
 						return [next];
 					}
 
@@ -185,9 +235,19 @@ const moderation = vi.hoisted(() => ({
 	}))
 }));
 
+// `sql` is only here so the upsert's `do update set` builder can run; the db
+// double never interprets the chunks it produces.
+const drizzle = vi.hoisted(() => ({
+	sql: Object.assign(
+		(strings: TemplateStringsArray, ...values: unknown[]) => ({ type: 'sql', strings, values }),
+		{ identifier: (name: string) => ({ type: 'identifier', name }) }
+	)
+}));
+
 vi.mock('drizzle-orm', () => ({
-	eq: (column: string, value: unknown) => ({ type: 'eq', column, value }),
-	and: (...conditions: unknown[]) => ({ type: 'and', conditions })
+	eq: (column: unknown, value: unknown) => ({ type: 'eq', column, value }),
+	and: (...conditions: unknown[]) => ({ type: 'and', conditions }),
+	sql: drizzle.sql
 }));
 
 vi.mock('$lib/server/db/schema', () => ({

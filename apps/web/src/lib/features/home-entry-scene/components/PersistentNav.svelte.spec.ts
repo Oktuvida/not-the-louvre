@@ -359,4 +359,37 @@ describe('PersistentNav', () => {
 		);
 		expect(panel).not.toBeNull();
 	});
+
+	// One paper, one tape: the avatar sheet used to print its own copy of both,
+	// and the auth sheet a click away printed a third.
+	it('builds the avatar editor out of the shared paper and tape', async () => {
+		render(PersistentNav, {
+			previewCards: topArtworks,
+			user: {
+				authUserId: 'auth-user-1',
+				email: 'artist_1@not-the-louvre.local',
+				id: 'product-user-1',
+				nickname: 'artist_1',
+				role: 'user'
+			}
+		});
+
+		await page.getByRole('button', { name: 'Edit avatar for artist_1' }).click();
+
+		const sheet = document.querySelector<HTMLElement>('.paper-sheet');
+		expect(sheet).not.toBeNull();
+		// The sheet scrolls, so it hands its grain to the inner element.
+		expect(sheet?.classList.contains('paper-grain')).toBe(false);
+		expect(document.querySelector('.avatar-sheet-inner')?.classList.contains('paper-grain')).toBe(
+			true
+		);
+		expect(document.querySelector('.avatar-sheet-swipe')?.classList.contains('paint-swipe')).toBe(
+			true
+		);
+
+		// The tape carries its own clip-path, so it needs no global stylesheet.
+		const close = page.getByRole('button', { name: 'Close' }).element();
+		expect(close.classList.contains('washi-tape')).toBe(true);
+		expect(getComputedStyle(close).clipPath).toContain('polygon');
+	});
 });

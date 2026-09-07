@@ -10,28 +10,24 @@ import {
 	uniqueIndex
 } from 'drizzle-orm/pg-core';
 import { account, session, user, verification } from './auth.schema';
+// Relative, not `$lib`: drizzle-kit loads this file outside Vite and cannot
+// resolve the alias. The enums below are derived from the shared vocabularies
+// so the API, the client and the type never drift from the database.
+import { PRODUCT_ROLES } from '../../shared/viewer';
+import {
+	ARTWORK_REPORT_REASONS,
+	CONTENT_REPORT_STATUSES
+} from '../../shared/content/report-reasons';
+import { ARTWORK_VOTE_VALUES } from '../../shared/content/votes';
 
 const appSchema = pgSchema('app');
 
-export const userRole = appSchema.enum('user_role', ['user', 'moderator', 'admin']);
+export const userRole = appSchema.enum('user_role', PRODUCT_ROLES);
 export const authAttemptKind = appSchema.enum('auth_attempt_kind', ['login', 'recovery']);
-export const artworkVoteValue = appSchema.enum('artwork_vote_value', ['up', 'down']);
+export const artworkVoteValue = appSchema.enum('artwork_vote_value', ARTWORK_VOTE_VALUES);
 export const artworkNsfwSource = appSchema.enum('artwork_nsfw_source', ['creator', 'moderator']);
-export const artworkReportReason = appSchema.enum('artwork_report_reason', [
-	'spam',
-	'harassment',
-	'hate',
-	'sexual_content',
-	'violence',
-	'misinformation',
-	'copyright',
-	'other'
-]);
-export const contentReportStatus = appSchema.enum('content_report_status', [
-	'pending',
-	'reviewed',
-	'actioned'
-]);
+export const artworkReportReason = appSchema.enum('artwork_report_reason', ARTWORK_REPORT_REASONS);
+export const contentReportStatus = appSchema.enum('content_report_status', CONTENT_REPORT_STATUSES);
 export const engagementRateLimitKind = appSchema.enum('engagement_rate_limit_kind', [
 	'vote',
 	'comment'

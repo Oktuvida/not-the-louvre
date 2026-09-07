@@ -1,8 +1,6 @@
 import type { RequestHandler } from './$types';
 import { userRepository } from '$lib/server/user/repository';
-
-const resolveAvatarUrl = (userId: string, storageKey: string | null) =>
-	storageKey ? `/api/users/${userId}/avatar` : null;
+import { resolveUserAvatarUrl } from '$lib/shared/user/avatar-url';
 
 export const GET: RequestHandler = async (event) => {
 	const user = await userRepository.findUserAvatarRefById(event.params.userId);
@@ -12,7 +10,7 @@ export const GET: RequestHandler = async (event) => {
 	}
 
 	return Response.json({
-		avatarUrl: user.avatarIsHidden ? null : resolveAvatarUrl(user.id, user.avatarUrl),
+		avatarUrl: user.avatarIsHidden ? null : resolveUserAvatarUrl(user.id, user.avatarUrl),
 		createdAt: user.createdAt,
 		id: user.id,
 		nickname: user.nickname,

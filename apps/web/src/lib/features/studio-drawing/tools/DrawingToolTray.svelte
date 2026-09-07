@@ -33,7 +33,7 @@
 	};
 </script>
 
-<div class:tool-tray-mobile={mobile} class="tool-tray">
+<div class:tool-tray-mobile={mobile} class="tool-tray paper-sheet paper-grain">
 	<span class="tray-tape tray-tape-left" aria-hidden="true"></span>
 	<span class="tray-tape tray-tape-right" aria-hidden="true"></span>
 	<span class="tray-stain tray-stain-a" aria-hidden="true"></span>
@@ -45,7 +45,7 @@
 			<Palette size={12} />
 			<span>Paints</span>
 		</div>
-		<span class="tray-label-swipe" aria-hidden="true"></span>
+		<span class="paint-swipe tray-label-swipe" aria-hidden="true"></span>
 		{#if mobile}
 			<div class="palette-mobile-row">
 				<div class="palette-mobile-grid">
@@ -153,26 +153,16 @@
 </div>
 
 <style>
-	/* A scrap of studio paper, same family as the sketchbook sheets */
+	/*
+	 * A scrap of studio paper: the paper itself is `.paper-sheet` +
+	 * `.paper-grain`, and how it is torn off and pinned down is here. The tray
+	 * used to carry its own copy of both, with the shadow a shade lighter
+	 * (0.28/0.16) than the auth sheet a click away — an invisible typo that the
+	 * shared class settles.
+	 */
 	.tool-tray {
-		background-color: #fbf7f0;
-		border-radius: 3px;
 		padding: 20px;
-		box-shadow:
-			4px 6px 16px rgba(0, 0, 0, 0.28),
-			1px 2px 4px rgba(0, 0, 0, 0.16);
 		transform: rotate(1.2deg);
-		position: relative;
-	}
-
-	/* per-pixel paper noise */
-	.tool-tray::before {
-		content: '';
-		position: absolute;
-		inset: 0;
-		border-radius: inherit;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-		pointer-events: none;
 	}
 
 	.tray-tape {
@@ -217,15 +207,12 @@
 		background: radial-gradient(closest-side, rgba(244, 196, 48, 0.13), transparent 70%);
 	}
 
-	/* a swipe of paint under the paints label */
+	/* How long and how crooked this swipe is; the paint is `.paint-swipe`. */
 	.tray-label-swipe {
-		display: block;
 		width: 86px;
 		height: 6px;
 		margin: -4px 0 12px;
 		rotate: -1deg;
-		border-radius: 4px 7px 5px 8px;
-		background: linear-gradient(90deg, rgba(212, 131, 74, 0.7), rgba(212, 131, 74, 0.22) 92%);
 	}
 
 	.tray-section {

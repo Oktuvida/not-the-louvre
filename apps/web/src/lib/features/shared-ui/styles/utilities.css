@@ -45,6 +45,67 @@
 	mix-blend-mode: multiply;
 }
 
+/*
+ * One sheet of museum paper.
+ *
+ * These four declarations were typed out in four stylesheets — the ops panels,
+ * the auth sheet, the avatar sheet and the studio tool tray — and they had
+ * already drifted: the tray sat under a shadow 12% lighter (0.28/0.16) than
+ * the auth sheet a click away. This is the only place that decides what paper
+ * looks like; call sites keep their own geometry (padding, rotation, width)
+ * and nothing else.
+ *
+ * `position: relative` is part of the material: the grain below hangs off it,
+ * and so do the tapes, stains and perforations the call sites pin to a sheet.
+ */
+.paper-sheet {
+	position: relative;
+	border-radius: 3px;
+	background-color: #fbf7f0;
+	box-shadow:
+		4px 6px 16px rgba(0, 0, 0, 0.32),
+		1px 2px 4px rgba(0, 0, 0, 0.18);
+}
+
+/*
+ * The museum's paper grain: the per-pixel feTurbulence tile every paper sheet
+ * wears. It lived as a 340-character data URI copy-pasted into four component
+ * stylesheets (the auth sheet, the avatar sheet, the tool tray and the ops
+ * panels), so every route paid for it again and retuning the texture meant
+ * finding four places.
+ *
+ * Deliberately NOT merged with `.paper-noise` above: that one is a different
+ * technique (a radial dot pattern multiplied over its surface) and is in use
+ * on the postcard faces and the studio panels, where this tile would look
+ * wrong. Two textures, two names.
+ *
+ * The host has to establish a positioning context; `PaperSheet` does, and the
+ * two sheets that carry their grain on an inner element already say
+ * `relative`.
+ */
+.paper-grain::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	pointer-events: none;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.13 0 0 0 0 0.08 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/*
+ * The swipe of paint under a section title, on the ops desk, the auth sheet,
+ * the avatar sheet and the tool tray's paints label.
+ *
+ * How long and how crooked the stroke is belongs to the call site; the stroke
+ * itself is one gradient, which is the drift this fixes — the tray's swipe was
+ * 0.7/0.22 against everyone else's 0.75/0.25, on screen a click apart.
+ */
+.paint-swipe {
+	display: block;
+	border-radius: 4px 7px 5px 8px;
+	background: linear-gradient(90deg, rgba(212, 131, 74, 0.75), rgba(212, 131, 74, 0.25) 92%);
+}
+
 @keyframes drift {
 	0%,
 	100% {

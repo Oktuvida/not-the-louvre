@@ -157,4 +157,36 @@ describe('FilmReel', () => {
 
 		expect(document.querySelectorAll('.nsfw-badge').length).toBeGreaterThan(0);
 	});
+
+	it('censors at the shared --nsfw-* strength instead of its own hardcoded blur and scrim', async () => {
+		// The reel cannot use <NsfwImage>, so the only thing keeping it at the
+		// gallery-wide strength is that it reads the two custom properties.
+		document.documentElement.style.setProperty('--nsfw-blur', '7px');
+		document.documentElement.style.setProperty('--nsfw-scrim', 'rgb(1, 2, 3)');
+
+		try {
+			const artworks = [
+				makeArtwork({ authorId: 'user-2', id: 'theirs', isNsfw: true }),
+				createArtwork('f2'),
+				createArtwork('f3')
+			];
+
+			renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
+
+			await expect.element(page.getByTestId('film-reel')).toBeVisible();
+
+			const blurred = document.querySelector('.nsfw-blurred');
+			expect(blurred).not.toBeNull();
+			const filter = getComputedStyle(blurred!).filter;
+			expect(filter).toContain('blur(7px)');
+			expect(filter).toContain('saturate(0)');
+
+			const overlay = document.querySelector('.nsfw-overlay');
+			expect(overlay).not.toBeNull();
+			expect(getComputedStyle(overlay!).backgroundColor).toBe('rgb(1, 2, 3)');
+		} finally {
+			document.documentElement.style.removeProperty('--nsfw-blur');
+			document.documentElement.style.removeProperty('--nsfw-scrim');
+		}
+	});
 });

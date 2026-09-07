@@ -18,6 +18,7 @@ import {
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '$lib/server/db';
 import { artworkComments, artworks, contentReports, users } from '$lib/server/db/schema';
+import type { ArtworkVoteValue } from '$lib/shared/content/votes';
 import type {
 	ArtworkDiscoveryCursor,
 	ArtworkDiscoveryTopWindow,
@@ -143,7 +144,7 @@ const parentSelect = {
 	parentTitle: parentArtworks.title
 };
 
-const voteCountSql = (value: 'down' | 'up') =>
+const voteCountSql = (value: ArtworkVoteValue) =>
 	sql<number>`coalesce((
 		select count(*)::int
 		from "app"."artwork_votes" vote
@@ -153,7 +154,7 @@ const voteCountSql = (value: 'down' | 'up') =>
 
 const viewerVoteSql = (viewer: { isModerator: boolean; userId: string | null }) =>
 	viewer.userId
-		? sql<'down' | 'up' | null>`(
+		? sql<ArtworkVoteValue | null>`(
 			select vote.value
 			from "app"."artwork_votes" vote
 			where vote.artwork_id = ${artworks.id}
@@ -213,7 +214,7 @@ type ArtworkReadRow = {
 	parentTitle?: string | null;
 	downvotes?: number;
 	upvotes?: number;
-	viewerVote?: 'down' | 'up' | null;
+	viewerVote?: ArtworkVoteValue | null;
 	rankingValue?: number;
 };
 

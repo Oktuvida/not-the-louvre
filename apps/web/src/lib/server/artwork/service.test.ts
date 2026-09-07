@@ -22,6 +22,7 @@ import {
 	createWebpTestFile,
 	fileToBytes
 } from '../media/test-helpers';
+import { applyRateLimitAttempt } from '$lib/server/db/fixtures/rate-limit';
 import type {
 	ArtworkRecord,
 	ArtworkRepository,
@@ -128,11 +129,7 @@ const createRepository = () => {
 		removeVote: vi.fn(async () => {
 			throw new Error('not implemented in publish tests');
 		}),
-		findEngagementRateLimit: vi.fn(async () => null),
-		createEngagementRateLimit: vi.fn(async () => {
-			throw new Error('not implemented in publish tests');
-		}),
-		updateEngagementRateLimit: vi.fn(async () => {
+		recordEngagementRateLimitAttempt: vi.fn(async () => {
 			throw new Error('not implemented in publish tests');
 		}),
 		listCommentsByArtworkId: vi.fn(async () => []),
@@ -227,24 +224,10 @@ const createRepository = () => {
 			return next;
 		}),
 		findPublishRateLimit: vi.fn(async (actorKey: string) => rateLimits.get(actorKey) ?? null),
-		createPublishRateLimit: vi.fn(async (input) => {
-			const record: PublishRateLimitRecord = {
-				createdAt: input.createdAt,
-				updatedAt: input.updatedAt,
-				blockedUntil: input.blockedUntil ?? null,
-				...input
-			};
-
+		recordPublishRateLimitAttempt: vi.fn(async (input) => {
+			const record = applyRateLimitAttempt(rateLimits.get(input.actorKey) ?? null, input);
 			rateLimits.set(record.actorKey, record);
 			return record;
-		}),
-		updatePublishRateLimit: vi.fn(async (id: string, input) => {
-			const current = Array.from(rateLimits.values()).find((candidate) => candidate.id === id);
-			if (!current) throw new Error(`Missing publish rate limit ${id}`);
-
-			const next = { ...current, ...input };
-			rateLimits.set(current.actorKey, next);
-			return next;
 		})
 	};
 
@@ -1795,7 +1778,7 @@ describe('artwork service', () => {
 			width: ARTWORK_MEDIA_WIDTH
 		});
 
-		vi.mocked(repository.createPublishRateLimit).mockRejectedValueOnce(
+		vi.mocked(repository.recordPublishRateLimitAttempt).mockRejectedValueOnce(
 			createConnectionClosedError()
 		);
 

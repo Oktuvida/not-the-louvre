@@ -1,4 +1,6 @@
 import { assertNotBanned } from '$lib/server/auth/guards';
+import { resolveUserAvatarUrl } from '$lib/shared/user/avatar-url';
+import type { Viewer } from '$lib/shared/viewer';
 import { ArtworkFlowError } from './errors';
 import { artworkReadRepository } from './read.repository';
 import type {
@@ -28,10 +30,7 @@ type ListArtworkDiscoveryInput = {
 };
 
 type RequesterContext = {
-	user?: {
-		id: string;
-		role: 'admin' | 'moderator' | 'user';
-	} | null;
+	user?: Viewer | null;
 };
 
 type ReadServiceDependencies = {
@@ -57,17 +56,12 @@ const toViewer = (context: RequesterContext = {}): ArtworkVisibilityActor => ({
 });
 
 const toAuthorSummary = (record: ArtworkReadRecord): ArtworkAuthorSummary => ({
-	avatarUrl: resolveAvatarUrl(record.authorId, record.authorAvatarUrl),
+	avatarUrl: resolveUserAvatarUrl(record.authorId, record.authorAvatarUrl),
 	id: record.authorId,
 	nickname: record.authorNickname
 });
 
 const getArtworkMediaUrl = (artworkId: string) => `/api/artworks/${artworkId}/media`;
-
-const getUserAvatarUrl = (userId: string) => `/api/users/${userId}/avatar`;
-
-const resolveAvatarUrl = (userId: string, storageKey: string | null) =>
-	storageKey ? getUserAvatarUrl(userId) : null;
 
 const toLineage = (record: ArtworkReadRecord): ArtworkLineageSummary => {
 	if (!record.parentId) {
@@ -83,7 +77,10 @@ const toLineage = (record: ArtworkReadRecord): ArtworkLineageSummary => {
 			isFork: true,
 			parent: {
 				author: {
-					avatarUrl: resolveAvatarUrl(record.parentAuthorId, record.parentAuthorAvatarUrl ?? null),
+					avatarUrl: resolveUserAvatarUrl(
+						record.parentAuthorId,
+						record.parentAuthorAvatarUrl ?? null
+					),
 					id: record.parentAuthorId,
 					nickname: record.parentAuthorNickname
 				},
@@ -105,7 +102,7 @@ const toChildForkSummary = (
 	record: NonNullable<ArtworkReadRecord['childForks']>[number]
 ): ArtworkChildForkSummary => ({
 	author: {
-		avatarUrl: resolveAvatarUrl(record.authorId, record.authorAvatarUrl),
+		avatarUrl: resolveUserAvatarUrl(record.authorId, record.authorAvatarUrl),
 		id: record.authorId,
 		nickname: record.authorNickname
 	},
@@ -373,7 +370,7 @@ export const listArtworkCommentsForViewer = async (
 		...comment,
 		author: {
 			...comment.author,
-			avatarUrl: resolveAvatarUrl(comment.author.id, comment.author.avatarUrl)
+			avatarUrl: resolveUserAvatarUrl(comment.author.id, comment.author.avatarUrl)
 		}
 	}));
 };

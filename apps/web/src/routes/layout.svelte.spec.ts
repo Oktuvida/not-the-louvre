@@ -6,9 +6,19 @@ import { SITE_NAME } from '$lib/features/shared-ui/site-meta';
 
 const idleCallbacks: IdleRequestCallback[] = [];
 
-const { imageInstances } = vi.hoisted(() => ({
-	imageInstances: [] as Array<{ decoding: string; src: string }>
+const { imageInstances, pageState } = vi.hoisted(() => ({
+	imageInstances: [] as Array<{ decoding: string; src: string }>,
+	// The layout is the only place that renders <title>, so the error page's
+	// status has to reach it through `page`.
+	pageState: {
+		data: {} as Record<string, unknown>,
+		error: null as { message: string } | null,
+		status: 200,
+		url: new URL('https://not-the-louvre.art/')
+	}
 }));
+
+vi.mock('$app/state', () => ({ page: pageState }));
 
 const TrackingImage = class {
 	decoding = '';
@@ -40,6 +50,9 @@ describe('root layout', () => {
 	beforeEach(() => {
 		idleCallbacks.length = 0;
 		imageInstances.length = 0;
+		pageState.data = {};
+		pageState.error = null;
+		pageState.status = 200;
 
 		vi.stubGlobal('Image', TrackingImage);
 		vi.stubGlobal(
@@ -74,6 +87,18 @@ describe('root layout', () => {
 
 		expect(shareImage?.getAttribute('content')).toBe('https://not-the-louvre.art/og-cover.png');
 		expect(twitterCard?.getAttribute('content')).toBe('summary_large_image');
+	});
+
+	// `+error.svelte` has no `load` and so contributes no `meta`; without the
+	// status the layout would title a 404 after whatever page.data still holds.
+	it('titles an error page with its status', async () => {
+		pageState.data = { meta: { title: 'Gallery' } };
+		pageState.error = { message: 'Not found' };
+		pageState.status = 404;
+
+		renderRootLayout();
+
+		expect(document.title).toBe(`404 · ${SITE_NAME}`);
 	});
 
 	it('preloads the two above-the-fold font faces with crossorigin', () => {

@@ -4,6 +4,7 @@ import type { RequestHandler } from './$types';
 import { auth } from '$lib/server/auth';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import { applyArtworkVote, removeArtworkVote } from '$lib/server/artwork/service';
+import type { ArtworkVoteValue } from '$lib/shared/content/votes';
 
 const toErrorResponse = (error: unknown) => {
 	if (error instanceof ArtworkFlowError) {
@@ -17,7 +18,7 @@ export const POST: RequestHandler = async (event) => {
 	try {
 		const body = (await event.request.json()) as { value?: string };
 		const result = await applyArtworkVote(
-			{ artworkId: event.params.artworkId, value: body.value as 'down' | 'up' },
+			{ artworkId: event.params.artworkId, value: body.value as ArtworkVoteValue },
 			{ ipAddress: getIp(event.request, auth.options), user: event.locals.user }
 		);
 

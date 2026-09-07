@@ -3,8 +3,6 @@
 	import { goto, invalidateAll, pushState, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
-	import { fade } from 'svelte/transition';
-	import { prefersReducedMotion } from 'svelte/motion';
 	import { get } from 'svelte/store';
 	import { setAdultContentEnabled } from '$lib/client/avatar-upload';
 	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
@@ -30,6 +28,7 @@
 	import { createRealtimeSubscription } from '$lib/features/gallery-exploration/use-realtime-subscription.svelte';
 	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
+	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
 	import GalleryStatusRegion from '$lib/features/gallery-exploration/components/GalleryStatusRegion.svelte';
 	import RoomLoadingSkeleton from '$lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
 	import HallOfFameRoom from '$lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
@@ -286,7 +285,6 @@
 	let showEntryFade = $state(enteredFromHome);
 	let showExitFade = $state(false);
 	let isExitingToHome = $state(false);
-	const fadeDuration = $derived(prefersReducedMotion.current ? 0 : 250);
 	let isRefreshingGallery = $state(false);
 	let detailOrigin = $state<GalleryDetailHistoryState['source'] | null>(null);
 	let didCreateLocalDetailHistoryEntry = $state(false);
@@ -884,17 +882,8 @@
 <!-- Transient outcomes announce themselves instead of shoving the room down. -->
 <GalleryStatusRegion message={detailErrorMessage} onDismiss={() => (detailErrorMessage = null)} />
 
-{#if showEntryFade}
-	<div
-		class="pointer-events-none fixed inset-0 z-[100] bg-[#6e6e6e]"
-		out:fade={{ duration: fadeDuration }}
-	></div>
-{/if}
+<!-- Arriving from the home page: the veil the home page dropped, lifting. -->
+<PageFadeOverlay direction="out" visible={showEntryFade} />
 
-{#if showExitFade}
-	<div
-		class="pointer-events-none fixed inset-0 z-[100] bg-[#6e6e6e]"
-		in:fade={{ duration: fadeDuration }}
-		onintroend={completeExitToHome}
-	></div>
-{/if}
+<!-- Leaving for it: the veil drops, and navigation waits for it to be down. -->
+<PageFadeOverlay direction="in" onComplete={completeExitToHome} visible={showExitFade} />

@@ -9,24 +9,25 @@ import {
 	artworks,
 	users
 } from '$lib/server/db/schema';
+import { rateLimitAttemptSet, rateLimitFirstAttemptBlockedUntil } from '$lib/server/db/rate-limit';
 import type {
 	ArtworkCommentRecord,
 	ArtworkCommentView,
+	ArtworkEngagementRateLimitRecord,
 	ContentReportRecord,
 	ArtworkRecord,
 	ArtworkRepository,
 	ArtworkVoteMutationResult,
 	ArtworkVoteRecord,
 	ArtworkVoteSummary,
-	CreatePublishRateLimitInput,
 	CreateArtworkCommentInput,
 	CreateContentReportInput,
 	CreateArtworkVoteInput,
-	CreateEngagementRateLimitInput,
 	HiddenStateUpdate,
-	ResolveContentReportsInput,
-	UpdateEngagementRateLimitInput,
-	UpdatePublishRateLimitInput
+	PublishRateLimitRecord,
+	RecordEngagementRateLimitAttemptInput,
+	RecordRateLimitAttemptInput,
+	ResolveContentReportsInput
 } from './types';
 
 // Every `artworks` column except `drawing_document`. The document can be
@@ -365,28 +366,30 @@ export const artworkRepository: ArtworkRepository = {
 
 		return (record as ArtworkCommentRecord | undefined) ?? null;
 	},
-	async findEngagementRateLimit(kind, actorKey) {
-		return (
-			(await db.query.artworkEngagementRateLimits.findFirst({
-				where: and(
-					eq(artworkEngagementRateLimits.kind, kind),
-					eq(artworkEngagementRateLimits.actorKey, actorKey)
-				)
-			})) ?? null
-		);
-	},
-	async createEngagementRateLimit(input: CreateEngagementRateLimitInput) {
-		const [record] = await db.insert(artworkEngagementRateLimits).values(input).returning();
-		return record;
-	},
-	async updateEngagementRateLimit(id: string, input: UpdateEngagementRateLimitInput) {
+	// One statement per attempt: the insert lands the first attempt and the
+	// `do update` counts every later one against the row it is already
+	// locking, so two concurrent attempts cannot both read the same count.
+	async recordEngagementRateLimitAttempt(input: RecordEngagementRateLimitAttemptInput) {
 		const [record] = await db
-			.update(artworkEngagementRateLimits)
-			.set(input)
-			.where(eq(artworkEngagementRateLimits.id, id))
+			.insert(artworkEngagementRateLimits)
+			.values({
+				actorKey: input.actorKey,
+				attemptCount: 1,
+				blockedUntil: rateLimitFirstAttemptBlockedUntil(input.policy, input.now),
+				createdAt: input.now,
+				id: input.id,
+				kind: input.kind,
+				lastAttemptAt: input.now,
+				updatedAt: input.now,
+				windowStartedAt: input.now
+			})
+			.onConflictDoUpdate({
+				target: [artworkEngagementRateLimits.kind, artworkEngagementRateLimits.actorKey],
+				set: rateLimitAttemptSet(artworkEngagementRateLimits, input.policy)
+			})
 			.returning();
 
-		return record;
+		return record as ArtworkEngagementRateLimitRecord;
 	},
 	async findPublishRateLimit(actorKey) {
 		return (
@@ -395,17 +398,25 @@ export const artworkRepository: ArtworkRepository = {
 			})) ?? null
 		);
 	},
-	async createPublishRateLimit(input: CreatePublishRateLimitInput) {
-		const [record] = await db.insert(artworkPublishRateLimits).values(input).returning();
-		return record;
-	},
-	async updatePublishRateLimit(id: string, input: UpdatePublishRateLimitInput) {
+	async recordPublishRateLimitAttempt(input: RecordRateLimitAttemptInput) {
 		const [record] = await db
-			.update(artworkPublishRateLimits)
-			.set(input)
-			.where(eq(artworkPublishRateLimits.id, id))
+			.insert(artworkPublishRateLimits)
+			.values({
+				actorKey: input.actorKey,
+				attemptCount: 1,
+				blockedUntil: rateLimitFirstAttemptBlockedUntil(input.policy, input.now),
+				createdAt: input.now,
+				id: input.id,
+				lastAttemptAt: input.now,
+				updatedAt: input.now,
+				windowStartedAt: input.now
+			})
+			.onConflictDoUpdate({
+				target: artworkPublishRateLimits.actorKey,
+				set: rateLimitAttemptSet(artworkPublishRateLimits, input.policy)
+			})
 			.returning();
 
-		return record;
+		return record as PublishRateLimitRecord;
 	}
 };

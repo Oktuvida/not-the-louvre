@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
+import type { ProductRole } from '$lib/shared/viewer';
+import type { RateLimitPolicy } from '$lib/server/db/rate-limit';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 // Same opt-in flag as the other integration suites: `bun run test:integration`.
 const describeWithDatabase = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
 
 type DbClient = Sql<Record<string, unknown>>;
-type ProductRole = 'admin' | 'moderator' | 'user';
 type TransactionContext = {
 	unsafe: DbClient['unsafe'];
 };
@@ -41,6 +42,9 @@ const createDbClient = () => {
 const truncateDatabase = async (sql: DbClient) => {
 	await sql.unsafe(`
 		truncate table
+			app.artwork_engagement_rate_limits,
+			app.artwork_publish_rate_limits,
+			app.auth_rate_limits,
 			app.content_reports,
 			app.artwork_votes,
 			app.artwork_vote_realtime,
@@ -1018,6 +1022,143 @@ describeWithDatabase('artwork DB contract', () => {
 
 		expect(secondPage.items.map((item) => item.id)).toEqual(['artwork-top-c']);
 		expect(secondPage.pageInfo.hasMore).toBe(false);
+	});
+
+	it('counts artwork rate-limit attempts in one statement and freezes a blocked actor', async () => {
+		const { artworkRepository } = await import('./repository');
+
+		// Two attempts per hour so the limit trips on the second one; the block
+		// runs from the start of the window, which is what the artwork limits do.
+		const policy: RateLimitPolicy = {
+			blockAnchor: 'window-start',
+			blockMs: 60 * 60 * 1000,
+			maxAttempts: 2,
+			windowMs: 60 * 60 * 1000
+		};
+		const windowStart = new Date('2026-03-27T12:00:00.000Z');
+		const trippingAttempt = new Date('2026-03-27T12:01:00.000Z');
+		const blockedAttempt = new Date('2026-03-27T12:02:00.000Z');
+		const expectedBlockedUntil = new Date(windowStart.getTime() + policy.blockMs);
+
+		const opened = await artworkRepository.recordEngagementRateLimitAttempt({
+			actorKey: 'viewer-1:127.0.0.1',
+			id: 'engagement-limit-1',
+			kind: 'vote',
+			now: windowStart,
+			policy
+		});
+
+		expect(opened).toMatchObject({ attemptCount: 1, blockedUntil: null, id: 'engagement-limit-1' });
+		expect(opened.windowStartedAt.toISOString()).toBe(windowStart.toISOString());
+
+		const tripped = await artworkRepository.recordEngagementRateLimitAttempt({
+			actorKey: 'viewer-1:127.0.0.1',
+			// The id only lands with the insert; on conflict the stored row keeps its own.
+			id: 'engagement-limit-2',
+			kind: 'vote',
+			now: trippingAttempt,
+			policy
+		});
+
+		expect(tripped).toMatchObject({ attemptCount: 2, id: 'engagement-limit-1' });
+		expect(tripped.blockedUntil?.toISOString()).toBe(expectedBlockedUntil.toISOString());
+
+		const hammered = await artworkRepository.recordEngagementRateLimitAttempt({
+			actorKey: 'viewer-1:127.0.0.1',
+			id: 'engagement-limit-3',
+			kind: 'vote',
+			now: blockedAttempt,
+			policy
+		});
+
+		// Blocked means frozen: the attempt is recorded, but the counter does not
+		// bump, the window does not roll forward and the block does not extend.
+		expect(hammered.attemptCount).toBe(2);
+		expect(hammered.windowStartedAt.toISOString()).toBe(windowStart.toISOString());
+		expect(hammered.blockedUntil?.toISOString()).toBe(expectedBlockedUntil.toISOString());
+		expect(hammered.lastAttemptAt.toISOString()).toBe(blockedAttempt.toISOString());
+
+		// The other engagement kind is a different actor row, not the same counter.
+		const otherKind = await artworkRepository.recordEngagementRateLimitAttempt({
+			actorKey: 'viewer-1:127.0.0.1',
+			id: 'engagement-limit-4',
+			kind: 'comment',
+			now: blockedAttempt,
+			policy
+		});
+
+		expect(otherKind).toMatchObject({ attemptCount: 1, blockedUntil: null });
+
+		// Same clause, second table: the publish limit is keyed by actor alone.
+		const publishOpened = await artworkRepository.recordPublishRateLimitAttempt({
+			actorKey: 'author-1:127.0.0.1',
+			id: 'publish-limit-1',
+			now: windowStart,
+			policy
+		});
+		const publishTripped = await artworkRepository.recordPublishRateLimitAttempt({
+			actorKey: 'author-1:127.0.0.1',
+			id: 'publish-limit-2',
+			now: trippingAttempt,
+			policy
+		});
+		const publishHammered = await artworkRepository.recordPublishRateLimitAttempt({
+			actorKey: 'author-1:127.0.0.1',
+			id: 'publish-limit-3',
+			now: blockedAttempt,
+			policy
+		});
+
+		expect(publishOpened).toMatchObject({ attemptCount: 1, blockedUntil: null });
+		expect(publishTripped.blockedUntil?.toISOString()).toBe(expectedBlockedUntil.toISOString());
+		expect(publishHammered.attemptCount).toBe(2);
+		expect(publishHammered.windowStartedAt.toISOString()).toBe(windowStart.toISOString());
+		expect(publishHammered.blockedUntil?.toISOString()).toBe(expectedBlockedUntil.toISOString());
+	});
+
+	it('freezes a blocked auth actor without extending its block', async () => {
+		const { AuthRateLimitError, recordFailure } = await import('$lib/server/auth/rate-limit');
+		const { AUTH_RATE_LIMITS } = await import('$lib/server/auth/config');
+
+		const readRow = async () => {
+			const [row] = await sql`
+				select attempt_count, blocked_until, window_started_at, last_attempt_at
+				from app.auth_rate_limits
+				where kind = 'login' and actor_key = ${'login:viewer-1_nick:127.0.0.1'}
+			`;
+
+			return row as {
+				attempt_count: number;
+				blocked_until: Date | null;
+				last_attempt_at: Date;
+				window_started_at: Date;
+			};
+		};
+
+		for (let attempt = 1; attempt < AUTH_RATE_LIMITS.login.maxFailures; attempt += 1) {
+			await recordFailure('login', 'viewer-1_nick', '127.0.0.1');
+			expect((await readRow()).attempt_count).toBe(attempt);
+		}
+
+		await expect(recordFailure('login', 'viewer-1_nick', '127.0.0.1')).rejects.toBeInstanceOf(
+			AuthRateLimitError
+		);
+
+		const blocked = await readRow();
+		expect(blocked.attempt_count).toBe(AUTH_RATE_LIMITS.login.maxFailures);
+		expect(blocked.blocked_until).not.toBeNull();
+
+		await expect(recordFailure('login', 'viewer-1_nick', '127.0.0.1')).rejects.toBeInstanceOf(
+			AuthRateLimitError
+		);
+
+		const hammered = await readRow();
+		expect(hammered.attempt_count).toBe(blocked.attempt_count);
+		expect(hammered.blocked_until?.getTime()).toBe(blocked.blocked_until?.getTime());
+		expect(hammered.window_started_at.getTime()).toBe(blocked.window_started_at.getTime());
+		expect(hammered.last_attempt_at.getTime()).toBeGreaterThanOrEqual(
+			blocked.last_attempt_at.getTime()
+		);
 	});
 
 	it('draws a random artwork only from visible rows', async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { applyRateLimitAttempt } from '$lib/server/db/fixtures/rate-limit';
 import { ArtworkFlowError } from './errors';
 import { deleteArtwork, publishArtwork } from './service';
 import type {
@@ -135,11 +136,7 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 		removeVote: async () => {
 			throw new Error('not implemented in read tests');
 		},
-		findEngagementRateLimit: async () => null,
-		createEngagementRateLimit: async () => {
-			throw new Error('not implemented in read tests');
-		},
-		updateEngagementRateLimit: async () => {
+		recordEngagementRateLimitAttempt: async () => {
 			throw new Error('not implemented in read tests');
 		},
 		listCommentsByArtworkId: async () => [],
@@ -213,21 +210,10 @@ const createWriteRepository = (artworks: Map<string, ArtworkRecord>) => {
 			throw new Error('not implemented in read tests');
 		},
 		findPublishRateLimit: async (actorKey: string) => rateLimits.get(actorKey) ?? null,
-		createPublishRateLimit: async (input) => {
-			const record: PublishRateLimitRecord = {
-				...input
-			};
-
+		recordPublishRateLimitAttempt: async (input) => {
+			const record = applyRateLimitAttempt(rateLimits.get(input.actorKey) ?? null, input);
 			rateLimits.set(record.actorKey, record);
 			return record;
-		},
-		updatePublishRateLimit: async (id: string, input) => {
-			const current = Array.from(rateLimits.values()).find((candidate) => candidate.id === id);
-			if (!current) throw new Error(`Missing publish rate limit ${id}`);
-
-			const next = { ...current, ...input };
-			rateLimits.set(current.actorKey, next);
-			return next;
 		}
 	};
 

@@ -11,6 +11,9 @@ import { ArtworkFlowError, logArtworkFlowFailure } from './errors';
 import { artworkRepository } from './repository';
 import { supabaseArtworkStorage } from './storage';
 import { checkTextModeration } from '$lib/server/moderation/service';
+import { isRateLimitBlocked, type RateLimitPolicy } from '$lib/server/db/rate-limit';
+import { isArtworkReportReason } from '$lib/shared/content/report-reasons';
+import { isArtworkVoteValue } from '$lib/shared/content/votes';
 import { prepareDrawingDocumentForStorage } from '$lib/features/stroke-json/runtime.server';
 import type {
 	ArtworkActorContext,
@@ -162,30 +165,27 @@ const normalizeCommentBody = (body: string) => {
 };
 
 const normalizeVoteValue = (value: string): ArtworkVoteValue => {
-	if (value === 'up' || value === 'down') {
+	if (isArtworkVoteValue(value)) {
 		return value;
 	}
 
 	throw new ArtworkFlowError(400, 'Vote must be either up or down', 'INVALID_VOTE');
 };
 
-const assertEngagementRateLimit = async (
-	kind: ArtworkEngagementRateLimitKind,
-	context: ArtworkActorContext,
-	repository: ArtworkRepository,
-	now: Date,
-	message: string
-) => {
-	const actorKey = getActorKey(context);
-	const record = await repository.findEngagementRateLimit(kind, actorKey);
+// Artwork limits block for exactly as long as the window they were counted in.
+const artworkRateLimitPolicy = (config: {
+	maxAttempts: number;
+	windowMs: number;
+}): RateLimitPolicy => ({
+	blockAnchor: 'window-start',
+	blockMs: config.windowMs,
+	maxAttempts: config.maxAttempts,
+	windowMs: config.windowMs
+});
 
-	if (record?.blockedUntil && record.blockedUntil > now) {
-		throw new ArtworkFlowError(429, message, 'RATE_LIMITED');
-	}
-
-	return { actorKey, record };
-};
-
+// The upsert counts the attempt and decides the block in one statement, so the
+// row it returns is what the caller answers with: no read-then-write window
+// where two concurrent votes can both slip past the last allowed attempt.
 const recordEngagementAttempt = async (
 	kind: ArtworkEngagementRateLimitKind,
 	context: ArtworkActorContext,
@@ -195,45 +195,15 @@ const recordEngagementAttempt = async (
 	config: { maxAttempts: number; windowMs: number },
 	message: string
 ) => {
-	const { actorKey, record } = await assertEngagementRateLimit(
+	const record = await repository.recordEngagementRateLimitAttempt({
+		actorKey: getActorKey(context),
+		id: nextId(),
 		kind,
-		context,
-		repository,
 		now,
-		message
-	);
-	const withinWindow =
-		record && now.getTime() - record.windowStartedAt.getTime() <= config.windowMs;
-	const attemptCount = withinWindow ? record.attemptCount + 1 : 1;
-	const windowStartedAt = withinWindow && record ? record.windowStartedAt : now;
-	const blockedUntil =
-		attemptCount >= config.maxAttempts
-			? new Date(windowStartedAt.getTime() + config.windowMs)
-			: null;
+		policy: artworkRateLimitPolicy(config)
+	});
 
-	if (!record) {
-		await repository.createEngagementRateLimit({
-			actorKey,
-			attemptCount,
-			blockedUntil,
-			createdAt: now,
-			id: nextId(),
-			kind,
-			lastAttemptAt: now,
-			updatedAt: now,
-			windowStartedAt
-		});
-	} else {
-		await repository.updateEngagementRateLimit(record.id, {
-			attemptCount,
-			blockedUntil,
-			lastAttemptAt: now,
-			updatedAt: now,
-			windowStartedAt
-		});
-	}
-
-	if (blockedUntil) {
+	if (isRateLimitBlocked(record, now)) {
 		throw new ArtworkFlowError(429, message, 'RATE_LIMITED');
 	}
 };
@@ -243,8 +213,7 @@ const assertPublishRateLimit = async (
 	repository: ArtworkRepository,
 	now: Date
 ) => {
-	const actorKey = getActorKey(context);
-	const record = await repository.findPublishRateLimit(actorKey);
+	const record = await repository.findPublishRateLimit(getActorKey(context));
 
 	if (record?.blockedUntil && record.blockedUntil > now) {
 		throw new ArtworkFlowError(
@@ -253,50 +222,22 @@ const assertPublishRateLimit = async (
 			'RATE_LIMITED'
 		);
 	}
-
-	return { actorKey, record };
 };
 
+// Runs after the publish succeeded, so it only counts: `assertPublishRateLimit`
+// at the top of `publishArtwork` is the gate that rejects a blocked author, and
+// the attempt that trips the limit still completes.
 const recordPublishAttempt = async (
 	context: ArtworkActorContext,
 	repository: ArtworkRepository,
 	now: Date,
 	generateIdValue: () => string
 ) => {
-	const { actorKey, record } = await assertPublishRateLimit(context, repository, now);
-	const withinWindow =
-		record &&
-		now.getTime() - record.windowStartedAt.getTime() <= ARTWORK_PUBLISH_RATE_LIMIT.windowMs;
-	const attemptCount = withinWindow ? (record?.attemptCount ?? 0) + 1 : 1;
-	const windowStartedAt = withinWindow && record ? record.windowStartedAt : now;
-	const blockedUntil =
-		attemptCount >= ARTWORK_PUBLISH_RATE_LIMIT.maxAttempts
-			? new Date(windowStartedAt.getTime() + ARTWORK_PUBLISH_RATE_LIMIT.windowMs)
-			: null;
-
-	if (!record) {
-		await repository.createPublishRateLimit({
-			actorKey,
-			attemptCount,
-			blockedUntil,
-			createdAt: now,
-			id: generateIdValue(),
-			lastAttemptAt: now,
-			updatedAt: now,
-			windowStartedAt
-		});
-		return;
-	}
-
-	// No throw here: `blockedUntil` is always `windowStartedAt + windowMs`, i.e.
-	// strictly in the future, so the attempt that trips the limit still
-	// completes and `assertPublishRateLimit` rejects the next one.
-	await repository.updatePublishRateLimit(record.id, {
-		attemptCount,
-		blockedUntil,
-		lastAttemptAt: now,
-		updatedAt: now,
-		windowStartedAt
+	await repository.recordPublishRateLimitAttempt({
+		actorKey: getActorKey(context),
+		id: generateIdValue(),
+		now,
+		policy: artworkRateLimitPolicy(ARTWORK_PUBLISH_RATE_LIMIT)
 	});
 };
 
@@ -432,19 +373,9 @@ const assertModerator = (context: Partial<ArtworkActorContext>) => {
 
 const normalizeReportReason = (reason: string): ArtworkReportReason => {
 	const normalized = reason.trim();
-	const reasons: ArtworkReportReason[] = [
-		'spam',
-		'harassment',
-		'hate',
-		'sexual_content',
-		'violence',
-		'misinformation',
-		'copyright',
-		'other'
-	];
 
-	if (reasons.includes(normalized as ArtworkReportReason)) {
-		return normalized as ArtworkReportReason;
+	if (isArtworkReportReason(normalized)) {
+		return normalized;
 	}
 
 	throw new ArtworkFlowError(400, 'Unsupported report reason', 'INVALID_REPORT_REASON');

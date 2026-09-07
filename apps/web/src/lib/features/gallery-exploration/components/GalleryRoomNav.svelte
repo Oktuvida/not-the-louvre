@@ -7,6 +7,7 @@
 		type GalleryRoomId
 	} from '$lib/features/gallery-exploration/model/rooms';
 	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
+	import type { Viewer } from '$lib/shared/viewer';
 
 	const roomIcons = {
 		'hall-of-fame': Trophy,
@@ -20,7 +21,7 @@
 		viewer = null
 	}: {
 		roomId: GalleryRoomId;
-		viewer?: { id: string; role: 'admin' | 'moderator' | 'user' } | null;
+		viewer?: Viewer | null;
 	} = $props();
 
 	const roomVariants: Record<GalleryRoomId, 'accent' | 'danger' | 'primary' | 'secondary'> = {

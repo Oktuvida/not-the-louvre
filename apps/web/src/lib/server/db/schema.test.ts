@@ -48,6 +48,27 @@ describe('database schema namespaces', () => {
 		expect(moderationTextPolicyContext.schema).toBe('app');
 	});
 
+	// The four enums below are derived from the shared vocabularies so the API,
+	// the client and the database cannot drift. Drizzle-kit diffs enum member
+	// ORDER, so reordering one of those arrays would emit a spurious ALTER TYPE
+	// against production: these literals are the order the committed migrations
+	// created the types with, and they are what stops that happening silently.
+	it('keeps the derived enums in the exact order the migrations created them', () => {
+		expect(userRole.enumValues).toEqual(['user', 'moderator', 'admin']);
+		expect(artworkVoteValue.enumValues).toEqual(['up', 'down']);
+		expect(artworkReportReason.enumValues).toEqual([
+			'spam',
+			'harassment',
+			'hate',
+			'sexual_content',
+			'violence',
+			'misinformation',
+			'copyright',
+			'other'
+		]);
+		expect(contentReportStatus.enumValues).toEqual(['pending', 'reviewed', 'actioned']);
+	});
+
 	it('places Better Auth tables in the better_auth schema', () => {
 		expect(getTableConfig(user).schema).toBe('better_auth');
 		expect(getTableConfig(session).schema).toBe('better_auth');

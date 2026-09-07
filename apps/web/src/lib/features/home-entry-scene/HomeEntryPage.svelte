@@ -11,7 +11,6 @@
 		HomePreviewCard,
 		HomeSceneArtworkSlot
 	} from '$lib/features/home-entry-scene/state/home-entry.svelte';
-	import FadeOverlay from '$lib/features/home-entry-scene/components/FadeOverlay.svelte';
 	import HomeHeroOverlay from '$lib/features/home-entry-scene/components/HomeHeroOverlay.svelte';
 	import PersistentNav from '$lib/features/home-entry-scene/components/PersistentNav.svelte';
 	import StudioLoadingFallback from '$lib/features/shared-3d-world/components/StudioLoadingFallback.svelte';
@@ -23,6 +22,8 @@
 	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
 	import type { EntryFlowState } from '$lib/features/home-entry-scene/state/entry-state.svelte';
 	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
+	import { PAGE_FADE_DURATION_MS } from '$lib/features/shared-ui/page-fade';
 	import { scheduleStudioBackgroundWarmup } from '$lib/features/shared-ui/studio-background-warmup';
 
 	let {
@@ -47,9 +48,12 @@
 		user?: HomeAuthUser | null;
 	} = $props();
 
-	const FADE_DURATION = 0.4;
+	/** The shared veil's own duration, in the seconds GSAP's timeline speaks. */
+	const FADE_DURATION_S = PAGE_FADE_DURATION_MS / 1000;
 	const GALLERY_EXIT_HOLD = 2;
 	const TOP_CLOSE_DURATION = 2;
+	/** A beat of reverse camera move before the veil starts lifting. */
+	const RETURN_FADE_DELAY_MS = 150;
 	/** Hard ceiling on the returning veil, whatever the state machine does. */
 	const RETURN_FADE_SAFETY_MS = 1000;
 
@@ -68,8 +72,10 @@
 	let initialPose: 'default' | 'left-wall' | 'top-close' = resolveInitialPose();
 	let isExiting = $state(false);
 	let isReturningActive = $state(isReturning);
-	let fadeOverlayVisible = $state(isReturning);
-	let fadeOverlayOpacity = $state(isReturning ? 1 : 0);
+	/** Opaque from the first frame when the visitor comes back from a room. */
+	let returnVeilVisible = $state(isReturning);
+	let exitVeilVisible = $state(false);
+	let exitTarget = $state<string | null>(null);
 
 	/*
 	 * three.js + threlte + GLTF + DRACO are ~344KB gz — three times the rest of
@@ -87,11 +93,8 @@
 	const sceneFailed = $derived(sceneMediaState === 'error');
 
 	let exitDelayedCall: gsap.core.Tween | null = null;
-	let exitFadeTween: gsap.core.Tween | null = null;
-	let returnFadeTween: gsap.core.Tween | null = null;
 	let returnFadeSafetyHandle: ReturnType<typeof setTimeout> | null = null;
 	let returnFadeStarted = false;
-	let destroyed = false;
 
 	/** Clean the ?from= param from the URL without triggering navigation. */
 	if (browser && isReturning) {
@@ -131,13 +134,12 @@
 	/*
 	 * Teardown-only effect. Everything scheduled here outlives the component
 	 * otherwise: the 2s delayedCall in particular used to fire after the visitor
-	 * had already navigated somewhere else and drag them into the gallery.
+	 * had already navigated somewhere else and drag them into the gallery. The
+	 * veil itself needs no teardown — PageFadeOverlay drops its own callback
+	 * when it is destroyed.
 	 */
 	$effect(() => () => {
-		destroyed = true;
 		exitDelayedCall?.kill();
-		exitFadeTween?.kill();
-		returnFadeTween?.kill();
 
 		if (returnFadeSafetyHandle !== null) {
 			clearTimeout(returnFadeSafetyHandle);
@@ -152,8 +154,7 @@
 	});
 
 	const clearReturnOverlay = () => {
-		fadeOverlayOpacity = 0;
-		fadeOverlayVisible = false;
+		returnVeilVisible = false;
 		isReturningActive = false;
 	};
 
@@ -164,8 +165,8 @@
 	 * The fade is deliberately NOT gated on `entryState === 'inside'`: a visitor
 	 * who signs up and has not finished their avatar comes back in `auth-signup`,
 	 * and gating there left the opaque veil on screen forever with no escape but
-	 * a reload. The latch keeps a mid-flight state change from starting a second
-	 * tween whose onUpdate would fight the first one over the same opacity.
+	 * a reload. The latch keeps a mid-flight state change from restarting the
+	 * lift once it is already under way.
 	 */
 	$effect(() => {
 		if (!isReturningActive) return;
@@ -178,22 +179,27 @@
 		if (returnFadeStarted) return;
 		returnFadeStarted = true;
 
-		const fade = { opacity: 1 };
-		returnFadeTween = gsap.to(fade, {
-			opacity: 0,
-			duration: 0.5,
-			delay: 0.15,
-			ease: 'power2.out',
-			onUpdate: () => {
-				fadeOverlayOpacity = fade.opacity;
-			},
-			onComplete: clearReturnOverlay
-		});
+		// Hands the veil to PageFadeOverlay, which holds it for RETURN_FADE_DELAY_MS
+		// and then lifts it.
+		returnVeilVisible = false;
 
 		// Idempotent safety net, guarded by the same latch: the veil can never
-		// outlive ~1s even if the tween never completes.
+		// outlive ~1s even if the transition never reports back.
 		returnFadeSafetyHandle = setTimeout(clearReturnOverlay, RETURN_FADE_SAFETY_MS);
 	});
+
+	/** Drops the veil over the page; navigation happens when it is down. */
+	const startExitTo = (target: string) => {
+		exitTarget = target;
+		exitVeilVisible = true;
+	};
+
+	const completeExit = () => {
+		if (!exitTarget) return;
+
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- both targets are resolved routes, extended with query params in navigation-warmup
+		void goto(exitTarget);
+	};
 
 	/** Called by PersistentNav when the GALLERY button is clicked. */
 	const handleGalleryNavigate = () => {
@@ -211,21 +217,7 @@
 		const holdSeconds = prefersReducedMotion() ? 0 : GALLERY_EXIT_HOLD;
 
 		exitDelayedCall = gsap.delayedCall(holdSeconds, () => {
-			fadeOverlayVisible = true;
-			const fade = { opacity: 0 };
-			exitFadeTween = gsap.to(fade, {
-				opacity: 1,
-				duration: FADE_DURATION,
-				ease: 'power2.in',
-				onUpdate: () => {
-					fadeOverlayOpacity = fade.opacity;
-				},
-				onComplete: () => {
-					if (destroyed) return;
-					// eslint-disable-next-line svelte/no-navigation-without-resolve -- homeGalleryTarget is a resolved route extended with query params
-					void goto(homeGalleryTarget);
-				}
-			});
+			startExitTo(homeGalleryTarget);
 		});
 	};
 
@@ -238,28 +230,14 @@
 		warmNavigationTargetWhenIdle(homeStudioTarget);
 
 		// Start the fade overlay near the end of the camera animation so
-		// navigation overlaps with the final stretch. The fade itself is 0.4s,
-		// so we begin it (duration − 0.55)s into the animation.
+		// navigation overlaps with the final stretch: the veil takes
+		// FADE_DURATION_S, so we begin it (duration − veil − 0.15)s in.
 		const fadeDelay = prefersReducedMotion()
 			? 0
-			: Math.max(0, TOP_CLOSE_DURATION - FADE_DURATION - 0.15);
+			: Math.max(0, TOP_CLOSE_DURATION - FADE_DURATION_S - 0.15);
 
 		exitDelayedCall = gsap.delayedCall(fadeDelay, () => {
-			fadeOverlayVisible = true;
-			const fade = { opacity: 0 };
-			exitFadeTween = gsap.to(fade, {
-				opacity: 1,
-				duration: FADE_DURATION,
-				ease: 'power2.in',
-				onUpdate: () => {
-					fadeOverlayOpacity = fade.opacity;
-				},
-				onComplete: () => {
-					if (destroyed) return;
-					// eslint-disable-next-line svelte/no-navigation-without-resolve -- homeStudioTarget is resolved in navigation-warmup
-					void goto(homeStudioTarget);
-				}
-			});
+			startExitTo(homeStudioTarget);
 		});
 	};
 </script>
@@ -337,4 +315,13 @@
 	{@render children?.()}
 </div>
 
-<FadeOverlay opacity={fadeOverlayOpacity} visible={fadeOverlayVisible} />
+<!-- Arriving back from a room: the veil is already down and lifts itself. -->
+<PageFadeOverlay
+	delayMs={RETURN_FADE_DELAY_MS}
+	direction="out"
+	onComplete={clearReturnOverlay}
+	visible={returnVeilVisible}
+/>
+
+<!-- Leaving for one: the veil drops over the camera move, then we navigate. -->
+<PageFadeOverlay direction="in" onComplete={completeExit} visible={exitVeilVisible} />

@@ -160,22 +160,6 @@ pub fn serialize_canonical_document(document_json: &[u8]) -> Result<Vec<u8>, Str
     serialize_document_v2(&normalize_document_to_canonical_v2(&document))
 }
 
-pub fn encode_validated_document(document: &DrawingDocumentV2) -> Result<Vec<u8>, StrokeJsonError> {
-    encode_validated_document_with_limits(document, StrokeJsonDocumentLimits::default())
-}
-
-pub fn encode_validated_document_with_limits(
-    document: &DrawingDocumentV2,
-    limits: StrokeJsonDocumentLimits,
-) -> Result<Vec<u8>, StrokeJsonError> {
-    let wrapped_document = DrawingDocument::V2(document.clone());
-    validate_document_shape(&wrapped_document)?;
-    assert_document_complexity_limits(&wrapped_document, limits)?;
-
-    let canonical_json = serialize_document_v2(document)?;
-    compress_canonical_json(&canonical_json, limits)
-}
-
 pub fn prepare_storage_document(
     document_json: &[u8],
 ) -> Result<StrokeJsonPreparedStorageDocument, StrokeJsonError> {

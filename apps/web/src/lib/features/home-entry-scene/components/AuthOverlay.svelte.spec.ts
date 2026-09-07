@@ -1,6 +1,9 @@
 import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+// The paper is a global utility, which the browser project does not load for a
+// component under test; the sheet's own material is what one case below checks.
+import '$lib/features/shared-ui/styles/utilities.css';
 import AuthOverlay from './AuthOverlay.svelte';
 
 describe('AuthOverlay', () => {
@@ -409,6 +412,34 @@ describe('AuthOverlay', () => {
 			.element(page.getByText('Sketch a quick self-portrait for artist_1.'))
 			.toBeVisible();
 		await expect.element(page.getByRole('textbox')).not.toBeInTheDocument();
+	});
+
+	// The auth sheet is the reference paper the rest of the museum drifted away
+	// from: the tool tray a click later carried a shadow 12% lighter, and its own
+	// copy of the same grain tile. Both wear the shared utilities now.
+	it('is printed on the shared museum paper', async () => {
+		render(AuthOverlay, { dispatch: vi.fn(), entryState: 'auth-login' });
+
+		const sheet = document.querySelector<HTMLElement>('.paper-sheet');
+		expect(sheet).not.toBeNull();
+
+		const styles = getComputedStyle(sheet as HTMLElement);
+		expect(styles.backgroundColor).toBe('rgb(251, 247, 240)');
+		expect(styles.borderRadius).toBe('3px');
+		expect(styles.boxShadow).toContain('rgba(0, 0, 0, 0.32) 4px 6px 16px');
+		expect(styles.boxShadow).toContain('rgba(0, 0, 0, 0.18) 1px 2px 4px');
+
+		// The sheet scrolls, so its grain rides the inner element with the content.
+		const grained = document.querySelector<HTMLElement>('.auth-sheet-inner');
+		expect(grained?.classList.contains('paper-grain')).toBe(true);
+		expect(getComputedStyle(grained as HTMLElement, '::before').backgroundImage).toContain(
+			'feTurbulence'
+		);
+
+		const swipe = document.querySelector<HTMLElement>('.auth-sheet-swipe');
+		expect(getComputedStyle(swipe as HTMLElement).backgroundImage).toContain(
+			'rgba(212, 131, 74, 0.75)'
+		);
 	});
 
 	it('notifies the controller when the avatar step is dismissed', async () => {

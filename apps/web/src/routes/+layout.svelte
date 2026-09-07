@@ -72,6 +72,11 @@
 	// once so a page can never end up with two competing <title> elements.
 	const routeMeta = $derived(readRouteMeta(page.data));
 	const pathname = $derived(page.url?.pathname);
+	// `+error.svelte` has no `load`, so it cannot contribute `meta` the way the
+	// real routes do, and `page.data` here still holds whatever the layout load
+	// returned — which would title a 404 after the page the visitor never
+	// reached. The status is the only title an error page can carry.
+	const documentTitle = $derived(page.error ? String(page.status) : routeMeta.title);
 
 	onMount(() => {
 		const handleFaviconUpdate = (event: Event) => {
@@ -105,7 +110,7 @@
 	/>
 </svelte:head>
 
-<SiteMeta title={routeMeta.title} description={routeMeta.description} {pathname} />
+<SiteMeta title={documentTitle} description={routeMeta.description} {pathname} />
 
 {@render children()}
 
