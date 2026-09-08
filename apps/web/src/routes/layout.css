@@ -187,70 +187,79 @@
  * `<style>` block, so `:global(...)` is never compiled away — it shipped
  * verbatim into the stylesheet, where it is not a valid selector, so browsers
  * dropped every one of these rules. They had never rendered.
+ *
+ * They live in `@layer base`, next to Tailwind's preflight, on purpose: an
+ * unlayered element rule beats EVERY layered one, so a bare
+ * `button { font: inherit }` here silently overrode the sticker controls'
+ * `@layer components` typography (Come In rendered in the body font). Base
+ * is the right altitude for document defaults — components and utilities
+ * are meant to win over them.
  */
-html {
-	background: var(--color-ink);
-	color: var(--color-paper);
-	/* The document font comes from `--default-font-family` in the @theme block
-	   above, via Tailwind's preflight. Declaring it again here would be a
-	   second source of truth for the same thing. */
-}
+@layer base {
+	html {
+		background: var(--color-ink);
+		color: var(--color-paper);
+		/* The document font comes from `--default-font-family` in the @theme block
+		   above, via Tailwind's preflight. Declaring it again here would be a
+		   second source of truth for the same thing. */
+	}
 
-body {
-	margin: 0;
-	min-height: 100vh;
-	background:
-		radial-gradient(circle at top, rgb(255 255 255 / 0.16), transparent 32%),
-		linear-gradient(180deg, #f4ede0 0%, #e7dccf 100%);
-	color: var(--color-ink);
-}
+	body {
+		margin: 0;
+		min-height: 100vh;
+		background:
+			radial-gradient(circle at top, rgb(255 255 255 / 0.16), transparent 32%),
+			linear-gradient(180deg, #f4ede0 0%, #e7dccf 100%);
+		color: var(--color-ink);
+	}
 
-*,
-*::before,
-*::after {
-	box-sizing: border-box;
-}
+	*,
+	*::before,
+	*::after {
+		box-sizing: border-box;
+	}
 
-a {
-	color: inherit;
-	text-decoration: none;
-}
+	a {
+		color: inherit;
+		text-decoration: none;
+	}
 
-button,
-input,
-textarea {
-	font: inherit;
-}
+	button,
+	input,
+	textarea {
+		font: inherit;
+	}
 
-/* Keep rapid consecutive taps as clicks instead of double-tap zoom on touch devices */
-button,
-a,
-[role='button'] {
-	touch-action: manipulation;
-}
+	/* Keep rapid consecutive taps as clicks instead of double-tap zoom on touch devices */
+	button,
+	a,
+	[role='button'] {
+		touch-action: manipulation;
+	}
 
-::selection {
-	background: rgb(212 131 74 / 0.24);
-}
+	::selection {
+		background: rgb(212 131 74 / 0.24);
+	}
 
-::-webkit-scrollbar {
-	width: 12px;
-	height: 12px;
-}
+	::-webkit-scrollbar {
+		width: 12px;
+		height: 12px;
+	}
 
-::-webkit-scrollbar-track {
-	background: var(--color-frame-line);
-	border-radius: var(--radius-tab);
-}
+	::-webkit-scrollbar-track {
+		background: var(--color-frame-line);
+		border-radius: var(--radius-tab);
+	}
 
-::-webkit-scrollbar-thumb {
-	background: var(--color-sage);
-	border-radius: var(--radius-tab);
-	border: 2px solid var(--color-frame-line);
-}
+	::-webkit-scrollbar-thumb {
+		background: var(--color-sage);
+		border-radius: var(--radius-tab);
+		border: 2px solid var(--color-frame-line);
+	}
 
-::-webkit-scrollbar-thumb:hover {
-	background: #6b8e7f;
+	::-webkit-scrollbar-thumb:hover {
+		background: #6b8e7f;
+	}
 }
 
 /*
