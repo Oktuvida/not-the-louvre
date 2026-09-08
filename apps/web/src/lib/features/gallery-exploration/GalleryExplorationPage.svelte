@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Brush } from 'lucide-svelte';
 	import { browser } from '$app/environment';
 	import { goto, invalidateAll, pushState, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -790,6 +791,7 @@
 			{#if !viewer}
 				<div class="mt-6 flex justify-center">
 					<GameLink href="/" variant="primary" size="sm">
+						<Brush class="h-5 w-5" />
 						<span class="font-semibold">Join &amp; draw</span>
 					</GameLink>
 				</div>
