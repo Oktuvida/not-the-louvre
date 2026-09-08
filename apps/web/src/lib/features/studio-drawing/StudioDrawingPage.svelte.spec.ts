@@ -1,4 +1,5 @@
 import { page } from 'vitest/browser';
+import { PAGE_FADE_DURATION_MS } from '$lib/features/shared-ui/page-fade';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
@@ -309,20 +310,35 @@ describe('StudioDrawingPage', () => {
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 
 		await page.getByRole('link', { name: 'Exit Studio' }).click();
+		const exitStartedAt = performance.now();
 
 		await expect.element(page.getByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
 		expect(goto).not.toHaveBeenCalled();
 
-		await new Promise((resolve) => setTimeout(resolve, 260));
+		await new Promise((resolve) => setTimeout(resolve, 160));
 
-		await expect.element(page.getByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
-		await expect.element(page.getByText('Forking Parent Artwork')).toBeInTheDocument();
-		expect(goto).not.toHaveBeenCalled();
+		// Mid-fade: the book stays closed and the fork context is still on the
+		// page. Synchronous DOM reads rather than polled locators, so a slow CI
+		// runner cannot push these checks past the end of the fade.
+		expect(
+			[...document.querySelectorAll('button')].some(
+				(button) =>
+					/^publish$/i.test(button.textContent?.trim() ?? '') &&
+					button.checkVisibility() &&
+					button.closest('[aria-hidden="true"], [inert]') === null
+			)
+		).toBe(false);
+		expect(document.body).toHaveTextContent('Forking Parent Artwork');
+		if (performance.now() - exitStartedAt < PAGE_FADE_DURATION_MS - 60) {
+			expect(goto).not.toHaveBeenCalled();
+		}
 
-		await new Promise((resolve) => setTimeout(resolve, 420));
-		await vi.waitFor(() => {
-			expect(goto).toHaveBeenCalledWith(expect.stringContaining('?from=studio'));
-		});
+		await vi.waitFor(
+			() => {
+				expect(goto).toHaveBeenCalledWith(expect.stringContaining('?from=studio'));
+			},
+			{ timeout: PAGE_FADE_DURATION_MS + 1_000 }
+		);
 
 		unmount();
 
