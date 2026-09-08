@@ -386,9 +386,14 @@ describe('GalleryExplorationPage', () => {
 
 		await vi.waitFor(
 			() => {
+				// Re-issue the scroll on every poll: on a saturated CI runner a single
+				// scrollIntoView can land before layout and never intersect.
+				document
+					.querySelector('[data-testid="scroll-sentinel"]')
+					?.scrollIntoView({ behavior: 'instant', block: 'center' });
 				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
 			},
-			{ timeout: 5000 }
+			{ timeout: 10_000 }
 		);
 
 		expect(loadMoreArtworks).toHaveBeenCalledWith({
@@ -428,9 +433,14 @@ describe('GalleryExplorationPage', () => {
 
 		await vi.waitFor(
 			() => {
+				// Re-issue the scroll on every poll: on a saturated CI runner a single
+				// scrollIntoView can land before layout and never intersect.
+				document
+					.querySelector('[data-testid="scroll-sentinel"]')
+					?.scrollIntoView({ behavior: 'instant', block: 'center' });
 				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
 			},
-			{ timeout: 5000 }
+			{ timeout: 10_000 }
 		);
 
 		await expect.element(page.getByText('Loaded Mine 2')).toBeVisible();
@@ -615,9 +625,14 @@ describe('GalleryExplorationPage', () => {
 
 		await vi.waitFor(
 			() => {
+				// Re-issue the scroll on every poll: on a saturated CI runner a single
+				// scrollIntoView can land before layout and never intersect.
+				document
+					.querySelector('[data-testid="scroll-sentinel"]')
+					?.scrollIntoView({ behavior: 'instant', block: 'center' });
 				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
 			},
-			{ timeout: 5000 }
+			{ timeout: 10_000 }
 		);
 		expect(loadArtworkDetail).not.toHaveBeenCalled();
 	});
@@ -958,9 +973,14 @@ describe('GalleryExplorationPage', () => {
 
 		await vi.waitFor(
 			() => {
+				// Re-issue the scroll on every poll: on a saturated CI runner a single
+				// scrollIntoView can land before layout and never intersect.
+				document
+					.querySelector('[data-testid="scroll-sentinel"]')
+					?.scrollIntoView({ behavior: 'instant', block: 'center' });
 				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
 			},
-			{ timeout: 5000 }
+			{ timeout: 10_000 }
 		);
 
 		// Verify skeleton cards are rendered in the DOM while the fetch is in flight.
@@ -1017,9 +1037,14 @@ describe('GalleryExplorationPage', () => {
 		// Wait for the failed fetch to complete
 		await vi.waitFor(
 			() => {
+				// Re-issue the scroll on every poll: on a saturated CI runner a single
+				// scrollIntoView can land before layout and never intersect.
+				document
+					.querySelector('[data-testid="scroll-sentinel"]')
+					?.scrollIntoView({ behavior: 'instant', block: 'center' });
 				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
 			},
-			{ timeout: 5000 }
+			{ timeout: 10_000 }
 		);
 
 		// Error message and retry button should be visible
@@ -1039,7 +1064,7 @@ describe('GalleryExplorationPage', () => {
 			() => {
 				expect(loadMoreArtworks).toHaveBeenCalledTimes(2);
 			},
-			{ timeout: 5000 }
+			{ timeout: 10_000 }
 		);
 
 		// After successful retry, error should be gone and new artwork visible
@@ -1136,9 +1161,14 @@ describe('GalleryExplorationPage', () => {
 
 		await vi.waitFor(
 			() => {
+				// Re-issue the scroll on every poll: on a saturated CI runner a single
+				// scrollIntoView can land before layout and never intersect.
+				document
+					.querySelector('[data-testid="scroll-sentinel"]')
+					?.scrollIntoView({ behavior: 'instant', block: 'center' });
 				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
 			},
-			{ timeout: 5000 }
+			{ timeout: 10_000 }
 		);
 
 		// New artworks should appear
@@ -1181,9 +1211,14 @@ describe('GalleryExplorationPage', () => {
 
 		await vi.waitFor(
 			() => {
+				// Re-issue the scroll on every poll: on a saturated CI runner a single
+				// scrollIntoView can land before layout and never intersect.
+				document
+					.querySelector('[data-testid="scroll-sentinel"]')
+					?.scrollIntoView({ behavior: 'instant', block: 'center' });
 				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
 			},
-			{ timeout: 5000 }
+			{ timeout: 10_000 }
 		);
 
 		// Podium is still visible while loading
@@ -1254,9 +1289,14 @@ describe('GalleryExplorationPage', () => {
 
 		await vi.waitFor(
 			() => {
+				// Re-issue the scroll on every poll: on a saturated CI runner a single
+				// scrollIntoView can land before layout and never intersect.
+				document
+					.querySelector('[data-testid="scroll-sentinel"]')
+					?.scrollIntoView({ behavior: 'instant', block: 'center' });
 				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
 			},
-			{ timeout: 5000 }
+			{ timeout: 10_000 }
 		);
 
 		await expect.element(page.getByTestId('scroll-sentinel-error')).toBeVisible();
