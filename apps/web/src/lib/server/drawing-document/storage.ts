@@ -9,10 +9,10 @@ import {
 	toEditableV2
 } from '#lib/stroke/legacy.js';
 
-// Drawings are stored as canonical version 2 documents, gzipped and base64-encoded
-// (chunked-write.ts explains why the text is written in pieces).
+// Drawings are stored as canonical version 2 documents, gzipped
+// (document-store.ts keeps the bytes).
 export type PreparedDrawingDocument = {
-	compressedDocumentBase64: string;
+	compressed: Uint8Array<ArrayBuffer>;
 	document: DrawingDocumentV2;
 	version: 2;
 };
@@ -33,22 +33,17 @@ export const prepareDrawingDocumentForStorage = async (
 	try {
 		const document = toCanonicalV2(parseLegacyDocument(documentJson));
 		const compressed = await encodeLegacyPayload(JSON.stringify(document));
-		return {
-			compressedDocumentBase64: Buffer.from(compressed).toString('base64'),
-			document,
-			version: 2
-		};
+		return { compressed, document, version: 2 };
 	} catch (error) {
 		throw toArtworkFlowError(error);
 	}
 };
 
-export const decodeCompressedDrawingDocumentToEditableDocument = async (
-	payloadBase64: string
+export const decodeDrawingDocument = async (
+	compressed: Uint8Array<ArrayBuffer>
 ): Promise<DrawingDocumentV2> => {
 	try {
-		const payload = Uint8Array.from(Buffer.from(payloadBase64, 'base64'));
-		return toEditableV2(parseLegacyDocument(await decodeLegacyPayload(payload)));
+		return toEditableV2(parseLegacyDocument(await decodeLegacyPayload(compressed)));
 	} catch (error) {
 		throw toArtworkFlowError(error);
 	}

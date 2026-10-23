@@ -5,6 +5,7 @@ import { getPlatformProxy, type PlatformProxy } from 'wrangler';
 import type { AppBucket } from '#lib/server/platform.js';
 import {
 	createEmptyDrawingDocument,
+	getRenderableDrawingStrokes,
 	serializeDrawingDocument
 } from '#lib/features/stroke-json/document.js';
 
@@ -148,15 +149,12 @@ describeWithDatabase('avatar backend integration', () => {
 				new RegExp(`^/api/users/${userId}/avatar\\?v=[0-9a-f]{16}$`)
 			);
 
-			const [storedUser] = await sql<
-				Array<{ avatar_document: string | null; avatar_url: string | null }>
-			>`
-				select avatar_document, avatar_url
+			const [storedUser] = await sql<Array<{ avatar_url: string | null }>>`
+				select avatar_url
 				from app.users
 				where id = ${userId}
 			`;
 
-			expect(storedUser?.avatar_document).toBeTruthy();
 			expect(storedUser?.avatar_url).toMatch(new RegExp(`^avatars/${userId}/[0-9a-f]{16}\\.webp$`));
 
 			const getResponse = await avatarModule.GET({
@@ -201,6 +199,68 @@ describeWithDatabase('avatar backend integration', () => {
 				code: 'NOT_FOUND',
 				message: 'Avatar not found'
 			});
+		} finally {
+			await deleteUser(sql, userId);
+		}
+	});
+	it('reopens a saved avatar drawing in the editor, kept out of its row', async () => {
+		const userId = `avatar-doc-user-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+		const strokes = [
+			{
+				color: '#2d2420',
+				points: [
+					[40, 40],
+					[128, 160],
+					[220, 90]
+				] as [number, number][],
+				size: 10
+			}
+		];
+
+		try {
+			await insertUser(sql, userId);
+			const formData = new FormData();
+			formData.append(
+				'drawingDocument',
+				JSON.stringify({ ...createEmptyDrawingDocument('avatar'), strokes })
+			);
+
+			const avatarModule = await import('./+server');
+			const uploadResponse = await avatarModule.PUT({
+				locals: { user: makeLocalUser(userId) },
+				params: { userId },
+				request: new Request('http://localhost/api/users/avatar', { body: formData, method: 'PUT' })
+			} as never);
+			expect(uploadResponse.status).toBe(200);
+
+			// The row only names the drawing; the bytes live in object storage.
+			const [row] = await sql<
+				Array<{
+					avatar_document: string | null;
+					avatar_document_key: string | null;
+					avatar_url: string | null;
+				}>
+			>`select avatar_document, avatar_document_key, avatar_url from app.users where id = ${userId}`;
+			expect(row?.avatar_document).toBeNull();
+			expect(row?.avatar_document_key).toMatch(/^documents\/[0-9a-f]{64}\.json\.gz$/);
+
+			const { load } = await import('../../../../+page.server');
+			const data = (await load({
+				locals: {
+					user: {
+						...makeLocalUser(userId),
+						avatarOnboardingCompletedAt: new Date(),
+						avatarUrl: row?.avatar_url ?? null
+					}
+				},
+				parent: async () => ({ adultContentEnabled: false })
+			} as never)) as {
+				auth: {
+					user: { avatarDrawingDocument: Parameters<typeof getRenderableDrawingStrokes>[0] };
+				};
+			};
+
+			expect(getRenderableDrawingStrokes(data.auth.user.avatarDrawingDocument)).toEqual(strokes);
 		} finally {
 			await deleteUser(sql, userId);
 		}

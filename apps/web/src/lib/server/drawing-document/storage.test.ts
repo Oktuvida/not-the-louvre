@@ -1,9 +1,6 @@
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import {
-	decodeCompressedDrawingDocumentToEditableDocument,
-	prepareDrawingDocumentForStorage
-} from './storage';
+import { decodeDrawingDocument, prepareDrawingDocumentForStorage } from './storage';
 
 const artwork = { kind: 'artwork', width: 768, height: 768, background: '#fdfbf7' } as const;
 const stroke = (points: [number, number][], color = '#1d3557', size = 8) => ({
@@ -27,9 +24,7 @@ describe('drawing document storage', () => {
 		};
 
 		const prepared = await prepareDrawingDocumentForStorage(JSON.stringify(drawn));
-		const reopened = await decodeCompressedDrawingDocumentToEditableDocument(
-			prepared.compressedDocumentBase64
-		);
+		const reopened = await decodeDrawingDocument(prepared.compressed);
 
 		expect(prepared.version).toBe(2);
 		expect(prepared.document).toEqual(drawn);
@@ -40,9 +35,7 @@ describe('drawing document storage', () => {
 		const drawn = { version: 1, ...artwork, strokes: [stroke([[10, 10]])] };
 
 		const prepared = await prepareDrawingDocumentForStorage(JSON.stringify(drawn));
-		const stored = JSON.parse(
-			gunzipSync(Buffer.from(prepared.compressedDocumentBase64, 'base64')).toString('utf8')
-		);
+		const stored = JSON.parse(gunzipSync(prepared.compressed).toString('utf8'));
 
 		expect(stored).toEqual({ version: 2, ...artwork, base: drawn.strokes, tail: [] });
 	});
@@ -76,7 +69,7 @@ describe('drawing document storage', () => {
 
 	it('refuses a stored payload that is not a gzip document', async () => {
 		await expect(
-			decodeCompressedDrawingDocumentToEditableDocument(Buffer.from('plain').toString('base64'))
+			decodeDrawingDocument(new TextEncoder().encode('plain') as Uint8Array<ArrayBuffer>)
 		).rejects.toMatchObject({ code: 'INVALID_DRAWING_DOCUMENT', status: 400 });
 	});
 });

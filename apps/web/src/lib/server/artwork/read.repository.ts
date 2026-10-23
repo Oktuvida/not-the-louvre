@@ -120,6 +120,7 @@ const discoverySelect = {
 
 const drawingDocumentSelect = {
 	drawingDocument: artworks.drawingDocument,
+	drawingDocumentKey: artworks.drawingDocumentKey,
 	drawingVersion: artworks.drawingVersion
 };
 
@@ -197,6 +198,7 @@ type ArtworkReadRow = {
 	isHidden: boolean;
 	isNsfw: boolean;
 	drawingDocument?: string | null;
+	drawingDocumentKey?: string | null;
 	drawingVersion?: number | null;
 	mediaContentType: string;
 	mediaPlaceholder?: string | null;
@@ -250,6 +252,7 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	isHidden: row.isHidden,
 	isNsfw: row.isNsfw,
 	drawingDocument: row.drawingDocument ?? null,
+	drawingDocumentKey: row.drawingDocumentKey ?? null,
 	drawingVersion: row.drawingVersion ?? null,
 	mediaContentType: row.mediaContentType,
 	mediaPlaceholder: row.mediaPlaceholder ?? null,

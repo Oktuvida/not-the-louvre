@@ -54,7 +54,11 @@ export const users = appSchema.table(
 			.references(() => user.id, { onDelete: 'cascade' }),
 		nickname: text('nickname').notNull(),
 		recoveryHash: text('recovery_hash').notNull(),
+		// Inline base64 gzip documents from before they moved to object storage;
+		// read until the migration copies them across, then dropped.
 		avatarDocument: text('avatar_document'),
+		// The object-storage key of the avatar drawing, written with the row.
+		avatarDocumentKey: text('avatar_document_key'),
 		avatarDocumentVersion: integer('avatar_document_version'),
 		avatarUrl: text('avatar_url'),
 		avatarOnboardingCompletedAt: timestamp('avatar_onboarding_completed_at'),
@@ -107,7 +111,11 @@ export const artworks = appSchema.table(
 			.references(() => users.id, { onDelete: 'cascade' }),
 		parentId: text('parent_id'),
 		title: text('title').notNull(),
+		// Inline base64 gzip documents from before they moved to object storage;
+		// read until the migration copies them across, then dropped.
 		drawingDocument: text('drawing_document'),
+		// The object-storage key of the drawing, written with the row itself.
+		drawingDocumentKey: text('drawing_document_key'),
 		drawingVersion: integer('drawing_version'),
 		storageKey: text('storage_key').notNull(),
 		mediaContentType: text('media_content_type').notNull(),

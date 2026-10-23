@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 import { db } from '#lib/server/db/index.js';
 import {
 	artworkComments,
@@ -33,14 +33,13 @@ import type {
 	ResolveContentReportsInput
 } from './types';
 
-// Every `artworks` column except `drawing_document`. The document can be
-// hundreds of KiB and no writer's caller reads it back, so RETURNING it only
-// drags it across the pooler again — the exact traffic the chunked write
-// exists to avoid.
+// Every `artworks` column except the legacy inline `drawing_document`, which
+// can be hundreds of KiB that no writer's caller reads back.
 const artworkRecordProjection = {
 	authorId: artworks.authorId,
 	commentCount: artworks.commentCount,
 	createdAt: artworks.createdAt,
+	drawingDocumentKey: artworks.drawingDocumentKey,
 	drawingVersion: artworks.drawingVersion,
 	forkCount: artworks.forkCount,
 	hiddenAt: artworks.hiddenAt,
@@ -77,45 +76,6 @@ export const artworkRepository: ArtworkRepository = {
 	async createArtwork(input) {
 		const [record] = await db.insert(artworks).values(input).returning(artworkRecordProjection);
 		return record as ArtworkRecord;
-	},
-	// The expected-length guard makes each append exactly-once under ambiguous
-	// connection failures: a reissued chunk whose first delivery committed
-	// matches zero rows instead of double-appending.
-	async appendArtworkDrawingDocumentChunk(id, chunk, expectedLength, updatedAt) {
-		const updated = await db
-			.update(artworks)
-			.set({
-				drawingDocument: sql`coalesce(${artworks.drawingDocument}, '') || ${chunk}`,
-				updatedAt
-			})
-			.where(
-				and(
-					eq(artworks.id, id),
-					sql`coalesce(length(${artworks.drawingDocument}), 0) = ${expectedLength}`
-				)
-			)
-			.returning({ id: artworks.id });
-
-		return updated.length > 0;
-	},
-	async finalizeArtworkDrawingDocument(id, version, expectedTotalLength, updatedAt) {
-		const [record] = await db
-			.update(artworks)
-			.set({ drawingVersion: version, updatedAt })
-			.where(
-				and(eq(artworks.id, id), sql`length(${artworks.drawingDocument}) = ${expectedTotalLength}`)
-			)
-			.returning(artworkRecordProjection);
-
-		return (record as ArtworkRecord | undefined) ?? null;
-	},
-	async findArtworkDrawingDocumentLength(id) {
-		const [row] = await db
-			.select({ length: sql<number>`coalesce(length(${artworks.drawingDocument}), 0)` })
-			.from(artworks)
-			.where(eq(artworks.id, id));
-
-		return row ? Number(row.length) : null;
 	},
 	async createContentReport(input: CreateContentReportInput) {
 		const [record] = await db.insert(contentReports).values(input).returning();

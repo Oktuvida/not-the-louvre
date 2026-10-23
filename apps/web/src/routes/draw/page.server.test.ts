@@ -8,15 +8,14 @@ type DrawPublishActionEvent = Parameters<Actions['publish']>[0];
 const DRAWING_DOCUMENT =
 	'{"version":1,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","strokes":[]}';
 const mocked = vi.hoisted(() => ({
-	decodeCompressedDrawingDocumentToEditableDocument: vi.fn(),
+	openStoredDrawingDocument: vi.fn(),
 	getIP: vi.fn(() => '127.0.0.1'),
 	getArtworkDetail: vi.fn(),
 	publishArtwork: vi.fn()
 }));
 
-vi.mock('#lib/server/drawing-document/storage.js', () => ({
-	decodeCompressedDrawingDocumentToEditableDocument:
-		mocked.decodeCompressedDrawingDocumentToEditableDocument
+vi.mock('#lib/server/drawing-document/document-store.js', () => ({
+	openStoredDrawingDocument: mocked.openStoredDrawingDocument
 }));
 
 vi.mock('#lib/server/artwork/service.js', () => ({
@@ -90,11 +89,11 @@ const createLoadEvent = (
 describe('draw route page', () => {
 	beforeEach(() => {
 		vi.resetModules();
-		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockReset();
+		mocked.openStoredDrawingDocument.mockReset();
 		mocked.getIP.mockClear();
 		mocked.getArtworkDetail.mockReset();
 		mocked.publishArtwork.mockReset();
-		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockResolvedValue({
+		mocked.openStoredDrawingDocument.mockResolvedValue({
 			background: '#fdfbf7',
 			base: [],
 			height: 768,
@@ -212,7 +211,9 @@ describe('draw route page', () => {
 			childForks: [],
 			commentCount: 0,
 			createdAt: new Date('2026-03-28T10:00:00.000Z'),
-			drawingDocument: 'persisted-parent-payload',
+			drawingDocument: null,
+			drawingDocumentKey: 'documents/parent.json.gz',
+			drawingVersion: 2,
 			forkCount: 0,
 			id: 'artwork-parent',
 			isNsfw: false,
@@ -239,9 +240,11 @@ describe('draw route page', () => {
 				title: 'Parent Artwork'
 			}
 		});
-		expect(mocked.decodeCompressedDrawingDocumentToEditableDocument).toHaveBeenCalledWith(
-			'persisted-parent-payload'
-		);
+		expect(mocked.openStoredDrawingDocument).toHaveBeenCalledWith({
+			key: 'documents/parent.json.gz',
+			legacyBase64: null,
+			version: 2
+		});
 		expect(mocked.getArtworkDetail).toHaveBeenCalledWith('artwork-parent', {
 			user: authenticatedUser,
 			withDrawingDocument: true
