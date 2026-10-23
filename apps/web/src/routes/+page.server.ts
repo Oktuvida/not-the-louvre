@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { decodeCompressedDrawingDocumentToEditableDocument } from '#lib/server/drawing-document/storage.js';
+import { openStoredDrawingDocument } from '#lib/server/drawing-document/document-store.js';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '#lib/server/auth.js';
 import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
@@ -112,14 +112,13 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
 			status: 'authenticated',
 			user: {
 				...locals.user,
-				// avatar_document_version is written last by the chunked write, so a
-				// document without one is a torn write and must read as absent.
-				avatarDrawingDocument:
-					avatarUserRecord?.avatarDocument && avatarUserRecord.avatarDocumentVersion !== null
-						? await decodeCompressedDrawingDocumentToEditableDocument(
-								avatarUserRecord.avatarDocument
-							)
-						: null,
+				avatarDrawingDocument: avatarUserRecord
+					? await openStoredDrawingDocument({
+							key: avatarUserRecord.avatarDocumentKey ?? null,
+							legacyBase64: avatarUserRecord.avatarDocument ?? null,
+							version: avatarUserRecord.avatarDocumentVersion ?? null
+						})
+					: null,
 				avatarUrl: resolveUserAvatarUrl(locals.user.id, locals.user.avatarUrl)
 			}
 		},

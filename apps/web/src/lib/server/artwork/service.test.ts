@@ -18,10 +18,30 @@ import type {
 	PublishRateLimitRecord
 } from './types';
 
-// storage.ts is gone: gzip/base64 is the Rust runtime's job in production, so
-// these suites unwrap the payload they gzipped themselves.
-const gunzipBase64 = (payload: string) =>
-	strFromU8(gunzipSync(new Uint8Array(Buffer.from(payload, 'base64'))));
+// prepareDrawingDocumentForStorage is mocked, so the suite unwraps the gzip it
+// produced itself.
+const gunzip = (payload: Uint8Array) => strFromU8(gunzipSync(payload));
+
+// Object storage for drawings, in memory: publishes keep their documents here.
+const storedDocuments = vi.hoisted(() => {
+	const objects = new Map<string, Uint8Array>();
+	return {
+		objects,
+		store: {
+			async put(compressed: Uint8Array) {
+				const key = `documents/test-${objects.size + 1}.json.gz`;
+				objects.set(key, compressed);
+				return key;
+			},
+			async read(key: string) {
+				return objects.get(key)!;
+			}
+		}
+	};
+});
+
+const readStoredDocument = (record: ArtworkRecord | undefined) =>
+	gunzip(storedDocuments.objects.get(record!.drawingDocumentKey!)!);
 
 type ModerationCheckResult = { status: 'allowed' } | { message: string; status: 'blocked' };
 
@@ -43,14 +63,11 @@ vi.mock('#lib/server/drawing-document/storage.js', () => ({
 	prepareDrawingDocumentForStorage: runtime.prepareDrawingDocumentForStorage
 }));
 
-const ARTWORK_DRAWING_DOCUMENT = JSON.stringify(createEmptyDrawingDocument('artwork'));
+vi.mock('#lib/server/drawing-document/document-store.js', () => ({
+	drawingDocumentStore: storedDocuments.store
+}));
 
-const createConnectionClosedError = () =>
-	Object.assign(new Error('Failed query: insert into artworks'), {
-		cause: Object.assign(new Error('write CONNECTION_CLOSED host:5432'), {
-			code: 'CONNECTION_CLOSED'
-		})
-	});
+const ARTWORK_DRAWING_DOCUMENT = JSON.stringify(createEmptyDrawingDocument('artwork'));
 
 // Mirrors the repository's RETURNING projection: every artworks column except
 // drawing_document, which no writer's caller reads back.
@@ -79,30 +96,6 @@ const createRepository = () => {
 	>();
 
 	const repository: ArtworkRepository = {
-		appendArtworkDrawingDocumentChunk: vi.fn(
-			async (id: string, chunk: string, expectedLength: number, updatedAt: Date) => {
-				const current = artworks.get(id);
-				if (!current) return false;
-				const existing = current.drawingDocument ?? '';
-				if (existing.length !== expectedLength) return false;
-				artworks.set(id, { ...current, drawingDocument: existing + chunk, updatedAt });
-				return true;
-			}
-		),
-		finalizeArtworkDrawingDocument: vi.fn(
-			async (id: string, version: number, expectedTotalLength: number, updatedAt: Date) => {
-				const current = artworks.get(id);
-				if (!current) return null;
-				if ((current.drawingDocument ?? '').length !== expectedTotalLength) return null;
-				const next = { ...current, drawingVersion: version, updatedAt };
-				artworks.set(id, next);
-				return asReturnedRecord(next);
-			}
-		),
-		findArtworkDrawingDocumentLength: vi.fn(async (id: string) => {
-			const current = artworks.get(id);
-			return current ? (current.drawingDocument ?? '').length : null;
-		}),
 		createContentReport: vi.fn(async (input) => {
 			const record: ContentReportRecord = { ...input };
 			reports.set(record.id, record);
@@ -245,13 +238,11 @@ describe('artwork service', () => {
 		runtime.prepareDrawingDocumentForStorage.mockImplementation(async (documentJson: string) => {
 			const document = parseDrawingDocumentV2(documentJson);
 			const canonicalDocumentJson = serializeCanonicalDrawingDocument(document);
-			const compressedDocumentBase64 = Buffer.from(
-				gzipSync(strToU8(canonicalDocumentJson))
-			).toString('base64');
+			const compressed = new Uint8Array(gzipSync(strToU8(canonicalDocumentJson)));
 
 			return {
 				canonicalDocumentJson,
-				compressedDocumentBase64,
+				compressed,
 				document,
 				height: document.height,
 				kind: document.kind,
@@ -365,13 +356,12 @@ describe('artwork service', () => {
 
 		expect(result.storageKey).toBe('artworks/user-1/artwork-1.webp');
 		expect(result.drawingVersion).toBe(2);
-		// The finalize RETURNING must not hand the ~100 KB document back over the
-		// pooler that the chunked write just fed it 16 KiB at a time.
+		// The row only names the drawing, which lives in object storage.
 		expect(result.drawingDocument).toBeUndefined();
 		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(drawingDocument);
 		expect(uploads).toHaveLength(1);
 		expect(uploads[0]?.file.type).toBe('image/webp');
-		expect(gunzipBase64(artworks.get('artwork-1')!.drawingDocument!)).toBe(
+		expect(readStoredDocument(artworks.get('artwork-1'))).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
 		expect(artworks.get('artwork-1')).toMatchObject({
@@ -444,7 +434,7 @@ describe('artwork service', () => {
 			canonicalDocumentJson: serializeCanonicalDrawingDocument(
 				createEmptyDrawingDocument('avatar')
 			),
-			compressedDocumentBase64: 'AA==',
+			compressed: new Uint8Array([0]),
 			document: parseDrawingDocumentV2(
 				serializeCanonicalDrawingDocument(createEmptyDrawingDocument('avatar'))
 			),
@@ -662,7 +652,7 @@ describe('artwork service', () => {
 			parentId: 'artwork-parent',
 			forkCount: 0
 		});
-		expect(gunzipBase64(artworks.get('artwork-child')!.drawingDocument!)).toBe(
+		expect(readStoredDocument(artworks.get('artwork-child'))).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(childDocument))
 		);
 		expect(artworks.get('artwork-parent')).toMatchObject({
@@ -753,600 +743,13 @@ describe('artwork service', () => {
 		expect(deletes).toEqual(['artworks/user-1/artwork-1.webp']);
 	});
 
-	it('retries the artwork insert with backoff when the connection closed mid-write', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage } = createStorage();
-
-		vi.mocked(repository.createArtwork).mockRejectedValueOnce(createConnectionClosedError());
-		const sleeps: number[] = [];
-
-		const result = await publishArtwork(
-			{
-				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
-				title: 'Retry me'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async (ms: number) => {
-					sleeps.push(ms);
-				},
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-1');
-		expect(repository.createArtwork).toHaveBeenCalledTimes(2);
-		expect(sleeps).toEqual([500]);
-	});
-
-	it('gives up after exhausting delayed retries and cleans up the uploaded media', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-
-		vi.mocked(repository.createArtwork).mockRejectedValue(createConnectionClosedError());
-		const sleeps: number[] = [];
-
-		await expect(
-			publishArtwork(
-				{
-					drawingDocument: ARTWORK_DRAWING_DOCUMENT,
-					title: 'Never lands'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{
-					generateId: () => 'artwork-1',
-					repository,
-					sleep: async (ms: number) => {
-						sleeps.push(ms);
-					},
-					storage
-				}
-			)
-		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
-
-		expect(repository.createArtwork).toHaveBeenCalledTimes(3);
-		expect(sleeps).toEqual([500, 2000]);
-		expect(deletes).toEqual(['artworks/user-1/artwork-1.webp']);
-	});
-
-	it('recovers via read-back when the final retry committed but the ack was lost', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-
-		const insert = vi.mocked(repository.createArtwork);
-		const commitRow = insert.getMockImplementation()!;
-		insert
-			.mockRejectedValueOnce(createConnectionClosedError())
-			.mockRejectedValueOnce(createConnectionClosedError())
-			.mockImplementationOnce(async (input) => {
-				// The last attempt committed, but the socket died before the ack.
-				await commitRow(input);
-				throw createConnectionClosedError();
-			});
-
-		const result = await publishArtwork(
-			{
-				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
-				title: 'Committed on the last try'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-1');
-		expect(repository.createArtwork).toHaveBeenCalledTimes(3);
-		expect(deletes).toEqual([]);
-	});
-
-	it('treats a unique violation on the first attempt as a genuine failure and cleans up', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-
-		vi.mocked(repository.createArtwork).mockRejectedValueOnce(
-			Object.assign(new Error('duplicate key value violates unique constraint "artworks_pkey"'), {
-				code: '23505'
-			})
-		);
-
-		await expect(
-			publishArtwork(
-				{
-					drawingDocument: ARTWORK_DRAWING_DOCUMENT,
-					title: 'Genuine duplicate'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{
-					generateId: () => 'artwork-1',
-					repository,
-					sleep: async () => {},
-					storage
-				}
-			)
-		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
-
-		expect(repository.createArtwork).toHaveBeenCalledTimes(1);
-		expect(deletes).toEqual(['artworks/user-1/artwork-1.webp']);
-	});
-
-	it('keeps retrying when a redial fails with CONNECT_TIMEOUT mid-ladder', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-
-		vi.mocked(repository.createArtwork)
-			.mockRejectedValueOnce(createConnectionClosedError())
-			.mockRejectedValueOnce(
-				Object.assign(new Error('write CONNECT_TIMEOUT host:5432'), { code: 'CONNECT_TIMEOUT' })
-			);
-		const sleeps: number[] = [];
-
-		const result = await publishArtwork(
-			{
-				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
-				title: 'Through the outage'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async (ms: number) => {
-					sleeps.push(ms);
-				},
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-1');
-		expect(repository.createArtwork).toHaveBeenCalledTimes(3);
-		expect(sleeps).toEqual([500, 2000]);
-		expect(deletes).toEqual([]);
-	});
-
-	it('recovers the committed artwork when a retry hits a unique violation after a lost ack', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-
-		const insert = vi.mocked(repository.createArtwork);
-		const commitRow = insert.getMockImplementation()!;
-		insert
-			.mockImplementationOnce(async (input) => {
-				// The insert committed, but the socket died before the ack arrived.
-				await commitRow(input);
-				throw createConnectionClosedError();
-			})
-			.mockImplementationOnce(async () => {
-				throw Object.assign(new Error('Failed query: insert into artworks'), {
-					cause: Object.assign(
-						new Error('duplicate key value violates unique constraint "artworks_pkey"'),
-						{ code: '23505' }
-					)
-				});
-			});
-
-		const result = await publishArtwork(
-			{
-				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
-				title: 'Committed after all'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-1');
-		expect(repository.createArtwork).toHaveBeenCalledTimes(2);
-		expect(repository.findArtworkById).toHaveBeenCalledWith('artwork-1');
-		expect(deletes).toEqual([]);
-	});
-
-	it('preserves stored media when a unique violation proves the insert committed but recovery fails', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-
-		vi.mocked(repository.createArtwork)
-			.mockRejectedValueOnce(createConnectionClosedError())
-			.mockRejectedValueOnce(
-				Object.assign(new Error('duplicate key value violates unique constraint "artworks_pkey"'), {
-					code: '23505'
-				})
-			);
-		vi.mocked(repository.findArtworkById).mockRejectedValueOnce(createConnectionClosedError());
-
-		await expect(
-			publishArtwork(
-				{
-					drawingDocument: ARTWORK_DRAWING_DOCUMENT,
-					title: 'Committed but unreadable'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{
-					generateId: () => 'artwork-1',
-					repository,
-					sleep: async () => {},
-					storage
-				}
-			)
-		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
-
-		expect(deletes).toEqual([]);
-	});
-
-	it('writes the drawing document in multiple chunks and finalizes with the version', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { storage } = createStorage();
-		const drawingDocument = JSON.stringify({
-			...createEmptyDrawingDocument('artwork'),
-			strokes: [
-				{
-					color: '#2d2420',
-					points: [
-						[48, 48] as [number, number],
-						[320, 320] as [number, number],
-						[540, 220] as [number, number]
-					],
-					size: 12
-				}
-			]
-		});
-
-		const result = await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Chunked Vector'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				drawingDocumentChunkChars: 16,
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		const storedDocument = artworks.get('artwork-1')!.drawingDocument!;
-		expect(vi.mocked(repository.createArtwork).mock.calls[0]![0].drawingDocument).toBeNull();
-		expect(repository.appendArtworkDrawingDocumentChunk).toHaveBeenCalledTimes(
-			Math.ceil(storedDocument.length / 16)
-		);
-		expect(result.drawingVersion).toBe(2);
-		expect(gunzipBase64(storedDocument)).toBe(
-			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
-		);
-		expect(result.drawingDocument).toBeUndefined();
-	});
-
-	it('resumes chunk appends after a lost-ack append via the length read-back', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { storage } = createStorage();
-		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
-
-		const append = vi.mocked(repository.appendArtworkDrawingDocumentChunk);
-		const applyChunk = append.getMockImplementation()!;
-		append.mockImplementationOnce(async (id, chunk, expectedLength, updatedAt) => {
-			// The append committed, but the socket died before the ack arrived.
-			await applyChunk(id, chunk, expectedLength, updatedAt);
-			throw createConnectionClosedError();
-		});
-
-		const result = await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Resumed chunks'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				drawingDocumentChunkChars: 16,
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.drawingVersion).toBe(2);
-		expect(gunzipBase64(artworks.get('artwork-1')!.drawingDocument!)).toBe(
-			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
-		);
-	});
-
-	it('keeps the chunk ladder alive when the length read-back itself fails', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { storage } = createStorage();
-		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
-
-		vi.mocked(repository.appendArtworkDrawingDocumentChunk).mockRejectedValueOnce(
-			createConnectionClosedError()
-		);
-		vi.mocked(repository.findArtworkDrawingDocumentLength).mockRejectedValueOnce(
-			Object.assign(new Error('write CONNECT_TIMEOUT host:5432'), { code: 'CONNECT_TIMEOUT' })
-		);
-
-		const result = await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Read-back hiccup'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.drawingVersion).toBe(2);
-		expect(artworks.get('artwork-1')?.drawingVersion).toBe(2);
-	});
-
-	it('recovers a finalize whose commit lost its ack', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { storage } = createStorage();
-		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
-
-		const finalize = vi.mocked(repository.finalizeArtworkDrawingDocument);
-		const commitFinalize = finalize.getMockImplementation()!;
-		finalize.mockImplementation(async (id, version, expectedTotalLength, updatedAt) => {
-			// Every finalize attempt commits but the ack never arrives.
-			await commitFinalize(id, version, expectedTotalLength, updatedAt);
-			throw createConnectionClosedError();
-		});
-
-		const result = await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Finalize lost ack'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.drawingVersion).toBe(2);
-		expect(artworks.get('artwork-1')?.drawingVersion).toBe(2);
-	});
-
-	it('keeps the publish successful without a document when chunk writing fails', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { deletes, storage } = createStorage();
-		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
-
-		vi.mocked(repository.appendArtworkDrawingDocumentChunk).mockResolvedValue(false);
-
-		const result = await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Doc-less survivor'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-1');
-		expect(result.drawingDocument ?? null).toBeNull();
-		expect(artworks.get('artwork-1')?.drawingVersion).toBeNull();
-		expect(deletes).toEqual([]);
-	});
-
 	it('keeps a committed publish successful when rate limit bookkeeping fails afterwards', async () => {
 		const { publishArtwork } = await import('./service');
 		const { artworks, repository } = createRepository();
 		const { deletes, storage } = createStorage();
 
 		vi.mocked(repository.recordPublishRateLimitAttempt).mockRejectedValueOnce(
-			createConnectionClosedError()
+			new Error('connection terminated unexpectedly')
 		);
 
 		const result = await publishArtwork(

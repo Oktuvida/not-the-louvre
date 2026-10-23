@@ -2,7 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { getIP } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '#lib/server/auth.js';
-import { decodeCompressedDrawingDocumentToEditableDocument } from '#lib/server/drawing-document/storage.js';
+import { openStoredDrawingDocument } from '#lib/server/drawing-document/document-store.js';
 import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
 import { getArtworkDetail } from '#lib/server/artwork/read.service.js';
 import { publishArtwork } from '#lib/server/artwork/service.js';
@@ -48,12 +48,14 @@ export const load: PageServerLoad = async (event) => {
 		? await getArtworkDetail(forkArtworkId, {
 				user: event.locals.user,
 				// The studio is the only reader of the drawing document: every
-				// other detail read leaves that column in Postgres.
+				// other detail read leaves its columns out.
 				withDrawingDocument: true
 			}).then(async (artwork) => ({
-				drawingDocument: artwork.drawingDocument
-					? await decodeCompressedDrawingDocumentToEditableDocument(artwork.drawingDocument)
-					: null,
+				drawingDocument: await openStoredDrawingDocument({
+					key: artwork.drawingDocumentKey ?? null,
+					legacyBase64: artwork.drawingDocument ?? null,
+					version: artwork.drawingVersion ?? null
+				}),
 				id: artwork.id,
 				isNsfw: artwork.isNsfw,
 				mediaUrl: artwork.mediaUrl,

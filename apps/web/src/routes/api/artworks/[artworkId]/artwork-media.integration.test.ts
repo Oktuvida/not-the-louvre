@@ -3,7 +3,10 @@ import postgres from 'postgres';
 import type { Sql } from 'postgres';
 import { getPlatformProxy, type PlatformProxy } from 'wrangler';
 import type { AppBucket } from '#lib/server/platform.js';
-import { createEmptyDrawingDocument } from '#lib/features/stroke-json/document.js';
+import {
+	createEmptyDrawingDocument,
+	getRenderableDrawingStrokes
+} from '#lib/features/stroke-json/document.js';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 // Same opt-in flag as the other integration suites: `bun run test:integration`.
@@ -72,6 +75,26 @@ const ONE_STROKE_DRAWING = JSON.stringify({
 	]
 });
 
+const DRAWN_STROKES = [
+	{
+		color: '#2d2420',
+		points: [
+			[120, 120],
+			[300, 260],
+			[640, 640]
+		] as [number, number][],
+		size: 12
+	},
+	{
+		color: '#c84f4f',
+		points: [
+			[700, 60],
+			[80, 720]
+		] as [number, number][],
+		size: 3
+	}
+];
+
 describeWithDatabase('artwork media storage', () => {
 	let sql: DbClient;
 	let proxy: PlatformProxy<{ BUCKET: AppBucket }>;
@@ -113,6 +136,47 @@ describeWithDatabase('artwork media storage', () => {
 			expect(response.headers.get('content-type')).toBe('image/webp');
 			expect(body.byteLength).toBe(artwork.mediaSizeBytes);
 			expect(new TextDecoder().decode(body.subarray(8, 12))).toBe('WEBP');
+		} finally {
+			await deleteUser(sql, userId);
+		}
+	});
+
+	it('keeps a published drawing out of its row and reopens it for a fork as drawn', async () => {
+		const userId = `fork-user-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+		const user = createCanonicalUser(userId);
+
+		try {
+			await insertUser(sql, userId);
+			const { publishArtwork } = await import('#lib/server/artwork/service.js');
+			const artwork = await publishArtwork(
+				{
+					drawingDocument: JSON.stringify({
+						...createEmptyDrawingDocument('artwork'),
+						strokes: DRAWN_STROKES
+					}),
+					title: 'Fork me'
+				},
+				{ ipAddress: '127.0.0.1', user }
+			);
+
+			// Supavisor drops a session whose Bind carries a whole drawing, so the
+			// row only names the document; the bytes live in object storage.
+			const [row] = await sql<
+				Array<{ drawing_document: string | null; drawing_document_key: string | null }>
+			>`select drawing_document, drawing_document_key from app.artworks where id = ${artwork.id}`;
+			expect(row?.drawing_document).toBeNull();
+			expect(row?.drawing_document_key).toMatch(/^documents\/[0-9a-f]{64}\.json\.gz$/);
+
+			const { load } = await import('../../../draw/+page.server');
+			const data = (await load({
+				locals: { user },
+				request: new Request(`http://localhost/draw?fork=${artwork.id}`),
+				url: new URL(`http://localhost/draw?fork=${artwork.id}`)
+			} as never)) as {
+				forkParent: { drawingDocument: Parameters<typeof getRenderableDrawingStrokes>[0] };
+			};
+
+			expect(getRenderableDrawingStrokes(data.forkParent.drawingDocument)).toEqual(DRAWN_STROKES);
 		} finally {
 			await deleteUser(sql, userId);
 		}

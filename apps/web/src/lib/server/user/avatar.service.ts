@@ -8,16 +8,15 @@ import {
 	assertNotBanned
 } from '#lib/server/auth/guards.js';
 import {
-	DRAWING_DOCUMENT_CHUNK_CHARS,
-	writeDrawingDocumentInChunks,
-	type DrawingDocumentChunkStore
-} from '#lib/server/drawing-document/chunked-write.js';
+	drawingDocumentStore,
+	type DrawingDocumentStore
+} from '#lib/server/drawing-document/document-store.js';
 import { createAvatarDrawingDocumentMedia } from '#lib/server/drawing-document/media.js';
 import type { ArtworkStorage } from '#lib/server/artwork/types.js';
 import type { CanonicalUser } from '#lib/server/auth/types.js';
 import { userRepository } from './repository';
 import { avatarStorage } from './storage';
-import type { UserAvatarDocumentRef, UserRecord, UserRepository } from './types';
+import type { UserRecord, UserRepository } from './types';
 
 // Named after the image itself, so a new avatar gets a new address and every
 // cache may keep the old one without ever showing it again (see avatar-url.ts).
@@ -26,35 +25,15 @@ const getAvatarStorageKey = async (userId: string, image: File) => {
 	return `${AVATAR_STORAGE_KEY_PREFIX}/${userId}/${hash.slice(0, 16)}.webp`;
 };
 
-const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 type AvatarServiceDependencies = {
-	drawingDocumentChunkChars?: number;
+	documents?: DrawingDocumentStore;
 	repository: UserRepository;
-	sleep?: (ms: number) => Promise<void>;
 	storage: ArtworkStorage;
 };
 
-// Binds the shared chunked-write ladder to app.users, so avatars and artworks
-// go through one retry implementation instead of two that can drift.
-const createAvatarDocumentStore = (
-	repository: UserRepository
-): DrawingDocumentChunkStore<UserAvatarDocumentRef> => ({
-	appendChunk: (id, chunk, expectedLength, updatedAt) =>
-		repository.appendUserAvatarDocumentChunk(id, chunk, expectedLength, updatedAt),
-	finalize: (id, version, expectedTotalLength, updatedAt) =>
-		repository.finalizeUserAvatarDocument(id, version, expectedTotalLength, updatedAt),
-	findDocumentLength: (id) => repository.findUserAvatarDocumentLength(id),
-	findFinalized: async (id, version) => {
-		const committed = await repository.findUserAvatarDocumentRef(id);
-		return committed?.avatarDocumentVersion === version ? committed : null;
-	}
-});
-
 export const createAvatarService = (deps: AvatarServiceDependencies) => {
 	const { repository, storage } = deps;
-	const chunkChars = deps.drawingDocumentChunkChars ?? DRAWING_DOCUMENT_CHUNK_CHARS;
-	const sleep = deps.sleep ?? defaultSleep;
+	const documents = deps.documents ?? drawingDocumentStore;
 
 	return {
 		async uploadAvatar(user: CanonicalUser | null, drawingDocument: string): Promise<UserRecord> {
@@ -70,27 +49,23 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 			}
 
 			const sanitizedMedia = await createAvatarDrawingDocumentMedia(preparedDocument.document);
-			const encodedDocument = preparedDocument.compressedDocumentBase64;
 
+			// The drawing and its image go to object storage first; the row update
+			// comes last and names both, so the editor never reopens a half-saved
+			// avatar.
+			const avatarDocumentKey = await documents.put(preparedDocument.compressed);
 			const storageKey = await getAvatarStorageKey(activeUser.id, sanitizedMedia.file);
 			await storage.upload(storageKey, sanitizedMedia.file);
 			const completedAt = new Date();
 
-			// The row is updated without the drawing document so the UPDATE's Bind
-			// stays small — Supavisor drops sessions that receive the whole
-			// document in one message, which is what used to kill a detailed
-			// avatar save outright. Both document columns are reset here so a
-			// previous avatar's leftovers cannot survive a partial rewrite; the
-			// document follows in chunked appends below.
-			const updatedUser = repository.updateUserAvatar
-				? await repository.updateUserAvatar(activeUser.id, {
-						avatarDocument: null,
-						avatarDocumentVersion: null,
-						avatarOnboardingCompletedAt: completedAt,
-						avatarUrl: storageKey,
-						updatedAt: completedAt
-					})
-				: await repository.updateUserAvatarUrl(activeUser.id, storageKey, completedAt, completedAt);
+			const updatedUser = await repository.updateUserAvatar(activeUser.id, {
+				avatarDocument: null,
+				avatarDocumentKey,
+				avatarDocumentVersion: preparedDocument.version,
+				avatarOnboardingCompletedAt: completedAt,
+				avatarUrl: storageKey,
+				updatedAt: completedAt
+			});
 			if (!updatedUser) {
 				await storage.delete(storageKey).catch(() => {});
 				throw new ArtworkFlowError(500, 'Avatar upload failed', 'PUBLISH_FAILED');
@@ -103,49 +78,7 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 				await storage.delete(previousStorageKey).catch(() => {});
 			}
 
-			// The avatar row is committed past this point: a failed document write
-			// must not fail the save during onboarding. It degrades to an avatar
-			// image the user cannot reopen in the editor, and avatar_document_version
-			// stays null so readers treat the partial document as absent.
-			let avatarDocumentVersion: number | null = null;
-			try {
-				const finalized = await writeDrawingDocumentInChunks({
-					category: 'avatar',
-					chunkChars,
-					documentBase64: encodedDocument,
-					logFields: { userId: activeUser.id },
-					now: completedAt,
-					sleep,
-					store: createAvatarDocumentStore(repository),
-					targetId: activeUser.id,
-					version: preparedDocument.version
-				});
-
-				if (finalized) {
-					avatarDocumentVersion = finalized.avatarDocumentVersion;
-				} else {
-					console.error(
-						JSON.stringify({
-							category: 'avatar',
-							drawingDocumentChars: encodedDocument.length,
-							event: 'drawing_document_write_failed',
-							userId: activeUser.id
-						})
-					);
-				}
-			} catch (error) {
-				console.error(
-					JSON.stringify({
-						category: 'avatar',
-						code: error instanceof Error ? error.name : 'UNKNOWN',
-						drawingDocumentChars: encodedDocument.length,
-						event: 'drawing_document_write_failed',
-						userId: activeUser.id
-					})
-				);
-			}
-
-			return { ...updatedUser, avatarDocumentVersion };
+			return updatedUser;
 		},
 
 		async deleteAvatar(user: CanonicalUser | null): Promise<UserRecord> {
@@ -161,22 +94,14 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 			}
 
 			const storageKey = record.avatarUrl;
-			// Clears both columns so a versionless leftover cannot be revived by a
-			// later append that happens to match its length.
-			const updatedUser = repository.updateUserAvatar
-				? await repository.updateUserAvatar(activeUser.id, {
-						avatarDocument: null,
-						avatarDocumentVersion: null,
-						avatarOnboardingCompletedAt: record.avatarOnboardingCompletedAt ?? null,
-						avatarUrl: null,
-						updatedAt: new Date()
-					})
-				: await repository.updateUserAvatarUrl(
-						activeUser.id,
-						null,
-						record.avatarOnboardingCompletedAt ?? null,
-						new Date()
-					);
+			const updatedUser = await repository.updateUserAvatar(activeUser.id, {
+				avatarDocument: null,
+				avatarDocumentKey: null,
+				avatarDocumentVersion: null,
+				avatarOnboardingCompletedAt: record.avatarOnboardingCompletedAt ?? null,
+				avatarUrl: null,
+				updatedAt: new Date()
+			});
 			if (!updatedUser) {
 				throw new ArtworkFlowError(500, 'Avatar deletion failed', 'PUBLISH_FAILED');
 			}

@@ -11,6 +11,7 @@ export type ArtworkRecord = {
 	commentCount: number;
 	createdAt: Date;
 	drawingDocument?: string | null;
+	drawingDocumentKey?: string | null;
 	drawingVersion?: number | null;
 	forkCount: number;
 	hiddenAt?: Date | null;
@@ -76,6 +77,7 @@ export type ArtworkChildForkSummary = {
 export type ArtworkDetail = ArtworkFeedCard & {
 	childForks: ArtworkChildForkSummary[];
 	drawingDocument?: string | null;
+	drawingDocumentKey?: string | null;
 	drawingVersion?: number | null;
 	mediaContentType: string;
 	mediaSizeBytes: number;
@@ -323,21 +325,8 @@ export type RecordEngagementRateLimitAttemptInput = RecordRateLimitAttemptInput 
 };
 
 export type ArtworkRepository = {
-	appendArtworkDrawingDocumentChunk(
-		id: string,
-		chunk: string,
-		expectedLength: number,
-		updatedAt: Date
-	): Promise<boolean>;
 	createComment(input: CreateArtworkCommentInput): Promise<ArtworkCommentView | null>;
 	createArtwork(input: CreateArtworkInput): Promise<ArtworkRecord>;
-	finalizeArtworkDrawingDocument(
-		id: string,
-		version: number,
-		expectedTotalLength: number,
-		updatedAt: Date
-	): Promise<ArtworkRecord | null>;
-	findArtworkDrawingDocumentLength(id: string): Promise<number | null>;
 	createContentReport(input: CreateContentReportInput): Promise<ContentReportRecord>;
 	deleteArtwork(id: string): Promise<ArtworkRecord | null>;
 	deleteComment(id: string, updatedAt: Date): Promise<ArtworkCommentRecord | null>;

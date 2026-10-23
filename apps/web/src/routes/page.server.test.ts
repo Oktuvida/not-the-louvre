@@ -11,7 +11,7 @@ import {
 type HomeActionEvent = Parameters<Actions['signUp']>[0];
 
 const mocked = vi.hoisted(() => ({
-	decodeCompressedDrawingDocumentToEditableDocument: vi.fn(),
+	openStoredDrawingDocument: vi.fn(),
 	findUserById: vi.fn(),
 	getIP: vi.fn(() => '127.0.0.1'),
 	getViewerContentPreferences: vi.fn(),
@@ -58,9 +58,8 @@ vi.mock('#lib/server/user/avatar.service.js', () => ({
 	}
 }));
 
-vi.mock('#lib/server/drawing-document/storage.js', () => ({
-	decodeCompressedDrawingDocumentToEditableDocument:
-		mocked.decodeCompressedDrawingDocumentToEditableDocument
+vi.mock('#lib/server/drawing-document/document-store.js', () => ({
+	openStoredDrawingDocument: mocked.openStoredDrawingDocument
 }));
 
 vi.mock('better-auth/api', () => ({
@@ -105,7 +104,7 @@ describe('home route auth contract', () => {
 		mocked.getViewerContentPreferences.mockReset();
 		mocked.getNicknameAvailability.mockReset();
 		mocked.listArtworkDiscovery.mockReset();
-		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockReset();
+		mocked.openStoredDrawingDocument.mockReset();
 		mocked.findUserById.mockReset();
 		mocked.recoverAccount.mockReset();
 		mocked.uploadAvatar.mockReset();
@@ -118,7 +117,7 @@ describe('home route auth contract', () => {
 			adultContentRevokedAt: null,
 			ambientAudioEnabled: null
 		});
-		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockResolvedValue({
+		mocked.openStoredDrawingDocument.mockResolvedValue({
 			background: '#f5f0e1',
 			base: [],
 			height: 340,
@@ -243,54 +242,11 @@ describe('home route auth contract', () => {
 				}
 			}
 		});
-		expect(mocked.decodeCompressedDrawingDocumentToEditableDocument).toHaveBeenCalledWith(
-			'persisted-avatar-payload'
-		);
-	});
-
-	it('treats an avatar document without a version as absent', async () => {
-		mocked.findUserById.mockResolvedValueOnce({
-			avatarDocument: 'half-written-avatar-payload',
-			avatarDocumentVersion: null,
-			avatarIsHidden: false,
-			avatarIsNsfw: false,
-			avatarOnboardingCompletedAt: new Date('2026-03-28T10:00:00.000Z'),
-			avatarUrl: 'avatars/product-user-1.avif',
-			banReason: null,
-			bannedAt: null,
-			createdAt: new Date('2026-03-28T09:00:00.000Z'),
-			id: 'product-user-1',
-			isBanned: false,
-			nickname: 'artist_1',
-			role: 'user',
-			updatedAt: new Date('2026-03-28T10:00:00.000Z')
+		expect(mocked.openStoredDrawingDocument).toHaveBeenCalledWith({
+			key: null,
+			legacyBase64: 'persisted-avatar-payload',
+			version: 2
 		});
-		const { load } = await import('./+page.server');
-
-		await expect(
-			load({
-				locals: {
-					user: {
-						id: 'product-user-1',
-						authUserId: 'auth-user-1',
-						avatarOnboardingCompletedAt: new Date('2026-03-28T10:00:00.000Z'),
-						nickname: 'artist_1',
-						role: 'user',
-						email: 'artist_1@not-the-louvre.local'
-					}
-				},
-				parent: async () => ({ adultContentEnabled: false }),
-				url: new URL('http://localhost/')
-			} as never)
-		).resolves.toMatchObject({
-			auth: {
-				status: 'authenticated',
-				user: {
-					avatarDrawingDocument: null
-				}
-			}
-		});
-		expect(mocked.decodeCompressedDrawingDocumentToEditableDocument).not.toHaveBeenCalled();
 	});
 
 	it('asks the studio feed for exactly the artworks the scene has frames for', async () => {

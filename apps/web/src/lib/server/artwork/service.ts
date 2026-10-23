@@ -30,14 +30,9 @@ import type {
 	ArtworkVoteValue
 } from './types';
 import {
-	CONNECTION_RETRY_DELAYS_MS,
-	DRAWING_DOCUMENT_CHUNK_CHARS,
-	isConnectionClosedError,
-	isRetryableConnectionError,
-	isUniqueViolation,
-	writeDrawingDocumentInChunks,
-	type DrawingDocumentChunkStore
-} from '#lib/server/drawing-document/chunked-write.js';
+	drawingDocumentStore,
+	type DrawingDocumentStore
+} from '#lib/server/drawing-document/document-store.js';
 import { createArtworkDrawingDocumentMedia } from '#lib/server/drawing-document/media.js';
 import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
@@ -95,27 +90,23 @@ type ModerateCommentInput = {
 };
 
 type ServiceDependencies = {
-	drawingDocumentChunkChars?: number;
+	documents?: DrawingDocumentStore;
 	generateId?: () => string;
 	now?: () => Date;
 	randomSuffix?: () => number;
 	repository?: ArtworkRepository;
 	renderDrawingDocumentMedia?: typeof createArtworkDrawingDocumentMedia;
-	sleep?: (ms: number) => Promise<void>;
 	storage?: ArtworkStorage;
 };
 
-const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 const getDependencies = (dependencies: ServiceDependencies = {}) => ({
-	drawingDocumentChunkChars: dependencies.drawingDocumentChunkChars ?? DRAWING_DOCUMENT_CHUNK_CHARS,
+	documents: dependencies.documents ?? drawingDocumentStore,
 	generateId: dependencies.generateId ?? generateId,
 	now: dependencies.now ?? (() => new Date()),
 	randomSuffix: dependencies.randomSuffix ?? (() => Math.floor(Math.random() * 10000)),
 	repository: dependencies.repository ?? artworkRepository,
 	renderDrawingDocumentMedia:
 		dependencies.renderDrawingDocumentMedia ?? createArtworkDrawingDocumentMedia,
-	sleep: dependencies.sleep ?? defaultSleep,
 	storage: dependencies.storage ?? artworkStorage
 });
 
@@ -123,11 +114,14 @@ const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 // (up to hundreds of KiB) only serves the server-side /draw fork loader, so it
 // stays off the wire while the response keeps its shape. Every HTTP handler
 // that serialises an artwork record goes through this.
-export const withoutDrawingDocument = <T extends { drawingDocument?: string | null }>(
+export const withoutDrawingDocument = <
+	T extends { drawingDocument?: string | null; drawingDocumentKey?: string | null }
+>(
 	artwork: T
 ) => ({
 	...artwork,
-	drawingDocument: null
+	drawingDocument: null,
+	drawingDocumentKey: null
 });
 
 const requireActor = (context: Partial<ArtworkActorContext>): ArtworkActorContext => {
@@ -236,107 +230,6 @@ const recordPublishAttempt = async (
 	});
 };
 
-// A closed-mid-query insert is ambiguous — it may have committed with only the
-// ack lost — so every ambiguous exit re-reads the row (the id is generated per
-// request, so a found row or a unique violation can only be this request's own
-// insert) and the result reports whether the uploaded media may belong to a
-// committed row. The backoff schedule is shared with the chunked document write.
-const insertWithConnectionRetries = async <T>(
-	run: () => Promise<T>,
-	options: {
-		readBackCommittedRow: () => Promise<T | null>;
-		sleep: (ms: number) => Promise<void>;
-	}
-): Promise<{ artwork: T } | { error: unknown; mayHaveCommitted: boolean }> => {
-	const readBack = async () => {
-		try {
-			return await options.readBackCommittedRow();
-		} catch {
-			await options.sleep(1000);
-			return options.readBackCommittedRow();
-		}
-	};
-
-	const recovered = (artwork: T) => {
-		console.warn(JSON.stringify({ category: 'artwork', event: 'insert_recovered_from_lost_ack' }));
-		return { artwork };
-	};
-
-	let lastError: unknown;
-	let sawAmbiguousClose = false;
-
-	for (let attempt = 0; attempt <= CONNECTION_RETRY_DELAYS_MS.length; attempt += 1) {
-		if (attempt > 0) {
-			const delayMs = CONNECTION_RETRY_DELAYS_MS[attempt - 1]!;
-			console.warn(
-				JSON.stringify({
-					attempt,
-					category: 'artwork',
-					delayMs,
-					event: 'insert_retry_connection_closed'
-				})
-			);
-			await options.sleep(delayMs);
-		}
-
-		try {
-			return { artwork: await run() };
-		} catch (error) {
-			if (sawAmbiguousClose && isUniqueViolation(error)) {
-				// An earlier ambiguous attempt actually committed.
-				try {
-					const committed = await readBack();
-					if (committed) {
-						return recovered(committed);
-					}
-				} catch {
-					// proven committed but unreadable; fall through
-				}
-				return { error, mayHaveCommitted: true };
-			}
-
-			if (!isRetryableConnectionError(error)) {
-				return { error, mayHaveCommitted: false };
-			}
-			sawAmbiguousClose ||= isConnectionClosedError(error);
-			lastError = error;
-		}
-	}
-
-	if (!sawAmbiguousClose) {
-		return { error: lastError, mayHaveCommitted: false };
-	}
-
-	// Retries exhausted after at least one closed-mid-query attempt; the last
-	// such attempt may have committed, so resolve the ambiguity before the
-	// caller decides whether the uploaded media can be cleaned up.
-	try {
-		const committed = await readBack();
-		if (committed) {
-			return recovered(committed);
-		}
-		return { error: lastError, mayHaveCommitted: false };
-	} catch {
-		return { error: lastError, mayHaveCommitted: true };
-	}
-};
-
-// Binds the shared chunked-write ladder to the artworks table. The avatar path
-// implements the same three-method port over app.users.
-const createArtworkDrawingDocumentStore = (
-	repository: ArtworkRepository
-): DrawingDocumentChunkStore<ArtworkRecord> => ({
-	appendChunk: (id, chunk, expectedLength, updatedAt) =>
-		repository.appendArtworkDrawingDocumentChunk(id, chunk, expectedLength, updatedAt),
-	finalize: (id, version, expectedTotalLength, updatedAt) =>
-		repository.finalizeArtworkDrawingDocument(id, version, expectedTotalLength, updatedAt),
-	findDocumentLength: (id) => repository.findArtworkDrawingDocumentLength(id),
-	findFinalized: async (id, version) => {
-		const committed = await repository.findArtworkById(id);
-		return committed?.drawingVersion === version ? committed : null;
-	}
-});
-
 const getArtworkOrThrow = async (artworkId: string, repository: ArtworkRepository) => {
 	const artwork = await repository.findArtworkById(artworkId);
 	if (!artwork) {
@@ -437,13 +330,12 @@ export const publishArtwork = async (
 ) => {
 	const actor = requireActor(context);
 	const {
-		drawingDocumentChunkChars,
+		documents,
 		generateId: nextId,
 		now: getNow,
 		randomSuffix,
 		repository,
 		renderDrawingDocumentMedia,
-		sleep,
 		storage
 	} = getDependencies(dependencies);
 	const now = getNow();
@@ -481,124 +373,49 @@ export const publishArtwork = async (
 	}
 
 	const media = await renderDrawingDocumentMedia(preparedDocument.document);
-	const drawingDocument = preparedDocument.compressedDocumentBase64;
-	const drawingVersion = preparedDocument.version;
 
 	const artworkId = nextId();
 	const extension = media.contentType.replace('image/', '');
 	const storageKey = `artworks/${actor.user.id}/${artworkId}.${extension}`;
 
+	// The drawing and its image go to object storage first; the row comes last
+	// and names both, so a reader never finds an artwork without its drawing.
+	const drawingDocumentKey = await documents.put(preparedDocument.compressed);
 	await storage.upload(storageKey, media.file);
 
-	// The row is inserted without the drawing document so the INSERT's Bind
-	// stays small — Supavisor drops sessions that receive the full document in
-	// one message. The document follows in chunked appends below.
-	const outcome = await insertWithConnectionRetries(
-		() =>
-			repository.createArtwork({
-				authorId: actor.user.id,
-				commentCount: 0,
-				createdAt: now,
-				drawingDocument: null,
-				drawingVersion: null,
-				forkCount: 0,
-				id: artworkId,
-				isNsfw: Boolean(input.isNsfw),
-				mediaContentType: media.contentType,
-				mediaPlaceholder: media.placeholder ?? null,
-				mediaSizeBytes: media.sizeBytes,
-				nsfwLabeledAt: input.isNsfw ? now : null,
-				nsfwSource: input.isNsfw ? 'creator' : null,
-				parentId: parentArtworkId,
-				score: 0,
-				storageKey,
-				title,
-				updatedAt: now
-			}),
-		{
-			readBackCommittedRow: () => repository.findArtworkById(artworkId),
-			sleep
-		}
-	);
-
-	if ('error' in outcome) {
-		// Payload sizes discriminate a size-triggered pooler abort from pooler
-		// health issues; the content itself stays out of the logs.
-		console.error(
-			JSON.stringify({
-				artworkId,
-				category: 'artwork',
-				drawingDocumentChars: drawingDocument?.length ?? 0,
-				event: 'publish_persist_failed',
-				hasParent: Boolean(parentArtworkId),
-				mayHaveCommitted: outcome.mayHaveCommitted,
-				mediaContentType: media.contentType,
-				mediaSizeBytes: media.sizeBytes
-			})
-		);
-
-		// An orphaned storage object is recoverable; a committed artwork row
-		// pointing at deleted media is not.
-		if (!outcome.mayHaveCommitted) {
-			try {
-				await storage.delete(storageKey);
-			} catch {
-				// best effort cleanup after a partial publish failure
-			}
-		}
-
-		if (outcome.error instanceof ArtworkFlowError) {
-			throw outcome.error;
-		}
-
-		throw new ArtworkFlowError(500, 'Artwork publish failed', 'PUBLISH_FAILED', {
-			cause: outcome.error
+	let artwork: ArtworkRecord;
+	try {
+		artwork = await repository.createArtwork({
+			authorId: actor.user.id,
+			commentCount: 0,
+			createdAt: now,
+			drawingDocument: null,
+			drawingDocumentKey,
+			drawingVersion: preparedDocument.version,
+			forkCount: 0,
+			id: artworkId,
+			isNsfw: Boolean(input.isNsfw),
+			mediaContentType: media.contentType,
+			mediaPlaceholder: media.placeholder ?? null,
+			mediaSizeBytes: media.sizeBytes,
+			nsfwLabeledAt: input.isNsfw ? now : null,
+			nsfwSource: input.isNsfw ? 'creator' : null,
+			parentId: parentArtworkId,
+			score: 0,
+			storageKey,
+			title,
+			updatedAt: now
 		});
-	}
+	} catch (error) {
+		// The image belongs to this request alone. The drawing stays: it is named
+		// by its content, so another artwork may already share it.
+		await storage.delete(storageKey).catch(() => {});
 
-	let artwork = outcome.artwork;
-
-	// The artwork row is committed past this point: the drawing document and
-	// the rate-limit bookkeeping must not fail the publish, and above all must
-	// not delete the committed artwork's media from storage. A failed document
-	// write degrades to a doc-less artwork (it renders but cannot seed forks);
-	// readers ignore documents whose drawing_version was never set.
-	if (drawingDocument) {
-		try {
-			const finalized = await writeDrawingDocumentInChunks({
-				category: 'artwork',
-				chunkChars: drawingDocumentChunkChars,
-				documentBase64: drawingDocument,
-				logFields: { artworkId },
-				now,
-				sleep,
-				store: createArtworkDrawingDocumentStore(repository),
-				targetId: artworkId,
-				version: drawingVersion!
-			});
-			if (finalized) {
-				artwork = finalized;
-			} else {
-				console.error(
-					JSON.stringify({
-						artworkId,
-						category: 'artwork',
-						drawingDocumentChars: drawingDocument.length,
-						event: 'drawing_document_write_failed'
-					})
-				);
-			}
-		} catch (error) {
-			console.error(
-				JSON.stringify({
-					artworkId,
-					category: 'artwork',
-					drawingDocumentChars: drawingDocument.length,
-					event: 'drawing_document_write_failed'
-				})
-			);
-			logArtworkFlowFailure('drawing document write', error);
+		if (error instanceof ArtworkFlowError) {
+			throw error;
 		}
+
+		throw new ArtworkFlowError(500, 'Artwork publish failed', 'PUBLISH_FAILED', { cause: error });
 	}
 
 	try {

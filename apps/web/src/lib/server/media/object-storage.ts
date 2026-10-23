@@ -8,7 +8,7 @@ import { appBucket, type AppBucket } from '#lib/server/platform.js';
  * environment runs this same code.
  */
 
-const requireBucket = (): AppBucket => {
+export const requireAppBucket = (): AppBucket => {
 	const bucket = appBucket();
 
 	if (!bucket) {
@@ -21,18 +21,18 @@ const requireBucket = (): AppBucket => {
 export const createObjectStorage = (options: { notFoundMessage: string }) => {
 	const storage: ArtworkStorage = {
 		async upload(key, file) {
-			await requireBucket().put(key, await file.arrayBuffer(), {
+			await requireAppBucket().put(key, await file.arrayBuffer(), {
 				httpMetadata: { contentType: file.type }
 			});
 		},
 
 		async delete(key) {
-			await requireBucket().delete(key);
+			await requireAppBucket().delete(key);
 		}
 	};
 
 	const stream = async (key: string) => {
-		const object = await requireBucket().get(key);
+		const object = await requireAppBucket().get(key);
 
 		if (!object) {
 			throw new ArtworkFlowError(404, options.notFoundMessage, 'NOT_FOUND');
@@ -51,7 +51,7 @@ export const createObjectStorage = (options: { notFoundMessage: string }) => {
 
 /** Empties the bucket. Only the e2e reset route calls it, against local R2. */
 export const deleteAllMediaObjects = async () => {
-	const bucket = requireBucket();
+	const bucket = requireAppBucket();
 	let cursor: string | undefined;
 
 	do {

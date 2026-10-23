@@ -55,7 +55,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Bug: sin WebGL no se podía entrar; la escena 3D vive ahora dentro de un `<svelte:boundary>` (`be8a92d`).
 - [x] Driver `pg` con `drizzle-orm/node-postgres`: un `Client` por petición en Workers, sin `end()`, y un pool en Node. Probado en workerd con `wrangler dev` y Hyperdrive emulado.
 - [ ] Dos configuraciones de Hyperdrive, con y sin caché, y elegir la correcta por petición. **Bloquea el corte:** con `pg` la caché de Hyperdrive (60 s, sin invalidar al escribir) empieza a aplicar. _Requiere acceso a Cloudflare._
-- [ ] Los reintentos de `chunked-write.ts` y de la publicación detectan códigos de postgres.js y asumen reconexión automática; con `pg` quedan inertes. Desaparecen en la fase 2 al mover los documentos a R2; hasta entonces, un corte de conexión en una publicación es un 500.
+- [x] Los reintentos de `chunked-write.ts` y de la publicación, que detectaban códigos de postgres.js y con `pg` quedaban inertes, se fueron con los documentos a R2 (fase 2).
 - [ ] Conexión directa a Supabase por IPv4. _Requiere acceso a Supabase._
 - [x] Better Auth 1.7.12 (`a480b83`), sin migración de datos: desde la 1.7.3 la tabla `account` es la misma que en la 1.6. La 1.4.22 de producción carga `node:async_hooks` con una importación dinámica dentro de la primera petición; en Workers, si esa petición se cancela, el isolate deja de responder a todo lo que pase por Better Auth (issue upstream #10315). La 1.7.12 usa `process.getBuiltinModule`, síncrono en workerd, y no tiene ese fallo.
 - [x] Bug de seguridad: la IP de los rate limits salía del primer valor de `X-Forwarded-For`, que escribe el cliente; con un valor inventado por petición se saltaban el bloqueo de login, el de recuperación y los límites de votos, comentarios y reportes. Ahora sale de `CF-Connecting-IP` (`538abae`).
@@ -79,7 +79,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Avatares en WebP sin pérdida con clave por contenido (`avatars/<id>/<hash>.webp`): la URL lleva la versión y se cachea como inmutable, así que un avatar nuevo se ve al instante en todas partes sin purgar cachés. El codificador AVIF (3,4 MB de WASM) sale del Worker; el decodificador se queda para los avatares antiguos.
 - [x] Imágenes en el bucket R2 de la app (binding `BUCKET`) con las mismas claves que en Supabase Storage. `wrangler dev` y las pruebas lo emulan en local, así que la e2e ya no necesita el almacén en memoria exclusivo de Playwright, y las suites de integración de imágenes y avatares corren en CI solo con Postgres.
 - [ ] Worker `renderer` aparte, para sacar los códecs WASM del Worker principal.
-- [ ] Documentos en R2 con clave sha256; la fila de Postgres se escribe al final como marca de commit.
+- [x] Documentos en R2 (`documents/<sha256>.json.gz`): primero se guardan el dibujo y la imagen, y la fila se escribe al final en una sola sentencia que los nombra, así que ya no hay dibujos a medias ni escrituras troceadas, y Supavisor nunca recibe un documento entero. Las filas anteriores siguen leyéndose de la columna base64 hasta la migración (migración `0017`: columnas `drawing_document_key` y `avatar_document_key`).
 - [ ] Script de migración: documentos byte a byte (omitiendo las escrituras rotas), AVIF copiados con sus claves y backfill a WebP por cola.
 - [ ] Dominio de medios con Tiered Cache y polling en lugar de Supabase Realtime.
 - [ ] Medir la CPU real de render en Workers y la distribución real de puntos por documento.

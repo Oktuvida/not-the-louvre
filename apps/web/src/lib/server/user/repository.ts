@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, lt, or } from 'drizzle-orm';
 import { db } from '#lib/server/db/index.js';
 import { users } from '#lib/server/db/schema.js';
 import type { ListUsersInput, UserRecord, UserRepository } from './types';
@@ -47,11 +47,6 @@ const userAvatarRefProjection = {
 	updatedAt: users.updatedAt
 };
 
-const userAvatarDocumentRefProjection = {
-	avatarDocumentVersion: users.avatarDocumentVersion,
-	id: users.id
-};
-
 type UserProfileRow = {
 	[Key in keyof typeof userProfileColumns]: (typeof users.$inferSelect)[Key];
 };
@@ -72,71 +67,35 @@ const mapProfileRow = (row: UserProfileRow): UserRecord => ({
 });
 
 const mapRow = (
-	row: UserProfileRow & Pick<typeof users.$inferSelect, 'avatarDocument' | 'avatarDocumentVersion'>
+	row: UserProfileRow &
+		Pick<
+			typeof users.$inferSelect,
+			'avatarDocument' | 'avatarDocumentKey' | 'avatarDocumentVersion'
+		>
 ): UserRecord => ({
 	...mapProfileRow(row),
 	avatarDocument: row.avatarDocument ?? null,
+	avatarDocumentKey: row.avatarDocumentKey ?? null,
 	avatarDocumentVersion: row.avatarDocumentVersion ?? null
 });
 
 export const userRepository: UserRepository = {
-	// The expected-length guard makes each append exactly-once under ambiguous
-	// connection failures: a reissued chunk whose first delivery committed
-	// matches zero rows instead of double-appending.
-	async appendUserAvatarDocumentChunk(id, chunk, expectedLength, updatedAt) {
-		const updated = await db
-			.update(users)
-			.set({
-				avatarDocument: sql`coalesce(${users.avatarDocument}, '') || ${chunk}`,
-				updatedAt
-			})
-			.where(
-				and(eq(users.id, id), sql`coalesce(length(${users.avatarDocument}), 0) = ${expectedLength}`)
-			)
-			.returning({ id: users.id });
-
-		return updated.length > 0;
-	},
-
-	async finalizeUserAvatarDocument(id, version, expectedTotalLength, updatedAt) {
-		const [record] = await db
-			.update(users)
-			.set({ avatarDocumentVersion: version, updatedAt })
-			.where(and(eq(users.id, id), sql`length(${users.avatarDocument}) = ${expectedTotalLength}`))
-			.returning(userAvatarDocumentRefProjection);
-
-		return record ?? null;
-	},
-
-	async findUserAvatarDocumentLength(id) {
-		const [row] = await db
-			.select({ length: sql<number>`coalesce(length(${users.avatarDocument}), 0)` })
-			.from(users)
-			.where(eq(users.id, id));
-
-		return row ? Number(row.length) : null;
-	},
-
-	async findUserAvatarDocumentRef(id) {
-		const [row] = await db
-			.select(userAvatarDocumentRefProjection)
-			.from(users)
-			.where(eq(users.id, id));
-
-		return row ?? null;
-	},
-
 	async findUserAvatarRefById(id) {
 		const [row] = await db.select(userAvatarRefProjection).from(users).where(eq(users.id, id));
 
 		return row ?? null;
 	},
 
-	// Keeps the avatar document: the home loader hydrates the avatar editor from
-	// it. Every other caller should use findUserAvatarRefById instead.
+	// Keeps where the avatar drawing is: the home loader hydrates the avatar
+	// editor from it. Every other caller should use findUserAvatarRefById.
 	async findUserById(id) {
 		const row = await db.query.users.findFirst({
-			columns: { ...userProfileColumns, avatarDocument: true, avatarDocumentVersion: true },
+			columns: {
+				...userProfileColumns,
+				avatarDocument: true,
+				avatarDocumentKey: true,
+				avatarDocumentVersion: true
+			},
 			where: eq(users.id, id)
 		});
 		return row ? mapRow(row) : null;
@@ -165,20 +124,12 @@ export const userRepository: UserRepository = {
 			.update(users)
 			.set({
 				avatarDocument: input.avatarDocument,
+				avatarDocumentKey: input.avatarDocumentKey,
 				avatarDocumentVersion: input.avatarDocumentVersion,
 				avatarOnboardingCompletedAt: input.avatarOnboardingCompletedAt,
 				avatarUrl: input.avatarUrl,
 				updatedAt: input.updatedAt
 			})
-			.where(eq(users.id, id))
-			.returning(userProfileProjection);
-		return rows[0] ? mapProfileRow(rows[0]) : null;
-	},
-
-	async updateUserAvatarUrl(id, avatarUrl, avatarOnboardingCompletedAt, updatedAt) {
-		const rows = await db
-			.update(users)
-			.set({ avatarOnboardingCompletedAt, avatarUrl, updatedAt })
 			.where(eq(users.id, id))
 			.returning(userProfileProjection);
 		return rows[0] ? mapProfileRow(rows[0]) : null;
