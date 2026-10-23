@@ -1,6 +1,8 @@
 export const ARTWORK_TITLE_MAX_LENGTH = 100;
-export const ARTWORK_MEDIA_MAX_BYTES = 100 * 1024;
-export const ARTWORK_MEDIA_CONTENT_TYPE = 'image/avif';
+// A guard, not a budget: the worst case measured at the document limits, fine
+// multicoloured noise over the whole canvas, is about 770 KiB lossless.
+export const ARTWORK_MEDIA_MAX_BYTES = 1024 * 1024;
+export const ARTWORK_MEDIA_CONTENT_TYPE = 'image/webp';
 export const ARTWORK_MEDIA_WIDTH = 768;
 export const ARTWORK_MEDIA_HEIGHT = 768;
 export const ARTWORK_STORAGE_BUCKET = 'artworks';

@@ -299,16 +299,16 @@ describe('artwork service', () => {
 		);
 
 		expect(result.id).toBe('artwork-1');
-		expect(result.storageKey).toBe('artworks/user-1/artwork-1.avif');
+		expect(result.storageKey).toBe('artworks/user-1/artwork-1.webp');
 		expect(result.parentId).toBeNull();
 		expect(result.forkCount).toBe(0);
 		expect(uploads).toHaveLength(1);
-		expect(uploads[0]?.key).toBe('artworks/user-1/artwork-1.avif');
+		expect(uploads[0]?.key).toBe('artworks/user-1/artwork-1.webp');
 		expect(artworks.get('artwork-1')).toMatchObject({
 			title: 'Evening Light',
 			authorId: 'user-1',
 			isNsfw: false,
-			storageKey: 'artworks/user-1/artwork-1.avif',
+			storageKey: 'artworks/user-1/artwork-1.webp',
 			parentId: null,
 			forkCount: 0
 		});
@@ -363,14 +363,14 @@ describe('artwork service', () => {
 			}
 		);
 
-		expect(result.storageKey).toBe('artworks/user-1/artwork-1.avif');
+		expect(result.storageKey).toBe('artworks/user-1/artwork-1.webp');
 		expect(result.drawingVersion).toBe(2);
 		// The finalize RETURNING must not hand the ~100 KB document back over the
 		// pooler that the chunked write just fed it 16 KiB at a time.
 		expect(result.drawingDocument).toBeUndefined();
 		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(drawingDocument);
 		expect(uploads).toHaveLength(1);
-		expect(uploads[0]?.file.type).toBe('image/avif');
+		expect(uploads[0]?.file.type).toBe('image/webp');
 		expect(gunzipBase64(artworks.get('artwork-1')!.drawingDocument!)).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
@@ -750,7 +750,7 @@ describe('artwork service', () => {
 			status: 500
 		});
 
-		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
+		expect(deletes).toEqual(['artworks/user-1/artwork-1.webp']);
 	});
 
 	it('retries the artwork insert with backoff when the connection closed mid-write', async () => {
@@ -840,7 +840,7 @@ describe('artwork service', () => {
 
 		expect(repository.createArtwork).toHaveBeenCalledTimes(3);
 		expect(sleeps).toEqual([500, 2000]);
-		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
+		expect(deletes).toEqual(['artworks/user-1/artwork-1.webp']);
 	});
 
 	it('recovers via read-back when the final retry committed but the ack was lost', async () => {
@@ -936,7 +936,7 @@ describe('artwork service', () => {
 		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
 
 		expect(repository.createArtwork).toHaveBeenCalledTimes(1);
-		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
+		expect(deletes).toEqual(['artworks/user-1/artwork-1.webp']);
 	});
 
 	it('keeps retrying when a redial fails with CONNECT_TIMEOUT mid-ladder', async () => {
@@ -1609,7 +1609,7 @@ describe('artwork service', () => {
 		);
 
 		expect(deleted.id).toBe('artwork-1');
-		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
+		expect(deletes).toEqual(['artworks/user-1/artwork-1.webp']);
 	});
 
 	it('decrements the parent fork count when a child fork is deleted', async () => {
