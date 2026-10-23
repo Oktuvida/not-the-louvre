@@ -630,6 +630,18 @@ describeWithDatabase('artwork DB contract', () => {
 		expect(queue.items[1]).toMatchObject({ reportCount: 1, targetType: 'artwork' });
 	});
 
+	it('answers a repeated report from the same visitor as a duplicate, not a server error', async () => {
+		const { submitContentReport } = await import('./service');
+		const reporter = { ipAddress: '127.0.0.1', user: createCanonicalUser('reporter-1') };
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-reported-twice' });
+		await submitContentReport({ artworkId: 'artwork-reported-twice', reason: 'spam' }, reporter);
+
+		await expect(
+			submitContentReport({ artworkId: 'artwork-reported-twice', reason: 'spam' }, reporter)
+		).rejects.toMatchObject({ code: 'DUPLICATE_REPORT', status: 409 });
+	});
+
 	it('resolves reports with reviewer attribution for dismiss, hide, and delete moderation outcomes', async () => {
 		const { createArtworkComment, moderateArtwork, moderateComment, submitContentReport } =
 			await import('./service');
