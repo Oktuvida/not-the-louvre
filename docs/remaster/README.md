@@ -49,8 +49,11 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 
 - [x] Arreglar el upsert de rate limit, roto en producción desde el 8 de septiembre (`35a5e17`). Para producción está listo en `hotfix/rate-limit-upsert`.
 - [x] Plan e informe dentro del repo.
-- [ ] Suite de contrato SQL en CI contra Postgres.
-- [ ] Tests e2e en CI.
+- [x] Suite de contrato SQL en CI contra Postgres (job `database`).
+- [x] Tests e2e en CI, excepto los `@realtime`, que necesitan Supabase Realtime y desaparecen en la fase 2.
+- [ ] Sacar de cuarentena los 6 e2e marcados con `test.fixme`: 3 de compactación (se reescriben en la fase 1), 2 de buffering del lienzo (fase 4) y el de la sala misteriosa (bug de interfaz, abajo).
+- [ ] Bug: sin WebGL no se puede entrar. La escena 3D de la home lanza un error y "Come In" nunca abre el panel de login. Comprobado en producción con Chromium headless. El login no puede depender de la escena.
+- [ ] Bug: en el detalle, a 1280×720, el pie de la postal tapa el botón "Send comment".
 - [ ] Driver `pg` y dos configuraciones de Hyperdrive, con y sin caché. *Requiere acceso a Cloudflare.*
 - [ ] Conexión directa a Supabase por IPv4. *Requiere acceso a Supabase.*
 - [ ] Better Auth 1.7, rate limit en base de datos y un e2e de petición abortada.
