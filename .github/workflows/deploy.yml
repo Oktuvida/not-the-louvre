@@ -21,6 +21,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # SvelteKit 3 needs Node 22.17+, and vitest, vite and wrangler run on Node.
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -96,6 +102,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # SvelteKit 3 needs Node 22.17+, and vitest, vite and wrangler run on Node.
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -153,6 +165,12 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      # SvelteKit 3 needs Node 22.17+, and vitest, vite and wrangler run on Node.
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
