@@ -26,6 +26,15 @@ export const auth = betterAuth({
 		// Vite (`bun run auth:schema`), where the name is undeclared.
 		disabled: typeof __PLAYWRIGHT__ !== 'undefined' && __PLAYWRIGHT__
 	},
+	advanced: {
+		ipAddress: {
+			// Every rate limit and session keys on this address. Cloudflare sets
+			// CF-Connecting-IP itself, while X-Forwarded-For, the default, keeps
+			// whatever the client sent: a fresh forged value per request would buy a
+			// fresh allowance of guesses.
+			ipAddressHeaders: ['cf-connecting-ip']
+		}
+	},
 	emailAndPassword: {
 		enabled: true,
 		requireEmailVerification: false
