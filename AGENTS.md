@@ -85,6 +85,9 @@ SQL this app ships — fork lineage, keyset paging, the rate-limit upsert — is
 executed. It needs only Postgres and runs in CI's `database` job. To run it locally against
 any plain Postgres, set `DATABASE_URL` and run `db:platform-objects` (plain Postgres only,
 never Supabase), `db:migrate` and `test:contract` with `bun run --filter @not-the-louvre/web`.
+The e2e suite builds the Worker and serves it on workerd with `wrangler dev`, using the same
+`DATABASE_URL` through Wrangler's local Hyperdrive emulation, so it exercises the production
+runtime rather than Node.
 The media and avatar suites still need the local Supabase stack's Storage, so **run them by
 hand before a release**: `bun run db:start`, then
 `bun run --filter @not-the-louvre/web test:integration`.

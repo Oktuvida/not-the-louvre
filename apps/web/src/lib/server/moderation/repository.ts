@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
-import { db } from '$lib/server/db';
-import { moderationTextPolicies, viewerContentPreferences } from '$lib/server/db/schema';
+import { db } from '#lib/server/db/index.js';
+import { moderationTextPolicies, viewerContentPreferences } from '#lib/server/db/schema.js';
 import type {
 	ModerationRepository,
 	UpdateTextPolicyInput,

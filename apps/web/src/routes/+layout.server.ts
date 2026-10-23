@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
-import { resolveFaviconState } from '$lib/favicon';
-import { getViewerContentPreferences } from '$lib/server/moderation/service';
+import { resolveFaviconState } from '#lib/favicon.js';
+import { getViewerContentPreferences } from '#lib/server/moderation/service.js';
 
 // The viewer's single preference row is read here once and handed down: the
 // home load and the gallery room loader used to re-read the same row for

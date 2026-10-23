@@ -1,17 +1,17 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
 	import { untrack } from 'svelte';
-	import { gsap } from '$lib/client/gsap';
+	import { gsap } from '#lib/client/gsap.js';
 	import { Canvas, T } from '@threlte/core';
 	import { GLTF } from '@threlte/extras';
 	import type { Group, Object3D, OrthographicCamera } from 'three';
-	import type { HomeSceneArtworkSlot } from '$lib/features/home-entry-scene/state/home-entry.svelte';
-	import { studioCanvasShadowMap } from '$lib/features/home-entry-scene/scene/studio-renderer-config';
-	import { getStudioDracoLoader } from '$lib/features/home-entry-scene/scene/studio-draco-loader';
-	import SceneFrameInvalidator from '$lib/features/home-entry-scene/scene/SceneFrameInvalidator.svelte';
-	import SceneTextureBindings from '$lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
-	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
-	import type { EntryFlowState } from '$lib/features/home-entry-scene/state/entry-state.svelte';
+	import type { HomeSceneArtworkSlot } from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
+	import { studioCanvasShadowMap } from '#lib/features/home-entry-scene/scene/studio-renderer-config.js';
+	import { getStudioDracoLoader } from '#lib/features/home-entry-scene/scene/studio-draco-loader.js';
+	import SceneFrameInvalidator from '#lib/features/home-entry-scene/scene/SceneFrameInvalidator.svelte';
+	import SceneTextureBindings from '#lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
+	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import type { EntryFlowState } from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
 
 	type StudioSceneMediaState = 'error' | 'loaded' | 'pending';
 
@@ -22,17 +22,18 @@
 		artworkSlots = [],
 		avatarUrl = null,
 		onMediaStateChange
+
+		/*
+		 * The loading card lives in HomeEntryPage, not here: this component is
+		 * imported lazily so three.js stays off the home critical path, and the
+		 * card has to be on screen from first paint — before this chunk lands.
+		 */
 	}: {
 		entryState?: EntryFlowState;
 		initialPose?: 'default' | 'left-wall' | 'top-close';
 		scenePose?: 'default' | 'left-wall' | 'top-close';
 		artworkSlots?: HomeSceneArtworkSlot[];
 		avatarUrl?: string | null;
-		/*
-		 * The loading card lives in HomeEntryPage, not here: this component is
-		 * imported lazily so three.js stays off the home critical path, and the
-		 * card has to be on screen from first paint — before this chunk lands.
-		 */
 		onMediaStateChange?: (state: StudioSceneMediaState) => void;
 	} = $props();
 

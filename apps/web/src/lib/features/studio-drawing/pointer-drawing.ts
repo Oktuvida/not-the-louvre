@@ -3,7 +3,7 @@ import {
 	type DrawingDocumentV2,
 	type DrawingPoint,
 	type DrawingStroke
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 
 /**
  * The pointer-drawing pieces the studio canvas and the avatar sketchpad share.

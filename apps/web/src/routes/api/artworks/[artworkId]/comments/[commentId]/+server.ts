@@ -1,7 +1,6 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { deleteArtworkComment } from '$lib/server/artwork/service';
-import { toApiErrorResponse } from '$lib/server/http/errors';
+import { deleteArtworkComment } from '#lib/server/artwork/service.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
 
 const COMMENT_DELETE_ERROR = {
 	fallbackCode: 'COMMENT_DELETE_FAILED',
@@ -16,7 +15,7 @@ export const DELETE: RequestHandler = async (event) => {
 			{ user: event.locals.user }
 		);
 
-		return json({ comment });
+		return Response.json({ comment });
 	} catch (error) {
 		return toApiErrorResponse(error, COMMENT_DELETE_ERROR);
 	}

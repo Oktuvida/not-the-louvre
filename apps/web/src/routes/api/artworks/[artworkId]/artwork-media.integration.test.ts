@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
-import { createAvifTestFile, fileToBytes } from '$lib/server/media/test-helpers';
-import { supabaseArtworkStorage } from '$lib/server/artwork/storage';
+import { createAvifTestFile, fileToBytes } from '#lib/server/media/test-helpers.js';
+import { supabaseArtworkStorage } from '#lib/server/artwork/storage.js';
 
 const testFileDirectory = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(testFileDirectory, '../../../../../');

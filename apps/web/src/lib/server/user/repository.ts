@@ -1,6 +1,6 @@
 import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
-import { db } from '$lib/server/db';
-import { users } from '$lib/server/db/schema';
+import { db } from '#lib/server/db/index.js';
+import { users } from '#lib/server/db/schema.js';
 import type { ListUsersInput, UserRecord, UserRepository } from './types';
 
 // Every UserRecord column except the avatar drawing document. `recovery_hash`

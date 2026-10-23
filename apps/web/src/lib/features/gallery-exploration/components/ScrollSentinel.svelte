@@ -1,6 +1,6 @@
 <script lang="ts">
-	import PolaroidSkeletonGrid from '$lib/features/gallery-exploration/components/PolaroidSkeletonGrid.svelte';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import PolaroidSkeletonGrid from '#lib/features/gallery-exploration/components/PolaroidSkeletonGrid.svelte';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 
 	interface Props {
 		onTrigger?: () => void;

@@ -6,8 +6,8 @@
 </script>
 
 <nav>
-	<a href={resolve('/demo')}>Back to demo index</a>
-	<a href={resolve('/demo/better-auth')}>Back to auth demo</a>
+	<a href={resolve('demo')}>Back to demo index</a>
+	<a href={resolve('demo/better-auth')}>Back to auth demo</a>
 </nav>
 
 <h1>Artwork Publish Demo</h1>

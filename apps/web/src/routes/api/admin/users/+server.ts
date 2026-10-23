@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
-import { toApiErrorResponse } from '$lib/server/http/errors';
-import { listUsers } from '$lib/server/user/admin.service';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
+import { listUsers } from '#lib/server/user/admin.service.js';
 
 // Answers errors as `{ code, message }` like every other JSON route; the admin
 // dashboard used to need a content-type sniff because this one spoke text.

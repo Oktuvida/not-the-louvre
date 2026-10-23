@@ -11,7 +11,7 @@ import {
 	parseDrawingDocument,
 	parseDrawingDocumentV2,
 	serializeCanonicalDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import { ArtworkFlowError } from './errors';
 import {
@@ -22,7 +22,7 @@ import {
 	createWebpTestFile,
 	fileToBytes
 } from '../media/test-helpers';
-import { applyRateLimitAttempt } from '$lib/server/db/fixtures/rate-limit';
+import { applyRateLimitAttempt } from '#lib/server/db/fixtures/rate-limit.js';
 import type {
 	ArtworkRecord,
 	ArtworkRepository,
@@ -48,11 +48,11 @@ const runtime = vi.hoisted(() => ({
 	prepareDrawingDocumentForStorage: vi.fn()
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	checkTextModeration: moderation.checkTextModeration
 }));
 
-vi.mock('$lib/server/drawing-document/storage', () => ({
+vi.mock('#lib/server/drawing-document/storage.js', () => ({
 	prepareDrawingDocumentForStorage: runtime.prepareDrawingDocumentForStorage
 }));
 

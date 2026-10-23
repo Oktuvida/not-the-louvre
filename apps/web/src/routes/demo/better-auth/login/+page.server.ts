@@ -1,22 +1,22 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import type { PageServerLoad } from './$types';
-import { auth } from '$lib/server/auth';
+import { auth } from '#lib/server/auth.js';
 import { getIp } from 'better-auth/api';
-import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
-import { toActionFailure } from '$lib/server/http/errors';
+import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
+import { toActionFailure } from '#lib/server/http/errors.js';
 import {
 	getNicknameAvailability,
 	recoverAccount,
 	signInWithNickname,
 	signUpWithNickname
-} from '$lib/server/auth/service';
+} from '#lib/server/auth/service.js';
 import {
 	availabilitySchema,
 	recoverSchema,
 	signInSchema,
 	signupSchema
-} from '$lib/server/auth/validation';
+} from '#lib/server/auth/validation.js';
 
 const toFailure = (error: unknown, fallback: string) =>
 	toActionFailure(error, { fallbackMessage: fallback, scope: 'demo auth action' });

@@ -5,7 +5,7 @@ import GalleryRoomNav from './GalleryRoomNav.svelte';
 
 describe('GalleryRoomNav', () => {
 	it('renders room navigation with shared sticker links', async () => {
-		render(GalleryRoomNav, { roomId: 'hall-of-fame' });
+		await render(GalleryRoomNav, { roomId: 'hall-of-fame' });
 
 		await expect
 			.element(page.getByRole('link', { name: 'Hall of Fame' }))
@@ -17,7 +17,7 @@ describe('GalleryRoomNav', () => {
 	});
 
 	it('includes the personal room for authenticated viewers', async () => {
-		render(GalleryRoomNav, {
+		await render(GalleryRoomNav, {
 			roomId: 'hall-of-fame',
 			viewer: { id: 'user-1', role: 'user' }
 		});
@@ -26,7 +26,7 @@ describe('GalleryRoomNav', () => {
 	});
 
 	it('keeps room navigation horizontally scrollable for narrow layouts', async () => {
-		render(GalleryRoomNav, { roomId: 'hall-of-fame' });
+		await render(GalleryRoomNav, { roomId: 'hall-of-fame' });
 
 		const nav = document.querySelector('nav');
 		expect(nav).not.toBeNull();

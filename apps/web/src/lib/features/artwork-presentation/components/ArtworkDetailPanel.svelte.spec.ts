@@ -50,7 +50,7 @@ describe('ArtworkDetailPanel', () => {
 	it('links forking into the draw studio with the parent artwork id', async () => {
 		goto.mockReset();
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'user-1', role: 'user' }
 		});
@@ -68,7 +68,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('shows fork attribution when the artwork comes from a parent artwork', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: {
 				...artwork,
 				lineage: {
@@ -89,7 +89,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('opens an enlarged author avatar preview from the detail view', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: {
 				...artwork,
 				artistAvatar: '/avatars/journey.png'
@@ -110,7 +110,7 @@ describe('ArtworkDetailPanel', () => {
 	it('renders artwork detail as read-only for signed-out visitors', async () => {
 		goto.mockReset();
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: null
 		});
@@ -123,7 +123,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('keeps the visitor book scrollable inside the postcard back', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: {
 				...artwork,
 				comments: [{ author: 'visitor_one', id: 'comment-1', text: 'hello', timestamp: Date.now() }]
@@ -160,7 +160,7 @@ describe('ArtworkDetailPanel', () => {
 			)
 		);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			checkTextContent,
 			artwork,
 			onArtworkChange,
@@ -199,7 +199,7 @@ describe('ArtworkDetailPanel', () => {
 		}));
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			checkTextContent,
 			artwork,
 			onArtworkChange,
@@ -224,7 +224,7 @@ describe('ArtworkDetailPanel', () => {
 		}));
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			checkTextContent,
 			artwork,
 			onArtworkChange,
@@ -254,7 +254,7 @@ describe('ArtworkDetailPanel', () => {
 			);
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			onArtworkChange,
 			viewer: { id: 'admin-1', role: 'admin' }
@@ -278,7 +278,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('blurs NSFW artwork for viewers without the 18+ preference', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, isNsfw: true },
 			viewer: { id: 'user-other', role: 'user' }
 		});
@@ -287,7 +287,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('never blurs the author viewing their own NSFW artwork', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, isNsfw: true },
 			viewer: { id: 'user-test', role: 'user' }
 		});
@@ -296,7 +296,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('shows a comments skeleton while the detail is hydrating', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			isHydrating: true
 		});
@@ -308,7 +308,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('never carries the lift or the tilt of the previous artwork into the next one', async () => {
-		const { rerender } = render(ArtworkDetailPanel, {
+		const { rerender } = await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'admin-1', role: 'admin' }
 		});
@@ -330,7 +330,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('opens the postcard window onto the LQIP instead of blank paper', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, imagePlaceholder: 'data:image/webp;base64,lqip' }
 		});
 
@@ -345,7 +345,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('censors the detail with the same treatment as every grid card', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: {
 				...artwork,
 				imagePlaceholder: 'data:image/webp;base64,lqip',
@@ -369,7 +369,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('stops censoring a piece the visitor revealed in the grid', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, isNsfw: true },
 			revealedArtworkIds: writable(new Set(['artwork-1'])),
 			viewer: { id: 'user-other', role: 'user' }
@@ -384,7 +384,7 @@ describe('ArtworkDetailPanel', () => {
 			vi.fn(() => new Promise(() => undefined))
 		);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, upvotes: 3, viewerVote: 'up' as const },
 			viewer: { id: 'user-1', role: 'user' }
 		});
@@ -403,7 +403,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('exposes the cast vote as a pressed toggle, not only as a ring', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, upvotes: 3, viewerVote: 'up' as const },
 			viewer: { id: 'user-1', role: 'user' }
 		});
@@ -429,7 +429,7 @@ describe('ArtworkDetailPanel', () => {
 			)
 		);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'user-1', role: 'user' }
 		});
@@ -446,7 +446,7 @@ describe('ArtworkDetailPanel', () => {
 			vi.fn(async () => new Response(JSON.stringify({ code: 'PUBLISH_FAILED' }), { status: 500 }))
 		);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'user-1', role: 'user' }
 		});
@@ -474,7 +474,7 @@ describe('ArtworkDetailPanel', () => {
 		);
 		const onNotify = vi.fn();
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			onNotify,
 			viewer: { id: 'user-1', role: 'user' }
@@ -494,7 +494,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('keeps Tab inside the dialog instead of walking into the gallery behind it', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'user-1', role: 'user' }
 		});
@@ -520,7 +520,7 @@ describe('ArtworkDetailPanel', () => {
 	it('dismisses on Escape even when focus sits inside the postcard', async () => {
 		const onClose = vi.fn();
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			onClose,
 			viewer: { id: 'user-1', role: 'user' }
@@ -539,7 +539,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('hands focus back to the avatar that opened the seal preview', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, artistAvatar: '/avatars/journey.png' }
 		});
 
@@ -562,7 +562,7 @@ describe('ArtworkDetailPanel', () => {
 		document.body.append(opener);
 		opener.focus();
 
-		const { rerender } = render(ArtworkDetailPanel, { artwork });
+		const { rerender } = await render(ArtworkDetailPanel, { artwork });
 
 		await vi.waitFor(() => {
 			expect(document.activeElement).not.toBe(opener);
@@ -581,7 +581,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('announces async work in a live region', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			isHydrating: true
 		});
@@ -607,7 +607,7 @@ describe('ArtworkDetailPanel', () => {
 			.spyOn(HTMLAnchorElement.prototype, 'click')
 			.mockImplementation(() => undefined);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, title: 'Detail Artwork!' }
 		});
 

@@ -1,20 +1,21 @@
 import { untrack } from 'svelte';
 import { beforeNavigate } from '$app/navigation';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 import {
 	createArtworkAccumulator,
 	type ArtworkAccumulator
-} from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
+} from '#lib/features/gallery-exploration/artwork-accumulator.svelte.js';
 import type {
 	GalleryPageInfo,
 	LoadMoreArtworks
-} from '$lib/features/gallery-exploration/model/discovery';
+} from '#lib/features/gallery-exploration/model/discovery.js';
+
 import {
 	readRoomFeedSnapshot,
 	restoreRoomFeedScroll,
 	writeRoomFeedSnapshot
-} from '$lib/features/gallery-exploration/model/feed-cache';
-import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+} from '#lib/features/gallery-exploration/model/feed-cache.js';
+import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
 
 /*
  * The seed reconciliation every room needs, written once.
@@ -153,7 +154,10 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Artw
 		 * the restore a no-op.
 		 */
 		let lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
-		beforeNavigate(() => {
+
+		beforeNavigate(({ shallow, type }) => {
+			if (shallow && type === 'goto') return;
+
 			lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
 		});
 

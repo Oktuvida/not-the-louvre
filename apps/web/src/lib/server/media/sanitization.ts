@@ -3,9 +3,9 @@ import {
 	ARTWORK_MEDIA_HEIGHT,
 	ARTWORK_MEDIA_MAX_BYTES,
 	ARTWORK_MEDIA_WIDTH
-} from '$lib/server/artwork/config';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import type { SanitizedMedia } from '$lib/server/artwork/types';
+} from '#lib/server/artwork/config.js';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import type { SanitizedMedia } from '#lib/server/artwork/types.js';
 import {
 	containOnBackground,
 	decodeImage,
@@ -20,14 +20,14 @@ import {
 	sniffImageFormat,
 	type AvifEncodeSettings,
 	type RawImage
-} from '$lib/server/media/codecs';
+} from '#lib/server/media/codecs/index.js';
 import {
 	AVATAR_MEDIA_CONTENT_TYPE,
 	AVATAR_MEDIA_HEIGHT,
 	AVATAR_MEDIA_MAX_BYTES,
 	AVATAR_UPLOAD_CONTENT_TYPE,
 	AVATAR_MEDIA_WIDTH
-} from '$lib/server/user/config';
+} from '#lib/server/user/config.js';
 
 type MediaSanitizationProfile = {
 	contentType: string;

@@ -1,13 +1,20 @@
-import { env } from '$env/dynamic/private';
+import {
+	PUBLIC_SUPABASE_ANON_KEY,
+	SUPABASE_ANON_KEY,
+	ANON_KEY,
+	PUBLIC_SUPABASE_URL,
+	SUPABASE_PUBLIC_URL
+} from '$app/env/private';
+
 import { error, fail, isRedirect, redirect } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
-import { auth } from '$lib/server/auth';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { getArtworkDetail } from '$lib/server/artwork/read.service';
-import { publishArtwork } from '$lib/server/artwork/service';
-import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
-import { toActionFailure } from '$lib/server/http/errors';
+import { auth } from '#lib/server/auth.js';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import { getArtworkDetail } from '#lib/server/artwork/read.service.js';
+import { publishArtwork } from '#lib/server/artwork/service.js';
+import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
+import { toActionFailure } from '#lib/server/http/errors.js';
 
 const toFailure = (errorValue: unknown, fallback: string) =>
 	toActionFailure(errorValue, {
@@ -49,8 +56,8 @@ export const load: PageServerLoad = async (event) => {
 		// The root layout renders the only <title>; the route names itself here.
 		meta: { title: 'Artwork Realtime Vote Demo' } satisfies RouteMeta,
 		realtimeConfig: {
-			anonKey: env.PUBLIC_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || env.ANON_KEY || null,
-			url: env.PUBLIC_SUPABASE_URL || env.SUPABASE_PUBLIC_URL || null
+			anonKey: PUBLIC_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY || ANON_KEY || null,
+			url: PUBLIC_SUPABASE_URL || SUPABASE_PUBLIC_URL || null
 		},
 		trackedArtwork,
 		trackedArtworkState,

@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
 import RootLayoutHarness from './RootLayoutHarness.svelte';
-import { SITE_NAME } from '$lib/features/shared-ui/site-meta';
+import { SITE_NAME } from '#lib/features/shared-ui/site-meta.js';
 
 const idleCallbacks: IdleRequestCallback[] = [];
 
@@ -70,8 +70,8 @@ describe('root layout', () => {
 
 	// The /table.avif warm-up belongs to the surfaces that lead to /draw (the
 	// home page and the gallery's "Create Art" control), not to every route.
-	it('does not warm the studio background from routes that may never reach /draw', () => {
-		renderRootLayout();
+	it('does not warm the studio background from routes that may never reach /draw', async () => {
+		await renderRootLayout();
 
 		for (const callback of idleCallbacks) {
 			callback({ didTimeout: false, timeRemaining: () => 1 } as IdleDeadline);
@@ -81,7 +81,7 @@ describe('root layout', () => {
 	});
 
 	it('renders the shared document title and share-preview metadata', async () => {
-		renderRootLayout();
+		await renderRootLayout();
 
 		expect(document.title).toBe(SITE_NAME);
 
@@ -99,7 +99,7 @@ describe('root layout', () => {
 		pageState.error = { message: 'Not found' };
 		pageState.status = 404;
 
-		renderRootLayout();
+		await renderRootLayout();
 
 		expect(document.title).toBe(`404 · ${SITE_NAME}`);
 	});
@@ -111,7 +111,7 @@ describe('root layout', () => {
 	 * which is exactly what that attribute promises does not happen.
 	 */
 	it('takes the Ops link out of the page while a modal dialog is open', async () => {
-		renderRootLayout(MODERATOR);
+		await renderRootLayout(MODERATOR);
 
 		const opsLink = document.querySelector('.ops-link');
 		expect(opsLink).not.toBeNull();
@@ -142,7 +142,7 @@ describe('root layout', () => {
 
 		try {
 			await page.viewport(390, 844);
-			renderRootLayout(MODERATOR);
+			await renderRootLayout(MODERATOR);
 
 			const pill = (document.querySelector('.ops-link') as Element).getBoundingClientRect();
 
@@ -162,8 +162,8 @@ describe('root layout', () => {
 	 * which made every page fetch both files — latin-ext first, ahead of the
 	 * preloaded faces it delays.
 	 */
-	it('declares one rangeless face per family and weight', () => {
-		renderRootLayout();
+	it('declares one rangeless face per family and weight', async () => {
+		await renderRootLayout();
 
 		const rangeless = new Map<string, number>();
 		let latinExtFaces = 0;
@@ -205,8 +205,8 @@ describe('root layout', () => {
 		expect(latinExtFaces).toBe(11);
 	});
 
-	it('preloads the two above-the-fold font faces with crossorigin', () => {
-		renderRootLayout();
+	it('preloads the two above-the-fold font faces with crossorigin', async () => {
+		await renderRootLayout();
 
 		const preloads = Array.from(
 			document.head.querySelectorAll<HTMLLinkElement>('link[rel="preload"][as="font"]')

@@ -1,4 +1,4 @@
-import type { CanonicalUser } from '$lib/server/auth/types';
+import type { CanonicalUser } from '#lib/server/auth/types.js';
 
 export type FaviconState = {
 	href: string;

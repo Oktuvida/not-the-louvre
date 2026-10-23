@@ -1,18 +1,17 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import { goto } from '$app/navigation';
-	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount, untrack } from 'svelte';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
-	} from '$lib/client/content-filter';
+	} from '#lib/client/content-filter/index.js';
 	import {
 		buildDrawingDraftKey,
 		createDrawingDraftSession,
 		type IndexedDbDrawingDraftStore
-	} from '$lib/features/stroke-json/drafts';
+	} from '#lib/features/stroke-json/drafts.js';
 	import {
 		DRAWING_DOCUMENT_VERSION,
 		cloneDrawingDocumentV2,
@@ -22,20 +21,20 @@
 		serializeDrawingDocument,
 		type DrawingDocumentV2,
 		type DrawingStroke
-	} from '$lib/features/stroke-json/document';
+	} from '#lib/features/stroke-json/document.js';
 	import type {
 		DrawForkParent,
 		DrawPageUser,
 		DrawPublishActionData,
 		DrawPublishedArtwork
-	} from '$lib/features/studio-drawing/publish-contract';
-	import DrawingBookStage from '$lib/features/studio-drawing/components/DrawingBookStage.svelte';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
-	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
-	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
-	import DrawingCanvas from '$lib/features/studio-drawing/components/DrawingCanvas.svelte';
-	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
+	} from '#lib/features/studio-drawing/publish-contract.js';
+	import DrawingBookStage from '#lib/features/studio-drawing/components/DrawingBookStage.svelte';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
+	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
+	import DrawingCanvas from '#lib/features/studio-drawing/components/DrawingCanvas.svelte';
+	import DrawingToolTray from '#lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 
 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
@@ -99,11 +98,8 @@
 			const mode =
 				typeof window === 'undefined'
 					? 'good'
-					: ((
-							window as Window & {
-								__drawingExportMode?: 'bad' | 'unsupported' | 'webp';
-							}
-						).__drawingExportMode ?? 'good');
+					: ((window as Window & { __drawingExportMode?: 'bad' | 'unsupported' | 'webp' })
+							.__drawingExportMode ?? 'good');
 
 			if (mode === 'unsupported') {
 				return null;
@@ -166,7 +162,7 @@
 			return { message: 'Artwork publish failed' };
 		},
 		replaceStudioUrl = () => {
-			replaceState(resolve('/draw'), window.history.state);
+			goto(resolve('draw'), { shallow: true, replace: true, state: window.history.state });
 		},
 		draftStore,
 		user
@@ -488,7 +484,7 @@
 	// studio is unmounted mid-fade — a stale callback would still pull a visitor
 	// who has already gone somewhere else back to the home page.
 	const completeExitToHome = () => {
-		void goto(resolve('/?from=studio'));
+		void goto(resolve('?from=studio'));
 	};
 
 	const publishArtwork = async () => {
@@ -610,8 +606,12 @@
 					stroke="currentColor"
 					stroke-width="2"
 					stroke-linecap="round"
-					stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg
+					stroke-linejoin="round"
 				>
+					<path d="m12 19-7-7 7-7"></path>
+					<path d="M19 12H5"></path>
+				</svg>
+
 				<span>Exit Studio</span>
 			</GameLink>
 		</div>

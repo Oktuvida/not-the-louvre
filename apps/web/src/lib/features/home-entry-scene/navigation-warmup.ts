@@ -1,5 +1,5 @@
-import { browser } from '$app/environment';
-import { preloadCode, preloadData } from '$app/navigation';
+import { browser } from '$app/env';
+import { preloadData } from '$app/navigation';
 import { resolve } from '$app/paths';
 
 /*
@@ -11,7 +11,7 @@ import { resolve } from '$app/paths';
  * fade completes.
  */
 export const homeGalleryTarget = `${resolve('/gallery/[[room]]', { room: 'your-studio' })}?from=home`;
-export const homeStudioTarget = resolve('/draw');
+export const homeStudioTarget = resolve('draw');
 
 const warmedTargets = new Set<string>();
 
@@ -27,14 +27,10 @@ export const warmNavigationTarget = (target: string) => {
 
 	warmedTargets.add(target);
 
-	const pathname = target.split('?')[0] ?? target;
-
-	void preloadCode(pathname).catch(() => {
-		// A cold-start warm-up must never surface as an error to the visitor.
-	});
-	void preloadData(target).catch(() => {
-		// Same: the navigation itself will retry and report properly.
-	});
+	// preloadData loads the route's code as well as running its load. A failed
+	// warm-up must never surface to the visitor: the navigation itself retries
+	// and reports properly.
+	void preloadData(target).catch(() => {});
 };
 
 /**

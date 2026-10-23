@@ -1,30 +1,30 @@
 <script lang="ts">
 	import { Paintbrush } from 'lucide-svelte';
 	import { onMount, type Snippet } from 'svelte';
-	import { browser } from '$app/environment';
-	import { goto, replaceState } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { browser } from '$app/env';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { gsap } from '$lib/client/gsap';
-	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
+	import { gsap } from '#lib/client/gsap.js';
+	import type { HomeAuthUser } from '#lib/features/home-entry-scene/auth-contract.js';
 	import type {
 		HomePreviewCard,
 		HomeSceneArtworkSlot
-	} from '$lib/features/home-entry-scene/state/home-entry.svelte';
-	import HomeHeroOverlay from '$lib/features/home-entry-scene/components/HomeHeroOverlay.svelte';
-	import PersistentNav from '$lib/features/home-entry-scene/components/PersistentNav.svelte';
-	import StudioLoadingFallback from '$lib/features/shared-3d-world/components/StudioLoadingFallback.svelte';
+	} from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
+	import HomeHeroOverlay from '#lib/features/home-entry-scene/components/HomeHeroOverlay.svelte';
+	import PersistentNav from '#lib/features/home-entry-scene/components/PersistentNav.svelte';
+	import StudioLoadingFallback from '#lib/features/shared-3d-world/components/StudioLoadingFallback.svelte';
 	import {
 		homeGalleryTarget,
 		homeStudioTarget,
 		warmNavigationTargetWhenIdle
-	} from '$lib/features/home-entry-scene/navigation-warmup';
-	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
-	import type { EntryFlowState } from '$lib/features/home-entry-scene/state/entry-state.svelte';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
-	import { PAGE_FADE_DURATION_MS } from '$lib/features/shared-ui/page-fade';
-	import { scheduleStudioBackgroundWarmup } from '$lib/features/shared-ui/studio-background-warmup';
+	} from '#lib/features/home-entry-scene/navigation-warmup.js';
+	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import type { EntryFlowState } from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
+	import { PAGE_FADE_DURATION_MS } from '#lib/features/shared-ui/page-fade.js';
+	import { scheduleStudioBackgroundWarmup } from '#lib/features/shared-ui/studio-background-warmup.js';
 
 	let {
 		children,
@@ -39,7 +39,9 @@
 		adultContentEnabled?: boolean;
 		entryState?: EntryFlowState;
 		onAvatarSaved?: (payload: {
-			avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
+			avatarDrawingDocument?:
+				| import('#lib/features/stroke-json/document.js').DrawingDocumentV2
+				| null;
 			avatarOnboardingCompletedAt: Date;
 			avatarUrl: string;
 		}) => void;
@@ -57,7 +59,7 @@
 	/** Hard ceiling on the returning veil, whatever the state machine does. */
 	const RETURN_FADE_SAFETY_MS = 1000;
 
-	const returnOrigin = browser ? $page.url?.searchParams?.get('from') : null;
+	const returnOrigin = browser ? page.url?.searchParams?.get('from') : null;
 	const returningFromGallery = returnOrigin === 'gallery';
 	const returningFromStudio = returnOrigin === 'studio';
 	const isReturning = returningFromGallery || returningFromStudio;
@@ -85,10 +87,10 @@
 	 * the frame is never an empty hole while the chunk is in flight.
 	 */
 	let SceneComponent = $state<
-		typeof import('$lib/features/home-entry-scene/scene/StudioScene.svelte').default | null
+		typeof import('#lib/features/home-entry-scene/scene/StudioScene.svelte').default | null
 	>(null);
-	let sceneMediaState = $state<'error' | 'loaded' | 'pending'>('pending');
 
+	let sceneMediaState = $state<'error' | 'loaded' | 'pending'>('pending');
 	const sceneReady = $derived(sceneMediaState === 'loaded');
 	const sceneFailed = $derived(sceneMediaState === 'error');
 
@@ -98,7 +100,7 @@
 
 	/** Clean the ?from= param from the URL without triggering navigation. */
 	if (browser && isReturning) {
-		replaceState(resolve('/'), window.history.state);
+		goto(resolve('/'), { shallow: true, replace: true, state: window.history.state });
 	}
 
 	onMount(() => {
@@ -113,7 +115,7 @@
 		 */
 		const cancelStudioBackgroundWarmup = scheduleStudioBackgroundWarmup();
 
-		void import('$lib/features/home-entry-scene/scene/StudioScene.svelte')
+		void import('#lib/features/home-entry-scene/scene/StudioScene.svelte')
 			.then((module) => {
 				if (!cancelled) {
 					SceneComponent = module.default;

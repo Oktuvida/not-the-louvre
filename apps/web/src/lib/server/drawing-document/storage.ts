@@ -1,5 +1,5 @@
-import type { DrawingDocumentV2 } from '$lib/features/stroke-json/document';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import type { DrawingDocumentV2 } from '#lib/features/stroke-json/document.js';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import {
 	decodeLegacyPayload,
 	encodeLegacyPayload,
@@ -7,7 +7,7 @@ import {
 	StrokeDocumentError,
 	toCanonicalV2,
 	toEditableV2
-} from '$lib/stroke/legacy';
+} from '#lib/stroke/legacy.js';
 
 // Drawings are stored as canonical version 2 documents, gzipped and base64-encoded
 // (chunked-write.ts explains why the text is written in pieces).

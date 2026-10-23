@@ -1,6 +1,6 @@
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-import type { GalleryPageInfo } from '$lib/features/gallery-exploration/model/discovery';
-import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+import type { GalleryPageInfo } from '#lib/features/gallery-exploration/model/discovery.js';
+import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
 
 /*
  * Per-room feed memory.

@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { writable, type Writable } from 'svelte/store';
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
 
 	/*
 	 * gsap is 27KB gzipped and the reel is the only thing in the whole gallery
@@ -12,8 +12,8 @@
 	 * already runs after mount behind a `browser` guard, so one memoised dynamic
 	 * import costs a microtask on the first idle cycle and nothing after that.
 	 */
-	let gsapModule: Promise<typeof import('$lib/client/gsap')> | null = null;
-	const loadGsap = () => (gsapModule ??= import('$lib/client/gsap'));
+	let gsapModule: Promise<typeof import('#lib/client/gsap.js')> | null = null;
+	const loadGsap = () => (gsapModule ??= import('#lib/client/gsap.js'));
 
 	let {
 		adultContentEnabled = false,

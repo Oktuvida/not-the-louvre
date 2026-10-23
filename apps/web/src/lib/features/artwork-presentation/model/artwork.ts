@@ -1,4 +1,4 @@
-import type { ArtworkVoteValue } from '$lib/shared/content/votes';
+import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
 
 export interface ArtworkComment {
 	id: string;

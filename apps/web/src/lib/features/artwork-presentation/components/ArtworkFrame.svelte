@@ -1,10 +1,10 @@
 <script lang="ts" module>
-	import { getCanvasContext, getFrequentReadCanvasContext } from '$lib/client/canvas-2d';
+	import { getCanvasContext, getFrequentReadCanvasContext } from '#lib/client/canvas-2d.js';
 	import {
 		drawArtworkFrame,
 		getArtworkFrameOpeningRatio
-	} from '$lib/features/artwork-presentation/canvas/artwork-frame-canvas';
-	import type { ArtworkFrameRenderOptions } from '$lib/features/artwork-presentation/model/frame';
+	} from '#lib/features/artwork-presentation/canvas/artwork-frame-canvas.js';
+	import type { ArtworkFrameRenderOptions } from '#lib/features/artwork-presentation/model/frame.js';
 
 	type FrameOpening = { h: number; w: number; x: number; y: number };
 	type PaintedFrame = { opening: FrameOpening; source: HTMLCanvasElement };
@@ -61,7 +61,7 @@
 
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import type { ArtworkFrameDescriptor } from '$lib/features/artwork-presentation/model/frame';
+	import type { ArtworkFrameDescriptor } from '#lib/features/artwork-presentation/model/frame.js';
 
 	let {
 		children,

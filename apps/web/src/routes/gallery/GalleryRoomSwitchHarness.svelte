@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import GalleryExplorationPage from '$lib/features/gallery-exploration/GalleryExplorationPage.svelte';
+	import { page } from '$app/state';
+	import GalleryExplorationPage from '#lib/features/gallery-exploration/GalleryExplorationPage.svelte';
 	import {
 		getGalleryRoom,
 		type GalleryRoomId
-	} from '$lib/features/gallery-exploration/model/rooms';
+	} from '#lib/features/gallery-exploration/model/rooms.js';
 	import Layout from './+layout.svelte';
 
 	/*
@@ -13,8 +13,8 @@
 	 * next one is already mounted. That overlap is what the layout-binding
 	 * ownership guard exists for.
 	 */
-	const roomId = $derived($page.data.roomId as GalleryRoomId);
-	const viewer = $derived($page.data.viewer as { id: string; role: 'user' } | null);
+	const roomId = $derived(page.data.roomId as GalleryRoomId);
+	const viewer = $derived(page.data.viewer as { id: string; role: 'user' } | null);
 </script>
 
 <Layout>

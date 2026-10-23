@@ -1,7 +1,10 @@
-import type { CanonicalUser } from '$lib/server/auth/types';
-import type { ArtworkReportReason, ContentReportStatus } from '$lib/shared/content/report-reasons';
-import type { ArtworkVoteValue } from '$lib/shared/content/votes';
-import type { RateLimitPolicy } from '$lib/server/db/rate-limit';
+import type { CanonicalUser } from '#lib/server/auth/types.js';
+import type {
+	ArtworkReportReason,
+	ContentReportStatus
+} from '#lib/shared/content/report-reasons.js';
+import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
+import type { RateLimitPolicy } from '#lib/server/db/rate-limit.js';
 
 export type ArtworkRecord = {
 	authorId: string;

@@ -7,7 +7,7 @@ import {
 	createMuseumWindowFrameUrl,
 	createStickerBackgroundUrl
 } from '../home-entry-scene/canvas/museum-canvas';
-import { generatedArtDigest } from '$lib/server/deploy/generated-art-digest';
+import { generatedArtDigest } from '#lib/server/deploy/generated-art-digest.js';
 import {
 	GENERATED_ART_VERSION,
 	MUSEUM_WALL_ASSET_NAME,

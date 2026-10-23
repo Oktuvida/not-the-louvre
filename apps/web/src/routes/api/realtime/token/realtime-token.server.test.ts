@@ -4,7 +4,7 @@ const mocked = vi.hoisted(() => ({
 	createRealtimeAuthToken: vi.fn()
 }));
 
-vi.mock('$lib/server/realtime/auth', () => ({
+vi.mock('#lib/server/realtime/auth.js', () => ({
 	createRealtimeAuthToken: mocked.createRealtimeAuthToken
 }));
 

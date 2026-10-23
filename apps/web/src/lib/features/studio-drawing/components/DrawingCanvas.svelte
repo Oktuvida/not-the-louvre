@@ -7,17 +7,17 @@
 		type DrawingDocumentV2,
 		type DrawingPoint,
 		type DrawingStroke
-	} from '$lib/features/stroke-json/document';
+	} from '#lib/features/stroke-json/document.js';
 	import {
 		renderDrawingDocumentToCanvas,
 		renderDrawingStroke
-	} from '$lib/features/stroke-json/canvas';
+	} from '#lib/features/stroke-json/canvas.js';
 	import {
 		appendBufferedStrokePoint,
 		appendCommittedStroke,
 		createBufferedStroke,
 		shouldUseResponsiveDrawing
-	} from '$lib/features/stroke-json/responsive-editing';
+	} from '#lib/features/stroke-json/responsive-editing.js';
 	import {
 		attachPointerReleaseSafetyNet,
 		ensureCommittedCacheCanvas,
@@ -26,8 +26,8 @@
 		isSameDrawingRenderSignature,
 		readDrawingRenderSignature,
 		type DrawingRenderSignature
-	} from '$lib/features/studio-drawing/pointer-drawing';
-	import { drawingTools } from '$lib/features/studio-drawing/state/drawing.svelte';
+	} from '#lib/features/studio-drawing/pointer-drawing.js';
+	import { drawingTools } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 
 	let {
 		canvasRef = $bindable<HTMLCanvasElement | null>(null),

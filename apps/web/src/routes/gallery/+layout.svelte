@@ -1,17 +1,17 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { fly } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import { createGalleryLayoutContext } from '$lib/features/gallery-exploration/gallery-layout-context';
+	import { createGalleryLayoutContext } from '#lib/features/gallery-exploration/gallery-layout-context.js';
 	import {
 		galleryRoomIds,
 		type GalleryRoomId
-	} from '$lib/features/gallery-exploration/model/rooms';
-	import GalleryLayoutFrame from '$lib/features/gallery-exploration/GalleryLayoutFrame.svelte';
+	} from '#lib/features/gallery-exploration/model/rooms.js';
+	import GalleryLayoutFrame from '#lib/features/gallery-exploration/GalleryLayoutFrame.svelte';
 
 	let { children } = $props();
-	const roomId = $derived($page.data.roomId as GalleryRoomId);
-	const viewer = $derived($page.data.viewer);
+	const roomId = $derived(page.data.roomId as GalleryRoomId);
+	const viewer = $derived(page.data.viewer);
 
 	const galleryLayout = createGalleryLayoutContext();
 	const previousRoomId = galleryLayout.previousRoomId;

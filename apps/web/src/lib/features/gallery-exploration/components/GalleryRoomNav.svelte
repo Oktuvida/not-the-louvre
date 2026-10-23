@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { navigating } from '$app/stores';
+	import { navigating } from '$app/state';
 	import { Flame, Route, Trophy, UserRound } from 'lucide-svelte';
 	import {
 		galleryRooms,
 		roomHref,
 		type GalleryRoomId
-	} from '$lib/features/gallery-exploration/model/rooms';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
-	import type { Viewer } from '$lib/shared/viewer';
+	} from '#lib/features/gallery-exploration/model/rooms.js';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import type { Viewer } from '#lib/shared/viewer.js';
 
 	const roomIcons = {
 		'hall-of-fame': Trophy,
@@ -44,7 +44,7 @@
 	// The active sticker follows the click, not the server round-trip: while
 	// a room navigation is in flight the destination tab lights up right away.
 	const activeRoomId = $derived(
-		($navigating?.to ? roomIdForPath($navigating.to.url.pathname) : null) ?? roomId
+		(navigating?.to ? roomIdForPath(navigating.to.url.pathname) : null) ?? roomId
 	);
 </script>
 

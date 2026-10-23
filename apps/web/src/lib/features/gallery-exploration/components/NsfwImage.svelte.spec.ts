@@ -11,7 +11,7 @@ const placeholderLayer = () => document.querySelector('.nsfw-placeholder');
 
 describe('NsfwImage', () => {
 	it('applies blur classes when blurred prop is true', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: 'https://example.com/nsfw.avif',
 			alt: 'Sensitive artwork',
 			blurred: true,
@@ -25,7 +25,7 @@ describe('NsfwImage', () => {
 	});
 
 	it('renders normally without blur when blurred prop is false', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: 'https://example.com/safe.avif',
 			alt: 'Safe artwork',
 			blurred: false
@@ -38,7 +38,7 @@ describe('NsfwImage', () => {
 	});
 
 	it('shows 18+ badge overlay when blurred', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: 'https://example.com/nsfw.avif',
 			alt: 'Sensitive artwork',
 			blurred: true
@@ -50,7 +50,7 @@ describe('NsfwImage', () => {
 	});
 
 	it('does not show 18+ badge overlay when not blurred', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: 'https://example.com/safe.avif',
 			alt: 'Safe artwork',
 			blurred: false
@@ -62,7 +62,7 @@ describe('NsfwImage', () => {
 	});
 
 	it('keeps the blur but drops the badge when the caller paints its own scrim', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: 'https://example.com/nsfw.avif',
 			alt: 'Sensitive artwork',
 			blurred: true,
@@ -80,7 +80,7 @@ describe('NsfwImage', () => {
 	});
 
 	it('keeps the placeholder mounted but drops its blur once the photo is opaque', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: PIXEL,
 			alt: 'Retired placeholder artwork',
 			placeholder: PIXEL
@@ -103,7 +103,7 @@ describe('NsfwImage', () => {
 	});
 
 	it('never retires the placeholder under a sensitive photo, so no sharp LQIP leaks', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: PIXEL,
 			alt: 'Sensitive placeholder artwork',
 			blurred: true,
@@ -123,14 +123,14 @@ describe('NsfwImage', () => {
 	});
 
 	it('re-shows a recycled card instantly instead of replaying the fade', async () => {
-		const first = render(NsfwImage, { src: PIXEL, alt: 'First mount' });
+		const first = await render(NsfwImage, { src: PIXEL, alt: 'First mount' });
 
 		await vi.waitFor(() => {
 			expect(page.getByAltText('First mount').element().className).toContain('is-loaded');
 		});
 		first.unmount();
 
-		render(NsfwImage, { src: PIXEL, alt: 'Recycled mount' });
+		await render(NsfwImage, { src: PIXEL, alt: 'Recycled mount' });
 
 		// Same source, already decoded this session: opaque on the first frame.
 		expect(page.getByAltText('Recycled mount').element().className).toContain('is-loaded');

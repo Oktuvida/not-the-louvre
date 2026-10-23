@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
 	import { onMount } from 'svelte';
-	import { requestJson } from '$lib/client/api';
-	import AmbientAudioTab from '$lib/features/shared-ui/components/AmbientAudioTab.svelte';
+	import { requestJson } from '#lib/client/api.js';
+	import AmbientAudioTab from '#lib/features/shared-ui/components/AmbientAudioTab.svelte';
 	import { ambientPlaylist, type AmbientTrack } from './playlist';
 	import {
 		readStoredAmbientAudioPreference,

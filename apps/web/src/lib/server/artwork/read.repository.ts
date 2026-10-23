@@ -16,9 +16,9 @@ import {
 	type SQLWrapper
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { db } from '$lib/server/db';
-import { artworkComments, artworks, contentReports, users } from '$lib/server/db/schema';
-import type { ArtworkVoteValue } from '$lib/shared/content/votes';
+import { db } from '#lib/server/db/index.js';
+import { artworkComments, artworks, contentReports, users } from '#lib/server/db/schema.js';
+import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
 import type {
 	ArtworkDiscoveryCursor,
 	ArtworkDiscoveryTopWindow,

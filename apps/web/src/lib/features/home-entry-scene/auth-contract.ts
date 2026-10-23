@@ -1,4 +1,4 @@
-import type { DrawingDocumentV2 } from '$lib/features/stroke-json/document';
+import type { DrawingDocumentV2 } from '#lib/features/stroke-json/document.js';
 
 export type HomeAuthUser = {
 	authUserId: string;

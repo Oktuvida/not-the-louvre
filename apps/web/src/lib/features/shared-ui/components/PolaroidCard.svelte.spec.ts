@@ -1,7 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 import PolaroidCard from './PolaroidCard.svelte';
 
 const artwork = {
@@ -25,7 +25,7 @@ const artwork = {
 
 describe('PolaroidCard', () => {
 	it('renders avatar, title-author column, and right-aligned metrics', async () => {
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork: {
 				...artwork,
 				commentCount: 5,
@@ -36,12 +36,12 @@ describe('PolaroidCard', () => {
 
 		await expect.element(page.getByText('Pinned Study')).toBeVisible();
 		await expect.element(page.getByText('journey_artist')).toBeVisible();
-		await expect.element(page.getByTestId('polaroid-card-score')).toHaveTextContent('⭐ 12');
-		await expect.element(page.getByTestId('polaroid-card-comments')).toHaveTextContent('💬 5');
+		await expect.element(page.getByTestId('polaroid-card-score')).toMatchTextContent('⭐ 12');
+		await expect.element(page.getByTestId('polaroid-card-comments')).toMatchTextContent('💬 5');
 	});
 
 	it('shows fork lineage on forked artworks', async () => {
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork: {
 				...artwork,
 				lineage: {
@@ -61,7 +61,7 @@ describe('PolaroidCard', () => {
 	});
 
 	it('marks the artwork image for progressive loading', async () => {
-		render(PolaroidCard, { artwork });
+		await render(PolaroidCard, { artwork });
 
 		const image = page.getByAltText('Pinned Study');
 
@@ -70,7 +70,7 @@ describe('PolaroidCard', () => {
 	});
 
 	it('blurs NSFW artworks for non-authors and forwards viewerId for exemption', async () => {
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork: { ...artwork, isNsfw: true },
 			viewerId: 'other-user',
 			testId: 'nsfw-polaroid-card'
@@ -83,7 +83,7 @@ describe('PolaroidCard', () => {
 	});
 
 	it('skips blur for NSFW artwork when viewer is the author', async () => {
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork: { ...artwork, isNsfw: true },
 			viewerId: 'user-journey',
 			testId: 'author-polaroid-card'
@@ -96,7 +96,7 @@ describe('PolaroidCard', () => {
 	});
 
 	it('toggles revealed state on click, removing blur', async () => {
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork: { ...artwork, isNsfw: true },
 			viewerId: 'other-user',
 			testId: 'reveal-polaroid-card'
@@ -118,7 +118,7 @@ describe('PolaroidCard', () => {
 		const onReveal = vi.fn();
 		const onclick = vi.fn();
 
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork: { ...artwork, isNsfw: true },
 			viewerId: 'other-user',
 			onReveal,
@@ -142,7 +142,7 @@ describe('PolaroidCard', () => {
 		const onReveal = vi.fn();
 		const onclick = vi.fn();
 
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork: { ...artwork, isNsfw: true },
 			viewerId: null,
 			onReveal,
@@ -162,7 +162,7 @@ describe('PolaroidCard', () => {
 	});
 
 	it('keeps its hand-pinned tilt on the element that straightens under the pointer', async () => {
-		render(PolaroidCard, { artwork, testId: 'tilted-card' });
+		await render(PolaroidCard, { artwork, testId: 'tilted-card' });
 
 		const card = page.getByTestId('tilted-card');
 		await expect.element(card).toBeVisible();
@@ -177,7 +177,7 @@ describe('PolaroidCard', () => {
 	});
 
 	it('lazily loads the artist avatar at low priority so the artwork wins the race', async () => {
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork: { ...artwork, artistAvatar: '/avatars/journey.png' }
 		});
 
@@ -191,7 +191,7 @@ describe('PolaroidCard', () => {
 	it('signals intent on pointerdown, but not on a reveal press', async () => {
 		const onPointerIntent = vi.fn();
 
-		const { unmount } = render(PolaroidCard, {
+		const { unmount } = await render(PolaroidCard, {
 			artwork,
 			onPointerIntent,
 			testId: 'prefetch-card'
@@ -204,7 +204,7 @@ describe('PolaroidCard', () => {
 		expect(onPointerIntent).toHaveBeenCalledTimes(1);
 		unmount();
 
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork: { ...artwork, isNsfw: true },
 			onPointerIntent,
 			viewerId: 'other-user',
@@ -221,7 +221,7 @@ describe('PolaroidCard', () => {
 	it('does not signal intent on a touch, which may be the start of a scroll', async () => {
 		const onPointerIntent = vi.fn();
 
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork,
 			onPointerIntent,
 			testId: 'touch-intent-card'
@@ -247,7 +247,7 @@ describe('PolaroidCard', () => {
 	it('signals intent on an activating keypress, and only on those keys', async () => {
 		const onPointerIntent = vi.fn();
 
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork,
 			onPointerIntent,
 			testId: 'keyboard-intent-card'
@@ -269,7 +269,7 @@ describe('PolaroidCard', () => {
 	it('honors an externally revealed state so reveals survive virtualization remounts', async () => {
 		const onclick = vi.fn();
 
-		render(PolaroidCard, {
+		await render(PolaroidCard, {
 			artwork: { ...artwork, isNsfw: true },
 			viewerId: 'other-user',
 			revealed: true,

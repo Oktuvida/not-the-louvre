@@ -3,7 +3,7 @@ import {
 	createEmptyDrawingDocumentV2,
 	normalizeDrawingDocumentToEditableV2,
 	createEmptyDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 import {
 	attachPointerReleaseSafetyNet,
 	ensureCommittedCacheCanvas,

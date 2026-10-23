@@ -10,8 +10,8 @@
  * callback.
  */
 
-import { ApiError, apiErrorMessage, requestJson } from '$lib/client/api';
-import { resolveUserAvatarPath } from '$lib/user/avatar-url';
+import { ApiError, apiErrorMessage, requestJson } from '#lib/client/api.js';
+import { resolveUserAvatarPath } from '#lib/user/avatar-url.js';
 
 export type AvatarUploadResult =
 	| { avatarUrl: string; success: true }

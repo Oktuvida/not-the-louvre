@@ -25,6 +25,16 @@ const databaseUrl =
 	process.env.DATABASE_URL ??
 	`postgres://postgres:${supabase.POSTGRES_PASSWORD}@127.0.0.1:${supabase.POSTGRES_PORT ?? '5432'}/${supabase.POSTGRES_DB ?? 'postgres'}`;
 
+// Runtime variables the Worker reads through `$app/env/private`.
+const workerVariables = {
+	ANON_KEY: supabase.ANON_KEY ?? '',
+	BETTER_AUTH_SECRET: 'playwright-secret-value-1234567890',
+	DATABASE_URL: databaseUrl,
+	JWT_SECRET: supabase.JWT_SECRET ?? '',
+	ORIGIN: 'http://127.0.0.1:4173',
+	SUPABASE_PUBLIC_URL: supabase.SUPABASE_PUBLIC_URL ?? ''
+};
+
 export default defineConfig({
 	use: {
 		baseURL: 'http://localhost:4173',
@@ -35,18 +45,23 @@ export default defineConfig({
 	},
 	workers: 1,
 	webServer: {
-		command: 'bun run build:e2e && bun run preview -- --host 127.0.0.1 --port 4173',
+		// The e2e build keeps the /demo routes and runs on workerd through `wrangler
+		// dev`, the runtime production uses: adapter-cloudflare's build imports
+		// `cloudflare:workers`, which Node cannot load, so `vite preview` is no option.
+		command: `bun run build:e2e && wrangler dev --ip 127.0.0.1 --port 4173 ${Object.entries(
+			workerVariables
+		)
+			.map(([key, value]) => `--var ${key}:${JSON.stringify(value)}`)
+			.join(' ')}`,
 		env: {
+			// The build's analyse step imports the server modules, and Better Auth
+			// checks its secret on import.
+			...workerVariables,
+			// Build time: swaps object storage for the in-memory store.
 			PLAYWRIGHT: '1',
-			DATABASE_URL: databaseUrl,
-			// `vite preview` emulates the Worker bindings through wrangler, which
-			// refuses to start unless the HYPERDRIVE binding has a local Postgres.
+			// wrangler reads the local Hyperdrive stand-in only from the environment.
 			CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: databaseUrl,
-			ORIGIN: 'http://127.0.0.1:4173',
-			BETTER_AUTH_SECRET: 'playwright-secret-value-1234567890',
-			SUPABASE_PUBLIC_URL: supabase.SUPABASE_PUBLIC_URL ?? '',
-			ANON_KEY: supabase.ANON_KEY ?? '',
-			JWT_SECRET: supabase.JWT_SECRET ?? ''
+			WRANGLER_SEND_METRICS: 'false'
 		},
 		url: 'http://localhost:4173',
 		reuseExistingServer: !process.env.CI

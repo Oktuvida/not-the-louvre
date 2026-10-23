@@ -1,35 +1,37 @@
 <script lang="ts">
 	import { LogOut, Trophy, X } from 'lucide-svelte';
 	import { resolve } from '$app/paths';
-	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
-	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
-	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
-	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
-	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
+	import ArtworkFrame from '#lib/features/artwork-presentation/components/ArtworkFrame.svelte';
+	import { resolveArtworkFrame } from '#lib/features/artwork-presentation/model/frame.js';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import type { HomeAuthUser } from '#lib/features/home-entry-scene/auth-contract.js';
+	import type { HomePreviewCard } from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
+	import AvatarSketchpad from '#lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
 	import {
 		homeGalleryTarget,
 		warmOnIntent
-	} from '$lib/features/home-entry-scene/navigation-warmup';
-	import { setAdultContentEnabled, uploadViewerAvatar } from '$lib/client/avatar-upload';
-	import { buildDrawingDraftKey, clearDrawingDraft } from '$lib/features/stroke-json/drafts';
+	} from '#lib/features/home-entry-scene/navigation-warmup.js';
+	import { setAdultContentEnabled, uploadViewerAvatar } from '#lib/client/avatar-upload.js';
+	import { buildDrawingDraftKey, clearDrawingDraft } from '#lib/features/stroke-json/drafts.js';
 	import {
 		DRAWING_DOCUMENT_VERSION,
 		createEmptyDrawingDocumentV2,
 		parseEditableDrawingDocumentV2
-	} from '$lib/features/stroke-json/document';
-	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
-	import PaperSheet from '$lib/features/shared-ui/components/PaperSheet.svelte';
-	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
-	import VisitorBadge from '$lib/features/shared-ui/components/VisitorBadge.svelte';
-	import WashiTape from '$lib/features/shared-ui/components/WashiTape.svelte';
-	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
-	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
+	} from '#lib/features/stroke-json/document.js';
+	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import PaperSheet from '#lib/features/shared-ui/components/PaperSheet.svelte';
+	import PostItNote from '#lib/features/shared-ui/components/PostItNote.svelte';
+	import VisitorBadge from '#lib/features/shared-ui/components/VisitorBadge.svelte';
+	import WashiTape from '#lib/features/shared-ui/components/WashiTape.svelte';
+	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import { dispatchAvatarFaviconUpdate } from '#lib/favicon.js';
 
 	type AvatarSavedPayload = {
-		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
+		avatarDrawingDocument?:
+			| import('#lib/features/stroke-json/document.js').DrawingDocumentV2
+			| null;
 		avatarOnboardingCompletedAt: Date;
 		avatarUrl: string;
 	};

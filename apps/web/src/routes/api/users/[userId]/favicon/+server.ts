@@ -1,10 +1,10 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { etagMatches, notModified } from '$lib/server/http/conditional';
-import { toApiErrorResponse } from '$lib/server/http/errors';
-import { renderAvatarFaviconPng } from '$lib/server/user/favicon';
-import { userRepository } from '$lib/server/user/repository';
-import { streamAvatarStorageObject } from '$lib/server/user/storage';
+import { etagMatches, notModified } from '#lib/server/http/conditional.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
+import { renderAvatarFaviconPng } from '#lib/server/user/favicon.js';
+import { userRepository } from '#lib/server/user/repository.js';
+import { streamAvatarStorageObject } from '#lib/server/user/storage.js';
+import { edgeCache, runAfterResponse } from '#lib/server/platform.js';
 
 // Mirrors the avatar endpoint: short browser TTL, longer edge TTL. The edge
 // copy also skips re-rendering the PNG, which runs on Worker CPU per request.
@@ -18,9 +18,9 @@ const FAVICON_READ_ERROR = {
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const edgeCache = event.platform?.caches?.default;
+		const cache = edgeCache();
 
-		const cachedResponse = await edgeCache?.match(event.request.url);
+		const cachedResponse = await cache?.match(event.request.url);
 		if (cachedResponse) {
 			const cachedEtag = cachedResponse.headers.get('etag');
 			if (cachedEtag && etagMatches(event.request, cachedEtag)) {
@@ -33,7 +33,7 @@ export const GET: RequestHandler = async (event) => {
 		const user = await userRepository.findUserAvatarRefById(event.params.userId);
 
 		if (!user || !user.avatarUrl) {
-			return json({ code: 'NOT_FOUND', message: 'Avatar not found' }, { status: 404 });
+			return Response.json({ code: 'NOT_FOUND', message: 'Avatar not found' }, { status: 404 });
 		}
 
 		const etag = `"${user.avatarUrl}:${user.updatedAt.getTime()}:favicon"`;
@@ -54,9 +54,9 @@ export const GET: RequestHandler = async (event) => {
 
 		const response = new Response(new Uint8Array(faviconBuffer), { headers, status: 200 });
 
-		if (edgeCache) {
-			const cachePut = edgeCache.put(event.request.url, response.clone()).catch(() => {});
-			event.platform?.context?.waitUntil(cachePut);
+		if (cache) {
+			const cachePut = cache.put(event.request.url, response.clone()).catch(() => {});
+			runAfterResponse(cachePut);
 		}
 
 		return response;

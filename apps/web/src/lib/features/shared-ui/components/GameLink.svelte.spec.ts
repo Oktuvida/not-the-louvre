@@ -5,7 +5,7 @@ import GameControlsHarness from './GameControlsHarness.svelte';
 
 describe('GameLink', () => {
 	it('renders an SSR-ready sticker background for navigation links', async () => {
-		render(GameControlsHarness);
+		await render(GameControlsHarness);
 
 		const gallery = page.getByRole('link', { name: 'Gallery' });
 		const back = page.getByRole('link', { name: 'Back' });
@@ -22,7 +22,7 @@ describe('GameLink', () => {
 	});
 
 	it('matches the shared sticker control API for links', async () => {
-		render(GameControlsHarness);
+		await render(GameControlsHarness);
 
 		const gallery = page.getByRole('link', { name: 'Gallery' });
 		const back = page.getByRole('link', { name: 'Back' });
@@ -35,7 +35,7 @@ describe('GameLink', () => {
 	});
 
 	it('spreads rest props onto the underlying anchor element', async () => {
-		render(GameControlsHarness);
+		await render(GameControlsHarness);
 
 		const gallery = page.getByRole('link', { name: 'Gallery' });
 

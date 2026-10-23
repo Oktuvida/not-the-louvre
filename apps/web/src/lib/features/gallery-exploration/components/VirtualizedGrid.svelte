@@ -4,7 +4,7 @@
 	import {
 		GALLERY_GRID_GAP,
 		GALLERY_GRID_MIN_COLUMN_WIDTH
-	} from '$lib/features/gallery-exploration/model/grid';
+	} from '#lib/features/gallery-exploration/model/grid.js';
 
 	interface Props {
 		items: T[];

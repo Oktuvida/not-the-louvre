@@ -6,11 +6,11 @@ import {
 	createEmptyDrawingDocument,
 	normalizeDrawingDocumentToEditableV2,
 	serializeDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 import {
 	buildDrawingDraftKey,
 	createIndexedDbDrawingDraftStore
-} from '$lib/features/stroke-json/drafts';
+} from '#lib/features/stroke-json/drafts.js';
 import PersistentNav from './PersistentNav.svelte';
 
 const DRAWING_DRAFTS_DB_NAME = 'drawing-drafts';
@@ -79,7 +79,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('shows backend-backed signed-in chrome only when a canonical user is present', async () => {
-		render(PersistentNav, {
+		await render(PersistentNav, {
 			previewCards: topArtworks,
 			user: {
 				authUserId: 'auth-user-1',
@@ -96,7 +96,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('hides signed-in chrome when no canonical backend user exists', async () => {
-		render(PersistentNav, { previewCards: [], user: null });
+		await render(PersistentNav, { previewCards: [], user: null });
 
 		await expect.element(page.getByText('HELLO')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: /logout/i })).not.toBeInTheDocument();
@@ -104,7 +104,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('renders real homepage top-artwork preview cards from route data', async () => {
-		render(PersistentNav, { previewCards: topArtworks, user: null });
+		await render(PersistentNav, { previewCards: topArtworks, user: null });
 
 		await expect.element(page.getByTestId('home-preview-frame-1')).toBeVisible();
 		await expect
@@ -114,7 +114,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('keeps the homepage preview stack desktop-only through responsive classes', async () => {
-		render(PersistentNav, { previewCards: topArtworks, user: null });
+		await render(PersistentNav, { previewCards: topArtworks, user: null });
 
 		const previewStack = document.querySelector('[data-testid="home-preview-stack"]');
 		expect(previewStack).not.toBeNull();
@@ -123,7 +123,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('marks top-artwork previews as sensitive until 18+ content is enabled', async () => {
-		render(PersistentNav, {
+		await render(PersistentNav, {
 			adultContentEnabled: false,
 			previewCards: [{ ...topArtworks[0], isNsfw: true, title: 'Adults only study' }],
 			user: null
@@ -136,7 +136,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('decodes the above-the-fold preview imagery without deferring it', async () => {
-		render(PersistentNav, {
+		await render(PersistentNav, {
 			previewCards: [{ ...topArtworks[0], artistAvatar: '/api/users/artist-1/avatar' }],
 			user: null
 		});
@@ -149,7 +149,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('censors sensitive previews with the one shared NSFW treatment', async () => {
-		render(PersistentNav, {
+		await render(PersistentNav, {
 			adultContentEnabled: false,
 			previewCards: [{ ...topArtworks[0], isNsfw: true, title: 'Adults only study' }],
 			user: null
@@ -170,13 +170,13 @@ describe('PersistentNav', () => {
 	});
 
 	it('does not render fake preview cards when the homepage teaser is empty', async () => {
-		render(PersistentNav, { previewCards: [], user: null });
+		await render(PersistentNav, { previewCards: [], user: null });
 
 		await expect.element(page.getByAltText('Sunset Over Mountains')).not.toBeInTheDocument();
 	});
 
 	it('uses shared sticker links for the primary homepage CTA', async () => {
-		render(PersistentNav, { previewCards: [], user: null });
+		await render(PersistentNav, { previewCards: [], user: null });
 
 		await expect
 			.element(page.getByRole('link', { name: 'GALLERY' }))
@@ -188,7 +188,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('shows the studio-bound gallery destination only for authenticated users', async () => {
-		render(PersistentNav, {
+		await render(PersistentNav, {
 			previewCards: [],
 			user: {
 				authUserId: 'auth-user-1',
@@ -252,7 +252,7 @@ describe('PersistentNav', () => {
 		}));
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(PersistentNav, { previewCards: topArtworks, user });
+		await render(PersistentNav, { previewCards: topArtworks, user });
 
 		await page.getByRole('button', { name: 'Edit avatar for artist_1' }).click();
 		await page.getByRole('button', { name: 'Close' }).click();
@@ -292,7 +292,7 @@ describe('PersistentNav', () => {
 			role: 'user'
 		};
 
-		const { rerender } = render(PersistentNav, { previewCards: topArtworks, user });
+		const { rerender } = await render(PersistentNav, { previewCards: topArtworks, user });
 
 		const previewStack = document.querySelector('[data-testid="home-preview-stack"]')!;
 		expect(previewStack.hasAttribute('inert')).toBe(false);
@@ -308,7 +308,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('keeps keyboard focus inside the avatar editor and hands it back on close', async () => {
-		render(PersistentNav, {
+		await render(PersistentNav, {
 			previewCards: topArtworks,
 			user: {
 				authUserId: 'auth-user-1',
@@ -339,7 +339,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('closes the avatar editor on Escape from inside the sheet', async () => {
-		render(PersistentNav, {
+		await render(PersistentNav, {
 			previewCards: topArtworks,
 			user: {
 				authUserId: 'auth-user-1',
@@ -365,7 +365,7 @@ describe('PersistentNav', () => {
 	});
 
 	it('uses a scrollable avatar editor dialog shell on small screens', async () => {
-		render(PersistentNav, {
+		await render(PersistentNav, {
 			previewCards: topArtworks,
 			user: {
 				authUserId: 'auth-user-1',
@@ -389,7 +389,7 @@ describe('PersistentNav', () => {
 	// One paper, one tape: the avatar sheet used to print its own copy of both,
 	// and the auth sheet a click away printed a third.
 	it('builds the avatar editor out of the shared paper and tape', async () => {
-		render(PersistentNav, {
+		await render(PersistentNav, {
 			previewCards: topArtworks,
 			user: {
 				authUserId: 'auth-user-1',

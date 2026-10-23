@@ -1,5 +1,5 @@
 <script lang="ts">
-	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
+	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 
 	let { isExiting = false }: { isExiting?: boolean } = $props();
 </script>

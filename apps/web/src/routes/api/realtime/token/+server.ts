@@ -1,10 +1,9 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createRealtimeAuthToken } from '$lib/server/realtime/auth';
+import { createRealtimeAuthToken } from '#lib/server/realtime/auth.js';
 
 export const GET: RequestHandler = async (event) => {
 	if (!event.locals.user) {
-		return json(
+		return Response.json(
 			{
 				code: 'UNAUTHENTICATED',
 				message: 'Authentication required'
@@ -18,7 +17,7 @@ export const GET: RequestHandler = async (event) => {
 
 	const realtimeAuth = await createRealtimeAuthToken(event.locals.user);
 
-	return json(realtimeAuth, {
+	return Response.json(realtimeAuth, {
 		headers: { 'cache-control': 'no-store' }
 	});
 };

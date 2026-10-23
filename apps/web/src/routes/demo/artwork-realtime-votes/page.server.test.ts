@@ -8,15 +8,15 @@ const mocked = vi.hoisted(() => ({
 	publishArtwork: vi.fn()
 }));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	getArtworkDetail: mocked.getArtworkDetail
 }));
 
-vi.mock('$lib/server/artwork/service', () => ({
+vi.mock('#lib/server/artwork/service.js', () => ({
 	publishArtwork: mocked.publishArtwork
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		options: {}
 	}

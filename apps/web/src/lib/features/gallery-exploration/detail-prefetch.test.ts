@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
+import { makeArtwork } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import { createDetailPrefetcher } from './detail-prefetch';
 
 const loaderFor = (ids: string[] = []) =>

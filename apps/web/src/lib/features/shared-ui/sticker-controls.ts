@@ -1,4 +1,4 @@
-import type { StickerVariant } from '$lib/features/home-entry-scene/canvas/museum-canvas';
+import type { StickerVariant } from '#lib/features/home-entry-scene/canvas/museum-canvas.js';
 
 export type StickerControlVariant = StickerVariant;
 export type StickerControlSize = 'hero' | 'lg' | 'md' | 'sm';

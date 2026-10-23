@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createRealtimeAttemptController } from '$lib/features/realtime/attempt-controller';
+import { createRealtimeAttemptController } from '#lib/features/realtime/attempt-controller.js';
 
 export type RealtimeTokenResponse = {
 	expiresAt?: string | null;

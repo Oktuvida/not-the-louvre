@@ -1,31 +1,31 @@
 import { fail } from '@sveltejs/kit';
-import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/server/drawing-document/storage';
+import { decodeCompressedDrawingDocumentToEditableDocument } from '#lib/server/drawing-document/storage.js';
 import type { Actions, PageServerLoad } from './$types';
-import { auth } from '$lib/server/auth';
-import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
-import { avatarService } from '$lib/server/user/avatar.service';
-import { userRepository } from '$lib/server/user/repository';
-import { toActionFailure } from '$lib/server/http/errors';
+import { auth } from '#lib/server/auth.js';
+import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
+import { avatarService } from '#lib/server/user/avatar.service.js';
+import { userRepository } from '#lib/server/user/repository.js';
+import { toActionFailure } from '#lib/server/http/errors.js';
 import {
 	homeSceneArtworkSlotNames,
 	toHomePreviewCards,
 	toHomeSceneArtworkSlots
-} from '$lib/features/home-entry-scene/state/home-entry.svelte';
+} from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
 import {
 	getNicknameAvailability,
 	recoverAccount,
 	signInWithNickname,
 	signOutCurrentSession,
 	signUpWithNickname
-} from '$lib/server/auth/service';
+} from '#lib/server/auth/service.js';
 import {
 	availabilitySchema,
 	recoverSchema,
 	signInSchema,
 	signupSchema
-} from '$lib/server/auth/validation';
+} from '#lib/server/auth/validation.js';
 import { getIp } from 'better-auth/api';
-import { resolveUserAvatarUrl } from '$lib/user/avatar-url';
+import { resolveUserAvatarUrl } from '#lib/user/avatar-url.js';
 
 const INTEGRITY_FAILURE_MESSAGE = 'Authenticated session is missing its product user profile';
 

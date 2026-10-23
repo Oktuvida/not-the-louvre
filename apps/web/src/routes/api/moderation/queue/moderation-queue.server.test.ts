@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import type { ModerationQueueItem, ModerationQueuePage } from '$lib/server/artwork/types';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import type { ModerationQueueItem, ModerationQueuePage } from '#lib/server/artwork/types.js';
 
 const mocked = vi.hoisted(() => ({
 	listModerationQueue: vi.fn()
 }));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	listModerationQueue: mocked.listModerationQueue
 }));
 

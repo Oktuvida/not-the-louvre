@@ -1,7 +1,8 @@
 import type { PageServerLoad } from './$types';
-import { runWithRequestDbConnection } from '$lib/server/db';
-import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
+import { runWithRequestDbConnection } from '#lib/server/db/index.js';
+import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
 import { loadGalleryRoomContent, loadGalleryRoomShell } from '../gallery-data.server';
+import { hyperdriveConnectionString } from '#lib/server/platform.js';
 
 // One route node serves both the gallery entry point (`/gallery`) and every
 // addressed room (`/gallery/hot-wall`): the optional parameter falls back to
@@ -14,7 +15,7 @@ import { loadGalleryRoomContent, loadGalleryRoomShell } from '../gallery-data.se
 // when the response headers go out), so it runs on a connection of its own.
 // `parent()` is awaited inside that promise, never in front of the shell: the
 // layout already read the viewer's content preferences for this request.
-export const load: PageServerLoad = async ({ locals, params, parent, platform }) => {
+export const load: PageServerLoad = async ({ locals, params, parent }) => {
 	const shell = loadGalleryRoomShell(params.room ?? 'hall-of-fame', locals.user);
 
 	// The root layout owns the only <title> in the document; a route says who it
@@ -39,7 +40,7 @@ export const load: PageServerLoad = async ({ locals, params, parent, platform })
 						adultContentEnabled: (await parent()).adultContentEnabled
 					}),
 				{
-					connectionString: platform?.env?.HYPERDRIVE?.connectionString
+					connectionString: hyperdriveConnectionString()
 				}
 			)
 		}

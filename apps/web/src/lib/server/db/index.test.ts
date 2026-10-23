@@ -31,9 +31,7 @@ vi.mock('drizzle-orm/node-postgres', () => ({
 	drizzle: mocked.drizzle
 }));
 
-vi.mock('$env/dynamic/private', () => ({
-	env: { DATABASE_URL: 'postgres://user:pass@localhost:5432/db' }
-}));
+vi.mock('$app/env/private', () => ({ DATABASE_URL: 'postgres://user:pass@localhost:5432/db' }));
 
 const HYPERDRIVE = 'postgres://user:pass@hyperdrive.local:5432/db';
 
@@ -50,8 +48,8 @@ describe('database connection', () => {
 	});
 
 	describe('on Cloudflare Workers', () => {
-		// The module recognises the runtime by `caches.default` at import time.
-		beforeEach(() => vi.stubGlobal('caches', { default: {} }));
+		// The module recognises workerd by its user agent at import time.
+		beforeEach(() => vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' }));
 
 		it('gives each request its own connected client on the Hyperdrive connection', async () => {
 			const { db, runWithRequestDbConnection } = await import('./index');

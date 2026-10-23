@@ -1,12 +1,10 @@
-import { env } from '$env/dynamic/private';
+import { SUPABASE_JWT_SECRET, JWT_SECRET, SUPABASE_JWT_ISSUER } from '$app/env/private';
 import { SignJWT } from 'jose';
-import type { CanonicalUser } from '$lib/server/auth/types';
+import type { CanonicalUser } from '#lib/server/auth/types.js';
 
 const REALTIME_TOKEN_TTL_SECONDS = 60 * 5;
-
-const getSupabaseJwtSecret = () => env.SUPABASE_JWT_SECRET || env.JWT_SECRET;
-
-const getSupabaseJwtIssuer = () => env.SUPABASE_JWT_ISSUER || 'supabase-demo';
+const getSupabaseJwtSecret = () => SUPABASE_JWT_SECRET || JWT_SECRET;
+const getSupabaseJwtIssuer = () => SUPABASE_JWT_ISSUER || 'supabase-demo';
 
 export const createRealtimeAuthToken = async (
 	user: Pick<CanonicalUser, 'email' | 'id' | 'role'>

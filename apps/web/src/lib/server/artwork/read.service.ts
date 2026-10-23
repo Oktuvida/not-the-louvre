@@ -1,6 +1,6 @@
-import { assertNotBanned } from '$lib/server/auth/guards';
-import { resolveUserAvatarUrl } from '$lib/shared/user/avatar-url';
-import type { Viewer } from '$lib/shared/viewer';
+import { assertNotBanned } from '#lib/server/auth/guards.js';
+import { resolveUserAvatarUrl } from '#lib/shared/user/avatar-url.js';
+import type { Viewer } from '#lib/shared/viewer.js';
 import { ArtworkFlowError } from './errors';
 import { artworkReadRepository } from './read.repository';
 import type {

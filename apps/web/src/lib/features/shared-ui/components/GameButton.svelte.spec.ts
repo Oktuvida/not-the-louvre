@@ -16,7 +16,7 @@ const stickerLabel = (text: string) =>
 
 describe('GameButton', () => {
 	it('supports reference-aligned size and variant presets', async () => {
-		render(GameControlsHarness);
+		await render(GameControlsHarness);
 
 		const cta = page.getByRole('button', { name: 'Create Art' });
 		const cancel = page.getByRole('button', { name: 'Cancel' });
@@ -34,7 +34,7 @@ describe('GameButton', () => {
 	});
 
 	it('paints the sticker from a cached static asset instead of a per-instance canvas', async () => {
-		render(GameControlsHarness);
+		await render(GameControlsHarness);
 
 		const cta = page.getByRole('button', { name: 'Create Art' });
 		await expect.element(cta).toBeVisible();
@@ -46,7 +46,7 @@ describe('GameButton', () => {
 	});
 
 	it('keeps its hand-placed tilt when a call site adds a rotate utility', async () => {
-		render(GameButton, { className: 'rotate-1', children: stickerLabel('Refresh') });
+		await render(GameButton, { className: 'rotate-1', children: stickerLabel('Refresh') });
 
 		const button = page.getByRole('button', { name: 'Refresh' });
 		await expect.element(button).toBeVisible();
@@ -67,7 +67,7 @@ describe('GameButton', () => {
 	});
 
 	it('announces a pressed toggle through aria-pressed', async () => {
-		render(GameButton, { ariaPressed: true, children: stickerLabel('Upvote') });
+		await render(GameButton, { ariaPressed: true, children: stickerLabel('Upvote') });
 
 		await expect
 			.element(page.getByRole('button', { name: 'Upvote' }))
@@ -75,7 +75,7 @@ describe('GameButton', () => {
 	});
 
 	it('announces the unpressed half of a toggle rather than dropping the attribute', async () => {
-		render(GameButton, { ariaPressed: false, children: stickerLabel('Downvote') });
+		await render(GameButton, { ariaPressed: false, children: stickerLabel('Downvote') });
 
 		await expect
 			.element(page.getByRole('button', { name: 'Downvote' }))
@@ -83,7 +83,7 @@ describe('GameButton', () => {
 	});
 
 	it('never claims a toggle state on a plain sticker button', async () => {
-		render(GameButton, { children: stickerLabel('Fork') });
+		await render(GameButton, { children: stickerLabel('Fork') });
 
 		await expect
 			.element(page.getByRole('button', { name: 'Fork' }))

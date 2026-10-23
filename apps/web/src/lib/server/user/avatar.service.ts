@@ -1,19 +1,19 @@
 import { AVATAR_STORAGE_KEY_PREFIX } from './config';
-import { prepareDrawingDocumentForStorage } from '$lib/server/drawing-document/storage';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { prepareDrawingDocumentForStorage } from '#lib/server/drawing-document/storage.js';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import {
 	assertActiveUser,
 	assertAuthenticatedUser,
 	assertNotBanned
-} from '$lib/server/auth/guards';
+} from '#lib/server/auth/guards.js';
 import {
 	DRAWING_DOCUMENT_CHUNK_CHARS,
 	writeDrawingDocumentInChunks,
 	type DrawingDocumentChunkStore
-} from '$lib/server/drawing-document/chunked-write';
-import { createAvatarDrawingDocumentMedia } from '$lib/server/drawing-document/media';
-import type { ArtworkStorage } from '$lib/server/artwork/types';
-import type { CanonicalUser } from '$lib/server/auth/types';
+} from '#lib/server/drawing-document/chunked-write.js';
+import { createAvatarDrawingDocumentMedia } from '#lib/server/drawing-document/media.js';
+import type { ArtworkStorage } from '#lib/server/artwork/types.js';
+import type { CanonicalUser } from '#lib/server/auth/types.js';
 import { userRepository } from './repository';
 import { supabaseAvatarStorage } from './storage';
 import type { UserAvatarDocumentRef, UserRecord, UserRepository } from './types';

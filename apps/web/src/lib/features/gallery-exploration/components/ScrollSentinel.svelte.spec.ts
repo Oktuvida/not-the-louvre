@@ -12,7 +12,7 @@ describe('ScrollSentinel', () => {
 		it('renders a sentinel element that triggers onTrigger when it enters the viewport', async () => {
 			const onTrigger = vi.fn();
 
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger,
 				hasMore: true,
 				isLoading: false,
@@ -33,7 +33,7 @@ describe('ScrollSentinel', () => {
 		it('does NOT call onTrigger when disabled is true', async () => {
 			const onTrigger = vi.fn();
 
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger,
 				disabled: true,
 				hasMore: true,
@@ -52,7 +52,7 @@ describe('ScrollSentinel', () => {
 		it('does NOT call onTrigger when hasMore is false', async () => {
 			const onTrigger = vi.fn();
 
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger,
 				hasMore: false,
 				isLoading: false,
@@ -69,7 +69,7 @@ describe('ScrollSentinel', () => {
 
 	describe('loading state', () => {
 		it('renders skeleton placeholder cards when isLoading is true', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				hasMore: true,
 				isLoading: true,
@@ -84,7 +84,7 @@ describe('ScrollSentinel', () => {
 		});
 
 		it('supports room-specific loading geometry and earlier trigger margins', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				hasMore: true,
 				isLoading: true,
@@ -103,7 +103,7 @@ describe('ScrollSentinel', () => {
 		});
 
 		it('does not render skeletons when isLoading is false', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				hasMore: true,
 				isLoading: false,
@@ -116,7 +116,7 @@ describe('ScrollSentinel', () => {
 
 	describe('error/retry', () => {
 		it('renders error message and retry button when error is set', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				onRetry: vi.fn(),
 				hasMore: true,
@@ -132,7 +132,7 @@ describe('ScrollSentinel', () => {
 		it('calls onRetry when retry button is clicked', async () => {
 			const onRetry = vi.fn();
 
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				onRetry,
 				hasMore: true,
@@ -148,7 +148,7 @@ describe('ScrollSentinel', () => {
 
 	describe('end-of-list', () => {
 		it('renders end-of-list indicator when hasMore is false and not loading and no error', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				hasMore: false,
 				isLoading: false,
@@ -159,7 +159,7 @@ describe('ScrollSentinel', () => {
 		});
 
 		it('does not render end-of-list when hasMore is true', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				hasMore: true,
 				isLoading: false,

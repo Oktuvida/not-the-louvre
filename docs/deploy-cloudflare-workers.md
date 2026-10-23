@@ -15,15 +15,18 @@ Drawing documents are read and written in plain TypeScript (`apps/web/src/lib/st
 
 `workerd` forbids compiling WASM from bytes at runtime, so every `.wasm` import is
 kept external in the Vite build (`build.rollupOptions.external`) and bundled by
-Wrangler as a `WebAssembly.Module`. In Node (tests, `vite preview`) the same code
-reads the bytes from disk instead. The branch is chosen at runtime by detecting
-`caches.default`.
+Wrangler as a `WebAssembly.Module`. In Node (`vite dev`, tests) the same code
+reads the bytes from disk instead. The branch is chosen at runtime by workerd's
+user agent (`apps/web/src/lib/server/runtime.ts`). Bindings such as Hyperdrive and
+the Cache API are reached only through `apps/web/src/lib/server/platform.ts`, on
+the `cloudflare:workers` module that adapter-cloudflare 8 uses in place of
+`event.platform`.
 
 ## One-time Cloudflare setup
 
 1. Create the Worker (the first `wrangler deploy` does this) — its name is
    `not-the-louvre` in `apps/web/wrangler.jsonc`.
-2. Set runtime secrets (NOT committed; these are read via `$env/dynamic/private`):
+2. Set runtime secrets (NOT committed; these are read via `$app/env/private`, declared in `apps/web/src/env.ts`):
 
    ```sh
    cd apps/web

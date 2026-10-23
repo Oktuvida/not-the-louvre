@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { hashString } from '$lib/features/artwork-presentation/model/frame';
+	import { hashString } from '#lib/features/artwork-presentation/model/frame.js';
 
 	let {
 		children,

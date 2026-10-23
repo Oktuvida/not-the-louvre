@@ -5,11 +5,11 @@ const mocked = vi.hoisted(() => ({
 	listArtworkDiscovery: vi.fn()
 }));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	listArtworkDiscovery: mocked.listArtworkDiscovery
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	getViewerContentPreferences: mocked.getViewerContentPreferences
 }));
 

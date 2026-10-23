@@ -5,7 +5,7 @@
 	import type {
 		HomeSceneArtworkSlot,
 		HomeSceneArtworkSlotName
-	} from '$lib/features/home-entry-scene/state/home-entry.svelte';
+	} from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
 
 	const DEBUG_SHOW_AVATAR_MESH = false;
 	const FALLBACK_AVATAR_SVG = `

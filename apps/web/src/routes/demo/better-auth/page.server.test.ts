@@ -4,7 +4,7 @@ const mocked = vi.hoisted(() => ({
 	signOut: vi.fn()
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		api: {
 			signOut: mocked.signOut

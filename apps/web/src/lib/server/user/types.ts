@@ -1,4 +1,4 @@
-import type { ProductRole } from '$lib/server/auth/types';
+import type { ProductRole } from '#lib/server/auth/types.js';
 
 export type UserRecord = {
 	avatarDocument?: string | null;

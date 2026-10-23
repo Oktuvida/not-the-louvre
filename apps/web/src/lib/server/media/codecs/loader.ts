@@ -1,10 +1,8 @@
+import { runningOnWorkers } from '#lib/server/runtime.js';
+
 // Cloudflare Workers disallow compiling WASM from bytes at runtime, so each codec
 // module must arrive as a WebAssembly.Module import bundled by wrangler. Node has
 // no native .wasm imports, so there we read the binary from node_modules instead.
-const runningInCloudflareWorkers =
-	typeof caches !== 'undefined' &&
-	(caches as unknown as { default?: unknown }).default !== undefined;
-
 const loadNodeWasmModule = async (specifier: string): Promise<WebAssembly.Module> => {
 	const { createRequire } = await import('node:module');
 	const { readFile } = await import('node:fs/promises');
@@ -17,9 +15,7 @@ export const loadCodecWasmModule = async (
 	specifier: string,
 	importWorkersWasmModule: () => Promise<{ default: WebAssembly.Module }>
 ): Promise<WebAssembly.Module> =>
-	runningInCloudflareWorkers
-		? (await importWorkersWasmModule()).default
-		: loadNodeWasmModule(specifier);
+	runningOnWorkers ? (await importWorkersWasmModule()).default : loadNodeWasmModule(specifier);
 
 class ImageDataPolyfill {
 	readonly colorSpace = 'srgb';

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import type { CanonicalUser } from '$lib/server/auth/types';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import type { CanonicalUser } from '#lib/server/auth/types.js';
 import type {
 	ModerationRepository,
 	TextModerationPolicyRecord,

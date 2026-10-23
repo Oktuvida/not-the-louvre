@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { GALLERY_GRID_TEMPLATE_COLUMNS } from '$lib/features/gallery-exploration/model/grid';
+	import { GALLERY_GRID_TEMPLATE_COLUMNS } from '#lib/features/gallery-exploration/model/grid.js';
 
 	/*
 	 * The placeholder box of a PolaroidCard, laid out on the same grid the real

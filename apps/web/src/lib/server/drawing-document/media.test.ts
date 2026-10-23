@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { createEmptyDrawingDocument } from '$lib/features/stroke-json/document';
+import { createEmptyDrawingDocument } from '#lib/features/stroke-json/document.js';
 import { createArtworkDrawingDocumentMedia, createAvatarDrawingDocumentMedia } from './media';
 
 describe('drawing-document backend media', () => {

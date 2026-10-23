@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { fakePage } from '#lib/testing/fake-page-state.svelte.js';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
@@ -7,49 +8,33 @@ type HarnessPageData = {
 	viewer: { id: string; role: 'user' } | null;
 };
 
-const { pageStore, setPageData, invalidateAll, goto, pushState, replaceState } = vi.hoisted(() => {
-	let currentValue = {
-		data: {
-			roomId: 'hall-of-fame',
-			viewer: { id: 'user-1', role: 'user' as const } as { id: string; role: 'user' } | null
-		},
-		state: {},
-		url: new URL('http://localhost/gallery')
-	};
-
-	const subscribers = new Set<(value: typeof currentValue) => void>();
-
-	return {
-		goto: vi.fn(),
-		invalidateAll: vi.fn(async () => {}),
-		pushState: vi.fn(),
-		replaceState: vi.fn(),
-		pageStore: {
-			subscribe(callback: (value: typeof currentValue) => void) {
-				subscribers.add(callback);
-				callback(currentValue);
-
-				return () => subscribers.delete(callback);
-			}
-		},
-		setPageData(data: typeof currentValue.data) {
-			currentValue = { data, state: {}, url: currentValue.url };
-			for (const subscriber of subscribers) subscriber(currentValue);
-		}
-	};
-});
-
-vi.mock('$app/stores', () => ({
-	navigating: { subscribe: (run: (value: null) => void) => (run(null), () => {}) },
-	page: pageStore
+const { refreshAll, goto } = vi.hoisted(() => ({
+	goto: vi.fn(),
+	refreshAll: vi.fn(async () => {})
 }));
 
-vi.mock('$app/navigation', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$app/navigation')>();
-	return { ...actual, goto, invalidateAll, pushState, replaceState };
-});
+type GalleryPageData = {
+	roomId: string;
+	viewer: { id: string; role: 'user' } | null;
+};
 
-vi.mock('$lib/features/home-entry-scene/canvas/museum-canvas', () => ({
+const setPageData = (data: GalleryPageData) => fakePage.set({ data, state: {} });
+
+setPageData({ roomId: 'hall-of-fame', viewer: { id: 'user-1', role: 'user' } });
+fakePage.set({ url: 'http://localhost/gallery' });
+
+vi.mock(
+	'$app/state',
+	async () => (await import('#lib/testing/fake-page-state.svelte.js')).fakeAppState
+);
+
+vi.mock('$app/navigation', async () => ({
+	...(await import('#lib/testing/fake-navigation.js')).fakeNavigation,
+	goto,
+	refreshAll
+}));
+
+vi.mock('#lib/features/home-entry-scene/canvas/museum-canvas.js', () => ({
 	museumWindowOpening: { x: 0, y: 0, width: 100, height: 100 },
 	museumWindowAspectRatio: '16/9'
 }));
@@ -66,7 +51,7 @@ describe('gallery route layout', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		render(GalleryRouteLayoutHarness);
+		await render(GalleryRouteLayoutHarness);
 
 		await expect.element(page.getByTestId('gallery-layout-slot')).toBeVisible();
 		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
@@ -89,7 +74,7 @@ describe('gallery route layout', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		render(GalleryRouteLayoutHarness);
+		await render(GalleryRouteLayoutHarness);
 
 		await expect.element(page.getByTestId('gallery-room-shell')).toBeVisible();
 
@@ -110,7 +95,7 @@ describe('gallery route layout', () => {
 			viewer: null
 		});
 
-		render(GalleryRouteLayoutHarness);
+		await render(GalleryRouteLayoutHarness);
 
 		await expect.element(page.getByTestId('gallery-layout-slot')).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Your Studio' })).not.toBeInTheDocument();
@@ -122,18 +107,18 @@ describe('gallery route layout', () => {
 			viewer: null
 		});
 
-		render(GalleryRouteLayoutHarness);
+		await render(GalleryRouteLayoutHarness);
 
 		await expect.element(page.getByRole('link', { name: /join/i })).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Create Art' })).not.toBeInTheDocument();
 	});
 
 	it('keeps the refresh action alive after two room changes', async () => {
-		invalidateAll.mockClear();
+		refreshAll.mockClear();
 
 		setRoom({ roomId: 'hall-of-fame', viewer: { id: 'user-1', role: 'user' } });
 
-		render(GalleryRoomSwitchHarness);
+		await render(GalleryRoomSwitchHarness);
 
 		await expect.element(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
 
@@ -147,7 +132,7 @@ describe('gallery route layout', () => {
 		await page.getByRole('button', { name: 'Refresh' }).click();
 
 		await vi.waitFor(() => {
-			expect(invalidateAll).toHaveBeenCalledTimes(1);
+			expect(refreshAll).toHaveBeenCalledTimes(1);
 		});
 	});
 });

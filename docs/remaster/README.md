@@ -66,7 +66,9 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Quitar `POST /api/artworks`: la API de obras queda de solo lectura.
 - [x] Documentación y tooling históricos (`openspec/`, `docs/superpowers/`, `docs/PRD.md`, `devenv`) se conservan, marcados como obsoletos. No se borran: no hacen daño.
 - Los tests que leen el código como texto (`*.source.test.ts`, `css-hygiene`, `check-scoped-keyframes`) protegen el CSS frágil actual: cada uno se elimina cuando se reescribe su componente (fases 3 y 4), sustituido por una prueba de interacción o de captura.
-- [ ] SvelteKit 3.1, Svelte 5.57, adapter-cloudflare 8, Vite 8, TypeScript 6, Vitest 5 y Wrangler 4.118 o superior.
+- [x] SvelteKit 3.1, Svelte 5.57, adapter-cloudflare 8, Vite 8, TypeScript 6.0, Vitest 5, Wrangler 4.152 y Playwright 1.64. TypeScript 7 queda fuera hasta que Kit y typescript-eslint lo admitan.
+- [x] Los bindings de Cloudflare (Hyperdrive, Cache API, `waitUntil`) se leen solo desde `#lib/server/platform.ts` sobre `cloudflare:workers`; `event.platform` ya no existe.
+- [x] Los e2e corren el Worker real en workerd con `wrangler dev`, sobre el Postgres local, en lugar de `vite preview` con Node.
 
 ### 2. Datos y medios en R2
 

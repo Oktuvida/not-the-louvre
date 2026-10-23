@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { browser } from '$app/environment';
-	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
-	import { createRealtimeAttemptController } from '$lib/features/realtime/attempt-controller';
+	import { browser } from '$app/env';
+	import { getBrowserRealtimeClient } from '#lib/features/realtime/browser-client.js';
+	import { createRealtimeAttemptController } from '#lib/features/realtime/attempt-controller.js';
 	import { type RealtimeChannel, type RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 	import type { ActionData, PageData } from './$types';
-	import { ApiError, apiErrorMessage, requestJson } from '$lib/client/api';
-	import type { ArtworkVoteValue } from '$lib/shared/content/votes';
+	import { ApiError, apiErrorMessage, requestJson } from '#lib/client/api.js';
+	import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
 
 	type SubscriptionState = 'idle' | 'connecting' | 'subscribed' | 'errored' | 'closed';
 	type VoteRow = {
@@ -24,7 +24,7 @@
 	let trackedScore = $state(0);
 	let subscriptionState = $state<SubscriptionState>('idle');
 	let subscriptionError = $state('');
-	let actionError = $state('');
+	let actionError = $derived(form?.message ?? '');
 	let actionPending = $state(false);
 	let actionStatus = $state('');
 	let eventLog = $state<string[]>([]);
@@ -236,10 +236,6 @@
 	};
 
 	$effect(() => {
-		actionError = form?.message ?? '';
-	});
-
-	$effect(() => {
 		const artworkId = data.trackedArtwork?.id ?? null;
 		trackedScore = data.trackedArtwork?.score ?? 0;
 
@@ -270,9 +266,9 @@
 </script>
 
 <nav>
-	<a href={resolve('/demo')}>Back to demo index</a>
-	<a href={resolve('/demo/better-auth')}>Back to auth demo</a>
-	<a href={resolve('/demo/artwork-publish')}>Back to artwork publish demo</a>
+	<a href={resolve('demo')}>Back to demo index</a>
+	<a href={resolve('demo/better-auth')}>Back to auth demo</a>
+	<a href={resolve('demo/artwork-publish')}>Back to artwork publish demo</a>
 </nav>
 
 <h1>Artwork Realtime Vote Demo</h1>

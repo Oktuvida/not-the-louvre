@@ -1,8 +1,9 @@
 import type { RequestHandler } from './$types';
-import { ArtworkFlowError, logArtworkFlowFailure } from '$lib/server/artwork/errors';
-import { getArtworkMedia } from '$lib/server/artwork/read.service';
-import { streamArtworkStorageObject } from '$lib/server/artwork/storage';
-import { etagMatches, notModified } from '$lib/server/http/conditional';
+import { ArtworkFlowError, logArtworkFlowFailure } from '#lib/server/artwork/errors.js';
+import { getArtworkMedia } from '#lib/server/artwork/read.service.js';
+import { streamArtworkStorageObject } from '#lib/server/artwork/storage.js';
+import { etagMatches, notModified } from '#lib/server/http/conditional.js';
+import { edgeCache, runAfterResponse } from '#lib/server/platform.js';
 
 // Browsers may hold media forever (a storage key never changes after publish).
 // The edge copy stays short-lived: cache.delete only reaches the local
@@ -14,9 +15,9 @@ const toEtag = (storageKey: string) => `"${storageKey}"`;
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const edgeCache = event.platform?.caches?.default;
+		const cache = edgeCache();
 
-		const cachedResponse = await edgeCache?.match(event.request.url);
+		const cachedResponse = await cache?.match(event.request.url);
 		if (cachedResponse) {
 			const cachedEtag = cachedResponse.headers.get('etag');
 			if (cachedEtag && etagMatches(event.request, cachedEtag)) {
@@ -49,9 +50,9 @@ export const GET: RequestHandler = async (event) => {
 			status: 200
 		});
 
-		if (edgeCache) {
-			const cachePut = edgeCache.put(event.request.url, response.clone()).catch(() => {});
-			event.platform?.context?.waitUntil(cachePut);
+		if (cache) {
+			const cachePut = cache.put(event.request.url, response.clone()).catch(() => {});
+			runAfterResponse(cachePut);
 		}
 
 		return response;

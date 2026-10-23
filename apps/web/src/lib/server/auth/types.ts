@@ -1,8 +1,8 @@
 import type { Session, User } from 'better-auth';
-import type { ProductRole } from '$lib/shared/viewer';
+import type { ProductRole } from '#lib/shared/viewer.js';
 
 // The role vocabulary is shared with the drizzle enum and the client
-// components; re-exported so `$lib/server/auth/types` keeps working.
+// components; re-exported so `#lib/server/auth/types.js` keeps working.
 export type { ProductRole };
 
 export type CanonicalUser = {

@@ -37,7 +37,9 @@ const openDrawSketchbook = async (page: import('@playwright/test').Page) => {
 	await enableReducedMotion(page);
 	await expect(page.getByRole('button', { name: 'Open sketchbook' })).toBeVisible();
 	await page.getByRole('button', { name: 'Open sketchbook' }).click();
-	await expect(page.getByPlaceholder('Untitled genius')).toBeVisible();
+	// The studio ignores strokes until the book has opened and the draft has
+	// loaded; the title field unlocks at the same moment.
+	await expect(page.getByPlaceholder('Untitled genius')).toBeEnabled();
 };
 
 const expectSignedInHomeChrome = async (
@@ -529,10 +531,19 @@ test.describe('Not the Louvre frontend port', () => {
 		const artworkCanvas = page.locator('canvas[width="768"][height="768"]').first();
 		await expect(artworkCanvas).toBeVisible();
 		await drawRepeatedDenseStroke(page, artworkCanvas, 3);
-		// The local draft is written after each stroke; give it a moment to land.
+		// The local draft is written shortly after each stroke; reload only once it
+		// holds all three.
 		await expect
-			.poll(async () => (await readDrawingDraftEntries(page, 'artwork')).length)
-			.toBeGreaterThan(0);
+			.poll(async () => {
+				// The store also keeps an untouched baseline snapshot next to the draft.
+				const draft = (await readDrawingDraftEntries(page, 'artwork')).find(
+					({ key }) => !key.startsWith('baseline:')
+				);
+				return draft
+					? getRenderableDrawingStrokes(parseVersionedDrawingDocument(draft.value)).length
+					: 0;
+			})
+			.toBe(3);
 
 		await page.reload();
 		await openDrawSketchbook(page);

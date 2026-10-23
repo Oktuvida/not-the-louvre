@@ -1,29 +1,29 @@
 import {
 	assertDrawingDocumentWithinLimits,
 	type DrawingDocument
-} from '$lib/features/stroke-json/document';
-import { drawingDocumentToSvg } from '$lib/features/stroke-json/svg';
+} from '#lib/features/stroke-json/document.js';
+import { drawingDocumentToSvg } from '#lib/features/stroke-json/svg.js';
 import {
 	ARTWORK_MEDIA_CONTENT_TYPE,
 	ARTWORK_MEDIA_HEIGHT,
 	ARTWORK_MEDIA_MAX_BYTES,
 	ARTWORK_MEDIA_WIDTH
-} from '$lib/server/artwork/config';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import type { SanitizedMedia } from '$lib/server/artwork/types';
+} from '#lib/server/artwork/config.js';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import type { SanitizedMedia } from '#lib/server/artwork/types.js';
 import {
 	encodeAvif,
 	renderSvgToRaster,
 	type AvifEncodeSettings,
 	type RawImage
-} from '$lib/server/media/codecs';
-import { encodeArtworkMediaPlaceholder } from '$lib/server/media/sanitization';
+} from '#lib/server/media/codecs/index.js';
+import { encodeArtworkMediaPlaceholder } from '#lib/server/media/sanitization.js';
 import {
 	AVATAR_MEDIA_CONTENT_TYPE,
 	AVATAR_MEDIA_HEIGHT,
 	AVATAR_MEDIA_MAX_BYTES,
 	AVATAR_MEDIA_WIDTH
-} from '$lib/server/user/config';
+} from '#lib/server/user/config.js';
 
 const ARTWORK_CANONICAL_AVIF_ATTEMPTS: ReadonlyArray<AvifEncodeSettings> = [
 	{ chromaSubsampling: '4:2:0', quality: 70 },

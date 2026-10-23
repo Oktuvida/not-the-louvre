@@ -3,14 +3,16 @@ import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
 const { beforeNavigate, navigate, resetNavigationCallbacks } = vi.hoisted(() => {
-	const callbacks = new Set<() => void>();
+	type Navigation = { shallow: boolean; type: string };
+	const callbacks = new Set<(navigation: Navigation) => void>();
 
 	return {
-		beforeNavigate: (callback: () => void) => {
+		beforeNavigate: (callback: (navigation: Navigation) => void) => {
 			callbacks.add(callback);
 		},
+		// A room tab is a full link navigation, not a shallow goto.
 		navigate: () => {
-			for (const callback of callbacks) callback();
+			for (const callback of callbacks) callback({ shallow: false, type: 'link' });
 		},
 		resetNavigationCallbacks: () => {
 			callbacks.clear();
@@ -18,16 +20,16 @@ const { beforeNavigate, navigate, resetNavigationCallbacks } = vi.hoisted(() => 
 	};
 });
 
-vi.mock('$app/navigation', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$app/navigation')>();
-	return { ...actual, beforeNavigate };
-});
+vi.mock('$app/navigation', async () => ({
+	...(await import('#lib/testing/fake-navigation.js')).fakeNavigation,
+	beforeNavigate
+}));
 
-import { makeArtworks } from '$lib/features/gallery-exploration/fixtures/artworks';
+import { makeArtworks } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import {
 	clearRoomFeedCache,
 	readRoomFeedSnapshot
-} from '$lib/features/gallery-exploration/model/feed-cache';
+} from '#lib/features/gallery-exploration/model/feed-cache.js';
 import HotWallRoom from './rooms/HotWallRoom.svelte';
 import RoomHarness from './rooms/RoomHarness.svelte';
 
@@ -50,7 +52,7 @@ describe('createSeededAccumulator feed memory', () => {
 	it('remembers where the reader was, not where the navigation left them', async () => {
 		const artworks = makeArtworks(6, { prefix: 'hot-' });
 
-		const room = render(RoomHarness, {
+		const room = await render(RoomHarness, {
 			props: {
 				component: HotWallRoom,
 				roomProps: {
@@ -79,7 +81,7 @@ describe('createSeededAccumulator feed memory', () => {
 	it('stores no offset for a room the reader never scrolled', async () => {
 		const artworks = makeArtworks(6, { prefix: 'hot-' });
 
-		const room = render(RoomHarness, {
+		const room = await render(RoomHarness, {
 			props: {
 				component: HotWallRoom,
 				roomProps: {

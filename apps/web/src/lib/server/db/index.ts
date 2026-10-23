@@ -2,12 +2,13 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from './schema';
-import { env } from '$env/dynamic/private';
+import { runningOnWorkers } from '#lib/server/runtime.js';
+import { DATABASE_URL } from '$app/env/private';
 
 type Database = NodePgDatabase<typeof schema>;
 
 const resolveDatabaseUrl = (connectionString?: string) => {
-	const databaseUrl = connectionString || env.DATABASE_URL;
+	const databaseUrl = connectionString || DATABASE_URL;
 
 	// Validated here rather than at module load so importing this module stays
 	// side-effect-free (SvelteKit's postbuild `analyse` step imports server
@@ -22,10 +23,6 @@ const resolveDatabaseUrl = (connectionString?: string) => {
 // client; Hyperdrive pools behind it and cleans the connection up when the
 // request ends, so it is never closed by hand. Node keeps one process-wide pool.
 const requestScopedDatabase = new AsyncLocalStorage<Database>();
-
-const runningInCloudflareWorkers =
-	typeof caches !== 'undefined' &&
-	(caches as unknown as { default?: unknown }).default !== undefined;
 
 let processDatabase: Database | undefined;
 
@@ -44,7 +41,7 @@ export const runWithRequestDbConnection = async <T>(
 	fn: () => Promise<T>,
 	options: { connectionString?: string } = {}
 ): Promise<T> => {
-	if (!runningInCloudflareWorkers) return fn();
+	if (!runningOnWorkers) return fn();
 
 	const client = new pg.Client({
 		connectionString: resolveDatabaseUrl(options.connectionString),

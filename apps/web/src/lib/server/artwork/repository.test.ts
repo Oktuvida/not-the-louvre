@@ -199,11 +199,11 @@ vi.mock('drizzle-orm', () => ({
 	)
 }));
 
-vi.mock('$lib/server/db', () => ({
+vi.mock('#lib/server/db/index.js', () => ({
 	db: mocked.db
 }));
 
-vi.mock('$lib/server/db/schema', () => ({
+vi.mock('#lib/server/db/schema.js', () => ({
 	artworkComments: mocked.schema.artworkComments,
 	artworkEngagementRateLimits: {},
 	artworkPublishRateLimits: {},

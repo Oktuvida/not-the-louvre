@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { ImageUp, Palette, Trash2 } from 'lucide-svelte';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import {
 		brushSizeSteps,
 		drawingPalette,
 		drawingTools
-	} from '$lib/features/studio-drawing/state/drawing.svelte';
+	} from '#lib/features/studio-drawing/state/drawing.svelte.js';
 
 	let {
 		isPublishing = false,

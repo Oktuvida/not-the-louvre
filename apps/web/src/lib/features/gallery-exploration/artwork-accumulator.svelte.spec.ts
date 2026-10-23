@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import { makeArtwork } from '#lib/features/gallery-exploration/fixtures/artworks.js';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 import { createArtworkAccumulator } from './artwork-accumulator.svelte';
 
 const makeIndexedArtwork = (index: number): Artwork =>

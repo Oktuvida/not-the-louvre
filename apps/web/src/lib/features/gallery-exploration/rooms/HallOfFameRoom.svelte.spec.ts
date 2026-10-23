@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
-vi.mock('$lib/features/home-entry-scene/canvas/museum-canvas', () => ({
+vi.mock('#lib/features/home-entry-scene/canvas/museum-canvas.js', () => ({
 	museumWindowOpening: { x: 0, y: 0, width: 100, height: 100 },
 	museumWindowAspectRatio: '16/9'
 }));
@@ -12,7 +12,7 @@ vi.mock('$app/environment', () => ({
 	browser: true
 }));
 
-import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
+import { makeArtwork } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import HallOfFameRoom from './HallOfFameRoom.svelte';
 import RoomHarness from './RoomHarness.svelte';
 
@@ -42,7 +42,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a6', 50)
 		];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
 		});
@@ -63,7 +63,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a6', 50)
 		];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -88,7 +88,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a4', 70)
 		];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
 			loadMoreArtworks
@@ -111,7 +111,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a6', 50)
 		];
 
-		const screen = renderRoom({
+		const screen = await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -155,7 +155,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a4', 70)
 		];
 
-		const { unmount } = renderRoom({
+		const { unmount } = await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});

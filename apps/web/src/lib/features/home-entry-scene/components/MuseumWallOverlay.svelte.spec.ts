@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { museumWallPatternAssetUrl } from '$lib/features/shared-ui/generated-art';
+import { museumWallPatternAssetUrl } from '#lib/features/shared-ui/generated-art.js';
 import MuseumWallOverlay from './MuseumWallOverlay.svelte';
 
 type MockTimelineCall = {
@@ -47,7 +47,7 @@ const { gsapSet, gsapTimeline, gsapTo, timelineInstances } = vi.hoisted(() => {
 	return { gsapSet, gsapTimeline, gsapTo, timelineInstances };
 });
 
-vi.mock('$lib/client/gsap', () => {
+vi.mock('#lib/client/gsap.js', () => {
 	const gsap = {
 		set: gsapSet,
 		timeline: gsapTimeline,
@@ -82,11 +82,13 @@ describe('MuseumWallOverlay', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('seeds wall slabs with centered opening geometry before layout measurement runs', () => {
+	it('seeds wall slabs with centered opening geometry before layout measurement runs', async () => {
 		const authOverlayElement = document.createElement('div');
 		document.body.append(authOverlayElement);
 
-		render(MuseumWallOverlay, {
+		// Mounting is synchronous; awaiting the render would also let the layout
+		// measurement run, and the seeded geometry is what is under test here.
+		const rendered = render(MuseumWallOverlay, {
 			authOverlayElement,
 			dispatch: vi.fn(),
 			entryState: 'outside'
@@ -108,14 +110,15 @@ describe('MuseumWallOverlay', () => {
 			'calc(50% - (0.5 * clamp(19rem, 80vw, 49rem)) + (0.819444 * clamp(19rem, 80vw, 49rem)))'
 		);
 
+		await rendered;
 		authOverlayElement.remove();
 	});
 
-	it('references the committed wall texture by URL instead of inlining the svg', () => {
+	it('references the committed wall texture by URL instead of inlining the svg', async () => {
 		const authOverlayElement = document.createElement('div');
 		document.body.append(authOverlayElement);
 
-		render(MuseumWallOverlay, {
+		await render(MuseumWallOverlay, {
 			authOverlayElement,
 			dispatch: vi.fn(),
 			entryState: 'outside'
@@ -134,7 +137,7 @@ describe('MuseumWallOverlay', () => {
 		const authOverlayElement = document.createElement('div');
 		document.body.append(authOverlayElement);
 
-		render(MuseumWallOverlay, {
+		await render(MuseumWallOverlay, {
 			authOverlayElement,
 			dispatch: vi.fn(),
 			entryState: 'outside'
@@ -157,7 +160,7 @@ describe('MuseumWallOverlay', () => {
 		const authOverlayElement = document.createElement('div');
 		document.body.append(authOverlayElement);
 
-		const { rerender } = render(MuseumWallOverlay, {
+		const { rerender } = await render(MuseumWallOverlay, {
 			authOverlayElement,
 			dispatch: vi.fn(),
 			entryState: 'outside'
@@ -199,7 +202,7 @@ describe('MuseumWallOverlay', () => {
 		const authOverlayElement = document.createElement('div');
 		document.body.append(authOverlayElement);
 
-		const { rerender } = render(MuseumWallOverlay, {
+		const { rerender } = await render(MuseumWallOverlay, {
 			authOverlayElement,
 			dispatch: vi.fn(),
 			entryState: 'outside'
@@ -217,7 +220,7 @@ describe('MuseumWallOverlay', () => {
 	});
 
 	it('defers a resize that lands while the wall is transformed until it is flat again', async () => {
-		const { rerender } = render(MuseumWallOverlay, {
+		const { rerender } = await render(MuseumWallOverlay, {
 			dispatch: vi.fn(),
 			entryState: 'outside'
 		});

@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { House, Paintbrush } from 'lucide-svelte';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
 	import { page } from '$app/state';
 
-	let props = $props<{ error?: App.Error; status?: number }>();
+	let props: { error?: App.Error; status?: number } = $props();
 
 	const status = $derived(props.status ?? page.status ?? 500);
 	const message = $derived(

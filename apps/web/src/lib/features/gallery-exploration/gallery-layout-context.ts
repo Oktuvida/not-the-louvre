@@ -1,7 +1,7 @@
 import { getContext, setContext } from 'svelte';
 import { writable, type Writable } from 'svelte/store';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-import type { Viewer as SharedViewer } from '$lib/shared/viewer';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+import type { Viewer as SharedViewer } from '#lib/shared/viewer.js';
 
 // The context stores the signed-out case too, so it keeps the nullable alias.
 type Viewer = SharedViewer | null;

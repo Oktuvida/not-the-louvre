@@ -1,11 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+
+// Handlers reach the Cloudflare runtime through #lib/server/platform.js; each
+// test registers the cache and waitUntil it would have found there.
+type FakePlatform = {
+	caches?: { default?: unknown };
+	context?: { waitUntil?: (promise: Promise<unknown>) => void };
+};
+const fakePlatform = vi.hoisted(() => ({ current: undefined as FakePlatform | undefined }));
+vi.mock('#lib/server/platform.js', () => ({
+	edgeCache: () => fakePlatform.current?.caches?.default,
+	hyperdriveConnectionString: () => undefined,
+	runAfterResponse: (promise: Promise<unknown>) =>
+		fakePlatform.current?.context?.waitUntil?.(promise)
+}));
+const usePlatform = (platform: FakePlatform) => {
+	fakePlatform.current = platform;
+	return platform;
+};
+beforeEach(() => {
+	fakePlatform.current = undefined;
+});
 
 const mocked = vi.hoisted(() => ({
 	listArtworkDiscovery: vi.fn()
 }));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	listArtworkDiscovery: mocked.listArtworkDiscovery
 }));
 
@@ -212,7 +233,7 @@ describe('artwork collection endpoint', () => {
 		const { GET } = await import('./+server');
 		const miss = await GET({
 			locals: {},
-			platform,
+			platform: usePlatform(platform),
 			request: request(),
 			url: new URL('http://localhost/api/artworks?sort=recent')
 		} as never);
@@ -224,7 +245,7 @@ describe('artwork collection endpoint', () => {
 
 		const hit = await GET({
 			locals: {},
-			platform,
+			platform: usePlatform(platform),
 			request: request(),
 			url: new URL('http://localhost/api/artworks?sort=recent')
 		} as never);
@@ -245,10 +266,10 @@ describe('artwork collection endpoint', () => {
 		const { GET } = await import('./+server');
 		const response = await GET({
 			locals: { user: { id: 'user-1', role: 'user' } },
-			platform: {
+			platform: usePlatform({
 				caches: { default: { match, put } },
 				context: { waitUntil: vi.fn() }
-			},
+			}),
 			request: new Request('http://localhost/api/artworks?sort=recent'),
 			url: new URL('http://localhost/api/artworks?sort=recent')
 		} as never);
