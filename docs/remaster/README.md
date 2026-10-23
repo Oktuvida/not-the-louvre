@@ -75,7 +75,9 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 
 ### 2. Datos y medios en R2
 
-- [ ] Worker `renderer`: resvg y WebP sin pérdida, renderizando directamente al tamaño final.
+- [x] Obras en WebP sin pérdida a 768 px: lo guardado es el render canónico de los trazos, píxel a píxel, y el límite de 100 KB pasa a ser una protección de 1 MiB. Con los ajustes por defecto de libwebp (esfuerzo 75, método 4) cuesta 34–107 ms de CPU en WASM; la escalera AVIF a la que sustituye perdía calidad. Las obras ya publicadas siguen en AVIF hasta la migración.
+- [ ] Avatares en WebP sin pérdida, con claves versionadas.
+- [ ] Worker `renderer` aparte, para sacar los códecs WASM del Worker principal.
 - [ ] Documentos en R2 con clave sha256; la fila de Postgres se escribe al final como marca de commit.
 - [ ] Script de migración: documentos byte a byte (omitiendo las escrituras rotas), AVIF copiados con sus claves y backfill a WebP por cola.
 - [ ] Dominio de medios con Tiered Cache, avatares con claves versionadas y polling en lugar de Supabase Realtime.

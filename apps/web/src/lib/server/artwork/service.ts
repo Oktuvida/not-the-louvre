@@ -485,7 +485,8 @@ export const publishArtwork = async (
 	const drawingVersion = preparedDocument.version;
 
 	const artworkId = nextId();
-	const storageKey = `artworks/${actor.user.id}/${artworkId}.avif`;
+	const extension = media.contentType.replace('image/', '');
+	const storageKey = `artworks/${actor.user.id}/${artworkId}.${extension}`;
 
 	await storage.upload(storageKey, media.file);
 

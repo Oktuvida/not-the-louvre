@@ -13,6 +13,7 @@ import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import type { SanitizedMedia } from '#lib/server/artwork/types.js';
 import {
 	encodeAvif,
+	encodeLosslessWebp,
 	renderSvgToRaster,
 	type AvifEncodeSettings,
 	type RawImage
@@ -25,12 +26,7 @@ import {
 	AVATAR_MEDIA_WIDTH
 } from '#lib/server/user/config.js';
 
-const ARTWORK_CANONICAL_AVIF_ATTEMPTS: ReadonlyArray<AvifEncodeSettings> = [
-	{ chromaSubsampling: '4:2:0', quality: 70 },
-	{ chromaSubsampling: '4:2:0', quality: 55 },
-	{ chromaSubsampling: '4:2:0', quality: 42 },
-	{ chromaSubsampling: '4:2:0', quality: 32 }
-];
+type Encoder = (raster: RawImage) => Promise<Uint8Array>;
 
 const AVATAR_CANONICAL_AVIF_ATTEMPTS: ReadonlyArray<AvifEncodeSettings> = [
 	{ chromaSubsampling: '4:4:4', quality: 90 },
@@ -38,11 +34,12 @@ const AVATAR_CANONICAL_AVIF_ATTEMPTS: ReadonlyArray<AvifEncodeSettings> = [
 	{ chromaSubsampling: '4:2:0', quality: 60 }
 ];
 
-const renderDocumentToAvif = async (
+const renderDocumentToMedia = async (
 	document: DrawingDocument,
 	options: {
-		attempts: ReadonlyArray<AvifEncodeSettings>;
 		contentType: string;
+		// Tried in order; the first output within maxBytes is kept.
+		encodings: ReadonlyArray<Encoder>;
 		// Only the artwork variant has a placeholder column, so the avatar path
 		// leaves this unset instead of paying the extra resize plus PNG encode.
 		encodePlaceholder?: (raster: RawImage) => Promise<string>;
@@ -71,13 +68,13 @@ const renderDocumentToAvif = async (
 		width: options.width
 	});
 
-	// Encoded from the same raster the AVIF attempts consume, and before them,
-	// so the blur-up colors always match the final media and no encoder call can
-	// have consumed the buffer first.
+	// Encoded from the same raster the encoders consume, and before them, so the
+	// blur-up colors always match the final media and no encoder call can have
+	// consumed the buffer first.
 	const placeholder = options.encodePlaceholder ? await options.encodePlaceholder(raster) : null;
 
-	for (const avifOptions of options.attempts) {
-		const outputBuffer = await encodeAvif(raster, avifOptions);
+	for (const encode of options.encodings) {
+		const outputBuffer = await encode(raster);
 
 		if (outputBuffer.byteLength <= options.maxBytes) {
 			return {
@@ -100,23 +97,27 @@ const renderDocumentToAvif = async (
 	);
 };
 
+// Lossless: the stored artwork is the canonical render of its strokes, pixel
+// for pixel. The lossy AVIF ladder it replaces visibly smeared thin lines.
 export const createArtworkDrawingDocumentMedia = (document: DrawingDocument) =>
-	renderDocumentToAvif(document, {
-		attempts: ARTWORK_CANONICAL_AVIF_ATTEMPTS,
+	renderDocumentToMedia(document, {
 		contentType: ARTWORK_MEDIA_CONTENT_TYPE,
 		encodePlaceholder: encodeArtworkMediaPlaceholder,
+		encodings: [encodeLosslessWebp],
 		height: ARTWORK_MEDIA_HEIGHT,
 		kind: 'artwork',
 		label: 'artwork',
 		maxBytes: ARTWORK_MEDIA_MAX_BYTES,
-		outputFileName: 'artwork.avif',
+		outputFileName: 'artwork.webp',
 		width: ARTWORK_MEDIA_WIDTH
 	});
 
 export const createAvatarDrawingDocumentMedia = (document: DrawingDocument) =>
-	renderDocumentToAvif(document, {
-		attempts: AVATAR_CANONICAL_AVIF_ATTEMPTS,
+	renderDocumentToMedia(document, {
 		contentType: AVATAR_MEDIA_CONTENT_TYPE,
+		encodings: AVATAR_CANONICAL_AVIF_ATTEMPTS.map(
+			(settings) => (raster: RawImage) => encodeAvif(raster, settings)
+		),
 		height: AVATAR_MEDIA_HEIGHT,
 		kind: 'avatar',
 		label: 'avatar',
