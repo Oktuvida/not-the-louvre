@@ -75,16 +75,15 @@ export const actions: Actions = {
 	publish: async (event) => {
 		const formData = await event.request.formData();
 		const drawingDocument = formData.get('drawingDocument')?.toString() ?? '';
-		const media = formData.get('media');
 		const title = formData.get('title')?.toString() ?? '';
 		const parentArtworkId = formData.get('parentArtworkId')?.toString() ?? null;
 		const isNsfw = formData.get('isNsfw')?.toString() === 'true';
 
-		if (!drawingDocument && !(media instanceof File)) {
+		if (!drawingDocument) {
 			return fail(400, {
 				action: 'publish',
 				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Artwork media or drawing document is required'
+				message: 'Artwork drawing document is required'
 			});
 		}
 
@@ -93,7 +92,6 @@ export const actions: Actions = {
 				{
 					drawingDocument,
 					isNsfw,
-					media: media instanceof File ? media : null,
 					parentArtworkId,
 					title
 				},

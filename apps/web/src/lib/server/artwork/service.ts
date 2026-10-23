@@ -26,11 +26,9 @@ import type {
 	ArtworkVoteMutationResult,
 	ArtworkVoteRemovalResult,
 	ContentReportStatus,
-	SanitizedMedia,
 	ArtworkVisibilityActor,
 	ArtworkVoteValue
 } from './types';
-import { sanitizeArtworkMedia } from '../media/sanitization';
 import {
 	CONNECTION_RETRY_DELAYS_MS,
 	DRAWING_DOCUMENT_CHUNK_CHARS,
@@ -46,7 +44,6 @@ import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 type PublishArtworkInput = {
 	drawingDocument?: string | null;
 	isNsfw?: boolean;
-	media?: File | null;
 	parentArtworkId?: string | null;
 	title?: string | null;
 };
@@ -104,7 +101,6 @@ type ServiceDependencies = {
 	randomSuffix?: () => number;
 	repository?: ArtworkRepository;
 	renderDrawingDocumentMedia?: typeof createArtworkDrawingDocumentMedia;
-	sanitizeMedia?: (file: File) => Promise<SanitizedMedia>;
 	sleep?: (ms: number) => Promise<void>;
 	storage?: ArtworkStorage;
 };
@@ -119,7 +115,6 @@ const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	repository: dependencies.repository ?? artworkRepository,
 	renderDrawingDocumentMedia:
 		dependencies.renderDrawingDocumentMedia ?? createArtworkDrawingDocumentMedia,
-	sanitizeMedia: dependencies.sanitizeMedia ?? sanitizeArtworkMedia,
 	sleep: dependencies.sleep ?? defaultSleep,
 	storage: dependencies.storage ?? supabaseArtworkStorage
 });
@@ -448,7 +443,6 @@ export const publishArtwork = async (
 		randomSuffix,
 		repository,
 		renderDrawingDocumentMedia,
-		sanitizeMedia,
 		sleep,
 		storage
 	} = getDependencies(dependencies);
@@ -471,29 +465,24 @@ export const publishArtwork = async (
 		}
 	}
 
-	let media: SanitizedMedia;
-	let drawingDocument: string | null = null;
-	let drawingVersion: number | null = null;
-
+	// An artwork is its strokes: the image is rendered from them, never uploaded.
 	const providedDrawingDocument = input.drawingDocument?.trim() ?? '';
-	if (providedDrawingDocument) {
-		const preparedDocument = await prepareDrawingDocumentForStorage(providedDrawingDocument);
-		if (preparedDocument.document.kind !== 'artwork') {
-			throw new ArtworkFlowError(
-				400,
-				'Artwork publish requires an artwork drawing document',
-				'INVALID_MEDIA_FORMAT'
-			);
-		}
-
-		media = await renderDrawingDocumentMedia(preparedDocument.document);
-		drawingDocument = preparedDocument.compressedDocumentBase64;
-		drawingVersion = preparedDocument.version;
-	} else if (input.media instanceof File) {
-		media = await sanitizeMedia(input.media);
-	} else {
-		throw new ArtworkFlowError(400, 'Artwork media is required', 'INVALID_MEDIA_FORMAT');
+	if (!providedDrawingDocument) {
+		throw new ArtworkFlowError(400, 'Artwork drawing document is required', 'INVALID_MEDIA_FORMAT');
 	}
+
+	const preparedDocument = await prepareDrawingDocumentForStorage(providedDrawingDocument);
+	if (preparedDocument.document.kind !== 'artwork') {
+		throw new ArtworkFlowError(
+			400,
+			'Artwork publish requires an artwork drawing document',
+			'INVALID_MEDIA_FORMAT'
+		);
+	}
+
+	const media = await renderDrawingDocumentMedia(preparedDocument.document);
+	const drawingDocument = preparedDocument.compressedDocumentBase64;
+	const drawingVersion = preparedDocument.version;
 
 	const artworkId = nextId();
 	const storageKey = `artworks/${actor.user.id}/${artworkId}.avif`;

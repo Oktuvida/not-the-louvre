@@ -5,6 +5,8 @@ import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 type DrawPublishActionEvent = Parameters<Actions['publish']>[0];
 
+const DRAWING_DOCUMENT =
+	'{"version":1,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","strokes":[]}';
 const mocked = vi.hoisted(() => ({
 	decodeCompressedDrawingDocumentToEditableDocument: vi.fn(),
 	getIP: vi.fn(() => '127.0.0.1'),
@@ -270,7 +272,7 @@ describe('draw route page', () => {
 		});
 	});
 
-	it('rejects publish attempts that omit artwork media', async () => {
+	it('rejects publish attempts that carry no drawing document', async () => {
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(createActionEvent({ title: 'No media yet' }));
 
@@ -279,27 +281,24 @@ describe('draw route page', () => {
 			data: {
 				action: 'publish',
 				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Artwork media or drawing document is required'
+				message: 'Artwork drawing document is required'
 			}
 		});
 		expect(mocked.publishArtwork).not.toHaveBeenCalled();
 	});
 
-	it('publishes a drawing document without requiring source media', async () => {
+	it('publishes the drawing document', async () => {
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(
 			createActionEvent({
-				drawingDocument:
-					'{"version":1,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","strokes":[]}',
+				drawingDocument: DRAWING_DOCUMENT,
 				title: 'Document publish'
 			})
 		);
 
 		expect(mocked.publishArtwork).toHaveBeenCalledWith(
 			expect.objectContaining({
-				drawingDocument:
-					'{"version":1,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","strokes":[]}',
-				media: null,
+				drawingDocument: DRAWING_DOCUMENT,
 				title: 'Document publish'
 			}),
 			expect.anything()
@@ -319,14 +318,14 @@ describe('draw route page', () => {
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(
 			createActionEvent({
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
+				drawingDocument: DRAWING_DOCUMENT,
 				title: 'My First Piece'
 			})
 		);
 
 		expect(mocked.publishArtwork).toHaveBeenCalledWith(
 			expect.objectContaining({
-				media: expect.any(File),
+				drawingDocument: DRAWING_DOCUMENT,
 				title: 'My First Piece'
 			}),
 			expect.objectContaining({
@@ -350,7 +349,7 @@ describe('draw route page', () => {
 		await actions.publish(
 			createActionEvent({
 				isNsfw: 'true',
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
+				drawingDocument: DRAWING_DOCUMENT,
 				parentArtworkId: 'artwork-parent',
 				title: 'Forked Piece'
 			})
@@ -368,18 +367,14 @@ describe('draw route page', () => {
 
 	it('preserves backend publish failure codes and messages', async () => {
 		mocked.publishArtwork.mockRejectedValue(
-			new ArtworkFlowError(
-				400,
-				'Artwork media must be AVIF, WebP, JPEG, or PNG',
-				'INVALID_MEDIA_FORMAT'
-			)
+			new ArtworkFlowError(400, 'Drawing document is invalid', 'INVALID_DRAWING_DOCUMENT')
 		);
 
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(
 			createActionEvent({
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
-				title: 'Bad upload'
+				drawingDocument: DRAWING_DOCUMENT,
+				title: 'Bad drawing'
 			})
 		);
 
@@ -387,8 +382,8 @@ describe('draw route page', () => {
 			status: 400,
 			data: {
 				action: 'publish',
-				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Artwork media must be AVIF, WebP, JPEG, or PNG'
+				code: 'INVALID_DRAWING_DOCUMENT',
+				message: 'Drawing document is invalid'
 			}
 		});
 	});

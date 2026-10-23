@@ -17,7 +17,7 @@ import {
 	type AvifEncodeSettings,
 	type RawImage
 } from '#lib/server/media/codecs/index.js';
-import { encodeArtworkMediaPlaceholder } from '#lib/server/media/sanitization.js';
+import { encodeArtworkMediaPlaceholder } from '#lib/server/media/placeholder.js';
 import {
 	AVATAR_MEDIA_CONTENT_TYPE,
 	AVATAR_MEDIA_HEIGHT,

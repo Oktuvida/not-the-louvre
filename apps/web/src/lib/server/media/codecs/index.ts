@@ -7,16 +7,10 @@ import resizeImageData, { initResize } from '@jsquash/resize';
 import decodeWebpImage, { init as initWebpDecode } from '@jsquash/webp/decode';
 import { initWasm as initResvg, Resvg } from '@resvg/resvg-wasm';
 import { ensureImageDataGlobal, loadCodecWasmModule } from './loader';
-import {
-	blitWithAlpha,
-	createSolidImage,
-	cropCenter,
-	type RawImage,
-	type RgbColor
-} from './raster';
+import { cropCenter, type RawImage } from './raster';
 
-export type { RawImage, RgbColor };
-export { applyRoundedRectAlpha, cropCenter, parseHexColor } from './raster';
+export type { RawImage };
+export { applyRoundedRectAlpha, cropCenter } from './raster';
 
 export type ImageFormat = 'avif' | 'jpeg' | 'png' | 'webp';
 
@@ -141,18 +135,6 @@ const readAscii = (input: Uint8Array, start: number, length: number) =>
 const matchesMagicBytes = (input: Uint8Array, magicBytes: ReadonlyArray<number>) =>
 	input.byteLength >= magicBytes.length && magicBytes.every((byte, index) => input[index] === byte);
 
-const containsAscii = (input: Uint8Array, marker: string) => {
-	const markerBytes = marker.split('').map((character) => character.charCodeAt(0));
-
-	for (let offset = 0; offset + markerBytes.length <= input.byteLength; offset += 1) {
-		if (markerBytes.every((byte, index) => input[offset + index] === byte)) {
-			return true;
-		}
-	}
-
-	return false;
-};
-
 const collectIsoBmffBrands = (input: Uint8Array) => {
 	const brands = new Set<string>();
 
@@ -176,13 +158,13 @@ const collectIsoBmffBrands = (input: Uint8Array) => {
 	return brands;
 };
 
-export const hasAvifMagicBytes = (input: Uint8Array) => {
+const hasAvifMagicBytes = (input: Uint8Array) => {
 	const brands = collectIsoBmffBrands(input);
 
 	return brands.has(AVIF_STILL_BRAND) || brands.has(AVIF_SEQUENCE_BRAND);
 };
 
-export const hasWebpMagicBytes = (input: Uint8Array) =>
+const hasWebpMagicBytes = (input: Uint8Array) =>
 	input.byteLength >= 12 && readAscii(input, 0, 4) === 'RIFF' && readAscii(input, 8, 4) === 'WEBP';
 
 export const sniffImageFormat = (input: Uint8Array): ImageFormat | null => {
@@ -204,27 +186,6 @@ export const sniffImageFormat = (input: Uint8Array): ImageFormat | null => {
 
 	return null;
 };
-
-// sharp exposed multi-frame inputs through `metadata.pages`; without it we
-// reject animated containers from their structure before decoding.
-export const isAnimatedImage = (input: Uint8Array, format: ImageFormat) => {
-	if (format === 'webp') {
-		return containsAscii(input, 'ANIM') || containsAscii(input, 'ANMF');
-	}
-
-	if (format === 'avif') {
-		return collectIsoBmffBrands(input).has(AVIF_SEQUENCE_BRAND);
-	}
-
-	if (format === 'png') {
-		return containsAscii(input, 'acTL');
-	}
-
-	return false;
-};
-
-export const mimeTypeForImageFormat = (format: ImageFormat) =>
-	format === 'jpeg' ? 'image/jpeg' : `image/${format}`;
 
 const toImageData = (image: RawImage) =>
 	new ImageData(new Uint8ClampedArray(image.data), image.width, image.height);
@@ -321,26 +282,6 @@ export const resizeImage = async (
 			width: target.width
 		})
 	);
-};
-
-export const containOnBackground = async (
-	image: RawImage,
-	target: { background: RgbColor; height: number; width: number }
-): Promise<RawImage> => {
-	const scale = Math.min(target.width / image.width, target.height / image.height);
-	const scaledWidth = Math.max(1, Math.round(image.width * scale));
-	const scaledHeight = Math.max(1, Math.round(image.height * scale));
-	const scaled = await resizeImage(image, { height: scaledHeight, width: scaledWidth });
-	const canvas = createSolidImage(target.width, target.height, target.background);
-
-	blitWithAlpha(
-		canvas,
-		scaled,
-		Math.floor((target.width - scaledWidth) / 2),
-		Math.floor((target.height - scaledHeight) / 2)
-	);
-
-	return canvas;
 };
 
 export const coverResize = async (

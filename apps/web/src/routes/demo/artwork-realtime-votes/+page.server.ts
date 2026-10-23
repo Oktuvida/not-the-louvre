@@ -6,15 +6,31 @@ import {
 	SUPABASE_PUBLIC_URL
 } from '$app/env/private';
 
-import { error, fail, isRedirect, redirect } from '@sveltejs/kit';
+import { error, isRedirect, redirect } from '@sveltejs/kit';
 import { getIP } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '#lib/server/auth.js';
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import { getArtworkDetail } from '#lib/server/artwork/read.service.js';
 import { publishArtwork } from '#lib/server/artwork/service.js';
+import { createEmptyDrawingDocument } from '#lib/features/stroke-json/document.js';
 import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
 import { toActionFailure } from '#lib/server/http/errors.js';
+
+// The demo only needs an artwork to vote on, and one stroke makes one.
+const DEMO_DRAWING_DOCUMENT = JSON.stringify({
+	...createEmptyDrawingDocument('artwork'),
+	strokes: [
+		{
+			color: '#2d2420',
+			points: [
+				[120, 120],
+				[640, 640]
+			],
+			size: 12
+		}
+	]
+});
 
 const toFailure = (errorValue: unknown, fallback: string) =>
 	toActionFailure(errorValue, {
@@ -68,19 +84,11 @@ export const load: PageServerLoad = async (event) => {
 export const actions: Actions = {
 	publish: async (event) => {
 		const formData = await event.request.formData();
-		const media = formData.get('media');
-
-		if (!(media instanceof File)) {
-			return fail(400, {
-				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Artwork media is required'
-			});
-		}
 
 		try {
 			const artwork = await publishArtwork(
 				{
-					media,
+					drawingDocument: DEMO_DRAWING_DOCUMENT,
 					title: formData.get('title')?.toString() ?? ''
 				},
 				{
