@@ -48,7 +48,7 @@ test('publishes artwork through the minimal authenticated demo and renders the r
 	}, mediaUrl);
 
 	expect(mediaResponse).toMatchObject({
-		cacheControl: 'public, max-age=31536000, immutable',
+		cacheControl: 'public, max-age=31536000, immutable, s-maxage=3600',
 		contentType: 'image/avif',
 		ok: true,
 		status: 200

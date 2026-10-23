@@ -935,10 +935,16 @@ describeWithDatabase('artwork DB contract', () => {
 			status: 404
 		});
 
-		const moderatorDetail = await getArtworkDetail('artwork-service', {
-			user: createCanonicalUser('moderator-1', 'moderator')
-		});
-		expect(moderatorDetail.id).toBe('artwork-service');
+		// Detail reads are public-only for every viewer since 4bb1735 ("restrict
+		// artwork reads to public items"): a moderator reaches hidden work through
+		// the moderation queue, not the detail view. Whether moderators and
+		// authors should open hidden detail again is an open remaster decision
+		// (docs/remaster/README.md); until then this pins the shipped behavior.
+		await expect(
+			getArtworkDetail('artwork-service', {
+				user: createCanonicalUser('moderator-1', 'moderator')
+			})
+		).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
 
 		await moderateArtwork(
 			{ action: 'unhide', artworkId: 'artwork-service' },
