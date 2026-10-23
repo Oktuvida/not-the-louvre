@@ -2,76 +2,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 
 const mocked = vi.hoisted(() => ({
-	listArtworkDiscovery: vi.fn(),
-	publishArtwork: vi.fn(),
-	getIp: vi.fn(() => '127.0.0.1')
-}));
-
-vi.mock('$lib/server/artwork/service', () => ({
-	publishArtwork: mocked.publishArtwork,
-	withoutDrawingDocument: <T>(artwork: T) => ({ ...artwork, drawingDocument: null })
+	listArtworkDiscovery: vi.fn()
 }));
 
 vi.mock('$lib/server/artwork/read.service', () => ({
 	listArtworkDiscovery: mocked.listArtworkDiscovery
 }));
 
-vi.mock('$lib/server/auth', () => ({
-	auth: {
-		options: {}
-	}
-}));
-
-vi.mock('better-auth/api', () => ({
-	getIp: mocked.getIp
-}));
-
-describe('artwork publish endpoint', () => {
+describe('artwork collection endpoint', () => {
 	beforeEach(() => {
 		mocked.listArtworkDiscovery.mockReset();
-		mocked.publishArtwork.mockReset();
-		mocked.getIp.mockClear();
-		mocked.publishArtwork.mockImplementation(async (_input, context) => {
-			if (!context?.user) {
-				throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
-			}
-
-			return {
-				id: 'artwork-1',
-				authorId: context.user.id,
-				forkCount: 0,
-				title: 'Published artwork',
-				parentId: null,
-				storageKey: `artworks/${context.user.id}/artwork-1.avif`,
-				mediaContentType: 'image/avif',
-				mediaSizeBytes: 128,
-				createdAt: new Date('2026-03-26T12:00:00.000Z'),
-				updatedAt: new Date('2026-03-26T12:00:00.000Z')
-			};
-		});
 	});
 
-	it('rejects unauthenticated publish requests', async () => {
-		const { POST } = await import('./+server');
-		const formData = new FormData();
-		formData.set('title', 'No session');
-		formData.set(
-			'media',
-			new File([new Uint8Array([1, 2, 3])], 'artwork.avif', { type: 'image/avif' })
-		);
+	// Artworks are published only as drawn documents through the studio's form
+	// action. An upload endpoint here let anyone publish an arbitrary image the
+	// app never drew, so the collection is read-only over the API.
+	it('offers no way to publish an uploaded image', async () => {
+		const endpoint = await import('./+server');
 
-		const response = await POST({
-			locals: {},
-			request: new Request('http://localhost/api/artworks', {
-				body: formData,
-				method: 'POST'
-			})
-		} as never);
-
-		expect(response.status).toBe(401);
-		expect(await response.json()).toMatchObject({
-			code: 'UNAUTHENTICATED'
-		});
+		expect(Object.keys(endpoint)).not.toContain('POST');
 	});
 
 	it('returns discovery results for the recent feed contract', async () => {
@@ -307,77 +256,5 @@ describe('artwork publish endpoint', () => {
 		expect(response.headers.get('cache-control')).toBe('private, no-store');
 		expect(match).not.toHaveBeenCalled();
 		expect(put).not.toHaveBeenCalled();
-	});
-
-	it('passes an optional fork parent reference through the publish endpoint', async () => {
-		const { POST } = await import('./+server');
-		const formData = new FormData();
-		formData.set('isNsfw', 'true');
-		formData.set('title', 'Forked artwork');
-		formData.set('parentArtworkId', 'artwork-parent');
-		formData.set(
-			'media',
-			new File([new Uint8Array([1, 2, 3])], 'artwork.avif', { type: 'image/avif' })
-		);
-
-		const response = await POST({
-			locals: {
-				user: {
-					id: 'user-1'
-				}
-			},
-			request: new Request('http://localhost/api/artworks', {
-				body: formData,
-				method: 'POST'
-			})
-		} as never);
-
-		expect(response.status).toBe(201);
-		expect(mocked.publishArtwork).toHaveBeenCalledTimes(1);
-		expect(mocked.publishArtwork.mock.calls[0]?.[0]).toMatchObject({
-			isNsfw: true,
-			parentArtworkId: 'artwork-parent'
-		});
-	});
-
-	it('never returns the drawing document with a published artwork', async () => {
-		mocked.publishArtwork.mockResolvedValue({
-			id: 'artwork-1',
-			authorId: 'user-1',
-			drawingDocument: 'compressed-drawing-document-payload',
-			forkCount: 0,
-			title: 'Published artwork',
-			parentId: null,
-			storageKey: 'artworks/user-1/artwork-1.avif',
-			mediaContentType: 'image/avif',
-			mediaSizeBytes: 128,
-			createdAt: new Date('2026-03-26T12:00:00.000Z'),
-			updatedAt: new Date('2026-03-26T12:00:00.000Z')
-		});
-
-		const { POST } = await import('./+server');
-		const formData = new FormData();
-		formData.set('title', 'Published artwork');
-		formData.set(
-			'media',
-			new File([new Uint8Array([1, 2, 3])], 'artwork.avif', { type: 'image/avif' })
-		);
-
-		const response = await POST({
-			locals: {
-				user: {
-					id: 'user-1'
-				}
-			},
-			request: new Request('http://localhost/api/artworks', {
-				body: formData,
-				method: 'POST'
-			})
-		} as never);
-
-		expect(response.status).toBe(201);
-		expect(await response.json()).toMatchObject({
-			artwork: { drawingDocument: null, id: 'artwork-1' }
-		});
 	});
 });
