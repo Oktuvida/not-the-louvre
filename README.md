@@ -54,6 +54,8 @@ The repository now uses a small Bun workspace so the root stays focused on share
 
 ## `devenv` workflow
 
+> **Deprecated.** `devenv` is not maintained during the remaster and still expects the Rust toolchain the project no longer has. Use Bun and Docker directly.
+
 This repo now includes a Linux-first `devenv` setup for local development. The direct Bun and Docker Compose workflow still works, but `devenv` is the preferred DX entrypoint.
 
 Prerequisites:
