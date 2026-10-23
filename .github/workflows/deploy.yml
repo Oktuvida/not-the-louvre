@@ -52,9 +52,7 @@ jobs:
         run: bun run --filter @not-the-louvre/web check
 
       # Integration suites opt in through RUN_INTEGRATION=1 and are skipped
-      # here. The SQL contract suite runs against real Postgres in the
-      # `database` job below; the media and avatar suites still need the local
-      # Supabase stack's Storage and stay a manual release step (AGENTS.md).
+      # here; they run against real Postgres in the `database` job below.
       - name: Server unit tests
         run: bun run --filter @not-the-louvre/web test:unit:server
 
@@ -80,7 +78,7 @@ jobs:
         run: bun run --filter @not-the-louvre/web test:unit:client
 
   database:
-    name: SQL contract and end-to-end tests
+    name: Integration and end-to-end tests
     runs-on: ubuntu-latest
     # A plain Postgres stands in for Supabase's: `db:platform-objects` recreates
     # the few Supabase-owned objects the migration history touches (see
@@ -131,10 +129,11 @@ jobs:
           bun run db:migrate
 
       # Fork lineage, keyset paging, DB-owned counters, auto-hide and the
-      # rate-limit upsert, executed for real instead of through fakes.
-      - name: SQL contract suite
+      # rate-limit upsert executed for real instead of through fakes, plus the
+      # media and avatar round trips through wrangler's local R2.
+      - name: Integration suites
         working-directory: apps/web
-        run: bun run test:contract
+        run: bun run test:integration
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4

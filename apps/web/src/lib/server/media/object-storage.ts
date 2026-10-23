@@ -1,165 +1,64 @@
-import {
-	SUPABASE_PUBLIC_URL,
-	SUPABASE_SECRET_KEY,
-	SERVICE_ROLE_KEY,
-	ARTWORK_STORAGE_BUCKET as ARTWORK_STORAGE_BUCKET_OVERRIDE
-} from '$app/env/private';
-
-import { ARTWORK_STORAGE_BUCKET } from '#lib/server/artwork/config.js';
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import type { ArtworkStorage } from '#lib/server/artwork/types.js';
+import { mediaBucket, type MediaBucket } from '#lib/server/platform.js';
 
-type SupabaseObjectStorageOptions = {
-	deleteFailedMessage: string;
-	missingConfigMessage: string;
-	notFoundMessage: string;
-	readFailedMessage: string;
-	uploadFailedMessage: string;
-	// Published artwork media is immutable, so a colliding key must fail loudly;
-	// an avatar is replaced in place under a stable key, so it upserts.
-	upsert: boolean;
-};
+/*
+ * Artwork and avatar images live in the MEDIA R2 bucket, one key prefix each.
+ * `wrangler dev` and the test suites emulate the bucket locally, so every
+ * environment runs this same code.
+ */
 
-type SupabaseObjectStorage = {
-	resetPlaywrightStorage: () => void;
-	storage: ArtworkStorage;
-	stream: (key: string) => Promise<Response>;
-};
+const requireBucket = (): MediaBucket => {
+	const bucket = mediaBucket();
 
-// Avatars live under their own key prefix inside the artwork bucket; a single
-// bucket is deliberate, so both callers resolve the same one.
-const getStorageConfig = (missingConfigMessage: string) => {
-	const baseUrl = SUPABASE_PUBLIC_URL;
-	const serviceKey = SUPABASE_SECRET_KEY || SERVICE_ROLE_KEY;
-
-	if (!baseUrl || !serviceKey) {
-		throw new ArtworkFlowError(500, missingConfigMessage, 'STORAGE_FAILED');
+	if (!bucket) {
+		throw new ArtworkFlowError(500, 'Media storage is not configured', 'STORAGE_FAILED');
 	}
 
-	return {
-		baseUrl,
-		bucket: ARTWORK_STORAGE_BUCKET_OVERRIDE || ARTWORK_STORAGE_BUCKET,
-		serviceKey
-	};
+	return bucket;
 };
 
-const toStorageError = async (response: Response, fallback: string) => {
-	let message = fallback;
-
-	try {
-		const body = (await response.json()) as { message?: string; error?: string };
-		message = body.message || body.error || fallback;
-	} catch {
-		// ignore invalid json response bodies
-	}
-
-	throw new ArtworkFlowError(502, message, 'STORAGE_FAILED');
-};
-
-const toObjectUrl = (baseUrl: string, bucket: string, key: string) =>
-	`${baseUrl}/storage/v1/object/${bucket}/${encodeURIComponent(key).replace(/%2F/g, '/')}`;
-
-export const createSupabaseObjectStorage = (
-	options: SupabaseObjectStorageOptions
-): SupabaseObjectStorage => {
-	// One Map per caller so artwork media and avatars stay separate stores, as
-	// they were when this was two copies of the same file. `__PLAYWRIGHT__` is a
-	// build-time constant (vite.config.ts `define`), so Rollup drops both the
-	// Map and every branch below from the production worker.
-	const playwrightStorage = __PLAYWRIGHT__
-		? new Map<string, { body: Uint8Array; contentType: string }>()
-		: null;
-
-	const resolveConfig = () => getStorageConfig(options.missingConfigMessage);
-
+export const createObjectStorage = (options: { notFoundMessage: string }) => {
 	const storage: ArtworkStorage = {
 		async upload(key, file) {
-			if (__PLAYWRIGHT__ && playwrightStorage) {
-				playwrightStorage.set(key, {
-					body: new Uint8Array(await file.arrayBuffer()),
-					contentType: file.type
-				});
-				return;
-			}
-
-			const { baseUrl, bucket, serviceKey } = resolveConfig();
-			const response = await fetch(toObjectUrl(baseUrl, bucket, key), {
-				body: await file.arrayBuffer(),
-				headers: {
-					authorization: `Bearer ${serviceKey}`,
-					'content-type': file.type,
-					'x-upsert': options.upsert ? 'true' : 'false'
-				},
-				method: 'POST'
+			await requireBucket().put(key, await file.arrayBuffer(), {
+				httpMetadata: { contentType: file.type }
 			});
-
-			if (!response.ok) {
-				await toStorageError(response, options.uploadFailedMessage);
-			}
 		},
 
 		async delete(key) {
-			if (__PLAYWRIGHT__ && playwrightStorage) {
-				playwrightStorage.delete(key);
-				return;
-			}
-
-			const { baseUrl, bucket, serviceKey } = resolveConfig();
-			const response = await fetch(`${baseUrl}/storage/v1/object/${bucket}/${key}`, {
-				headers: {
-					authorization: `Bearer ${serviceKey}`
-				},
-				method: 'DELETE'
-			});
-
-			if (!response.ok && response.status !== 404) {
-				await toStorageError(response, options.deleteFailedMessage);
-			}
+			await requireBucket().delete(key);
 		}
 	};
 
 	const stream = async (key: string) => {
-		if (__PLAYWRIGHT__ && playwrightStorage) {
-			const storedObject = playwrightStorage.get(key);
+		const object = await requireBucket().get(key);
 
-			if (!storedObject) {
-				throw new ArtworkFlowError(404, options.notFoundMessage, 'NOT_FOUND');
-			}
-
-			return new Response(
-				new Blob([Buffer.from(storedObject.body)], { type: storedObject.contentType }),
-				{
-					headers: {
-						'content-type': storedObject.contentType
-					}
-				}
-			);
+		if (!object) {
+			throw new ArtworkFlowError(404, options.notFoundMessage, 'NOT_FOUND');
 		}
 
-		const { baseUrl, bucket, serviceKey } = resolveConfig();
-		const response = await fetch(toObjectUrl(baseUrl, bucket, key), {
+		return new Response(object.body, {
 			headers: {
-				authorization: `Bearer ${serviceKey}`
-			},
-			method: 'GET'
-		});
-
-		if (!response.ok) {
-			if (response.status === 404) {
-				throw new ArtworkFlowError(404, options.notFoundMessage, 'NOT_FOUND');
+				'content-length': String(object.size),
+				'content-type': object.httpMetadata?.contentType ?? 'application/octet-stream'
 			}
+		});
+	};
 
-			await toStorageError(response, options.readFailedMessage);
+	return { storage, stream };
+};
+
+/** Empties the bucket. Only the e2e reset route calls it, against local R2. */
+export const deleteAllMediaObjects = async () => {
+	const bucket = requireBucket();
+	let cursor: string | undefined;
+
+	do {
+		const page = await bucket.list({ cursor });
+		if (page.objects.length > 0) {
+			await bucket.delete(page.objects.map((object) => object.key));
 		}
-
-		return response;
-	};
-
-	return {
-		resetPlaywrightStorage: () => {
-			playwrightStorage?.clear();
-		},
-		storage,
-		stream
-	};
+		cursor = page.truncated ? page.cursor : undefined;
+	} while (cursor);
 };

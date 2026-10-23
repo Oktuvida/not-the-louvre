@@ -28,7 +28,7 @@ const moderation = vi.hoisted(() => ({
 }));
 
 vi.mock('./storage', () => ({
-	supabaseArtworkStorage: {
+	artworkStorage: {
 		delete: vi.fn(async () => undefined),
 		upload: vi.fn(async () => undefined)
 	}

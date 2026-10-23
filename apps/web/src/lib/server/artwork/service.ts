@@ -9,7 +9,7 @@ import {
 } from './config';
 import { ArtworkFlowError, logArtworkFlowFailure } from './errors';
 import { artworkRepository } from './repository';
-import { supabaseArtworkStorage } from './storage';
+import { artworkStorage } from './storage';
 import { checkTextModeration } from '#lib/server/moderation/service.js';
 import { isRateLimitBlocked, type RateLimitPolicy } from '#lib/server/db/rate-limit.js';
 import { isArtworkReportReason } from '#lib/shared/content/report-reasons.js';
@@ -116,7 +116,7 @@ const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	renderDrawingDocumentMedia:
 		dependencies.renderDrawingDocumentMedia ?? createArtworkDrawingDocumentMedia,
 	sleep: dependencies.sleep ?? defaultSleep,
-	storage: dependencies.storage ?? supabaseArtworkStorage
+	storage: dependencies.storage ?? artworkStorage
 });
 
 // The gallery client renders from the media endpoint; the drawing document

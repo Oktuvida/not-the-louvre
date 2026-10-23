@@ -9,7 +9,25 @@ import { env, waitUntil } from 'cloudflare:workers';
  * fake platforms.
  */
 
-type Bindings = { HYPERDRIVE?: { connectionString: string } };
+/** The slice of an R2 bucket the app uses. */
+export type MediaBucket = {
+	delete(keys: string | string[]): Promise<void>;
+	get(key: string): Promise<{
+		body: ReadableStream;
+		httpMetadata?: { contentType?: string };
+		size: number;
+	} | null>;
+	list(options?: {
+		cursor?: string;
+	}): Promise<{ cursor?: string; objects: { key: string }[]; truncated: boolean }>;
+	put(
+		key: string,
+		value: ArrayBuffer,
+		options?: { httpMetadata?: { contentType?: string } }
+	): Promise<unknown>;
+};
+
+type Bindings = { HYPERDRIVE?: { connectionString: string }; MEDIA?: MediaBucket };
 
 /** The Hyperdrive binding's connection string, or undefined off Workers. */
 export const hyperdriveConnectionString = (): string | undefined => {
@@ -17,6 +35,15 @@ export const hyperdriveConnectionString = (): string | undefined => {
 		return (env as Bindings).HYPERDRIVE?.connectionString;
 	} catch {
 		// The emulated module throws where there is no platform proxy at all.
+		return undefined;
+	}
+};
+
+/** The R2 bucket holding artwork and avatar images, or undefined off Workers. */
+export const mediaBucket = (): MediaBucket | undefined => {
+	try {
+		return (env as Bindings).MEDIA;
+	} catch {
 		return undefined;
 	}
 };

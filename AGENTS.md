@@ -74,23 +74,21 @@ After every change, run `bun run format`, `bun run lint`, `bun run check`, and `
 | `bun run test:unit` | Unit & component tests (Vitest) |
 | `bun run test:e2e` | End-to-end tests (Playwright) |
 | `bun run test` | Unit + e2e combined |
-| `bun run --filter @not-the-louvre/web test:contract` | SQL contract suite against a real Postgres (runs in CI, see below) |
-| `bun run --filter @not-the-louvre/web test:integration` | Every integration suite, including the Storage-backed ones (release step, see below) |
+| `bun run --filter @not-the-louvre/web test:integration` | Integration suites against a real Postgres and wrangler's local R2 (runs in CI, see below) |
 
 Before pushing code, all of the above must pass. Prefer running them in order: format → lint → check → test.
 
 The integration suites (`*.integration.test.ts`) are gated on `RUN_INTEGRATION=1` and skip
 everywhere else. The SQL contract suite (`db.contract.integration.test.ts`) is where the raw
 SQL this app ships — fork lineage, keyset paging, the rate-limit upsert — is actually
-executed. It needs only Postgres and runs in CI's `database` job. To run it locally against
-any plain Postgres, set `DATABASE_URL` and run `db:platform-objects` (plain Postgres only,
-never Supabase), `db:migrate` and `test:contract` with `bun run --filter @not-the-louvre/web`.
+executed; the media and avatar suites publish and read images through the MEDIA R2 bucket,
+which each suite emulates with wrangler's `getPlatformProxy`. They need only Postgres and
+run in CI's `database` job. To run them locally against any plain Postgres, set
+`DATABASE_URL` and run `db:platform-objects` (plain Postgres only, never Supabase),
+`db:migrate` and `test:integration` with `bun run --filter @not-the-louvre/web`.
 The e2e suite builds the Worker and serves it on workerd with `wrangler dev`, using the same
-`DATABASE_URL` through Wrangler's local Hyperdrive emulation, so it exercises the production
-runtime rather than Node.
-The media and avatar suites still need the local Supabase stack's Storage, so **run them by
-hand before a release**: `bun run db:start`, then
-`bun run --filter @not-the-louvre/web test:integration`.
+`DATABASE_URL` through Wrangler's local Hyperdrive emulation and a local R2 bucket, so it
+exercises the production runtime rather than Node.
 
 ### Reproducibility (Everything-as-Code)
 
@@ -101,7 +99,7 @@ Local development must be reproducible from a clean clone:
 - **Dependencies**: `bun install` from root. Lockfile is committed.
 - **Environment**: `.env.example` documents every required variable.
 - **Schema**: Drizzle migrations define the database state (see below).
-- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check`, `test:unit:server` and `test:unit:client` on every pull request and before every deploy, plus, in its `database` job, the SQL contract suite and the e2e suite (except the `@realtime` demo) against a Postgres service container. Only the Storage-backed media and avatar suites stay a manual release step (above).
+- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check`, `test:unit:server` and `test:unit:client` on every pull request and before every deploy, plus, in its `database` job, the integration suites and the e2e suite (except the `@realtime` demo) against a Postgres service container.
 
 ---
 
