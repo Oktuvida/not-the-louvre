@@ -120,11 +120,7 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
 								avatarUserRecord.avatarDocument
 							)
 						: null,
-				avatarUrl: resolveUserAvatarUrl(
-					locals.user.id,
-					locals.user.avatarUrl,
-					locals.user.avatarUrl ? locals.user.updatedAt.getTime() : null
-				)
+				avatarUrl: resolveUserAvatarUrl(locals.user.id, locals.user.avatarUrl)
 			}
 		},
 		adultContentEnabled,
@@ -210,12 +206,7 @@ export const actions: Actions = {
 
 			return {
 				action: 'saveAvatar',
-				avatarUrl:
-					resolveUserAvatarUrl(
-						updatedUser.id,
-						updatedUser.avatarUrl,
-						updatedUser.updatedAt.getTime()
-					) ?? '',
+				avatarUrl: resolveUserAvatarUrl(updatedUser.id, updatedUser.avatarUrl) ?? '',
 				onboarding: 'complete',
 				success: true
 			};

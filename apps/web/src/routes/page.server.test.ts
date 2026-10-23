@@ -457,7 +457,7 @@ describe('home route auth contract', () => {
 	it('saves an avatar through the home route action and marks onboarding complete', async () => {
 		mocked.uploadAvatar.mockResolvedValue({
 			avatarOnboardingCompletedAt: new Date('2026-03-28T12:00:00.000Z'),
-			avatarUrl: 'avatars/product-user-1.avif',
+			avatarUrl: 'avatars/product-user-1/0123456789abcdef.webp',
 			createdAt: new Date('2026-03-28T10:00:00.000Z'),
 			id: 'product-user-1',
 			nickname: 'fresh_artist',
@@ -497,11 +497,11 @@ describe('home route auth contract', () => {
 		expect(mocked.uploadAvatar).toHaveBeenCalledWith(localUser, avatarDocument);
 		expect(event.locals.user).toMatchObject({
 			avatarOnboardingCompletedAt: new Date('2026-03-28T12:00:00.000Z'),
-			avatarUrl: 'avatars/product-user-1.avif'
+			avatarUrl: 'avatars/product-user-1/0123456789abcdef.webp'
 		});
 		expect(result).toEqual({
 			action: 'saveAvatar',
-			avatarUrl: '/api/users/product-user-1/avatar?v=1774699200000',
+			avatarUrl: '/api/users/product-user-1/avatar?v=0123456789abcdef',
 			onboarding: 'complete',
 			success: true
 		});

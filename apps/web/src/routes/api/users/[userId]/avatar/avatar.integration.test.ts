@@ -167,7 +167,9 @@ describeWithStorage('avatar backend integration', () => {
 
 			expect(uploadResponse.status).toBe(200);
 			const uploadPayload = (await uploadResponse.json()) as { avatarUrl: string };
-			expect(uploadPayload.avatarUrl).toMatch(new RegExp(`^/api/users/${userId}/avatar\\?v=\\d+$`));
+			expect(uploadPayload.avatarUrl).toMatch(
+				new RegExp(`^/api/users/${userId}/avatar\\?v=[0-9a-f]{16}$`)
+			);
 
 			const [storedUser] = await sql<
 				Array<{ avatar_document: string | null; avatar_url: string | null }>
@@ -178,17 +180,20 @@ describeWithStorage('avatar backend integration', () => {
 			`;
 
 			expect(storedUser?.avatar_document).toBeTruthy();
-			expect(storedUser?.avatar_url).toBe(`avatars/${userId}.avif`);
+			expect(storedUser?.avatar_url).toMatch(new RegExp(`^avatars/${userId}/[0-9a-f]{16}\\.webp$`));
 
 			const getResponse = await avatarModule.GET({
 				locals: {},
-				params: { userId }
+				params: { userId },
+				request: new Request(`http://localhost${uploadPayload.avatarUrl}`)
 			} as never);
 			const avatarBytes = new Uint8Array(await getResponse.arrayBuffer());
 
 			expect(getResponse.status).toBe(200);
-			expect(getResponse.headers.get('content-type')).toBe('image/avif');
-			expect(getResponse.headers.get('cache-control')).toBe('public, max-age=300');
+			expect(getResponse.headers.get('content-type')).toBe('image/webp');
+			expect(getResponse.headers.get('cache-control')).toBe(
+				'public, max-age=31536000, immutable, s-maxage=3600'
+			);
 			expect(avatarBytes.byteLength).toBeGreaterThan(0);
 
 			const deleteResponse = await avatarModule.DELETE({

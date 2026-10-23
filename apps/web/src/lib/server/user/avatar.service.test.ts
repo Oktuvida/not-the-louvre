@@ -155,6 +155,8 @@ const createRepositoryStore = (initial: UserRecord | null = null) => {
 const createRepository = (initial: UserRecord | null = null): UserRepository =>
 	createRepositoryStore(initial).repository;
 
+const VERSIONED_AVATAR_KEY = /^avatars\/user-1\/[0-9a-f]{16}\.webp$/;
+
 const createStorage = (): ArtworkStorage => ({
 	upload: vi.fn(async () => {}),
 	delete: vi.fn(async () => {})
@@ -228,13 +230,13 @@ describe('avatar upload', () => {
 
 		const result = await service.uploadAvatar(user, avatarDocument);
 
-		expect(storage.upload).toHaveBeenCalledWith('avatars/user-1.avif', expect.any(File));
+		expect(result.avatarUrl).toMatch(VERSIONED_AVATAR_KEY);
+		expect(storage.upload).toHaveBeenCalledWith(result.avatarUrl, expect.any(File));
 		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(avatarDocument);
 		expect(result.avatarDocumentVersion).toBe(2);
 		expect(gunzipBase64(store.read()!.avatarDocument!)).toBe(
 			serializeCanonicalDrawingDocument(createEmptyDrawingDocument('avatar'))
 		);
-		expect(result.avatarUrl).toBe('avatars/user-1.avif');
 	});
 
 	it('writes the avatar document in chunks and never binds it whole', async () => {
@@ -306,7 +308,7 @@ describe('avatar upload', () => {
 
 		// Onboarding must not fail on a document write: the avatar image is saved
 		// and the versionless document is inert for readers.
-		expect(result.avatarUrl).toBe('avatars/user-1.avif');
+		expect(result.avatarUrl).toMatch(VERSIONED_AVATAR_KEY);
 		expect(result.avatarDocumentVersion).toBeNull();
 		expect(store.read()!.avatarDocumentVersion).toBeNull();
 		expect(storage.delete).not.toHaveBeenCalled();
@@ -338,16 +340,31 @@ describe('avatar upload', () => {
 		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
-	it('overwrites the previous avatar key in place without a separate deletion', async () => {
+	// The address changes with the picture, so every cache can keep an avatar
+	// forever and nobody is ever shown the previous one.
+	it('gives a changed avatar a new address and removes the old image', async () => {
 		repository = createRepository(makeUserRecord({ avatarUrl: 'avatars/user-1.avif' }));
 		const service = createAvatarService({ repository, storage });
 		const user = makeCanonicalUser({ id: 'user-1', avatarUrl: 'avatars/user-1.avif' });
 
 		const result = await service.uploadAvatar(user, avatarDocument);
 
-		expect(storage.upload).toHaveBeenCalledWith('avatars/user-1.avif', expect.any(File));
+		expect(result.avatarUrl).toMatch(VERSIONED_AVATAR_KEY);
+		expect(storage.delete).toHaveBeenCalledWith('avatars/user-1.avif');
+	});
+
+	it('keeps the same address when the same drawing is saved again', async () => {
+		const store = createRepositoryStore(makeUserRecord());
+		const service = createAvatarService({ repository: store.repository, storage });
+
+		const first = await service.uploadAvatar(makeCanonicalUser({ id: 'user-1' }), avatarDocument);
+		const second = await service.uploadAvatar(
+			makeCanonicalUser({ id: 'user-1', avatarUrl: first.avatarUrl }),
+			avatarDocument
+		);
+
+		expect(second.avatarUrl).toBe(first.avatarUrl);
 		expect(storage.delete).not.toHaveBeenCalled();
-		expect(result.avatarUrl).toBe('avatars/user-1.avif');
 	});
 
 	it('does not call storage delete on first upload', async () => {

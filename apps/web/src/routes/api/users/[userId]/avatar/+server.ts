@@ -4,13 +4,28 @@ import { toApiErrorResponse } from '#lib/server/http/errors.js';
 import { avatarService } from '#lib/server/user/avatar.service.js';
 import { userRepository } from '#lib/server/user/repository.js';
 import { streamAvatarStorageObject } from '#lib/server/user/storage.js';
-import { resolveUserAvatarPath, resolveUserAvatarUrl } from '#lib/user/avatar-url.js';
+import {
+	avatarVersionFromStorageKey,
+	resolveUserAvatarPath,
+	resolveUserAvatarUrl
+} from '#lib/user/avatar-url.js';
 import { edgeCache, runAfterResponse } from '#lib/server/platform.js';
 
-// Browser TTL stays at the pre-cache 5 minutes so avatar changes keep
-// propagating as fast as before; the edge copy lives longer because uploads
-// purge the uploader's own datacenter below (remote colos wait out the TTL).
-const CACHE_CONTROL = 'public, max-age=300, s-maxage=3600';
+// The URLs the app hands out name the avatar's version, and a version never
+// changes its bytes, so browsers may keep it forever. The edge copy stays
+// short-lived: cache.delete only reaches the local datacenter, so hiding an
+// avatar can only wait out this TTL elsewhere.
+const VERSIONED_CACHE_CONTROL = 'public, max-age=31536000, immutable, s-maxage=3600';
+
+// An address without the current version (the bare path, an old version, a
+// legacy avatar) gets whatever the avatar is now, so browsers recheck it within
+// minutes; the edge copy lasts longer because uploads purge the uploader's own
+// datacenter below.
+const UNVERSIONED_CACHE_CONTROL = 'public, max-age=300, s-maxage=3600';
+
+// Avatars saved before lossless WebP are still AVIF under their legacy key.
+const contentTypeForStorageKey = (storageKey: string) =>
+	storageKey.endsWith('.webp') ? 'image/webp' : 'image/avif';
 
 const AVATAR_READ_ERROR = {
 	fallbackCode: 'AVATAR_READ_FAILED',
@@ -67,9 +82,16 @@ export const GET: RequestHandler = async (event) => {
 
 		const etag = `"${user.avatarUrl}:${user.updatedAt.getTime()}"`;
 
+		const version = avatarVersionFromStorageKey(user.avatarUrl);
+		const isCurrentVersion =
+			version !== null && new URL(event.request.url).searchParams.get('v') === version;
+
 		const headers = new Headers();
-		headers.set('content-type', 'image/avif');
-		headers.set('cache-control', CACHE_CONTROL);
+		headers.set('content-type', contentTypeForStorageKey(user.avatarUrl));
+		headers.set(
+			'cache-control',
+			isCurrentVersion ? VERSIONED_CACHE_CONTROL : UNVERSIONED_CACHE_CONTROL
+		);
 		headers.set('etag', etag);
 
 		if (etagMatches(event.request, etag)) {
@@ -111,7 +133,7 @@ export const PUT: RequestHandler = async (event) => {
 		purgeAvatarEdgeCache(event, updated.id);
 
 		return Response.json({
-			avatarUrl: resolveUserAvatarUrl(updated.id, updated.avatarUrl, updated.updatedAt.getTime())
+			avatarUrl: resolveUserAvatarUrl(updated.id, updated.avatarUrl)
 		});
 	} catch (error) {
 		return toApiErrorResponse(error, AVATAR_UPLOAD_ERROR);
