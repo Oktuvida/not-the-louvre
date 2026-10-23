@@ -502,7 +502,8 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 
 		const avatarCanvas = page.locator('canvas[width="340"][height="340"]').first();
-		await expect(avatarCanvas).toBeVisible();
+		// The pad takes strokes once the local draft has loaded.
+		await expect(avatarCanvas).toHaveAttribute('aria-disabled', 'false');
 		await drawRepeatedDenseStroke(page, avatarCanvas, 3);
 
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
