@@ -1,18 +1,18 @@
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import type { ArtworkStorage } from '#lib/server/artwork/types.js';
-import { mediaBucket, type MediaBucket } from '#lib/server/platform.js';
+import { appBucket, type AppBucket } from '#lib/server/platform.js';
 
 /*
- * Artwork and avatar images live in the MEDIA R2 bucket, one key prefix each.
+ * Artwork and avatar images live in the app's R2 bucket, one key prefix each.
  * `wrangler dev` and the test suites emulate the bucket locally, so every
  * environment runs this same code.
  */
 
-const requireBucket = (): MediaBucket => {
-	const bucket = mediaBucket();
+const requireBucket = (): AppBucket => {
+	const bucket = appBucket();
 
 	if (!bucket) {
-		throw new ArtworkFlowError(500, 'Media storage is not configured', 'STORAGE_FAILED');
+		throw new ArtworkFlowError(500, 'Object storage is not configured', 'STORAGE_FAILED');
 	}
 
 	return bucket;

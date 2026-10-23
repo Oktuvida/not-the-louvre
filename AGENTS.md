@@ -81,7 +81,7 @@ Before pushing code, all of the above must pass. Prefer running them in order: f
 The integration suites (`*.integration.test.ts`) are gated on `RUN_INTEGRATION=1` and skip
 everywhere else. The SQL contract suite (`db.contract.integration.test.ts`) is where the raw
 SQL this app ships — fork lineage, keyset paging, the rate-limit upsert — is actually
-executed; the media and avatar suites publish and read images through the MEDIA R2 bucket,
+executed; the media and avatar suites publish and read images through the app's R2 bucket (`BUCKET`),
 which each suite emulates with wrangler's `getPlatformProxy`. They need only Postgres and
 run in CI's `database` job. To run them locally against any plain Postgres, set
 `DATABASE_URL` and run `db:platform-objects` (plain Postgres only, never Supabase),
