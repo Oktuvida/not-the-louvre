@@ -1,0 +1,1596 @@
+{
+	"about": "Answers of the Rust/WASM stroke-json runtime, recorded before its removal. The TypeScript reader must match them.",
+	"runtimeVersion": "0.1.0",
+	"documents": [
+		{
+			"name": "v1 artwork with two strokes",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[10,10],[20,25],[30,40]]},{\"color\":\"#E63946\",\"size\":24,\"points\":[[100,100],[120,90]]}]}",
+			"validate": {
+				"ok": true,
+				"value": {
+					"version": 1,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"strokeCount": 2,
+					"totalPoints": 5
+				}
+			},
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									10,
+									10
+								],
+								[
+									20,
+									25
+								],
+								[
+									30,
+									40
+								]
+							]
+						},
+						{
+							"color": "#E63946",
+							"size": 24,
+							"points": [
+								[
+									100,
+									100
+								],
+								[
+									120,
+									90
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									10,
+									10
+								],
+								[
+									20,
+									25
+								],
+								[
+									30,
+									40
+								]
+							]
+						},
+						{
+							"color": "#E63946",
+							"size": 24,
+							"points": [
+								[
+									100,
+									100
+								],
+								[
+									120,
+									90
+								]
+							]
+						}
+					],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "v1 avatar",
+			"json": "{\"version\":1,\"kind\":\"avatar\",\"width\":340,\"height\":340,\"background\":\"#f5f0e1\",\"strokes\":[{\"color\":\"#000000\",\"size\":1,\"points\":[[340,0]]}]}",
+			"validate": {
+				"ok": true,
+				"value": {
+					"version": 1,
+					"kind": "avatar",
+					"width": 340,
+					"height": 340,
+					"strokeCount": 1,
+					"totalPoints": 1
+				}
+			},
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "avatar",
+					"width": 340,
+					"height": 340,
+					"background": "#f5f0e1",
+					"base": [],
+					"tail": [
+						{
+							"color": "#000000",
+							"size": 1,
+							"points": [
+								[
+									340,
+									0
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "avatar",
+					"width": 340,
+					"height": 340,
+					"background": "#f5f0e1",
+					"base": [
+						{
+							"color": "#000000",
+							"size": 1,
+							"points": [
+								[
+									340,
+									0
+								]
+							]
+						}
+					],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "v2 artwork with base and tail",
+			"json": "{\"version\":2,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"base\":[{\"color\":\"#264653\",\"size\":64,\"points\":[[1,2]]}],\"tail\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[5,5],[6,7]]}]}",
+			"validate": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"strokeCount": 2,
+					"totalPoints": 3
+				}
+			},
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#264653",
+							"size": 64,
+							"points": [
+								[
+									1,
+									2
+								]
+							]
+						}
+					],
+					"tail": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									5,
+									5
+								],
+								[
+									6,
+									7
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#264653",
+							"size": 64,
+							"points": [
+								[
+									1,
+									2
+								]
+							]
+						}
+					],
+					"tail": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									5,
+									5
+								],
+								[
+									6,
+									7
+								]
+							]
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "v2 artwork with no strokes",
+			"json": "{\"version\":2,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"base\":[],\"tail\":[]}",
+			"validate": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"strokeCount": 0,
+					"totalPoints": 0
+				}
+			},
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": []
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "v1 artwork with no strokes",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[]}",
+			"validate": {
+				"ok": true,
+				"value": {
+					"version": 1,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"strokeCount": 0,
+					"totalPoints": 0
+				}
+			},
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": []
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "points on the canvas edges, sizes 1 and 64, uppercase hex",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#ABCDEF\",\"size\":1,\"points\":[[0,0],[768,768]]},{\"color\":\"#abcdef\",\"size\":64,\"points\":[[768,0]]}]}",
+			"validate": {
+				"ok": true,
+				"value": {
+					"version": 1,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"strokeCount": 2,
+					"totalPoints": 3
+				}
+			},
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": [
+						{
+							"color": "#ABCDEF",
+							"size": 1,
+							"points": [
+								[
+									0,
+									0
+								],
+								[
+									768,
+									768
+								]
+							]
+						},
+						{
+							"color": "#abcdef",
+							"size": 64,
+							"points": [
+								[
+									768,
+									0
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#ABCDEF",
+							"size": 1,
+							"points": [
+								[
+									0,
+									0
+								],
+								[
+									768,
+									768
+								]
+							]
+						},
+						{
+							"color": "#abcdef",
+							"size": 64,
+							"points": [
+								[
+									768,
+									0
+								]
+							]
+						}
+					],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "single-point stroke",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[384,384]]}]}",
+			"validate": {
+				"ok": true,
+				"value": {
+					"version": 1,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"strokeCount": 1,
+					"totalPoints": 1
+				}
+			},
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									384,
+									384
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									384,
+									384
+								]
+							]
+						}
+					],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "keys in a different order",
+			"json": "{\"strokes\":[{\"points\":[[1,1]],\"size\":2,\"color\":\"#123456\"}],\"background\":\"#fdfbf7\",\"height\":768,\"width\":768,\"kind\":\"artwork\",\"version\":1}",
+			"validate": {
+				"ok": true,
+				"value": {
+					"version": 1,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"strokeCount": 1,
+					"totalPoints": 1
+				}
+			},
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": [
+						{
+							"color": "#123456",
+							"size": 2,
+							"points": [
+								[
+									1,
+									1
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#123456",
+							"size": 2,
+							"points": [
+								[
+									1,
+									1
+								]
+							]
+						}
+					],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "exactly the per-stroke point limit",
+			"generated": {
+				"kind": "artwork",
+				"strokes": 1,
+				"pointsPerStroke": 5000
+			},
+			"validate": {
+				"ok": true,
+				"value": {
+					"version": 1,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"strokeCount": 1,
+					"totalPoints": 5000
+				}
+			},
+			"editable": {
+				"ok": true,
+				"value": {
+					"bytes": 48597,
+					"sha256": "29de37f36d0cab5ed3a9396aab4f13fa8399a6e329dfc3e3a82318b6ed4f0a77"
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"bytes": 48597,
+					"sha256": "f5976c9b57d98b55888b645338808cd42af51b262f855c6d3831e0e05f8b3ad7"
+				}
+			}
+		},
+		{
+			"name": "exactly the total point limit",
+			"generated": {
+				"kind": "artwork",
+				"strokes": 20,
+				"pointsPerStroke": 5000
+			},
+			"validate": {
+				"ok": true,
+				"value": {
+					"version": 1,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"strokeCount": 20,
+					"totalPoints": 100000
+				}
+			},
+			"editable": {
+				"ok": true,
+				"value": {
+					"bytes": 970097,
+					"sha256": "994c696fd9336ea5ed990bc1fcfebd96aca4e6a19c11d6eac54e986a3064abab"
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"bytes": 970097,
+					"sha256": "c4bea06be65a15e120c0467213e4ae177f2e0d9d7a16d0d0a5c9f663f2538dcf"
+				}
+			}
+		},
+		{
+			"name": "invalid JSON",
+			"json": "{not json",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			}
+		},
+		{
+			"name": "missing version",
+			"json": "{\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			}
+		},
+		{
+			"name": "unsupported version 3",
+			"json": "{\"version\":3,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[]}",
+			"validate": {
+				"ok": false,
+				"error": "Unsupported drawing document version: 3"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Unsupported drawing document version: 3"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Unsupported drawing document version: 3"
+			}
+		},
+		{
+			"name": "version as a string",
+			"json": "{\"version\":\"1\",\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			}
+		},
+		{
+			"name": "unknown document field",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[],\"title\":\"x\"}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown field `title`, expected one of `version`, `kind`, `width`, `height`, `background`, `strokes` at line 1 column 98"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown field `title`, expected one of `version`, `kind`, `width`, `height`, `background`, `strokes` at line 1 column 98"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown field `title`, expected one of `version`, `kind`, `width`, `height`, `background`, `strokes` at line 1 column 98"
+			}
+		},
+		{
+			"name": "unknown stroke field",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[1,1]],\"opacity\":0.5}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown field `opacity`, expected one of `color`, `size`, `points` at line 1 column 143"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown field `opacity`, expected one of `color`, `size`, `points` at line 1 column 143"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown field `opacity`, expected one of `color`, `size`, `points` at line 1 column 143"
+			}
+		},
+		{
+			"name": "color with five hex digits",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#12345\",\"size\":8,\"points\":[[1,1]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] has invalid color"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] has invalid color"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] has invalid color"
+			}
+		},
+		{
+			"name": "named color",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"red\",\"size\":8,\"points\":[[1,1]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] has invalid color"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] has invalid color"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] has invalid color"
+			}
+		},
+		{
+			"name": "non-hex color",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#gggggg\",\"size\":8,\"points\":[[1,1]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] has invalid color"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] has invalid color"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] has invalid color"
+			}
+		},
+		{
+			"name": "size 0",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#123456\",\"size\":0,\"points\":[[1,1]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] size must be between 1 and 64"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] size must be between 1 and 64"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] size must be between 1 and 64"
+			}
+		},
+		{
+			"name": "size 65",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#123456\",\"size\":65,\"points\":[[1,1]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] size must be between 1 and 64"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] size must be between 1 and 64"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] size must be between 1 and 64"
+			}
+		},
+		{
+			"name": "fractional size",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#123456\",\"size\":2.5,\"points\":[[1,1]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid type: floating point `2.5`, expected u32 at line 1 column 118"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid type: floating point `2.5`, expected u32 at line 1 column 118"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid type: floating point `2.5`, expected u32 at line 1 column 118"
+			}
+		},
+		{
+			"name": "stroke with no points",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] must contain at least one point"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] must contain at least one point"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: stroke strokes[0] must contain at least one point"
+			}
+		},
+		{
+			"name": "x beyond the width",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[769,1]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: point strokes[0].points[0][0] must be within canvas width 768"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: point strokes[0].points[0][0] must be within canvas width 768"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: point strokes[0].points[0][0] must be within canvas width 768"
+			}
+		},
+		{
+			"name": "y beyond the height",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[1,769]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: point strokes[0].points[0][1] must be within canvas height 768"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: point strokes[0].points[0][1] must be within canvas height 768"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: point strokes[0].points[0][1] must be within canvas height 768"
+			}
+		},
+		{
+			"name": "negative coordinate",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[-1,1]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid value: integer `-1`, expected u32 at line 1 column 130"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid value: integer `-1`, expected u32 at line 1 column 130"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid value: integer `-1`, expected u32 at line 1 column 130"
+			}
+		},
+		{
+			"name": "fractional coordinate",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[1.5,1]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid type: floating point `1.5`, expected u32 at line 1 column 131"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid type: floating point `1.5`, expected u32 at line 1 column 131"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid type: floating point `1.5`, expected u32 at line 1 column 131"
+			}
+		},
+		{
+			"name": "integral float coordinate written as 1.0",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[10.0,10],[20,25],[30,40]]},{\"color\":\"#E63946\",\"size\":24,\"points\":[[100,100],[120,90]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid type: floating point `10.0`, expected u32 at line 1 column 132"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid type: floating point `10.0`, expected u32 at line 1 column 132"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: invalid type: floating point `10.0`, expected u32 at line 1 column 132"
+			}
+		},
+		{
+			"name": "point with three coordinates",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[1,2,3]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: trailing characters at line 1 column 133"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: trailing characters at line 1 column 133"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: trailing characters at line 1 column 133"
+			}
+		},
+		{
+			"name": "artwork with avatar dimensions",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":340,\"height\":340,\"background\":\"#fdfbf7\",\"strokes\":[]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid Artwork drawing dimensions/background; expected 768x768 with #fdfbf7"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid Artwork drawing dimensions/background; expected 768x768 with #fdfbf7"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid Artwork drawing dimensions/background; expected 768x768 with #fdfbf7"
+			}
+		},
+		{
+			"name": "artwork with the wrong background",
+			"json": "{\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#ffffff\",\"strokes\":[]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid Artwork drawing dimensions/background; expected 768x768 with #fdfbf7"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid Artwork drawing dimensions/background; expected 768x768 with #fdfbf7"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid Artwork drawing dimensions/background; expected 768x768 with #fdfbf7"
+			}
+		},
+		{
+			"name": "unknown kind",
+			"json": "{\"version\":1,\"kind\":\"sticker\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown variant `sticker`, expected `artwork` or `avatar` at line 1 column 29"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown variant `sticker`, expected `artwork` or `avatar` at line 1 column 29"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown variant `sticker`, expected `artwork` or `avatar` at line 1 column 29"
+			}
+		},
+		{
+			"name": "v2 without tail",
+			"json": "{\"version\":2,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"base\":[]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: missing field `tail` at line 1 column 88"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: missing field `tail` at line 1 column 88"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: missing field `tail` at line 1 column 88"
+			}
+		},
+		{
+			"name": "v2 with v1 strokes field",
+			"json": "{\"version\":2,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown field `strokes`, expected one of `version`, `kind`, `width`, `height`, `background`, `base`, `tail` at line 1 column 87"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown field `strokes`, expected one of `version`, `kind`, `width`, `height`, `background`, `base`, `tail` at line 1 column 87"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: unknown field `strokes`, expected one of `version`, `kind`, `width`, `height`, `background`, `base`, `tail` at line 1 column 87"
+			}
+		},
+		{
+			"name": "duplicate version key",
+			"json": "{\"version\":1,\"version\":1,\"kind\":\"artwork\",\"width\":768,\"height\":768,\"background\":\"#fdfbf7\",\"strokes\":[{\"color\":\"#1d3557\",\"size\":8,\"points\":[[10,10],[20,25],[30,40]]},{\"color\":\"#E63946\",\"size\":24,\"points\":[[100,100],[120,90]]}]}",
+			"validate": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document JSON"
+			}
+		},
+		{
+			"name": "one point over the per-stroke limit",
+			"generated": {
+				"kind": "artwork",
+				"strokes": 1,
+				"pointsPerStroke": 5001
+			},
+			"validate": {
+				"ok": false,
+				"error": "Drawing document exceeds max points per stroke of 5000"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Drawing document exceeds max points per stroke of 5000"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Drawing document exceeds max points per stroke of 5000"
+			}
+		},
+		{
+			"name": "one stroke over the stroke limit",
+			"generated": {
+				"kind": "artwork",
+				"strokes": 5001,
+				"pointsPerStroke": 1
+			},
+			"validate": {
+				"ok": false,
+				"error": "Drawing document exceeds max strokes of 5000"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Drawing document exceeds max strokes of 5000"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Drawing document exceeds max strokes of 5000"
+			}
+		},
+		{
+			"name": "over the total point limit",
+			"generated": {
+				"kind": "artwork",
+				"strokes": 21,
+				"pointsPerStroke": 5000
+			},
+			"validate": {
+				"ok": false,
+				"error": "Drawing document exceeds max total points of 100000"
+			},
+			"editable": {
+				"ok": false,
+				"error": "Drawing document exceeds max total points of 100000"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Drawing document exceeds max total points of 100000"
+			}
+		}
+	],
+	"payloads": [
+		{
+			"name": "gzip level 6 of a v1 document (Rust and fflate default)",
+			"base64": "H4sIAAAAAAAAE1WMTQ6DIBgF7/K6/Rbgv+x7CsJCBZXQSIO0JjXevcE0Tbt8mTez42nCav0CwQnOLhoCXYibDw6Ezeo4Q9RVQ5iNneb4GX03uCn4x/m/jHrsxxqENQbvzAohdwz+5kOiXOdleVL7MhAN4e7tEtNLckacKZIZo6xUJHNGBVPqoB//WuVtUX39rPgPpEJK8IxRm1x1vAGv1fb21gAAAA==",
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									10,
+									10
+								],
+								[
+									20,
+									25
+								],
+								[
+									30,
+									40
+								]
+							]
+						},
+						{
+							"color": "#E63946",
+							"size": 24,
+							"points": [
+								[
+									100,
+									100
+								],
+								[
+									120,
+									90
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									10,
+									10
+								],
+								[
+									20,
+									25
+								],
+								[
+									30,
+									40
+								]
+							]
+						},
+						{
+							"color": "#E63946",
+							"size": 24,
+							"points": [
+								[
+									100,
+									100
+								],
+								[
+									120,
+									90
+								]
+							]
+						}
+					],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "gzip level 9 of a v1 document",
+			"base64": "H4sIAAAAAAACE1WMTQ6DIBgF7/K6/Rbgv+x7CsJCBZXQSIO0JjXevcE0Tbt8mTez42nCav0CwQnOLhoCXYibDw6Ezeo4Q9RVQ5iNneb4GX03uCn4x/m/jHrsxxqENQbvzAohdwz+5kOiXOdleVL7MhAN4e7tEtNLckacKZIZo6xUJHNGBVPqoB//WuVtUX39rPgPpEJK8IxRm1x1vAGv1fb21gAAAA==",
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									10,
+									10
+								],
+								[
+									20,
+									25
+								],
+								[
+									30,
+									40
+								]
+							]
+						},
+						{
+							"color": "#E63946",
+							"size": 24,
+							"points": [
+								[
+									100,
+									100
+								],
+								[
+									120,
+									90
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									10,
+									10
+								],
+								[
+									20,
+									25
+								],
+								[
+									30,
+									40
+								]
+							]
+						},
+						{
+							"color": "#E63946",
+							"size": 24,
+							"points": [
+								[
+									100,
+									100
+								],
+								[
+									120,
+									90
+								]
+							]
+						}
+					],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "gzip level 1 of a v2 document",
+			"base64": "H4sIAAAAAAAEE1XMyw6DIBSE4XcZt2fjBTS8CmGBgnqikQZoTWp898a2i3Y5yf/NgYePicMGVREW3hwUbMx7iAsIO7s8Q7WyI8yepzl/R2+HZYrh/u6L0Y392ILQ2+Sh9IEhrCFCoahkI0UNQuKnh5IN4RZ4ywlK65IqY05DyJbXf1e6Wojr8uO6XyZIGNKS2gufL7V9N/PDAAAA",
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#264653",
+							"size": 64,
+							"points": [
+								[
+									1,
+									2
+								]
+							]
+						}
+					],
+					"tail": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									5,
+									5
+								],
+								[
+									6,
+									7
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#264653",
+							"size": 64,
+							"points": [
+								[
+									1,
+									2
+								]
+							]
+						}
+					],
+					"tail": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									5,
+									5
+								],
+								[
+									6,
+									7
+								]
+							]
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "plain JSON bytes without gzip",
+			"base64": "eyJ2ZXJzaW9uIjoxLCJraW5kIjoiYXJ0d29yayIsIndpZHRoIjo3NjgsImhlaWdodCI6NzY4LCJiYWNrZ3JvdW5kIjoiI2ZkZmJmNyIsInN0cm9rZXMiOlt7ImNvbG9yIjoiIzFkMzU1NyIsInNpemUiOjgsInBvaW50cyI6W1sxMCwxMF0sWzIwLDI1XSxbMzAsNDBdXX0seyJjb2xvciI6IiNFNjM5NDYiLCJzaXplIjoyNCwicG9pbnRzIjpbWzEwMCwxMDBdLFsxMjAsOTBdXX1dfQ==",
+			"editable": {
+				"ok": false,
+				"error": "Failed to decompress drawing document: invalid gzip header"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Failed to decompress drawing document: invalid gzip header"
+			}
+		},
+		{
+			"name": "truncated gzip",
+			"base64": "H4sIAAAAAAAAE1WMTQ6DIBgF7/I=",
+			"editable": {
+				"ok": false,
+				"error": "Failed to decompress drawing document: unexpected end of file"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Failed to decompress drawing document: unexpected end of file"
+			}
+		},
+		{
+			"name": "gzip of an invalid document",
+			"base64": "H4sIAAAAAAAAEy3KQQ6DIBBG4bv83c6GNFbhKoaFCgihYZqB1qTGuzeaLl++t+PjpSYuMIqQU3EwmKRtLBmELbkWYfrHQIg+rbH9Y56WvAq/r/8WXJhDD0JtwtlXmHHHwk+WU5W7d92l6ethBsKLU2nnNWqtSVl72OMHrcomiIoAAAA=",
+			"editable": {
+				"ok": false,
+				"error": "Invalid drawing document: point strokes[0].points[0][0] must be within canvas width 768"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Invalid drawing document: point strokes[0].points[0][0] must be within canvas width 768"
+			}
+		},
+		{
+			"name": "gzip followed by trailing garbage",
+			"base64": "H4sIAAAAAAAAE1WMTQ6DIBgF7/K6/Rbgv+x7CsJCBZXQSIO0JjXevcE0Tbt8mTez42nCav0CwQnOLhoCXYibDw6Ezeo4Q9RVQ5iNneb4GX03uCn4x/m/jHrsxxqENQbvzAohdwz+5kOiXOdleVL7MhAN4e7tEtNLckacKZIZo6xUJHNGBVPqoB//WuVtUX39rPgPpEJK8IxRm1x1vAGv1fb21gAAAGdhcmJhZ2U=",
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									10,
+									10
+								],
+								[
+									20,
+									25
+								],
+								[
+									30,
+									40
+								]
+							]
+						},
+						{
+							"color": "#E63946",
+							"size": 24,
+							"points": [
+								[
+									100,
+									100
+								],
+								[
+									120,
+									90
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									10,
+									10
+								],
+								[
+									20,
+									25
+								],
+								[
+									30,
+									40
+								]
+							]
+						},
+						{
+							"color": "#E63946",
+							"size": 24,
+							"points": [
+								[
+									100,
+									100
+								],
+								[
+									120,
+									90
+								]
+							]
+						}
+					],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "two concatenated gzip members",
+			"base64": "H4sIAAAAAAAAE1WMTQ6DIBgF7/K6/Rbgv+x7CsJCBZXQSIO0JjXevcE0Tbt8mTez42nCav0CwQnOLhoCXYibDw6Ezeo4Q9RVQ5iNneb4GX03uCn4x/m/jHrsxxqENQbvzAohdwz+5kOiXOdleVL7MhAN4e7tEtNLckacKZIZo6xUJHNGBVPqoB//WuVtUX39rPgPpEJK8IxRm1x1vAGv1fb21gAAAB+LCAAAAAAAABNVy0sOgyAUBdC93E7fxA9g2AphoIL6opEGsCY17r2xaZp2eD/nwMPHxGGFLgkzrw4abcx7iDMIO7s8QSvZECbP45Q/oWv7eYxhe/9vgxu6QeGqk4c2B/qwhHhNpaylqEBI/PTQsibcA685QRtTUGntaQm55eXfFa4SQn1d88sECUtGkrrw+QK1fTfzwwAAAA==",
+			"editable": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [],
+					"tail": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									10,
+									10
+								],
+								[
+									20,
+									25
+								],
+								[
+									30,
+									40
+								]
+							]
+						},
+						{
+							"color": "#E63946",
+							"size": 24,
+							"points": [
+								[
+									100,
+									100
+								],
+								[
+									120,
+									90
+								]
+							]
+						}
+					]
+				}
+			},
+			"canonical": {
+				"ok": true,
+				"value": {
+					"version": 2,
+					"kind": "artwork",
+					"width": 768,
+					"height": 768,
+					"background": "#fdfbf7",
+					"base": [
+						{
+							"color": "#1d3557",
+							"size": 8,
+							"points": [
+								[
+									10,
+									10
+								],
+								[
+									20,
+									25
+								],
+								[
+									30,
+									40
+								]
+							]
+						},
+						{
+							"color": "#E63946",
+							"size": 24,
+							"points": [
+								[
+									100,
+									100
+								],
+								[
+									120,
+									90
+								]
+							]
+						}
+					],
+					"tail": []
+				}
+			}
+		},
+		{
+			"name": "compressed payload over 256 KiB",
+			"generated": "stored-gzip-of-300KiB-pseudorandom",
+			"editable": {
+				"ok": false,
+				"error": "Drawing document exceeds max compressed bytes of 262144"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Drawing document exceeds max compressed bytes of 262144"
+			}
+		},
+		{
+			"name": "decompresses past 1 MiB",
+			"base64": "H4sIAAAAAAAAE+3MO07DQBQF0K2goZ3Cdv7uWYXlIomdxDLKIMcQiSh7R44Qgpr2nO7p3XtvTwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/xQ+2uHSpXMo8xj67tyEMmyH8ZqGPsRw7ZrxFMrVch3Dqe2Op/H72G33/XFI74/886E57A6rEMNlHFLfXkJZ3cI+vaZh+ubNbLF4fLvPNpTrGN5Sdx6nVJVnMc/qWBVZLBZ1rGZZnGd1fY+/+i/L2Wa+/OkX878D08I0kRdZ3Ezd+v4F5+vKddYAEAA=",
+			"editable": {
+				"ok": false,
+				"error": "Drawing document exceeds max output bytes of 1048576"
+			},
+			"canonical": {
+				"ok": false,
+				"error": "Drawing document exceeds max output bytes of 1048576"
+			}
+		}
+	]
+}
