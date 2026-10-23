@@ -18,6 +18,14 @@ If it is not reproducible, it is a future bug wearing a disguise.
 
 ---
 
+## Remaster In Progress
+
+All remaster work happens on the long-lived `remaster` branch, which is merged into `main` only when the owner decides it is ready. The plan, the decisions already made and the phase checklist live in [`docs/remaster/README.md`](docs/remaster/README.md); the technical evidence behind them is in `docs/remaster/informe-stack.md`.
+
+Never trigger the deploy workflow manually (`workflow_dispatch`) from `remaster`: that path deploys to production. A draft pull request from `remaster` to `main` runs the quality jobs without deploying.
+
+---
+
 ## Development Methodology
 
 ### Test-Driven Development (Test-First)
@@ -41,6 +49,16 @@ Business-scenario-first test modeling:
 4. Only then write the minimum code needed to satisfy the test.
 
 If code exists before a failing scenario test, the process is out of order.
+
+### Test Strategy
+
+Write each test at the level where the behavior actually lives:
+
+- **SQL** runs against a real Postgres in the contract suites. Never verify SQL with fakes that reimplement it.
+- **User journeys** are Playwright e2e tests.
+- **Unit tests** cover pure logic only.
+- **Component specs** are for interaction-heavy widgets, and query by role and text, not by class names or test ids.
+- **No source-text tests.** A test that greps code or CSS, or pins generated SQL as its only guard, passes while the product is broken.
 
 ### Automated Quality Gates
 
