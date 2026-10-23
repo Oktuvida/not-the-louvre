@@ -504,6 +504,28 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
 	});
 
+	// Old phones, blocklisted GPUs and browsers with WebGL turned off cannot give
+	// three.js a context. The 3D studio is decoration; signing in is not.
+	test('home route still lets visitors sign in when the browser has no WebGL', async ({ page }) => {
+		await page.addInitScript(() => {
+			const getContext = HTMLCanvasElement.prototype.getContext;
+			HTMLCanvasElement.prototype.getContext = function (
+				this: HTMLCanvasElement,
+				type: string,
+				...rest: unknown[]
+			) {
+				if (type.startsWith('webgl') || type === 'experimental-webgl') return null;
+				return (getContext as (...args: unknown[]) => unknown).call(this, type, ...rest);
+			} as typeof getContext;
+		});
+
+		await page.goto('/');
+
+		await expect(page.getByText('Scene preview paused')).toBeVisible();
+		await page.getByRole('button', { name: 'Come In' }).click();
+		await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+	});
+
 	test('home route keeps the localized scene fallback when the studio GLB fails', async ({
 		page
 	}) => {

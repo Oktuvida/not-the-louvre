@@ -268,16 +268,29 @@
 					<StudioLoadingFallback failed={sceneFailed} />
 				</div>
 				{#if SceneComponent}
-					<SceneComponent
-						{entryState}
-						{initialPose}
-						{scenePose}
-						avatarUrl={user?.avatarUrl ?? null}
-						artworkSlots={sceneArtworks}
-						onMediaStateChange={(state) => {
-							sceneMediaState = state;
+					<!--
+						The scene is decoration. Without a WebGL context three.js throws while
+						the canvas mounts, and an uncaught error there stopped the whole page:
+						Come In never opened the auth overlay. The boundary keeps the failure
+						inside the frame and leaves the failed loading card in its place.
+					-->
+					<svelte:boundary
+						onerror={() => {
+							sceneMediaState = 'error';
 						}}
-					/>
+					>
+						<SceneComponent
+							{entryState}
+							{initialPose}
+							{scenePose}
+							avatarUrl={user?.avatarUrl ?? null}
+							artworkSlots={sceneArtworks}
+							onMediaStateChange={(state) => {
+								sceneMediaState = state;
+							}}
+						/>
+						{#snippet failed()}{/snippet}
+					</svelte:boundary>
 				{/if}
 			</div>
 			<div
