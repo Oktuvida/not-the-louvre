@@ -268,7 +268,6 @@
 <nav>
 	<a href={resolve('demo')}>Back to demo index</a>
 	<a href={resolve('demo/better-auth')}>Back to auth demo</a>
-	<a href={resolve('demo/artwork-publish')}>Back to artwork publish demo</a>
 </nav>
 
 <h1>Artwork Realtime Vote Demo</h1>
@@ -279,21 +278,12 @@
 	<section aria-label="Publish tracked artwork">
 		<h2>Publish tracked artwork</h2>
 		<p>Publish one artwork to open the realtime vote view for a second browser context.</p>
-		<form method="post" action="?/publish" enctype="multipart/form-data">
+		<form method="post" action="?/publish">
 			<label>
 				Artwork title
 				<input
 					name="title"
 					value="Realtime Gallery Study"
-					class="mt-1 rounded-md border border-stone-300 bg-white px-3 py-2 shadow-sm focus:border-amber-700 focus:ring-2 focus:ring-amber-700 focus:outline-none"
-				/>
-			</label>
-			<label>
-				Artwork media
-				<input
-					accept="image/avif"
-					name="media"
-					type="file"
 					class="mt-1 rounded-md border border-stone-300 bg-white px-3 py-2 shadow-sm focus:border-amber-700 focus:ring-2 focus:ring-amber-700 focus:outline-none"
 				/>
 			</label>

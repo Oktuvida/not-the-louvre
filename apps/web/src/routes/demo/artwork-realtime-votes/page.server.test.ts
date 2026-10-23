@@ -138,7 +138,6 @@ describe('artwork realtime vote demo page', () => {
 		await expect(
 			actions.publish(
 				createActionEvent({
-					media: new File([new Uint8Array([1, 2, 3])], 'artwork.avif', { type: 'image/avif' }),
 					title: 'Realtime Gallery Study'
 				})
 			)

@@ -66,6 +66,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Documentos de referencia generados con el Rust actual: 48 casos en `apps/web/src/lib/stroke/fixtures` (`1689f4f`).
 - [x] Lector y escritor TS de v1/v2 en `apps/web/src/lib/stroke`, con paridad frente al Rust; Rust/WASM y compactación eliminados. El paquete compartido `stroke` se extrae en la fase 2, cuando lo necesite el Worker de render.
 - [x] Quitar `POST /api/artworks`: la API de obras queda de solo lectura.
+- [x] Las obras solo se publican desde sus trazos: la acción de `/draw` aceptaba también una imagen subida sin documento, así que cualquiera podía publicar una foto sin trazos (sin fork ni timelapse posibles). Con ella se fueron la demo de subida y la sanitización de imágenes subidas.
 - [x] Documentación y tooling históricos (`openspec/`, `docs/superpowers/`, `docs/PRD.md`, `devenv`) se conservan, marcados como obsoletos. No se borran: no hacen daño.
 - Los tests que leen el código como texto (`*.source.test.ts`, `css-hygiene`, `check-scoped-keyframes`) protegen el CSS frágil actual: cada uno se elimina cuando se reescribe su componente (fases 3 y 4), sustituido por una prueba de interacción o de captura.
 - [x] SvelteKit 3.1, Svelte 5.57, adapter-cloudflare 8, Vite 8, TypeScript 6.0, Vitest 5, Wrangler 4.152 y Playwright 1.64. TypeScript 7 queda fuera hasta que Kit y typescript-eslint lo admitan.

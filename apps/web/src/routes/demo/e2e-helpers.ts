@@ -1,16 +1,7 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import {
-	ARTWORK_MEDIA_HEIGHT,
-	ARTWORK_MEDIA_MAX_BYTES,
-	ARTWORK_MEDIA_WIDTH
-} from '../../lib/server/artwork/config';
-import {
-	createAvifTestFile,
-	createJpegTestFile,
-	createMalformedAvifFile,
-	createWebpTestFile
-} from '../../lib/server/media/test-helpers';
+import { ARTWORK_MEDIA_HEIGHT, ARTWORK_MEDIA_WIDTH } from '../../lib/server/artwork/config';
+import { createMalformedAvifFile, createWebpTestFile } from '../../lib/server/media/test-helpers';
 
 export const deterministicAuthUser = {
 	nickname: 'journey_artist',
@@ -189,70 +180,13 @@ export const recoverThroughNicknameDemo = async (
 	await expect(page.getByText('Rotated recovery key:')).toBeVisible();
 };
 
-export const createArtworkUpload = async () => {
-	const file = await createAvifTestFile({
-		height: ARTWORK_MEDIA_HEIGHT,
-		name: 'journey-artwork.avif',
-		width: ARTWORK_MEDIA_WIDTH
-	});
-
-	return {
-		buffer: Buffer.from(await file.arrayBuffer()),
-		mimeType: file.type,
-		name: file.name
-	};
-};
-
-export const createDisguisedJpegUpload = async () => {
-	const file = await createJpegTestFile({
-		height: ARTWORK_MEDIA_HEIGHT,
-		name: 'renamed-artwork.avif',
-		width: ARTWORK_MEDIA_WIDTH
-	});
-
-	return {
-		buffer: Buffer.from(await file.arrayBuffer()),
-		mimeType: 'image/avif',
-		name: 'renamed-artwork.avif'
-	};
-};
-
-export const createOversizedArtworkUpload = () => ({
-	buffer: Buffer.from(new Uint8Array(ARTWORK_MEDIA_MAX_BYTES + 1)),
-	mimeType: 'image/avif',
-	name: 'oversized-artwork.avif'
-});
-
-export const publishArtworkThroughDemo = async (
-	page: Page,
-	input: {
-		title?: string;
-		upload?: Awaited<ReturnType<typeof createArtworkUpload>>;
-	} = {}
-) => {
-	await page.goto('/demo/artwork-publish');
-	await expect(page.getByText('Artwork demo state: authenticated')).toBeVisible();
-	await page.getByLabel('Artwork title').fill(input.title ?? deterministicArtwork.title);
-	await page
-		.getByLabel('Artwork media')
-		.setInputFiles(input.upload ?? (await createArtworkUpload()));
-	await page.getByRole('button', { name: 'Publish artwork' }).click();
-	await expect(page).toHaveURL(/\/demo\/artwork-publish\?published=/);
-};
-
 export const publishArtworkThroughRealtimeDemo = async (
 	page: Page,
-	input: {
-		title?: string;
-		upload?: Awaited<ReturnType<typeof createArtworkUpload>>;
-	} = {}
+	input: { title?: string } = {}
 ) => {
 	await page.goto('/demo/artwork-realtime-votes');
 	await expect(page.getByText('Realtime vote demo state: authenticated')).toBeVisible();
 	await page.getByLabel('Artwork title').fill(input.title ?? 'Realtime Gallery Study');
-	await page
-		.getByLabel('Artwork media')
-		.setInputFiles(input.upload ?? (await createArtworkUpload()));
 	await page.getByRole('button', { name: 'Publish tracked artwork' }).click();
 	await expect(page).toHaveURL(/\/demo\/artwork-realtime-votes\?artworkId=/);
 

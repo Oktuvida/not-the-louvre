@@ -8,11 +8,6 @@
 			name: 'Nickname auth demo'
 		},
 		{
-			description: 'Authenticated artwork publish flow with visible read-back results.',
-			href: '/demo/artwork-publish',
-			name: 'Artwork publish demo'
-		},
-		{
 			description:
 				'Publishes one artwork and watches live vote updates arrive in another browser context.',
 			href: '/demo/artwork-realtime-votes',

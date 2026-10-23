@@ -7,7 +7,6 @@
 
 <nav>
 	<a href={resolve('demo')}>Back to demo index</a>
-	<a href={resolve('demo/artwork-publish')}>Open artwork publish demo</a>
 </nav>
 
 <h1>Nickname Auth Demo Session</h1>

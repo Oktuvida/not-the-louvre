@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { applyRateLimitAttempt } from '#lib/server/db/fixtures/rate-limit.js';
+import { createEmptyDrawingDocument } from '#lib/features/stroke-json/document.js';
 import { ArtworkFlowError } from './errors';
 import { deleteArtwork, publishArtwork } from './service';
 import type {
@@ -17,15 +18,7 @@ vi.mock('#lib/server/moderation/service.js', () => ({
 	checkTextModeration: vi.fn(async () => ({ status: 'allowed' as const }))
 }));
 
-const createAvifFile = (size = 128, type = 'image/avif') => {
-	const bytes = new Uint8Array(size);
-	bytes.set([
-		0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66, 0x00, 0x00, 0x00, 0x00,
-		0x6d, 0x69, 0x66, 0x31
-	]);
-
-	return new File([bytes], 'artwork.avif', { type });
-};
+const ARTWORK_DRAWING_DOCUMENT = JSON.stringify(createEmptyDrawingDocument('artwork'));
 
 type ProfileRecord = {
 	avatarUrl: string | null;
@@ -422,12 +415,13 @@ const createStorage = () => {
 	return { storage };
 };
 
-const sanitizeMediaForReadTests = async (file: File): Promise<SanitizedMedia> => ({
+// The read tests care about the rows a publish leaves behind, not the image.
+const renderMediaForReadTests = async (): Promise<SanitizedMedia> => ({
 	contentType: 'image/avif',
-	file,
-	height: 1024,
+	file: new File([new Uint8Array(128)], 'artwork.avif', { type: 'image/avif' }),
+	height: 768,
 	sizeBytes: 128,
-	width: 1024
+	width: 768
 });
 
 const asWriteDeps = (
@@ -436,7 +430,7 @@ const asWriteDeps = (
 	overrides: { generateId?: () => string; now?: () => Date } = {}
 ) => ({
 	repository,
-	sanitizeMedia: sanitizeMediaForReadTests,
+	renderDrawingDocumentMedia: renderMediaForReadTests,
 	storage,
 	...overrides
 });
@@ -471,7 +465,7 @@ describe('artwork read service', () => {
 		const { storage } = createStorage();
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'First in time' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'First in time' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-1',
@@ -480,7 +474,7 @@ describe('artwork read service', () => {
 		);
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Second in time' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Second in time' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-2',
@@ -489,7 +483,7 @@ describe('artwork read service', () => {
 		);
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Newest tie-breaker' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Newest tie-breaker' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-2')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-3',
@@ -1028,7 +1022,7 @@ describe('artwork read service', () => {
 		const { storage } = createStorage();
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Projection test' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Projection test' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-101',
@@ -1111,7 +1105,7 @@ describe('artwork read service', () => {
 		const { storage } = createStorage();
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Partial doc' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Partial doc' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-102',
@@ -1147,7 +1141,7 @@ describe('artwork read service', () => {
 		const { storage } = createStorage();
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Parent artwork' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Parent artwork' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-parent',
@@ -1157,7 +1151,7 @@ describe('artwork read service', () => {
 
 		await publishArtwork(
 			{
-				media: createAvifFile(),
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				parentArtworkId: 'artwork-parent',
 				title: 'Fork artwork'
 			},
@@ -1170,7 +1164,7 @@ describe('artwork read service', () => {
 
 		await publishArtwork(
 			{
-				media: createAvifFile(),
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				parentArtworkId: 'artwork-parent',
 				title: 'Second fork artwork'
 			},
@@ -1220,7 +1214,7 @@ describe('artwork read service', () => {
 		const { storage } = createStorage();
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Parent artwork' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Parent artwork' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-parent',
@@ -1230,7 +1224,7 @@ describe('artwork read service', () => {
 
 		await publishArtwork(
 			{
-				media: createAvifFile(),
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				parentArtworkId: 'artwork-parent',
 				title: 'Fork artwork'
 			},
@@ -1268,7 +1262,7 @@ describe('artwork read service', () => {
 		const { storage } = createStorage();
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Parent artwork' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Parent artwork' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-parent',
@@ -1278,7 +1272,7 @@ describe('artwork read service', () => {
 
 		await publishArtwork(
 			{
-				media: createAvifFile(),
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				parentArtworkId: 'artwork-parent',
 				title: 'Child fork artwork'
 			},
@@ -1320,7 +1314,7 @@ describe('artwork read service', () => {
 		const { storage } = createStorage();
 
 		await publishArtwork(
-			{ isNsfw: true, media: createAvifFile(), title: 'Adults only study' },
+			{ isNsfw: true, drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Adults only study' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-nsfw-1',
@@ -1359,7 +1353,7 @@ describe('artwork read service', () => {
 		const { storage } = createStorage();
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Keep me' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Keep me' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-201',
@@ -1368,7 +1362,7 @@ describe('artwork read service', () => {
 		);
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Delete me' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Delete me' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-202',
@@ -1412,7 +1406,7 @@ describe('artwork read service', () => {
 		const { storage } = createStorage();
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Visible ranked artwork' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Visible ranked artwork' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-1')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-ranked-visible',
@@ -1421,7 +1415,7 @@ describe('artwork read service', () => {
 		);
 
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Deleted ranked artwork' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Deleted ranked artwork' },
 			{ ipAddress: '127.0.0.1', ...createActor(profiles.get('user-2')!) },
 			asWriteDeps(repository, storage, {
 				generateId: () => 'artwork-ranked-deleted',
@@ -1467,7 +1461,7 @@ describe('artwork read service', () => {
 
 		// Publish two artworks
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Artwork Alpha' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Artwork Alpha' },
 			createActor(profiles.get('user-1')!),
 			asWriteDeps(writeRepo, storage, {
 				generateId: () => 'artwork-rng-1',
@@ -1475,7 +1469,7 @@ describe('artwork read service', () => {
 			})
 		);
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Artwork Beta' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Artwork Beta' },
 			createActor(profiles.get('user-2')!),
 			asWriteDeps(writeRepo, storage, {
 				generateId: () => 'artwork-rng-2',
@@ -1515,7 +1509,7 @@ describe('artwork read service', () => {
 
 		// Publish and then hide an artwork
 		await publishArtwork(
-			{ media: createAvifFile(), title: 'Hidden Artwork' },
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Hidden Artwork' },
 			createActor(profiles.get('user-1')!),
 			asWriteDeps(writeRepo, storage, {
 				generateId: () => 'artwork-hidden-rng',
