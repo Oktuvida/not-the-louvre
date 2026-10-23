@@ -135,14 +135,15 @@ const createRepository = () => {
 			);
 
 			if (duplicate) {
-				const error = new Error('duplicate pending report') as Error & {
-					code: string;
-					constraint_name: string;
-				};
-				error.code = '23505';
-				error.constraint_name = input.artworkId
-					? 'content_reports_pending_artwork_reporter_unique'
-					: 'content_reports_pending_comment_reporter_unique';
+				// Shaped like production: Drizzle's wrapper with the pg error as its cause.
+				const error = new Error('Failed query: insert into "app"."content_reports"', {
+					cause: Object.assign(new Error('duplicate key value violates unique constraint'), {
+						code: '23505',
+						constraint: input.artworkId
+							? 'content_reports_pending_artwork_reporter_unique'
+							: 'content_reports_pending_comment_reporter_unique'
+					})
+				});
 				throw error;
 			}
 

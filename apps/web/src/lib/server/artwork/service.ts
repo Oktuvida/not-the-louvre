@@ -411,24 +411,23 @@ const assertExactlyOneReportTarget = (artworkId?: string | null, commentId?: str
 	return { artworkId: normalizedArtworkId, commentId: normalizedCommentId };
 };
 
+const PENDING_REPORT_UNIQUE_CONSTRAINTS = [
+	'content_reports_pending_artwork_reporter_unique',
+	'content_reports_pending_comment_reporter_unique'
+];
+
+// Drizzle wraps the driver's error in a DrizzleQueryError, so the SQLSTATE and
+// the constraint name live on its cause, never on the error the query rejects with.
 const isPendingReportUniqueViolation = (error: unknown) => {
-	if (!error || typeof error !== 'object') return false;
-
-	const candidate = error as {
-		code?: string;
-		constraint?: string;
-		constraint_name?: string;
-		message?: string;
-	};
-	const constraint = candidate.constraint_name ?? candidate.constraint ?? candidate.message ?? '';
-
-	return (
-		candidate.code === '23505' &&
-		(typeof constraint !== 'string'
-			? false
-			: constraint.includes('content_reports_pending_artwork_reporter_unique') ||
-				constraint.includes('content_reports_pending_comment_reporter_unique'))
-	);
+	for (let current: unknown = error; current instanceof Error; current = current.cause) {
+		const { code, constraint } = current as { code?: unknown; constraint?: unknown };
+		if (code === '23505') {
+			return (
+				typeof constraint === 'string' && PENDING_REPORT_UNIQUE_CONSTRAINTS.includes(constraint)
+			);
+		}
+	}
+	return false;
 };
 
 const getResolutionStatus = (
