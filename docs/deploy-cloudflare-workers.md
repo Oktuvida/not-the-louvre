@@ -7,14 +7,11 @@ The web app (`apps/web`) deploys to **Cloudflare Workers with static assets** vi
 ## Why Workers and not Pages
 
 Cloudflare now recommends Workers (static assets) over Pages for new SvelteKit
-projects, and the same adapter targets both. The app relies on WebAssembly in two
-places, both of which run on `workerd`:
-
-- **stroke-json runtime** — the Rust-built drawing-document WASM
-  (`packages/stroke-json-runtime`).
-- **Image pipeline** — `sharp` was replaced with WASM codecs (`@jsquash/*` for
-  AVIF/WebP/PNG/JPEG decode-encode and resize, `@resvg/resvg-wasm` for
-  SVG→raster), because `sharp` is a native Node addon that cannot run on Workers.
+projects, and the same adapter targets both. The app relies on WebAssembly for its
+image pipeline, which runs on `workerd`: `sharp` was replaced with WASM codecs
+(`@jsquash/*` for AVIF/WebP/PNG/JPEG decode-encode and resize, `@resvg/resvg-wasm`
+for SVG→raster), because `sharp` is a native Node addon that cannot run on Workers.
+Drawing documents are read and written in plain TypeScript (`apps/web/src/lib/stroke`).
 
 `workerd` forbids compiling WASM from bytes at runtime, so every `.wasm` import is
 kept external in the Vite build (`build.rollupOptions.external`) and bundled by
@@ -79,9 +76,8 @@ scoped to a `production` environment:
 | `CLOUDFLARE_API_TOKEN`  | API token with the **Edit Cloudflare Workers** template permissions |
 | `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID                                        |
 
-The deploy job needs neither Rust nor a database: the stroke-json WASM is
-committed under `packages/stroke-json-runtime/generated`, and the database
-connection is created lazily on the first request rather than at import.
+The deploy job needs no database: the connection is created lazily on the first
+request rather than at import.
 
 One caveat: SvelteKit's postbuild `analyse` step imports the server modules, and
 better-auth validates its secret when its instance is constructed at module

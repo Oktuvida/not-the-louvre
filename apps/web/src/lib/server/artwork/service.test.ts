@@ -52,7 +52,7 @@ vi.mock('$lib/server/moderation/service', () => ({
 	checkTextModeration: moderation.checkTextModeration
 }));
 
-vi.mock('$lib/features/stroke-json/runtime.server', () => ({
+vi.mock('$lib/server/drawing-document/storage', () => ({
 	prepareDrawingDocumentForStorage: runtime.prepareDrawingDocumentForStorage
 }));
 

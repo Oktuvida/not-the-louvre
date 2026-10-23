@@ -13,7 +13,8 @@ import {
 
 /*
  * The fixtures are the answers of the Rust/WASM runtime that stored every
- * drawing until the remaster (scripts/stroke-json/generate-parity-fixtures.ts).
+ * drawing until the remaster, recorded by scripts/stroke-json/
+ * generate-parity-fixtures.ts (in git history at 1689f4f, removed with the Rust).
  * Production holds those documents, so the TypeScript reader has to read them
  * exactly as Rust did before the Rust can go.
  */
@@ -45,7 +46,7 @@ const ACCEPTED_DIVERGENCES: Record<string, 'accepts' | 'rejects'> = {
 	'two concatenated gzip members': 'rejects'
 };
 
-// Same rule as the fixture generator: point i is [i mod (width+1), i mod (height+1)].
+// Same rule the fixture generator used: point i is [i mod (width+1), i mod (height+1)].
 const buildGeneratedDocument = ({ kind, strokes, pointsPerStroke }: Generated) => {
 	const [width, height, background] =
 		kind === 'artwork' ? [768, 768, '#fdfbf7'] : [340, 340, '#f5f0e1'];

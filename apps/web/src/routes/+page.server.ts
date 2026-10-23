@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/features/stroke-json/runtime.server';
+import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/server/drawing-document/storage';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { listArtworkDiscovery } from '$lib/server/artwork/read.service';

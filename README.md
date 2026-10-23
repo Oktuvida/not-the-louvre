@@ -106,11 +106,6 @@ builds and deploys on every push to `main` (`.github/workflows/deploy.yml`). The
 runbook — one-time Worker setup, Hyperdrive, CPU limits, local `wrangler dev` — lives in
 [`docs/deploy-cloudflare-workers.md`](./docs/deploy-cloudflare-workers.md).
 
-The committed stroke-json WASM runtime under `packages/stroke-json-runtime/generated/wasm/`
-is the deployable artifact; Wrangler uploads it into the Worker. Neither CI nor the runtime
-needs the Rust toolchain — you only need it to regenerate the WASM after changing the Rust
-crates.
-
 ### Worker secrets
 
 Production secrets never live in the repository. Set them once per Worker with

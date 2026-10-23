@@ -12,11 +12,11 @@
 		createEmptyDrawingDocument,
 		createEmptyDrawingDocumentV2,
 		getRenderableDrawingStrokes,
+		serializeDrawingDocument,
 		type DrawingDocumentV2,
 		type DrawingPoint,
 		type DrawingStroke
 	} from '$lib/features/stroke-json/document';
-	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/runtime.browser';
 	import { renderDrawingStroke } from '$lib/features/stroke-json/canvas';
 	import {
 		appendBufferedStrokePoint,
@@ -76,7 +76,7 @@
 				return JSON.stringify(createEmptyDrawingDocument('artwork'));
 			}
 
-			return prepareDrawingDocumentForPublish(documentState);
+			return serializeDrawingDocument(documentState);
 		},
 		draftUserKey = null,
 		draftStore,

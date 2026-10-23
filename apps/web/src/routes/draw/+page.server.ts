@@ -2,7 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
-import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/features/stroke-json/runtime.server';
+import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/server/drawing-document/storage';
 import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
 import { getArtworkDetail } from '$lib/server/artwork/read.service';
 import { publishArtwork } from '$lib/server/artwork/service';

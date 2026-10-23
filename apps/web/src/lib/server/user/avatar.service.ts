@@ -1,5 +1,5 @@
 import { AVATAR_STORAGE_KEY_PREFIX } from './config';
-import { prepareDrawingDocumentForStorage } from '$lib/features/stroke-json/runtime.server';
+import { prepareDrawingDocumentForStorage } from '$lib/server/drawing-document/storage';
 import { ArtworkFlowError } from '$lib/server/artwork/errors';
 import {
 	assertActiveUser,

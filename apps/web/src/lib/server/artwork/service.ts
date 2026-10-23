@@ -14,7 +14,7 @@ import { checkTextModeration } from '$lib/server/moderation/service';
 import { isRateLimitBlocked, type RateLimitPolicy } from '$lib/server/db/rate-limit';
 import { isArtworkReportReason } from '$lib/shared/content/report-reasons';
 import { isArtworkVoteValue } from '$lib/shared/content/votes';
-import { prepareDrawingDocumentForStorage } from '$lib/features/stroke-json/runtime.server';
+import { prepareDrawingDocumentForStorage } from '$lib/server/drawing-document/storage';
 import type {
 	ArtworkActorContext,
 	ArtworkCommentView,

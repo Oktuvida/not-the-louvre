@@ -17,12 +17,6 @@
 				'Publishes one artwork and watches live vote updates arrive in another browser context.',
 			href: '/demo/artwork-realtime-votes',
 			name: 'Artwork realtime vote demo'
-		},
-		{
-			description:
-				'Compares 20x bitmap reload degradation against replaying a compact stroke JSON document.',
-			href: '/demo/stroke-json',
-			name: 'Stroke JSON lab'
 		}
 	] as const;
 </script>

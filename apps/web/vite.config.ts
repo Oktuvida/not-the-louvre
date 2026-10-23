@@ -1,5 +1,4 @@
 import tailwindcss from '@tailwindcss/vite';
-import { resolve } from 'node:path';
 import process from 'node:process';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
@@ -19,7 +18,6 @@ globalWithVitestRunner.__vitest_browser_runner__ ??= {
 };
 
 const workspaceRoot = searchForWorkspaceRoot(process.cwd());
-const strokeJsonRuntimeRoot = resolve(workspaceRoot, 'packages/stroke-json-runtime');
 
 /**
  * `vite dev` emulates the Worker bindings through wrangler's getPlatformProxy,
@@ -65,11 +63,11 @@ export default defineConfig(({ mode }) => {
 		},
 		server: {
 			fs: {
-				allow: [workspaceRoot, strokeJsonRuntimeRoot]
+				allow: [workspaceRoot]
 			}
 		},
 		ssr: {
-			noExternal: ['gsap', /^@not-the-louvre\/stroke-json-runtime(?:\/.*)?$/]
+			noExternal: ['gsap']
 		},
 		test: {
 			expect: { requireAssertions: true },

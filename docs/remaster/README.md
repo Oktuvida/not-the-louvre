@@ -51,7 +51,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Plan e informe dentro del repo.
 - [x] Suite de contrato SQL en CI contra Postgres (job `database`).
 - [x] Tests e2e en CI, excepto los `@realtime`, que necesitan Supabase Realtime y desaparecen en la fase 2.
-- [ ] Sacar de cuarentena los 6 e2e marcados con `test.fixme`: 3 de compactación (se reescriben en la fase 1), 2 de buffering del lienzo (fase 4) y el de la sala misteriosa (bug de interfaz, abajo).
+- [ ] Sacar de cuarentena los 6 e2e marcados con `test.fixme`: 3 de compactación (la compactación ya no existe; se reescriben como "publica el dibujo tal como se dibujó"), 2 de buffering del lienzo (fase 4) y el de la sala misteriosa (bug de interfaz, abajo).
 - [ ] Bug: sin WebGL no se puede entrar. La escena 3D de la home lanza un error y "Come In" nunca abre el panel de login. Comprobado en producción con Chromium headless. El login no puede depender de la escena.
 - [ ] Bug: en el detalle, a 1280×720, el pie de la postal tapa el botón "Send comment".
 - [ ] Driver `pg` y dos configuraciones de Hyperdrive, con y sin caché. *Requiere acceso a Cloudflare.*
@@ -60,8 +60,8 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 
 ### 1. Plataforma y poda
 
-- [ ] Documentos de referencia generados con el Rust actual, para probar la paridad del lector nuevo.
-- [ ] Paquete TS `stroke` con lector v1/v2 y validación; quitar Rust/WASM y la compactación.
+- [x] Documentos de referencia generados con el Rust actual: 48 casos en `apps/web/src/lib/stroke/fixtures` (`1689f4f`).
+- [x] Lector y escritor TS de v1/v2 en `apps/web/src/lib/stroke`, con paridad frente al Rust; Rust/WASM y compactación eliminados. El paquete compartido `stroke` se extrae en la fase 2, cuando lo necesite el Worker de render.
 - [ ] Quitar tooling vestigial, `POST /api/artworks` y los tests que hacen grep del código.
 - [ ] SvelteKit 3.1, Svelte 5.57, adapter-cloudflare 8, Vite 8, TypeScript 6, Vitest 5 y Wrangler 4.118 o superior.
 

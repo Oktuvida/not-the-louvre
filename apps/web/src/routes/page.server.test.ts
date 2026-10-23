@@ -58,7 +58,7 @@ vi.mock('$lib/server/user/avatar.service', () => ({
 	}
 }));
 
-vi.mock('$lib/features/stroke-json/runtime.server', () => ({
+vi.mock('$lib/server/drawing-document/storage', () => ({
 	decodeCompressedDrawingDocumentToEditableDocument:
 		mocked.decodeCompressedDrawingDocumentToEditableDocument
 }));
