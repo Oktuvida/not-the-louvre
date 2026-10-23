@@ -1,5 +1,4 @@
 import decodeAvifImage, { init as initAvifDecode } from '@jsquash/avif/decode';
-import encodeAvifImage, { init as initAvifEncode } from '@jsquash/avif/encode';
 import decodeJpegImage, { init as initJpegDecode } from '@jsquash/jpeg/decode';
 import decodePngImage, { init as initPngDecode } from '@jsquash/png/decode';
 import encodePngImage, { init as initPngEncode } from '@jsquash/png/encode';
@@ -14,11 +13,6 @@ export type { RawImage };
 export { applyRoundedRectAlpha, cropCenter } from './raster';
 
 export type ImageFormat = 'avif' | 'jpeg' | 'png' | 'webp';
-
-export type AvifEncodeSettings = {
-	chromaSubsampling: '4:2:0' | '4:4:4';
-	quality: number;
-};
 
 ensureImageDataGlobal();
 
@@ -53,14 +47,6 @@ const ensureAvifDecode = () =>
 		'@jsquash/avif/codec/dec/avif_dec.wasm',
 		() => importWasmModule(() => import('@jsquash/avif/codec/dec/avif_dec.wasm')),
 		initAvifDecode as unknown as InitWithWasmModule
-	);
-
-const ensureAvifEncode = () =>
-	ensureCodec(
-		'avif-encode',
-		'@jsquash/avif/codec/enc/avif_enc.wasm',
-		() => importWasmModule(() => import('@jsquash/avif/codec/enc/avif_enc.wasm')),
-		initAvifEncode as unknown as InitWithWasmModule
 	);
 
 const ensureJpegDecode = () =>
@@ -244,30 +230,6 @@ export const decodeImage = async (input: Uint8Array, format: ImageFormat): Promi
 	await ensureJpegDecode();
 
 	return fromImageData(await decodeJpegImage(buffer));
-};
-
-const AVIF_CHROMA_SUBSAMPLING_VALUES = {
-	'4:2:0': 1,
-	'4:4:4': 3
-} as const;
-
-// Matches the previous sharp pipeline's `effort: 4` middle ground; jSquash
-// speed runs 0 (slowest) to 10 and defaults to 6.
-const AVIF_ENCODE_SPEED = 6;
-
-export const encodeAvif = async (
-	image: RawImage,
-	settings: AvifEncodeSettings
-): Promise<Uint8Array> => {
-	await ensureAvifEncode();
-
-	const encoded = await encodeAvifImage(toImageData(image), {
-		quality: settings.quality,
-		speed: AVIF_ENCODE_SPEED,
-		subsample: AVIF_CHROMA_SUBSAMPLING_VALUES[settings.chromaSubsampling]
-	});
-
-	return new Uint8Array(encoded);
 };
 
 // libwebp's own lossless defaults. On 768px drawings, effort 100 cost 4 to 14

@@ -6,7 +6,8 @@ const avatarObjectStorage = createSupabaseObjectStorage({
 	notFoundMessage: 'Avatar not found',
 	readFailedMessage: 'Avatar media read failed',
 	uploadFailedMessage: 'Avatar media upload failed',
-	// An avatar is replaced in place under a stable key, so it overwrites.
+	// An avatar key names its content, so saving the same picture again rewrites
+	// the same bytes.
 	upsert: true
 });
 

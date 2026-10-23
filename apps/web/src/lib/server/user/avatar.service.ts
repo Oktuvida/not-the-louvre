@@ -1,4 +1,5 @@
 import { AVATAR_STORAGE_KEY_PREFIX } from './config';
+import { contentHash } from '#lib/server/media/content-hash.js';
 import { prepareDrawingDocumentForStorage } from '#lib/server/drawing-document/storage.js';
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import {
@@ -18,7 +19,12 @@ import { userRepository } from './repository';
 import { supabaseAvatarStorage } from './storage';
 import type { UserAvatarDocumentRef, UserRecord, UserRepository } from './types';
 
-const getAvatarStorageKey = (userId: string) => `${AVATAR_STORAGE_KEY_PREFIX}/${userId}.avif`;
+// Named after the image itself, so a new avatar gets a new address and every
+// cache may keep the old one without ever showing it again (see avatar-url.ts).
+const getAvatarStorageKey = async (userId: string, image: File) => {
+	const hash = await contentHash(await image.arrayBuffer());
+	return `${AVATAR_STORAGE_KEY_PREFIX}/${userId}/${hash.slice(0, 16)}.webp`;
+};
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -66,7 +72,7 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 			const sanitizedMedia = await createAvatarDrawingDocumentMedia(preparedDocument.document);
 			const encodedDocument = preparedDocument.compressedDocumentBase64;
 
-			const storageKey = getAvatarStorageKey(activeUser.id);
+			const storageKey = await getAvatarStorageKey(activeUser.id, sanitizedMedia.file);
 			await storage.upload(storageKey, sanitizedMedia.file);
 			const completedAt = new Date();
 
@@ -88,6 +94,13 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 			if (!updatedUser) {
 				await storage.delete(storageKey).catch(() => {});
 				throw new ArtworkFlowError(500, 'Avatar upload failed', 'PUBLISH_FAILED');
+			}
+
+			// Nothing points at the previous image once the row is committed. A
+			// failed delete only leaves an orphan behind.
+			const previousStorageKey = activeUser.avatarUrl;
+			if (previousStorageKey && previousStorageKey !== storageKey) {
+				await storage.delete(previousStorageKey).catch(() => {});
 			}
 
 			// The avatar row is committed past this point: a failed document write

@@ -111,8 +111,8 @@ describe('drawing-document backend media', () => {
 		expect(metadata.height).toBe(24);
 	});
 
-	it('derives canonical avatar avif from an avatar drawing document', async () => {
-		const media = await createAvatarDrawingDocumentMedia({
+	it('stores the avatar exactly as its strokes render', async () => {
+		const document = {
 			...createEmptyDrawingDocument('avatar'),
 			strokes: [
 				{
@@ -124,19 +124,23 @@ describe('drawing-document backend media', () => {
 					],
 					size: 10
 				}
-			]
-		});
+			] satisfies DrawingStroke[]
+		};
 
-		expect(media.contentType).toBe('image/avif');
+		const media = await createAvatarDrawingDocumentMedia(document);
+
+		expect(media.contentType).toBe('image/webp');
 		expect(media.width).toBe(256);
 		expect(media.height).toBe(256);
-		expect(media.sizeBytes).toBeGreaterThan(0);
 		// Avatars have no placeholder column, so they must not pay the extra
 		// resize plus PNG encode on every save.
 		expect(media.placeholder ?? null).toBeNull();
 
-		const metadata = await sharp(Buffer.from(await media.file.arrayBuffer())).metadata();
-		expect(metadata.width).toBe(256);
-		expect(metadata.height).toBe(256);
+		const stored = await decodeImage(new Uint8Array(await media.file.arrayBuffer()), 'webp');
+		const canonical = await renderSvgToRaster(drawingDocumentToSvg(document), {
+			height: 256,
+			width: 256
+		});
+		expect(countDifferentBytes(stored.data, canonical.data)).toBe(0);
 	});
 });
