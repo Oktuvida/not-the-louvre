@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 const mocked = {
-	getIp: vi.fn(() => '127.0.0.1'),
+	getIP: vi.fn(() => '127.0.0.1'),
 	moderateComment: vi.fn()
 };
 

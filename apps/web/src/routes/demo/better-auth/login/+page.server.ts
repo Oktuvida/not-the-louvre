@@ -2,7 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import type { PageServerLoad } from './$types';
 import { auth } from '#lib/server/auth.js';
-import { getIp } from 'better-auth/api';
+import { getIP } from 'better-auth/api';
 import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
 import { toActionFailure } from '#lib/server/http/errors.js';
 import {
@@ -47,7 +47,7 @@ export const actions: Actions = {
 		try {
 			await signInWithNickname(
 				parsed.data,
-				getIp(event.request, auth.options),
+				getIP(event.request, auth.options),
 				event.request.headers
 			);
 		} catch (error) {
@@ -105,7 +105,7 @@ export const actions: Actions = {
 		}
 
 		try {
-			const result = await recoverAccount(parsed.data, getIp(event.request, auth.options));
+			const result = await recoverAccount(parsed.data, getIP(event.request, auth.options));
 			return { recoveryKey: result.recoveryKey, rotatedRecoveryKey: result.recoveryKey };
 		} catch (error) {
 			return toFailure(error, 'Unexpected recovery error');

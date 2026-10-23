@@ -1,4 +1,4 @@
-import { getIp } from 'better-auth/api';
+import { getIP } from 'better-auth/api';
 import type { RequestHandler } from './$types';
 import { auth } from '#lib/server/auth.js';
 import { submitContentReport } from '#lib/server/artwork/service.js';
@@ -19,7 +19,7 @@ export const POST: RequestHandler = async (event) => {
 				details: body.details,
 				reason: body.reason ?? ''
 			},
-			{ ipAddress: getIp(event.request, auth.options), user: event.locals.user }
+			{ ipAddress: getIP(event.request, auth.options), user: event.locals.user }
 		);
 
 		return Response.json({ report }, { status: 201 });

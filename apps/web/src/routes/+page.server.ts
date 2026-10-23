@@ -24,7 +24,7 @@ import {
 	signInSchema,
 	signupSchema
 } from '#lib/server/auth/validation.js';
-import { getIp } from 'better-auth/api';
+import { getIP } from 'better-auth/api';
 import { resolveUserAvatarUrl } from '#lib/user/avatar-url.js';
 
 const INTEGRITY_FAILURE_MESSAGE = 'Authenticated session is missing its product user profile';
@@ -171,7 +171,7 @@ export const actions: Actions = {
 		}
 
 		try {
-			const result = await recoverAccount(parsed.data, getIp(event.request, auth.options));
+			const result = await recoverAccount(parsed.data, getIP(event.request, auth.options));
 
 			return {
 				action: 'recover',
@@ -240,7 +240,7 @@ export const actions: Actions = {
 		try {
 			const result = await signInWithNickname(
 				parsed.data,
-				getIp(event.request, auth.options),
+				getIP(event.request, auth.options),
 				event.request.headers
 			);
 

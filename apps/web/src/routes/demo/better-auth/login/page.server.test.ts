@@ -10,7 +10,7 @@ const mocked = vi.hoisted(() => ({
 	recoverAccount: vi.fn(),
 	signInWithNickname: vi.fn(),
 	signUpWithNickname: vi.fn(),
-	getIp: vi.fn(() => '127.0.0.1')
+	getIP: vi.fn(() => '127.0.0.1')
 }));
 
 vi.mock('#lib/server/auth/service.js', () => ({
@@ -27,7 +27,7 @@ vi.mock('#lib/server/auth.js', () => ({
 }));
 
 vi.mock('better-auth/api', () => ({
-	getIp: mocked.getIp
+	getIP: mocked.getIP
 }));
 
 const createEvent = (fields: Record<string, string>) => {
@@ -64,7 +64,7 @@ describe('nickname auth page actions', () => {
 		mocked.recoverAccount.mockReset();
 		mocked.signInWithNickname.mockReset();
 		mocked.signUpWithNickname.mockReset();
-		mocked.getIp.mockClear();
+		mocked.getIP.mockClear();
 	});
 
 	it('rejects invalid nickname signup input before calling the signup service', async () => {

@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 
 const mocked = {
-	getIp: vi.fn(() => '127.0.0.1'),
+	getIP: vi.fn(() => '127.0.0.1'),
 	moderateArtwork: vi.fn()
 };
 
