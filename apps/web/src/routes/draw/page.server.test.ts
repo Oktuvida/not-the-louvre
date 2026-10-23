@@ -12,7 +12,7 @@ const mocked = vi.hoisted(() => ({
 	publishArtwork: vi.fn()
 }));
 
-vi.mock('$lib/features/stroke-json/runtime.server', () => ({
+vi.mock('$lib/server/drawing-document/storage', () => ({
 	decodeCompressedDrawingDocumentToEditableDocument:
 		mocked.decodeCompressedDrawingDocumentToEditableDocument
 }));

@@ -258,6 +258,33 @@ const concatBytes = (chunks: Uint8Array[], total: number) => {
 	return bytes;
 };
 
+const singleChunkStream = (bytes: Uint8Array<ArrayBuffer>) =>
+	new ReadableStream<BufferSource>({
+		start(controller) {
+			controller.enqueue(bytes);
+			controller.close();
+		}
+	});
+
+// Gzips a canonical document for storage with the platform's CompressionStream,
+// under the byte limits the Rust writer enforced.
+export const encodeLegacyPayload = async (json: string): Promise<Uint8Array<ArrayBuffer>> => {
+	const bytes = new TextEncoder().encode(json);
+	if (bytes.byteLength > LEGACY_LIMITS.maxDecompressedBytes) {
+		throw limitExceeded(`max decompressed bytes of ${LEGACY_LIMITS.maxDecompressedBytes}`);
+	}
+
+	const compressed = new Uint8Array(
+		await new Response(
+			singleChunkStream(bytes).pipeThrough(new CompressionStream('gzip'))
+		).arrayBuffer()
+	);
+	if (compressed.byteLength > LEGACY_LIMITS.maxCompressedBytes) {
+		throw limitExceeded(`max compressed bytes of ${LEGACY_LIMITS.maxCompressedBytes}`);
+	}
+	return compressed;
+};
+
 // Gunzips a stored payload with the platform's DecompressionStream, refusing
 // oversized input and stopping as soon as the output passes the limit, so a
 // zip bomb never inflates in memory.
@@ -266,12 +293,7 @@ export const decodeLegacyPayload = async (payload: Uint8Array<ArrayBuffer>): Pro
 		throw limitExceeded(`max compressed bytes of ${LEGACY_LIMITS.maxCompressedBytes}`);
 	}
 
-	const reader = new ReadableStream<BufferSource>({
-		start(controller) {
-			controller.enqueue(payload);
-			controller.close();
-		}
-	})
+	const reader = singleChunkStream(payload)
 		.pipeThrough(new DecompressionStream('gzip'))
 		.getReader();
 	const chunks: Uint8Array[] = [];

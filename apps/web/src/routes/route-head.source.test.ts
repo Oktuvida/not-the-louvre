@@ -70,12 +70,6 @@ describe('route document head', () => {
 		}
 	});
 
-	it('keeps the stroke-json lab out of the head', async () => {
-		const source = await readRouteSource('../lib/features/stroke-json/StrokeJsonLab.svelte');
-
-		expect(source).not.toContain('<title>');
-	});
-
 	it('keeps the error page out of the head', async () => {
 		const source = await readRouteSource('+error.svelte');
 

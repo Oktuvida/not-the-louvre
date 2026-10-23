@@ -37,10 +37,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # The *root* lint/check scripts shell out to `cargo fmt`, `cargo clippy`
-      # and `cargo check`, and this runner has no Rust toolchain — so gate on the
-      # web workspace scripts, which need only Bun. Both of them run
-      # `svelte-kit sync` first, so `./$types` resolves on a clean checkout.
+      # Both web scripts run `svelte-kit sync` first, so `./$types` resolves on a
+      # clean checkout.
       - name: Lint
         run: bun run --filter @not-the-louvre/web lint
 
@@ -172,10 +170,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # The Rust-built stroke-json WASM is committed under
-      # packages/stroke-json-runtime/generated, so no Rust toolchain is needed
-      # here. `bun run build` smoke-tests that artifact, then runs the SvelteKit
-      # adapter-cloudflare build into apps/web/.svelte-kit/cloudflare.
+      # `bun run build` runs the SvelteKit adapter-cloudflare build into
+      # apps/web/.svelte-kit/cloudflare.
       #
       # SvelteKit's postbuild `analyse` step imports the server modules, and
       # better-auth validates its secret when its instance is constructed at

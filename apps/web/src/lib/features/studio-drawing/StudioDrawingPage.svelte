@@ -19,10 +19,10 @@
 		createEmptyDrawingDocument,
 		createEmptyDrawingDocumentV2,
 		getRenderableDrawingStrokes,
+		serializeDrawingDocument,
 		type DrawingDocumentV2,
 		type DrawingStroke
 	} from '$lib/features/stroke-json/document';
-	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/runtime.browser';
 	import type {
 		DrawForkParent,
 		DrawPageUser,
@@ -130,7 +130,7 @@
 				});
 			}
 
-			return prepareDrawingDocumentForPublish(documentState);
+			return serializeDrawingDocument(documentState);
 		},
 		forkParent = null,
 		// Seeded from the request's client hints so a phone is not served the

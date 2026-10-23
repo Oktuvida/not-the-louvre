@@ -31,7 +31,6 @@ if (exitCode !== 0) {
 await validateCloudflareBuild(projectRoot, {
 	requireDemoExclusion: false,
 	requireGsapBundled: false,
-	requireWasmExternalized: false,
 	requireWorkerOutput: false
 });
 
