@@ -154,6 +154,17 @@ jobs:
         working-directory: apps/web
         run: bun run test:e2e --grep-invert @realtime
 
+      # The trace of a failed test holds the DOM, console and network at every
+      # step, which is the only way to see a failure that does not reproduce
+      # on a laptop. Open it with `bunx playwright show-trace <zip>`.
+      - name: Keep the traces of failed end-to-end tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: apps/web/test-results
+          retention-days: 7
+
   deploy:
     name: Build and deploy worker
     needs: [quality, database]

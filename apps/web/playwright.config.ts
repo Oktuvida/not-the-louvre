@@ -41,7 +41,8 @@ export default defineConfig({
 		// Headless Chromium no longer falls back to software WebGL on its own, and
 		// without a WebGL context the home scene throws before "Come In" can open
 		// the auth overlay. SwiftShader stands in for the GPU real visitors have.
-		launchOptions: { args: ['--enable-unsafe-swiftshader'] }
+		launchOptions: { args: ['--enable-unsafe-swiftshader'] },
+		trace: 'retain-on-failure'
 	},
 	workers: 1,
 	webServer: {
