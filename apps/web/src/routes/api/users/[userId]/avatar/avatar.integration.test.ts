@@ -1,53 +1,26 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
+import { getPlatformProxy, type PlatformProxy } from 'wrangler';
+import type { MediaBucket } from '#lib/server/platform.js';
 import {
 	createEmptyDrawingDocument,
 	serializeDrawingDocument
 } from '#lib/features/stroke-json/document.js';
 
-const testFileDirectory = dirname(fileURLToPath(import.meta.url));
-const appRoot = resolve(testFileDirectory, '../../../../../../');
-const workspaceRoot = resolve(testFileDirectory, '../../../../../../../../');
-
-const loadEnvFile = (filePath: string) => {
-	if (!existsSync(filePath)) {
-		return;
-	}
-
-	const fileContents = readFileSync(filePath, 'utf8');
-	for (const rawLine of fileContents.split(/\r?\n/)) {
-		const line = rawLine.trim();
-		if (!line || line.startsWith('#')) {
-			continue;
-		}
-
-		const separatorIndex = line.indexOf('=');
-		if (separatorIndex <= 0) {
-			continue;
-		}
-
-		const key = line.slice(0, separatorIndex).trim();
-		const rawValue = line.slice(separatorIndex + 1).trim();
-		const normalizedValue = rawValue.replace(/^['"]|['"]$/g, '');
-
-		if (!process.env[key]) {
-			process.env[key] = normalizedValue;
-		}
-	}
-};
-
-loadEnvFile(resolve(appRoot, '.env'));
-loadEnvFile(resolve(workspaceRoot, '.env.supabase'));
-
 const DATABASE_URL = process.env.DATABASE_URL;
-// Opt-in only: these suites talk to the local Supabase stack over TCP, so they
-// must skip (not fail) on a machine that has not started it. The env files above
-// still supply the connection details once RUN_INTEGRATION is set.
-const describeWithStorage = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
+// Same opt-in flag as the other integration suites: `bun run test:integration`.
+const describeWithDatabase = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
+
+// Vitest's workers never see the platform proxy Vite starts, so the suite runs
+// its own: the R2 bucket is wrangler's local emulation of the real one.
+const platform = vi.hoisted(() => ({ bucket: undefined as unknown }));
+vi.mock('#lib/server/platform.js', () => ({
+	edgeCache: () => undefined,
+	hyperdriveConnectionString: () => undefined,
+	mediaBucket: () => platform.bucket,
+	runAfterResponse: () => {}
+}));
 
 type DbClient = Sql<Record<string, unknown>>;
 
@@ -133,15 +106,19 @@ const makeLocalUser = (id: string) => ({
 	updatedAt: new Date('2026-03-28T19:30:00.000Z')
 });
 
-describeWithStorage('avatar backend integration', () => {
+describeWithDatabase('avatar backend integration', () => {
 	let sql: DbClient;
+	let proxy: PlatformProxy<{ MEDIA: MediaBucket }>;
 
-	beforeAll(() => {
+	beforeAll(async () => {
+		proxy = await getPlatformProxy<{ MEDIA: MediaBucket }>({ persist: false });
+		platform.bucket = proxy.env.MEDIA;
 		sql = createDbClient();
 	});
 
 	afterAll(async () => {
-		await sql.end({ timeout: 5 });
+		await sql?.end({ timeout: 5 });
+		await proxy?.dispose();
 	});
 
 	it('uploads avatar media, streams it back through the backend endpoint, and deletes it', async () => {
@@ -215,7 +192,8 @@ describeWithStorage('avatar backend integration', () => {
 
 			const missingResponse = await avatarModule.GET({
 				locals: {},
-				params: { userId }
+				params: { userId },
+				request: new Request(`http://localhost${uploadPayload.avatarUrl}`)
 			} as never);
 
 			expect(missingResponse.status).toBe(404);

@@ -1,7 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { db } from '#lib/server/db/index.js';
-import { resetPlaywrightArtworkStorage } from '#lib/server/artwork/storage.js';
-import { resetPlaywrightAvatarStorage } from '#lib/server/user/storage.js';
+import { deleteAllMediaObjects } from '#lib/server/media/object-storage.js';
 
 const RESET_SQL = `
 	truncate table
@@ -24,8 +23,7 @@ const RESET_SQL = `
 
 export const resetBackendState = async () => {
 	await db.execute(sql.raw(RESET_SQL));
-	resetPlaywrightArtworkStorage();
-	resetPlaywrightAvatarStorage();
+	await deleteAllMediaObjects();
 
 	return {
 		resetAt: new Date().toISOString()

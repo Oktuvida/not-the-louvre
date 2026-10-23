@@ -1,101 +1,71 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createSupabaseObjectStorage } from './object-storage';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getPlatformProxy, type PlatformProxy } from 'wrangler';
+import type { MediaBucket } from '#lib/server/platform.js';
+import { createObjectStorage } from './object-storage';
 
-vi.mock('$app/env/private', () => ({
-	ARTWORK_STORAGE_BUCKET: 'artworks',
-	SERVICE_ROLE_KEY: '',
-	SUPABASE_PUBLIC_URL: 'https://storage.local',
-	SUPABASE_SECRET_KEY: 'service-key'
+// wrangler's local emulation of the MEDIA bucket, the same one `wrangler dev`
+// serves the e2e suite from.
+const platform = vi.hoisted(() => ({ bucket: undefined as unknown }));
+vi.mock('#lib/server/platform.js', () => ({
+	mediaBucket: () => platform.bucket
 }));
 
-const messages = {
-	deleteFailedMessage: 'Artwork media deletion failed',
-	missingConfigMessage: 'Missing storage configuration for artwork publishing',
-	notFoundMessage: 'Artwork media not found',
-	readFailedMessage: 'Artwork media read failed',
-	uploadFailedMessage: 'Artwork media upload failed'
-};
+describe('media object storage', () => {
+	let proxy: PlatformProxy<{ MEDIA: MediaBucket }>;
+	const { storage, stream } = createObjectStorage({ notFoundMessage: 'Artwork media not found' });
 
-const fetchMock = vi.fn<typeof fetch>();
-
-beforeEach(() => {
-	fetchMock.mockReset();
-	vi.stubGlobal('fetch', fetchMock);
-});
-
-afterEach(() => {
-	vi.unstubAllGlobals();
-});
-
-describe('supabase object storage client', () => {
-	it('sends immutable uploads with x-upsert false and replaceable ones with true', async () => {
-		fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
-
-		const immutable = createSupabaseObjectStorage({ ...messages, upsert: false });
-		const replaceable = createSupabaseObjectStorage({ ...messages, upsert: true });
-
-		await immutable.storage.upload(
-			'artworks/user-1/artwork-1.avif',
-			new File([new Uint8Array([1])], 'artwork.avif', { type: 'image/avif' })
-		);
-		await replaceable.storage.upload(
-			'avatars/user-1.avif',
-			new File([new Uint8Array([1])], 'avatar.avif', { type: 'image/avif' })
-		);
-
-		const [immutableRequest, replaceableRequest] = fetchMock.mock.calls;
-		expect(immutableRequest?.[0]).toBe(
-			'https://storage.local/storage/v1/object/artworks/artworks/user-1/artwork-1.avif'
-		);
-		expect((immutableRequest?.[1]?.headers as Record<string, string>)['x-upsert']).toBe('false');
-		expect((replaceableRequest?.[1]?.headers as Record<string, string>)['x-upsert']).toBe('true');
+	beforeAll(async () => {
+		proxy = await getPlatformProxy<{ MEDIA: MediaBucket }>({ persist: false });
 	});
 
-	it('maps a storage 404 on read to the caller not-found message', async () => {
-		fetchMock.mockResolvedValue(new Response(null, { status: 404 }));
+	afterEach(() => {
+		platform.bucket = proxy.env.MEDIA;
+	});
 
-		const objectStorage = createSupabaseObjectStorage({ ...messages, upsert: false });
+	afterAll(async () => {
+		await proxy.dispose();
+	});
 
-		await expect(objectStorage.stream('artworks/user-1/missing.avif')).rejects.toMatchObject({
+	it('streams back what was uploaded, with its content type', async () => {
+		platform.bucket = proxy.env.MEDIA;
+		const bytes = new Uint8Array([82, 73, 70, 70, 1, 2, 3]);
+
+		await storage.upload(
+			'artworks/user-1/a.webp',
+			new File([bytes], 'a.webp', { type: 'image/webp' })
+		);
+		const response = await stream('artworks/user-1/a.webp');
+
+		expect(response.headers.get('content-type')).toBe('image/webp');
+		expect(response.headers.get('content-length')).toBe(String(bytes.byteLength));
+		expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+	});
+
+	it("answers a missing object with the caller's not-found error", async () => {
+		platform.bucket = proxy.env.MEDIA;
+
+		await expect(stream('artworks/user-1/missing.webp')).rejects.toMatchObject({
 			code: 'NOT_FOUND',
 			message: 'Artwork media not found',
 			status: 404
 		});
 	});
 
-	it('surfaces the storage error body on a failed upload', async () => {
-		fetchMock.mockResolvedValue(
-			new Response(JSON.stringify({ message: 'duplicate key' }), { status: 409 })
-		);
+	it('deletes an object, and treats deleting a missing one as done', async () => {
+		platform.bucket = proxy.env.MEDIA;
+		await storage.upload('avatars/user-1/b.webp', new File([new Uint8Array([1])], 'b.webp'));
 
-		const objectStorage = createSupabaseObjectStorage({ ...messages, upsert: false });
+		await storage.delete('avatars/user-1/b.webp');
+		await storage.delete('avatars/user-1/b.webp');
 
-		await expect(
-			objectStorage.storage.upload(
-				'artworks/user-1/artwork-1.avif',
-				new File([new Uint8Array([1])], 'artwork.avif', { type: 'image/avif' })
-			)
-		).rejects.toMatchObject({ code: 'STORAGE_FAILED', message: 'duplicate key', status: 502 });
+		await expect(stream('avatars/user-1/b.webp')).rejects.toMatchObject({ status: 404 });
 	});
 
-	it('swallows a 404 on delete but reports other failures', async () => {
-		const objectStorage = createSupabaseObjectStorage({ ...messages, upsert: false });
+	it('fails as a storage error when the bucket binding is missing', async () => {
+		platform.bucket = undefined;
 
-		fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
 		await expect(
-			objectStorage.storage.delete('artworks/user-1/gone.avif')
-		).resolves.toBeUndefined();
-
-		fetchMock.mockResolvedValueOnce(new Response(null, { status: 500 }));
-		await expect(objectStorage.storage.delete('artworks/user-1/gone.avif')).rejects.toMatchObject({
-			code: 'STORAGE_FAILED',
-			message: 'Artwork media deletion failed'
-		});
-	});
-
-	it('keeps the Playwright in-memory store out of the default build', () => {
-		// The production and unit-test builds compile with __PLAYWRIGHT__ false,
-		// so no request may ever be served from the in-memory map.
-		expect(__PLAYWRIGHT__).toBe(false);
+			storage.upload('artworks/user-1/c.webp', new File([new Uint8Array([1])], 'c.webp'))
+		).rejects.toMatchObject({ code: 'STORAGE_FAILED', status: 500 });
 	});
 });

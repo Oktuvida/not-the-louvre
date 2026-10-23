@@ -16,7 +16,7 @@ import { createAvatarDrawingDocumentMedia } from '#lib/server/drawing-document/m
 import type { ArtworkStorage } from '#lib/server/artwork/types.js';
 import type { CanonicalUser } from '#lib/server/auth/types.js';
 import { userRepository } from './repository';
-import { supabaseAvatarStorage } from './storage';
+import { avatarStorage } from './storage';
 import type { UserAvatarDocumentRef, UserRecord, UserRepository } from './types';
 
 // Named after the image itself, so a new avatar gets a new address and every
@@ -231,5 +231,5 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 
 export const avatarService = createAvatarService({
 	repository: userRepository,
-	storage: supabaseAvatarStorage
+	storage: avatarStorage
 });

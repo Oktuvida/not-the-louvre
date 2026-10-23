@@ -14,8 +14,5 @@ export const variables = defineEnvVars({
 	SUPABASE_JWT_SECRET: { schema: (input) => input ?? '' },
 	JWT_SECRET: { schema: (input) => input ?? '' },
 	SUPABASE_JWT_ISSUER: { schema: (input) => input ?? '' },
-	SUPABASE_SECRET_KEY: { schema: (input) => input ?? '' },
-	SERVICE_ROLE_KEY: { schema: (input) => input ?? '' },
-	ARTWORK_STORAGE_BUCKET: { schema: (input) => input ?? '' },
 	DATABASE_URL: { schema: (input) => input ?? '' }
 });
