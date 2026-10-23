@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
 import { getPlatformProxy, type PlatformProxy } from 'wrangler';
-import type { MediaBucket } from '#lib/server/platform.js';
+import type { AppBucket } from '#lib/server/platform.js';
 import {
 	createEmptyDrawingDocument,
 	serializeDrawingDocument
@@ -18,7 +18,7 @@ const platform = vi.hoisted(() => ({ bucket: undefined as unknown }));
 vi.mock('#lib/server/platform.js', () => ({
 	edgeCache: () => undefined,
 	hyperdriveConnectionString: () => undefined,
-	mediaBucket: () => platform.bucket,
+	appBucket: () => platform.bucket,
 	runAfterResponse: () => {}
 }));
 
@@ -108,11 +108,11 @@ const makeLocalUser = (id: string) => ({
 
 describeWithDatabase('avatar backend integration', () => {
 	let sql: DbClient;
-	let proxy: PlatformProxy<{ MEDIA: MediaBucket }>;
+	let proxy: PlatformProxy<{ BUCKET: AppBucket }>;
 
 	beforeAll(async () => {
-		proxy = await getPlatformProxy<{ MEDIA: MediaBucket }>({ persist: false });
-		platform.bucket = proxy.env.MEDIA;
+		proxy = await getPlatformProxy<{ BUCKET: AppBucket }>({ persist: false });
+		platform.bucket = proxy.env.BUCKET;
 		sql = createDbClient();
 	});
 

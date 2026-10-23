@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
 import { getPlatformProxy, type PlatformProxy } from 'wrangler';
-import type { MediaBucket } from '#lib/server/platform.js';
+import type { AppBucket } from '#lib/server/platform.js';
 import { createEmptyDrawingDocument } from '#lib/features/stroke-json/document.js';
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -15,7 +15,7 @@ const platform = vi.hoisted(() => ({ bucket: undefined as unknown }));
 vi.mock('#lib/server/platform.js', () => ({
 	edgeCache: () => undefined,
 	hyperdriveConnectionString: () => undefined,
-	mediaBucket: () => platform.bucket,
+	appBucket: () => platform.bucket,
 	runAfterResponse: () => {}
 }));
 
@@ -74,11 +74,11 @@ const ONE_STROKE_DRAWING = JSON.stringify({
 
 describeWithDatabase('artwork media storage', () => {
 	let sql: DbClient;
-	let proxy: PlatformProxy<{ MEDIA: MediaBucket }>;
+	let proxy: PlatformProxy<{ BUCKET: AppBucket }>;
 
 	beforeAll(async () => {
-		proxy = await getPlatformProxy<{ MEDIA: MediaBucket }>({ persist: false });
-		platform.bucket = proxy.env.MEDIA;
+		proxy = await getPlatformProxy<{ BUCKET: AppBucket }>({ persist: false });
+		platform.bucket = proxy.env.BUCKET;
 		if (!DATABASE_URL) {
 			throw new Error('DATABASE_URL is required for artwork media integration tests');
 		}

@@ -10,7 +10,7 @@ import { env, waitUntil } from 'cloudflare:workers';
  */
 
 /** The slice of an R2 bucket the app uses. */
-export type MediaBucket = {
+export type AppBucket = {
 	delete(keys: string | string[]): Promise<void>;
 	get(key: string): Promise<{
 		body: ReadableStream;
@@ -27,7 +27,7 @@ export type MediaBucket = {
 	): Promise<unknown>;
 };
 
-type Bindings = { HYPERDRIVE?: { connectionString: string }; MEDIA?: MediaBucket };
+type Bindings = { HYPERDRIVE?: { connectionString: string }; BUCKET?: AppBucket };
 
 /** The Hyperdrive binding's connection string, or undefined off Workers. */
 export const hyperdriveConnectionString = (): string | undefined => {
@@ -40,9 +40,9 @@ export const hyperdriveConnectionString = (): string | undefined => {
 };
 
 /** The R2 bucket holding artwork and avatar images, or undefined off Workers. */
-export const mediaBucket = (): MediaBucket | undefined => {
+export const appBucket = (): AppBucket | undefined => {
 	try {
-		return (env as Bindings).MEDIA;
+		return (env as Bindings).BUCKET;
 	} catch {
 		return undefined;
 	}

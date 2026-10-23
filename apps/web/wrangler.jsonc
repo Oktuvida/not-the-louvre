@@ -18,10 +18,11 @@
 	// "Workers Hyperdrive: Edit" permission to deploy this binding. The app
 	// falls back to dialing DATABASE_URL directly if the binding is removed.
 	"hyperdrive": [{ "binding": "HYPERDRIVE", "id": "ccf1b83470444d9bade76d5b8599c921" }],
-	// Artwork and avatar images. `wrangler dev` and the test suites emulate the
-	// bucket locally; production needs it created in the account before the
+	// The app's objects: artwork and avatar images, and soon drawing documents,
+	// each under its own key prefix. `wrangler dev` and the test suites emulate
+	// the bucket locally; production needs it created in the account before the
 	// first deploy that carries this binding.
-	"r2_buckets": [{ "binding": "MEDIA", "bucket_name": "not-the-louvre-media" }],
+	"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "not-the-louvre" }],
 	// Mirrors the dashboard state so deploys don't flip logging: persisted
 	// Workers Logs on (incident forensics depend on them), traces off.
 	"observability": {

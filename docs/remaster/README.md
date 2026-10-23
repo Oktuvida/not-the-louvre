@@ -77,7 +77,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 
 - [x] Obras en WebP sin pérdida a 768 px: lo guardado es el render canónico de los trazos, píxel a píxel, y el límite de 100 KB pasa a ser una protección de 1 MiB. Con los ajustes por defecto de libwebp (esfuerzo 75, método 4) cuesta 34–107 ms de CPU en WASM; la escalera AVIF a la que sustituye perdía calidad. Las obras ya publicadas siguen en AVIF hasta la migración.
 - [x] Avatares en WebP sin pérdida con clave por contenido (`avatars/<id>/<hash>.webp`): la URL lleva la versión y se cachea como inmutable, así que un avatar nuevo se ve al instante en todas partes sin purgar cachés. El codificador AVIF (3,4 MB de WASM) sale del Worker; el decodificador se queda para los avatares antiguos.
-- [x] Imágenes en el bucket R2 `MEDIA` con las mismas claves que en Supabase Storage. `wrangler dev` y las pruebas lo emulan en local, así que la e2e ya no necesita el almacén en memoria exclusivo de Playwright, y las suites de integración de imágenes y avatares corren en CI solo con Postgres.
+- [x] Imágenes en el bucket R2 de la app (binding `BUCKET`) con las mismas claves que en Supabase Storage. `wrangler dev` y las pruebas lo emulan en local, así que la e2e ya no necesita el almacén en memoria exclusivo de Playwright, y las suites de integración de imágenes y avatares corren en CI solo con Postgres.
 - [ ] Worker `renderer` aparte, para sacar los códecs WASM del Worker principal.
 - [ ] Documentos en R2 con clave sha256; la fila de Postgres se escribe al final como marca de commit.
 - [ ] Script de migración: documentos byte a byte (omitiendo las escrituras rotas), AVIF copiados con sus claves y backfill a WebP por cola.
@@ -121,7 +121,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 ## Prerrequisitos pendientes
 
 - Acceso a la cuenta de Cloudflare para Workers, Hyperdrive, R2 y logs.
-- Antes del primer despliegue de `remaster`: crear el bucket R2 `not-the-louvre-media` (sin él, `wrangler deploy` rechaza el binding) y copiar a él los objetos de Supabase Storage con sus claves.
+- Antes del primer despliegue de `remaster`: crear el bucket R2 `not-the-louvre` (sin él, `wrangler deploy` rechaza el binding) y copiar a él los objetos de Supabase Storage con sus claves.
 - Plan y acceso del proyecto de Supabase, para el complemento de IPv4.
 - Confirmar si la migración 0016 y el backfill de placeholders están aplicados en producción.
 - Dispositivos de prueba: un iPad con Pencil y un Galaxy con S Pen.
