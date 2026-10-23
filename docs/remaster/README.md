@@ -62,7 +62,9 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 
 - [x] Documentos de referencia generados con el Rust actual: 48 casos en `apps/web/src/lib/stroke/fixtures` (`1689f4f`).
 - [x] Lector y escritor TS de v1/v2 en `apps/web/src/lib/stroke`, con paridad frente al Rust; Rust/WASM y compactación eliminados. El paquete compartido `stroke` se extrae en la fase 2, cuando lo necesite el Worker de render.
-- [ ] Quitar tooling vestigial, `POST /api/artworks` y los tests que hacen grep del código.
+- [x] Quitar `POST /api/artworks`: la API de obras queda de solo lectura.
+- [ ] Quitar tooling vestigial (pendiente de confirmar qué carpetas usa el dueño).
+- Los tests que leen el código como texto (`*.source.test.ts`, `css-hygiene`, `check-scoped-keyframes`) protegen el CSS frágil actual: cada uno se elimina cuando se reescribe su componente (fases 3 y 4), sustituido por una prueba de interacción o de captura.
 - [ ] SvelteKit 3.1, Svelte 5.57, adapter-cloudflare 8, Vite 8, TypeScript 6, Vitest 5 y Wrangler 4.118 o superior.
 
 ### 2. Datos y medios en R2
