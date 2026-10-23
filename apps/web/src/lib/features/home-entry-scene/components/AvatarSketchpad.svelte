@@ -4,7 +4,7 @@
 		buildDrawingDraftKey,
 		createDrawingDraftSession,
 		type IndexedDbDrawingDraftStore
-	} from '$lib/features/stroke-json/drafts';
+	} from '#lib/features/stroke-json/drafts.js';
 	import {
 		AVATAR_DRAWING_DIMENSIONS,
 		DRAWING_DOCUMENT_VERSION,
@@ -16,14 +16,14 @@
 		type DrawingDocumentV2,
 		type DrawingPoint,
 		type DrawingStroke
-	} from '$lib/features/stroke-json/document';
-	import { renderDrawingStroke } from '$lib/features/stroke-json/canvas';
+	} from '#lib/features/stroke-json/document.js';
+	import { renderDrawingStroke } from '#lib/features/stroke-json/canvas.js';
 	import {
 		appendBufferedStrokePoint,
 		appendCommittedStroke,
 		createBufferedStroke,
 		shouldUseResponsiveDrawing
-	} from '$lib/features/stroke-json/responsive-editing';
+	} from '#lib/features/stroke-json/responsive-editing.js';
 	import {
 		attachPointerReleaseSafetyNet,
 		ensureCommittedCacheCanvas,
@@ -32,11 +32,11 @@
 		isSameDrawingRenderSignature,
 		readDrawingRenderSignature,
 		type DrawingRenderSignature
-	} from '$lib/features/studio-drawing/pointer-drawing';
-	import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
-	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
-	import type { AvatarUploadResult } from '$lib/client/avatar-upload';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	} from '#lib/features/studio-drawing/pointer-drawing.js';
+	import { drawingPalette } from '#lib/features/studio-drawing/state/drawing.svelte.js';
+	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import type { AvatarUploadResult } from '#lib/client/avatar-upload.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 
 	const palette = drawingPalette;
 	const BRUSH_SIZES = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
@@ -105,6 +105,9 @@
 	let baselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
 	let brushStep = $state(Math.floor((BRUSH_SIZES.length - 1) / 2));
 	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
+	// Strokes wait for the local draft: restoring it replaces the document, and a
+	// stroke drawn while it loads would vanish under it. The studio gates the same way.
+	let draftReady = $state(false);
 	let activeStroke = $state<DrawingStroke | null>(null);
 	let activePointerId = $state<number | null>(null);
 	let isDrawing = $state(false);
@@ -410,7 +413,7 @@
 	};
 
 	const startDrawing = (event: PointerEvent) => {
-		if (!canvasElement) return;
+		if (!canvasElement || !draftReady) return;
 		if (!event.isPrimary) return;
 
 		event.preventDefault();
@@ -542,6 +545,7 @@
 					drawingDocument =
 						draft?.kind === 'avatar' ? draft : cloneDrawingDocumentV2(baselineDocument);
 					committedCacheDirty = true;
+					draftReady = true;
 					clearUnsavedDraftWarning();
 				})
 				.catch(() => {
@@ -549,11 +553,13 @@
 
 					drawingDocument = cloneDrawingDocumentV2(baselineDocument);
 					committedCacheDirty = true;
+					draftReady = true;
 					markUnsavedDraftWarning();
 				});
 		} else {
 			drawingDocument = cloneDrawingDocumentV2(baselineDocument);
 			committedCacheDirty = true;
+			draftReady = true;
 		}
 
 		const detachPointerReleaseSafetyNet = attachPointerReleaseSafetyNet(finishDrawing);
@@ -677,6 +683,7 @@
 					width={CANVAS_WIDTH}
 					height={CANVAS_HEIGHT}
 					class="sketch-canvas"
+					aria-disabled={!draftReady}
 					data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
 					draggable="false"
 					ondragstart={preventCanvasDrag}
