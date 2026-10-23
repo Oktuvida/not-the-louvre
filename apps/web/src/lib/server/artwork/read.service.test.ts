@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyRateLimitAttempt } from '$lib/server/db/fixtures/rate-limit';
+import { applyRateLimitAttempt } from '#lib/server/db/fixtures/rate-limit.js';
 import { ArtworkFlowError } from './errors';
 import { deleteArtwork, publishArtwork } from './service';
 import type {
@@ -13,7 +13,7 @@ import type {
 	PublishRateLimitRecord
 } from './types';
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	checkTextModeration: vi.fn(async () => ({ status: 'allowed' as const }))
 }));
 

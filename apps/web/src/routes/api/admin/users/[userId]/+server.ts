@@ -1,7 +1,6 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { toApiErrorResponse } from '$lib/server/http/errors';
-import { updateUserRole } from '$lib/server/user/admin.service';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
+import { updateUserRole } from '#lib/server/user/admin.service.js';
 
 const ROLE_UPDATE_ERROR = {
 	fallbackCode: 'ROLE_UPDATE_FAILED',
@@ -14,7 +13,10 @@ export const PATCH: RequestHandler = async (event) => {
 		const body = (await event.request.json()) as { role?: string };
 
 		if (!body.role) {
-			return json({ code: 'INVALID_ROLE', message: 'Missing role field' }, { status: 400 });
+			return Response.json(
+				{ code: 'INVALID_ROLE', message: 'Missing role field' },
+				{ status: 400 }
+			);
 		}
 
 		const result = await updateUserRole(

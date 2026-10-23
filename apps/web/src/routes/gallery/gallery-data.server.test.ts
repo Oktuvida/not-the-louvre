@@ -1,12 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('$env/dynamic/private', () => ({ env: {} }));
+// Unset environment variables read as empty strings (src/env.ts).
+vi.mock('$app/env/private', () => ({
+	ANON_KEY: '',
+	PUBLIC_SUPABASE_ANON_KEY: '',
+	PUBLIC_SUPABASE_URL: '',
+	SUPABASE_ANON_KEY: '',
+	SUPABASE_PUBLIC_URL: ''
+}));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	listArtworkDiscovery: vi.fn()
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	getViewerContentPreferences: vi.fn()
 }));
 

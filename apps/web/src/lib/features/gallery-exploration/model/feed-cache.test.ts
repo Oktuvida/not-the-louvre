@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeArtwork, makeArtworks } from '$lib/features/gallery-exploration/fixtures/artworks';
+import { makeArtwork, makeArtworks } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import {
 	clearRoomFeedCache,
 	readRoomFeedSnapshot,

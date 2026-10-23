@@ -7,7 +7,7 @@ import EntrySceneController from './EntrySceneController.svelte';
 // a WebGL context. These specs cover the auth/onboarding state machine, so the
 // scene is swapped for an inert stub. An explicit factory is required: the bare
 // auto-mock does not produce a mountable Svelte 5 component.
-vi.mock('$lib/features/home-entry-scene/scene/StudioScene.svelte', async () => ({
+vi.mock('#lib/features/home-entry-scene/scene/StudioScene.svelte', async () => ({
 	default: (await import('./StudioSceneStub.svelte')).default
 }));
 
@@ -30,7 +30,7 @@ describe('EntrySceneController', () => {
 	});
 
 	it('shows the wall first and reveals auth after Come In completes', async () => {
-		render(EntrySceneController, {
+		await render(EntrySceneController, {
 			auth: { integrityFailure: null, onboarding: null, status: 'signed-out', user: null }
 		});
 
@@ -44,7 +44,7 @@ describe('EntrySceneController', () => {
 	});
 
 	it('bootstraps directly into the signed-in scene when the server session already exists', async () => {
-		render(EntrySceneController, {
+		await render(EntrySceneController, {
 			auth: {
 				integrityFailure: null,
 				onboarding: { status: 'complete' },
@@ -62,7 +62,7 @@ describe('EntrySceneController', () => {
 	});
 
 	it('keeps the signup overlay visible after backend signup success until the user acknowledges the recovery key', async () => {
-		render(EntrySceneController, {
+		await render(EntrySceneController, {
 			auth: {
 				integrityFailure: null,
 				onboarding: { status: 'complete' },
@@ -96,7 +96,7 @@ describe('EntrySceneController', () => {
 			subtree: true
 		});
 
-		render(EntrySceneController, {
+		await render(EntrySceneController, {
 			auth: {
 				integrityFailure: null,
 				onboarding: { status: 'needs-avatar' },
@@ -127,7 +127,7 @@ describe('EntrySceneController', () => {
 	});
 
 	it('renders a safe blocked message when auth bootstrap detects an integrity failure', async () => {
-		render(EntrySceneController, {
+		await render(EntrySceneController, {
 			auth: {
 				integrityFailure: {
 					message: 'Authenticated session is missing its product user profile',
@@ -147,7 +147,7 @@ describe('EntrySceneController', () => {
 	});
 
 	it('resumes avatar onboarding for authenticated users who have not completed it yet', async () => {
-		render(EntrySceneController, {
+		await render(EntrySceneController, {
 			auth: {
 				integrityFailure: null,
 				onboarding: { status: 'needs-avatar' },
@@ -168,7 +168,7 @@ describe('EntrySceneController', () => {
 	});
 
 	it('lets authenticated users close the avatar onboarding overlay into the signed-in scene', async () => {
-		render(EntrySceneController, {
+		await render(EntrySceneController, {
 			auth: {
 				integrityFailure: null,
 				onboarding: { status: 'needs-avatar' },

@@ -1,4 +1,4 @@
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 
 /*
  * Warm the artwork detail on intent, not on hover.

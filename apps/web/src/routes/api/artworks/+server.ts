@@ -1,8 +1,7 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
-import { edgeCacheControl, readEdgeCache, storeInEdgeCache } from '$lib/server/http/edge-cache';
-import { toApiErrorResponse } from '$lib/server/http/errors';
+import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
+import { edgeCacheControl, readEdgeCache, storeInEdgeCache } from '#lib/server/http/edge-cache.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
 
 // Anonymous discovery pages are viewer-independent: `viewerVote` collapses to a
 // literal null and the visibility filter ignores the moderator flag, so every
@@ -27,7 +26,7 @@ export const GET: RequestHandler = async (event) => {
 	const isAnonymous = !event.locals.user;
 
 	if (isAnonymous) {
-		const cached = await readEdgeCache(event.platform, event.request);
+		const cached = await readEdgeCache(event.request);
 		if (cached) return cached;
 	}
 
@@ -48,14 +47,14 @@ export const GET: RequestHandler = async (event) => {
 		};
 
 		const discovery = await listArtworkDiscovery(discoveryRequest, { user: event.locals.user });
-		const response = json(discovery, {
+		const response = Response.json(discovery, {
 			headers: {
 				'cache-control': isAnonymous ? ANONYMOUS_CACHE_CONTROL : SIGNED_IN_CACHE_CONTROL
 			}
 		});
 
 		if (isAnonymous) {
-			storeInEdgeCache(event.platform, event.request, response);
+			storeInEdgeCache(event.request, response);
 		}
 
 		return response;

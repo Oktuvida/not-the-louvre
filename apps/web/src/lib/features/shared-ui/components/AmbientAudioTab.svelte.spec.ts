@@ -8,7 +8,7 @@ describe('AmbientAudioTab', () => {
 	it('renders the current track label and emits a toggle click', async () => {
 		const onToggle = vi.fn();
 
-		render(AmbientAudioTab, {
+		await render(AmbientAudioTab, {
 			currentTrackLabel: 'Gallery Rain',
 			enabled: true,
 			onToggle,
@@ -24,7 +24,7 @@ describe('AmbientAudioTab', () => {
 	});
 
 	it('shows the quiet state when playback is unavailable', async () => {
-		render(AmbientAudioTab, {
+		await render(AmbientAudioTab, {
 			currentTrackLabel: null,
 			enabled: false,
 			onToggle: () => {},
@@ -37,7 +37,7 @@ describe('AmbientAudioTab', () => {
 	});
 
 	it('renders a muted-state audio icon affordance', async () => {
-		render(AmbientAudioTab, {
+		await render(AmbientAudioTab, {
 			currentTrackLabel: null,
 			enabled: false,
 			onToggle: () => {},

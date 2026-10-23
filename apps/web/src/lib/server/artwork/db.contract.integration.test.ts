@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
-import type { ProductRole } from '$lib/shared/viewer';
-import type { RateLimitPolicy } from '$lib/server/db/rate-limit';
+import type { ProductRole } from '#lib/shared/viewer.js';
+import type { RateLimitPolicy } from '#lib/server/db/rate-limit.js';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 // Same opt-in flag as the other integration suites: `bun run test:integration`.
@@ -1135,8 +1135,8 @@ describeWithDatabase('artwork DB contract', () => {
 	});
 
 	it('freezes a blocked auth actor without extending its block', async () => {
-		const { AuthRateLimitError, recordFailure } = await import('$lib/server/auth/rate-limit');
-		const { AUTH_RATE_LIMITS } = await import('$lib/server/auth/config');
+		const { AuthRateLimitError, recordFailure } = await import('#lib/server/auth/rate-limit.js');
+		const { AUTH_RATE_LIMITS } = await import('#lib/server/auth/config.js');
 
 		const readRow = async () => {
 			const [row] = await sql`

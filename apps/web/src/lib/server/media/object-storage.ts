@@ -1,7 +1,13 @@
-import { env } from '$env/dynamic/private';
-import { ARTWORK_STORAGE_BUCKET } from '$lib/server/artwork/config';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import type { ArtworkStorage } from '$lib/server/artwork/types';
+import {
+	SUPABASE_PUBLIC_URL,
+	SUPABASE_SECRET_KEY,
+	SERVICE_ROLE_KEY,
+	ARTWORK_STORAGE_BUCKET as ARTWORK_STORAGE_BUCKET_OVERRIDE
+} from '$app/env/private';
+
+import { ARTWORK_STORAGE_BUCKET } from '#lib/server/artwork/config.js';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import type { ArtworkStorage } from '#lib/server/artwork/types.js';
 
 type SupabaseObjectStorageOptions = {
 	deleteFailedMessage: string;
@@ -23,14 +29,18 @@ type SupabaseObjectStorage = {
 // Avatars live under their own key prefix inside the artwork bucket; a single
 // bucket is deliberate, so both callers resolve the same one.
 const getStorageConfig = (missingConfigMessage: string) => {
-	const baseUrl = env.SUPABASE_PUBLIC_URL;
-	const serviceKey = env.SUPABASE_SECRET_KEY || env.SERVICE_ROLE_KEY;
+	const baseUrl = SUPABASE_PUBLIC_URL;
+	const serviceKey = SUPABASE_SECRET_KEY || SERVICE_ROLE_KEY;
 
 	if (!baseUrl || !serviceKey) {
 		throw new ArtworkFlowError(500, missingConfigMessage, 'STORAGE_FAILED');
 	}
 
-	return { baseUrl, bucket: env.ARTWORK_STORAGE_BUCKET || ARTWORK_STORAGE_BUCKET, serviceKey };
+	return {
+		baseUrl,
+		bucket: ARTWORK_STORAGE_BUCKET_OVERRIDE || ARTWORK_STORAGE_BUCKET,
+		serviceKey
+	};
 };
 
 const toStorageError = async (response: Response, fallback: string) => {

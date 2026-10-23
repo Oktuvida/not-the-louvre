@@ -1,5 +1,5 @@
-import type { ArtworkDetail, ArtworkFeedCard } from '$lib/server/artwork/types';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { ArtworkDetail, ArtworkFeedCard } from '#lib/server/artwork/types.js';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 
 type SerializableArtworkFeedCard = Omit<ArtworkFeedCard, 'createdAt'> & {
 	createdAt: Date | string;

@@ -1,12 +1,12 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Actions } from './$types';
-import { AuthFlowError } from '$lib/server/auth/errors';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { AuthFlowError } from '#lib/server/auth/errors.js';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import {
 	createEmptyDrawingDocument,
 	serializeDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 
 type HomeActionEvent = Parameters<Actions['signUp']>[0];
 
@@ -24,7 +24,7 @@ const mocked = vi.hoisted(() => ({
 	signUpWithNickname: vi.fn()
 }));
 
-vi.mock('$lib/server/auth/service', () => ({
+vi.mock('#lib/server/auth/service.js', () => ({
 	getNicknameAvailability: mocked.getNicknameAvailability,
 	recoverAccount: mocked.recoverAccount,
 	signInWithNickname: mocked.signInWithNickname,
@@ -32,33 +32,33 @@ vi.mock('$lib/server/auth/service', () => ({
 	signUpWithNickname: mocked.signUpWithNickname
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		options: {}
 	}
 }));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	listArtworkDiscovery: mocked.listArtworkDiscovery
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	getViewerContentPreferences: mocked.getViewerContentPreferences
 }));
 
-vi.mock('$lib/server/user/repository', () => ({
+vi.mock('#lib/server/user/repository.js', () => ({
 	userRepository: {
 		findUserById: mocked.findUserById
 	}
 }));
 
-vi.mock('$lib/server/user/avatar.service', () => ({
+vi.mock('#lib/server/user/avatar.service.js', () => ({
 	avatarService: {
 		uploadAvatar: mocked.uploadAvatar
 	}
 }));
 
-vi.mock('$lib/server/drawing-document/storage', () => ({
+vi.mock('#lib/server/drawing-document/storage.js', () => ({
 	decodeCompressedDrawingDocumentToEditableDocument:
 		mocked.decodeCompressedDrawingDocumentToEditableDocument
 }));

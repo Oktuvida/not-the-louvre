@@ -1,4 +1,4 @@
-import { createSupabaseObjectStorage } from '$lib/server/media/object-storage';
+import { createSupabaseObjectStorage } from '#lib/server/media/object-storage.js';
 
 const avatarObjectStorage = createSupabaseObjectStorage({
 	deleteFailedMessage: 'Avatar media deletion failed',

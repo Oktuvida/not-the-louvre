@@ -41,7 +41,7 @@ const createQueryBuilder = (recorded: RecordedQuery) => {
 	return builder;
 };
 
-vi.mock('$lib/server/db', () => ({
+vi.mock('#lib/server/db/index.js', () => ({
 	db: {
 		select: (fields: Record<string, unknown>) => {
 			const recorded: RecordedQuery = { calls: [], fields };

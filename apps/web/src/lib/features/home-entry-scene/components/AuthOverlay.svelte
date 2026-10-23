@@ -1,37 +1,37 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
 	import { deserialize, enhance } from '$app/forms';
-	import { gsap } from '$lib/client/gsap';
+	import { gsap } from '#lib/client/gsap.js';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
-	} from '$lib/client/content-filter';
-	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
-	import { parseEditableDrawingDocumentV2 } from '$lib/features/stroke-json/document';
+	} from '#lib/client/content-filter/index.js';
+	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import { parseEditableDrawingDocumentV2 } from '#lib/features/stroke-json/document.js';
 	import {
 		NICKNAME_PATTERN,
 		PASSWORD_MAX_LENGTH,
 		PASSWORD_MIN_LENGTH,
 		normalizeNickname
-	} from '$lib/auth/config';
+	} from '#lib/auth/config.js';
 	import type {
 		HomeAuthActionData,
 		HomeAuthActionForm,
 		HomeAuthUser,
 		HomeAuthAvailability
-	} from '$lib/features/home-entry-scene/auth-contract';
-	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
-	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import WashiTape from '$lib/features/shared-ui/components/WashiTape.svelte';
+	} from '#lib/features/home-entry-scene/auth-contract.js';
+	import AvatarSketchpad from '#lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
+	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import WashiTape from '#lib/features/shared-ui/components/WashiTape.svelte';
 	import type {
 		EntryFlowEvent,
 		EntryFlowState
-	} from '$lib/features/home-entry-scene/state/entry-state.svelte';
-	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
-	import { uploadViewerAvatar } from '$lib/client/avatar-upload';
+	} from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
+	import { dispatchAvatarFaviconUpdate } from '#lib/favicon.js';
+	import { uploadViewerAvatar } from '#lib/client/avatar-upload.js';
 	import { onMount } from 'svelte';
-	import { waitForPageLayoutReady } from '$lib/features/home-entry-scene/components/page-layout-ready';
+	import { waitForPageLayoutReady } from '#lib/features/home-entry-scene/components/page-layout-ready.js';
 
 	type AuthView =
 		| 'login'
@@ -60,7 +60,9 @@
 		form?: HomeAuthActionForm;
 		onAvatarDismiss?: () => void;
 		onAvatarSaved?: (payload: {
-			avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
+			avatarDrawingDocument?:
+				| import('#lib/features/stroke-json/document.js').DrawingDocumentV2
+				| null;
 			avatarOnboardingCompletedAt: Date;
 			avatarUrl: string;
 		}) => void;

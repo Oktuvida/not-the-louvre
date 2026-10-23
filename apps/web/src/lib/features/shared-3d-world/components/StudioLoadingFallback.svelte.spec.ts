@@ -5,7 +5,7 @@ import StudioLoadingFallback from './StudioLoadingFallback.svelte';
 
 describe('StudioLoadingFallback', () => {
 	it('renders as a non-blocking localized scene placeholder', async () => {
-		render(StudioLoadingFallback);
+		await render(StudioLoadingFallback);
 
 		const fallback = page.getByTestId('studio-scene-fallback');
 		await expect.element(fallback).toBeVisible();

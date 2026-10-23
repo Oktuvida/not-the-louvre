@@ -1,11 +1,11 @@
 import { error, fail, isRedirect, redirect } from '@sveltejs/kit';
 import { getIp } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
-import { auth } from '$lib/server/auth';
-import { getArtworkDetail, listArtworkDiscovery } from '$lib/server/artwork/read.service';
-import { publishArtwork } from '$lib/server/artwork/service';
-import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
-import { toActionFailure } from '$lib/server/http/errors';
+import { auth } from '#lib/server/auth.js';
+import { getArtworkDetail, listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
+import { publishArtwork } from '#lib/server/artwork/service.js';
+import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
+import { toActionFailure } from '#lib/server/http/errors.js';
 
 const toFailure = (errorValue: unknown, fallback: string) =>
 	toActionFailure(errorValue, {

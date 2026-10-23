@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyRateLimitAttempt } from '$lib/server/db/fixtures/rate-limit';
-import type { ProductRole } from '$lib/shared/viewer';
+import { applyRateLimitAttempt } from '#lib/server/db/fixtures/rate-limit.js';
+import type { ProductRole } from '#lib/shared/viewer.js';
 import { ArtworkFlowError } from './errors';
 import {
 	ARTWORK_COMMENT_MAX_LENGTH,
@@ -38,7 +38,7 @@ vi.mock('./repository', () => ({
 	artworkRepository: {}
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	checkTextModeration: moderation.checkTextModeration
 }));
 

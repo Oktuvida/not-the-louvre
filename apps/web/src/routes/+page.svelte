@@ -2,12 +2,12 @@
 	import type {
 		HomeAuthActionForm,
 		HomeAuthBootstrap
-	} from '$lib/features/home-entry-scene/auth-contract';
+	} from '#lib/features/home-entry-scene/auth-contract.js';
 	import type {
 		HomePreviewCard,
 		HomeSceneArtworkSlot
-	} from '$lib/features/home-entry-scene/state/home-entry.svelte';
-	import EntrySceneController from '$lib/features/home-entry-scene/components/EntrySceneController.svelte';
+	} from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
+	import EntrySceneController from '#lib/features/home-entry-scene/components/EntrySceneController.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();

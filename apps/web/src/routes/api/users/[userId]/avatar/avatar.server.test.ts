@@ -1,10 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import type { UserRecord } from '$lib/server/user/types';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import type { UserRecord } from '#lib/server/user/types.js';
 import {
 	createEmptyDrawingDocument,
 	serializeDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
+
+// Handlers reach the Cloudflare runtime through #lib/server/platform.js; each
+// test registers the cache and waitUntil it would have found there.
+type FakePlatform = {
+	caches?: { default?: unknown };
+	context?: { waitUntil?: (promise: Promise<unknown>) => void };
+};
+const fakePlatform = vi.hoisted(() => ({ current: undefined as FakePlatform | undefined }));
+vi.mock('#lib/server/platform.js', () => ({
+	edgeCache: () => fakePlatform.current?.caches?.default,
+	hyperdriveConnectionString: () => undefined,
+	runAfterResponse: (promise: Promise<unknown>) =>
+		fakePlatform.current?.context?.waitUntil?.(promise)
+}));
+const usePlatform = (platform: FakePlatform) => {
+	fakePlatform.current = platform;
+	return platform;
+};
+beforeEach(() => {
+	fakePlatform.current = undefined;
+});
 
 const mocked = vi.hoisted(() => ({
 	avatarService: {
@@ -15,18 +36,18 @@ const mocked = vi.hoisted(() => ({
 	streamAvatarStorageObject: vi.fn()
 }));
 
-vi.mock('$lib/server/user/avatar.service', () => ({
+vi.mock('#lib/server/user/avatar.service.js', () => ({
 	avatarService: mocked.avatarService
 }));
 
-vi.mock('$lib/server/user/repository', () => ({
+vi.mock('#lib/server/user/repository.js', () => ({
 	userRepository: {
 		findUserAvatarRefById: mocked.findUserAvatarRefById,
 		updateUserAvatarUrl: vi.fn()
 	}
 }));
 
-vi.mock('$lib/server/user/storage', () => ({
+vi.mock('#lib/server/user/storage.js', () => ({
 	streamAvatarStorageObject: mocked.streamAvatarStorageObject
 }));
 
@@ -185,7 +206,7 @@ describe('GET /api/users/[userId]/avatar', () => {
 		const response = await GET({
 			locals: {},
 			params: { userId: 'user-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil: vi.fn() } }),
 			request: new Request('https://gallery.test/api/users/user-1/avatar')
 		} as never);
 
@@ -239,7 +260,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		const response = await PUT({
 			locals: { user: makeLocalUser() },
 			params: { userId: 'user-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil } }),
 			request: new Request('http://localhost', { method: 'PUT', body: formData }),
 			url: new URL('http://localhost/api/users/user-1/avatar')
 		} as never);

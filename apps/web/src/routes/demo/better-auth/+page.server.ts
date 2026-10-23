@@ -1,8 +1,8 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import type { PageServerLoad } from './$types';
-import { auth } from '$lib/server/auth';
-import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
+import { auth } from '#lib/server/auth.js';
+import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
 
 export const load: PageServerLoad = async (event) => {
 	if (event.locals.integrityFailure) {

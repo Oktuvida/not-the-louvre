@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { banUser, listUsers, unbanUser, updateUserRole } from './admin.service';
-import type { CanonicalUser } from '$lib/server/auth/types';
+import type { CanonicalUser } from '#lib/server/auth/types.js';
 import type { UserRecord, UserRepository } from './types';
 
 const createAdmin = (overrides: Partial<CanonicalUser> = {}): CanonicalUser => ({

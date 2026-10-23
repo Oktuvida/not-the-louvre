@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAvatarService } from './avatar.service';
 import type { UserRecord, UserRepository } from './types';
-import type { ArtworkStorage } from '$lib/server/artwork/types';
-import type { CanonicalUser } from '$lib/server/auth/types';
+import type { ArtworkStorage } from '#lib/server/artwork/types.js';
+import type { CanonicalUser } from '#lib/server/auth/types.js';
 import {
 	createEmptyDrawingDocument,
 	countDrawingPoints,
 	parseDrawingDocumentV2,
 	serializeCanonicalDrawingDocument,
 	serializeDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 
 // storage.ts is gone: gzip/base64 is the Rust runtime's job in production, so
@@ -21,7 +21,7 @@ const runtime = vi.hoisted(() => ({
 	prepareDrawingDocumentForStorage: vi.fn()
 }));
 
-vi.mock('$lib/server/drawing-document/storage', () => ({
+vi.mock('#lib/server/drawing-document/storage.js', () => ({
 	prepareDrawingDocumentForStorage: runtime.prepareDrawingDocumentForStorage
 }));
 

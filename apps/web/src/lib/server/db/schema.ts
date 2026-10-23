@@ -10,7 +10,7 @@ import {
 	uniqueIndex
 } from 'drizzle-orm/pg-core';
 import { account, session, user, verification } from './auth.schema';
-// Relative, not `$lib`: drizzle-kit loads this file outside Vite and cannot
+// Relative, not `#lib`: drizzle-kit loads this file outside Vite and cannot
 // resolve the alias. The enums below are derived from the shared vocabularies
 // so the API, the client and the type never drift from the database.
 import { PRODUCT_ROLES } from '../../shared/viewer';

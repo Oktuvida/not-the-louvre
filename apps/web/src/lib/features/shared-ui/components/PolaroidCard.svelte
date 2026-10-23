@@ -3,10 +3,10 @@
 </script>
 
 <script lang="ts">
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { hashString } from '$lib/features/artwork-presentation/model/frame';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
-	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import { hashString } from '#lib/features/artwork-presentation/model/frame.js';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import NsfwImage from '#lib/features/gallery-exploration/components/NsfwImage.svelte';
 
 	let {
 		artwork,

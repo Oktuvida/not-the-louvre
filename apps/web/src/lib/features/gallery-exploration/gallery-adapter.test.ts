@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ArtworkDetail, ArtworkFeedCard } from '$lib/server/artwork/types';
+import type { ArtworkDetail, ArtworkFeedCard } from '#lib/server/artwork/types.js';
 import { toGalleryArtwork, toGalleryArtworkDetail } from './gallery-adapter';
 
 const feedCard: ArtworkFeedCard = {

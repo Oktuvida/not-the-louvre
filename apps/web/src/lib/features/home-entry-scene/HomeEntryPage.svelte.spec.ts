@@ -1,54 +1,35 @@
 import { page } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakePage } from '#lib/testing/fake-page-state.svelte.js';
 import { render } from 'vitest-browser-svelte';
 import HomeEntryPage from './HomeEntryPage.svelte';
 
 // The scene mounts a Threlte `<Canvas>`, which the headless browser cannot give
 // a WebGL context; the stub keeps the rest of the page mountable.
-vi.mock('$lib/features/home-entry-scene/scene/StudioScene.svelte', async () => ({
+vi.mock('#lib/features/home-entry-scene/scene/StudioScene.svelte', async () => ({
 	default: (await import('./components/StudioSceneStub.svelte')).default
 }));
 
-const { navigation, pageStore, setPageUrl } = vi.hoisted(() => {
-	let current = { state: {}, url: new URL('http://localhost/') };
-	const subscribers = new Set<(value: typeof current) => void>();
+const navigation = vi.hoisted(() => ({ goto: vi.fn() }));
 
-	return {
-		navigation: { goto: vi.fn(), replaceState: vi.fn() },
-		pageStore: {
-			subscribe(run: (value: typeof current) => void) {
-				subscribers.add(run);
-				run(current);
+const setPageUrl = (href: string) => fakePage.set({ state: {}, url: href });
 
-				return () => {
-					subscribers.delete(run);
-				};
-			}
-		},
-		setPageUrl(href: string) {
-			current = { state: {}, url: new URL(href) };
+vi.mock('$app/navigation', async () => ({
+	...(await import('#lib/testing/fake-navigation.js')).fakeNavigation,
+	goto: navigation.goto
+}));
 
-			for (const subscriber of subscribers) {
-				subscriber(current);
-			}
-		}
-	};
-});
-
-vi.mock('$app/navigation', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$app/navigation')>();
-
-	return { ...actual, goto: navigation.goto, replaceState: navigation.replaceState };
-});
-
-vi.mock('$app/stores', () => ({ page: pageStore }));
+vi.mock(
+	'$app/state',
+	async () => (await import('#lib/testing/fake-page-state.svelte.js')).fakeAppState
+);
 
 const warmup = vi.hoisted(() => ({
 	cancel: vi.fn(),
 	schedule: vi.fn()
 }));
 
-vi.mock('$lib/features/shared-ui/studio-background-warmup', () => ({
+vi.mock('#lib/features/shared-ui/studio-background-warmup.js', () => ({
 	scheduleStudioBackgroundWarmup: () => {
 		warmup.schedule();
 		return warmup.cancel;
@@ -91,7 +72,6 @@ describe('HomeEntryPage', () => {
 	afterEach(() => {
 		setPageUrl('http://localhost/');
 		navigation.goto.mockClear();
-		navigation.replaceState.mockClear();
 	});
 
 	it('lifts the shared grey veil when the visitor comes back from a room', async () => {
@@ -99,7 +79,7 @@ describe('HomeEntryPage', () => {
 		// scrim the room dropped, not at a page that fades one in.
 		setPageUrl('http://localhost/?from=gallery');
 
-		render(HomeEntryPage, { entryState: 'inside' });
+		await render(HomeEntryPage, { entryState: 'inside' });
 
 		const veil = page.getByTestId('page-fade-overlay');
 		await expect.element(veil).toBeInTheDocument();
@@ -117,7 +97,7 @@ describe('HomeEntryPage', () => {
 	});
 
 	it('warms the studio table background itself instead of leaving it to the root layout', async () => {
-		const { unmount } = render(HomeEntryPage, {});
+		const { unmount } = await render(HomeEntryPage, {});
 
 		expect(warmup.schedule).toHaveBeenCalledTimes(1);
 
@@ -130,7 +110,7 @@ describe('HomeEntryPage', () => {
 	});
 
 	it('prefetches the studio model and its DRACO decoder from the page that needs them', async () => {
-		render(HomeEntryPage, {});
+		await render(HomeEntryPage, {});
 
 		const prefetched = [...document.head.querySelectorAll('link[rel="prefetch"]')].map((link) =>
 			link.getAttribute('href')

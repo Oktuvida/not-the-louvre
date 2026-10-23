@@ -1,5 +1,5 @@
 <script lang="ts">
-	import GalleryExplorationPage from '$lib/features/gallery-exploration/GalleryExplorationPage.svelte';
+	import GalleryExplorationPage from '#lib/features/gallery-exploration/GalleryExplorationPage.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();

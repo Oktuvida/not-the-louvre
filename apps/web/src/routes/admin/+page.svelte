@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { PageData, PageProps } from './$types';
-	import { requestJson } from '$lib/client/api';
-	import type { TextFilterContext } from '$lib/client/content-filter';
+	import { requestJson } from '#lib/client/api.js';
+	import type { TextFilterContext } from '#lib/client/content-filter/index.js';
 
 	type TabKey = 'moderation' | 'policy' | 'users';
 	// The same three contexts the policy table and the client filter speak.
@@ -63,7 +63,7 @@
 	let moderationNextCursor = $state<string | null>(
 		initialModerationPage?.pageInfo.nextCursor ?? null
 	);
-	let policyDrafts = $state(createPolicyDrafts(null));
+	let policyDrafts = $derived(createPolicyDrafts(data.textPolicy));
 
 	const visibleTabs = $derived(
 		[
@@ -104,10 +104,6 @@
 			}
 		};
 	}
-
-	$effect(() => {
-		policyDrafts = createPolicyDrafts(data.textPolicy);
-	});
 
 	function setMessage(tone: DashboardMessage['tone'], text: string) {
 		message = { text, tone };
@@ -491,8 +487,7 @@
 								rows="3"
 								placeholder="Document the reason for a soft ban"
 								value={banReasonDrafts[user.id] ?? user.banReason ?? ''}
-								oninput={(event) => updateBanReason(user.id, event.currentTarget.value)}
-							></textarea>
+								oninput={(event) => updateBanReason(user.id, event.currentTarget.value)}></textarea>
 							<div class="action-row">
 								<button
 									type="button"

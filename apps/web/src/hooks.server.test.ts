@@ -10,15 +10,15 @@ vi.mock('$app/environment', () => ({
 	building: false
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {}
 }));
 
-vi.mock('$lib/server/auth/service', () => ({
+vi.mock('#lib/server/auth/service.js', () => ({
 	resolveSessionContext: mocked.resolveSessionContext
 }));
 
-vi.mock('$lib/server/security/logging', () => ({
+vi.mock('#lib/server/security/logging.js', () => ({
 	logSecurityEvent: mocked.logSecurityEvent
 }));
 

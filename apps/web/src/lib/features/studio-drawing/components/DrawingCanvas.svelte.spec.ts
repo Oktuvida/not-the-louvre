@@ -6,7 +6,7 @@ import {
 	normalizeDrawingDocumentToEditableV2,
 	type DrawingDocumentV2,
 	type DrawingStroke
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 import DrawingCanvas from './DrawingCanvas.svelte';
 
 const createLargeEditableArtworkDocument = () =>
@@ -66,7 +66,7 @@ describe('DrawingCanvas', () => {
 	});
 
 	it('renders product-facing status messaging below the canvas', async () => {
-		render(DrawingCanvas, {
+		await render(DrawingCanvas, {
 			statusMessage: 'Artwork published as Untitled #0001',
 			statusTone: 'success'
 		});
@@ -81,7 +81,7 @@ describe('DrawingCanvas', () => {
 			.mockImplementation(((contextId: string) =>
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 
-		render(DrawingCanvas, { interactive: false });
+		await render(DrawingCanvas, { interactive: false });
 
 		const canvas = document.querySelector('canvas');
 		if (!canvas) {
@@ -116,7 +116,7 @@ describe('DrawingCanvas', () => {
 			.mockImplementation(((contextId: string) =>
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 
-		render(DrawingCanvas, { interactive: true });
+		await render(DrawingCanvas, { interactive: true });
 
 		const canvas = document.querySelector('canvas');
 		if (!canvas) {
@@ -157,7 +157,7 @@ describe('DrawingCanvas', () => {
 			.mockImplementation(((contextId: string) =>
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 
-		render(DrawingCanvas, { interactive: true });
+		await render(DrawingCanvas, { interactive: true });
 
 		const canvas = document.querySelector('canvas');
 		if (!canvas) {
@@ -196,7 +196,7 @@ describe('DrawingCanvas', () => {
 			.mockImplementation(((contextId: string) =>
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 
-		render(DrawingCanvas, { interactive: true });
+		await render(DrawingCanvas, { interactive: true });
 
 		const canvas = document.querySelector('canvas');
 		if (!canvas) {
@@ -238,7 +238,7 @@ describe('DrawingCanvas', () => {
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 		const committedStrokes: { stroke: DrawingStroke }[] = [];
 
-		render(DrawingCanvas, {
+		await render(DrawingCanvas, {
 			interactive: true,
 			onStrokeCommitted: (input: { stroke: DrawingStroke }) => {
 				committedStrokes.push(input);
@@ -297,7 +297,7 @@ describe('DrawingCanvas', () => {
 			.mockImplementation(((contextId: string) =>
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 
-		render(DrawingCanvas, {
+		await render(DrawingCanvas, {
 			initialDrawingDocument: normalizeDrawingDocumentToEditableV2({
 				...createEmptyDrawingDocument('artwork'),
 				strokes: [
@@ -335,7 +335,7 @@ describe('DrawingCanvas', () => {
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 		const committedDocuments: DrawingDocumentV2[] = [];
 
-		render(DrawingCanvas, {
+		await render(DrawingCanvas, {
 			initialDrawingDocument: normalizeDrawingDocumentToEditableV2({
 				...createEmptyDrawingDocument('artwork'),
 				strokes: [
@@ -397,7 +397,7 @@ describe('DrawingCanvas', () => {
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 		const committedDocuments: DrawingDocumentV2[] = [];
 
-		render(DrawingCanvas, {
+		await render(DrawingCanvas, {
 			initialDrawingDocument: createLargeEditableArtworkDocument(),
 			onDocumentChange: (document: DrawingDocumentV2) => {
 				committedDocuments.push(document);
@@ -453,7 +453,7 @@ describe('DrawingCanvas', () => {
 			.mockImplementation(((contextId: string) =>
 				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
 
-		render(DrawingCanvas, { interactive: true });
+		await render(DrawingCanvas, { interactive: true });
 
 		const canvas = document.querySelector('canvas');
 		if (!canvas) {

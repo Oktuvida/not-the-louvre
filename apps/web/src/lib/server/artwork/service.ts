@@ -1,5 +1,5 @@
 import { generateId } from 'better-auth';
-import { assertNotBanned } from '$lib/server/auth/guards';
+import { assertNotBanned } from '#lib/server/auth/guards.js';
 import {
 	ARTWORK_COMMENT_MAX_LENGTH,
 	ARTWORK_COMMENT_RATE_LIMIT,
@@ -10,11 +10,11 @@ import {
 import { ArtworkFlowError, logArtworkFlowFailure } from './errors';
 import { artworkRepository } from './repository';
 import { supabaseArtworkStorage } from './storage';
-import { checkTextModeration } from '$lib/server/moderation/service';
-import { isRateLimitBlocked, type RateLimitPolicy } from '$lib/server/db/rate-limit';
-import { isArtworkReportReason } from '$lib/shared/content/report-reasons';
-import { isArtworkVoteValue } from '$lib/shared/content/votes';
-import { prepareDrawingDocumentForStorage } from '$lib/server/drawing-document/storage';
+import { checkTextModeration } from '#lib/server/moderation/service.js';
+import { isRateLimitBlocked, type RateLimitPolicy } from '#lib/server/db/rate-limit.js';
+import { isArtworkReportReason } from '#lib/shared/content/report-reasons.js';
+import { isArtworkVoteValue } from '#lib/shared/content/votes.js';
+import { prepareDrawingDocumentForStorage } from '#lib/server/drawing-document/storage.js';
 import type {
 	ArtworkActorContext,
 	ArtworkCommentView,
@@ -39,8 +39,8 @@ import {
 	isUniqueViolation,
 	writeDrawingDocumentInChunks,
 	type DrawingDocumentChunkStore
-} from '$lib/server/drawing-document/chunked-write';
-import { createArtworkDrawingDocumentMedia } from '$lib/server/drawing-document/media';
+} from '#lib/server/drawing-document/chunked-write.js';
+import { createArtworkDrawingDocumentMedia } from '#lib/server/drawing-document/media.js';
 import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
 type PublishArtworkInput = {

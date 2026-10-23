@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
-import { makeArtworks } from '$lib/features/gallery-exploration/fixtures/artworks';
+import { makeArtworks } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import VirtualizedGridHarness from './VirtualizedGridHarness.svelte';
 
 const createArtworks = (count: number, prefix: string) => makeArtworks(count, { prefix });
 
 describe('VirtualizedGrid', () => {
 	it('renders rows using WindowVirtualizer with the provided items', async () => {
-		render(VirtualizedGridHarness, { items: createArtworks(6, 'a') });
+		await render(VirtualizedGridHarness, { items: createArtworks(6, 'a') });
 
 		// Each artwork should be rendered via the renderCard snippet
 		const cards = page.getByRole('list').getByRole('listitem');
@@ -20,7 +20,7 @@ describe('VirtualizedGrid', () => {
 	});
 
 	it('row wrappers do not clip overflow so hover animations are visible', async () => {
-		render(VirtualizedGridHarness, { items: createArtworks(4, 'b') });
+		await render(VirtualizedGridHarness, { items: createArtworks(4, 'b') });
 
 		await expect.element(page.getByTestId('grid-card-b1')).toBeVisible();
 
@@ -35,7 +35,7 @@ describe('VirtualizedGrid', () => {
 	});
 
 	it('accepts a renderCard snippet and calls it for each artwork', async () => {
-		render(VirtualizedGridHarness, { items: createArtworks(3, 'c') });
+		await render(VirtualizedGridHarness, { items: createArtworks(3, 'c') });
 
 		// Harness renders each artwork with a data-testid
 		await expect.element(page.getByTestId('grid-card-c1')).toBeVisible();
@@ -51,7 +51,7 @@ describe('VirtualizedGrid', () => {
 	it('chunks rows to match the real column count for the measured width', async () => {
 		// Harness viewport defaults to the test browser width; force a narrow
 		// minColumnWidth so multiple columns fit deterministically.
-		render(VirtualizedGridHarness, { items: createArtworks(24, 'd'), minColumnWidth: 100 });
+		await render(VirtualizedGridHarness, { items: createArtworks(24, 'd'), minColumnWidth: 100 });
 
 		await expect.element(page.getByTestId('grid-card-d1')).toBeVisible();
 

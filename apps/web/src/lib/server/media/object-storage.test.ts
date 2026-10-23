@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSupabaseObjectStorage } from './object-storage';
 
-vi.mock('$env/dynamic/private', () => ({
-	env: {
-		ARTWORK_STORAGE_BUCKET: 'artworks',
-		SUPABASE_PUBLIC_URL: 'https://storage.local',
-		SUPABASE_SECRET_KEY: 'service-key'
-	}
+vi.mock('$app/env/private', () => ({
+	ARTWORK_STORAGE_BUCKET: 'artworks',
+	SERVICE_ROLE_KEY: '',
+	SUPABASE_PUBLIC_URL: 'https://storage.local',
+	SUPABASE_SECRET_KEY: 'service-key'
 }));
 
 const messages = {

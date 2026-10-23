@@ -1,15 +1,15 @@
 <script lang="ts">
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
-	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import ScrollSentinel from '#lib/features/gallery-exploration/components/ScrollSentinel.svelte';
+	import VirtualizedGrid from '#lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
 	import type {
 		GalleryPageInfo,
 		LoadMoreArtworks
-	} from '$lib/features/gallery-exploration/model/discovery';
-	import { GALLERY_GRID_GAP } from '$lib/features/gallery-exploration/model/grid';
-	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
-	import { createSeededAccumulator } from '$lib/features/gallery-exploration/use-seeded-accumulator.svelte';
-	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
+	} from '#lib/features/gallery-exploration/model/discovery.js';
+	import { GALLERY_GRID_GAP } from '#lib/features/gallery-exploration/model/grid.js';
+	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
+	import { createSeededAccumulator } from '#lib/features/gallery-exploration/use-seeded-accumulator.svelte.js';
+	import PolaroidCard from '#lib/features/shared-ui/components/PolaroidCard.svelte';
 
 	interface Props {
 		artworks: Artwork[];

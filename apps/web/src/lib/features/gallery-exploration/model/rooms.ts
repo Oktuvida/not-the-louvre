@@ -1,10 +1,10 @@
 // Room identity and hrefs are shared vocabulary (the server loaders resolve
 // route params with them); this module keeps the presentation config and
 // re-exports the vocabulary so the existing importers keep working.
-import type { GalleryRoomId } from '$lib/shared/gallery/rooms';
+import type { GalleryRoomId } from '#lib/shared/gallery/rooms.js';
 
-export { galleryRoomIds, isGalleryRoomId, roomHref } from '$lib/shared/gallery/rooms';
-export type { GalleryRoomId } from '$lib/shared/gallery/rooms';
+export { galleryRoomIds, isGalleryRoomId, roomHref } from '#lib/shared/gallery/rooms.js';
+export type { GalleryRoomId } from '#lib/shared/gallery/rooms.js';
 
 export type GalleryRoomConfig = {
 	color: string;

@@ -1,6 +1,6 @@
-import { fail, json } from '@sveltejs/kit';
-import { ArtworkFlowError, logArtworkFlowFailure } from '$lib/server/artwork/errors';
-import { AuthFlowError } from '$lib/server/auth/errors';
+import { fail } from '@sveltejs/kit';
+import { ArtworkFlowError, logArtworkFlowFailure } from '#lib/server/artwork/errors.js';
+import { AuthFlowError } from '#lib/server/auth/errors.js';
 
 /*
  * The one place a thrown domain error becomes an HTTP answer.
@@ -73,10 +73,16 @@ export const toApiErrorResponse = (error: unknown, options: ApiErrorOptions) => 
 	logServerFailure(options.scope, error, failure);
 
 	if (failure) {
-		return json({ code: failure.code, message: failure.message }, { status: failure.status });
+		return Response.json(
+			{ code: failure.code, message: failure.message },
+			{ status: failure.status }
+		);
 	}
 
-	return json({ code: options.fallbackCode, message: options.fallbackMessage }, { status: 500 });
+	return Response.json(
+		{ code: options.fallbackCode, message: options.fallbackMessage },
+		{ status: 500 }
+	);
 };
 
 type ActionFailureOptions<Extra extends Record<string, unknown>> = {

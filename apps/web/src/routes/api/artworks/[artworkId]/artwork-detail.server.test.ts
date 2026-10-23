@@ -1,5 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+
+// Handlers reach the Cloudflare runtime through #lib/server/platform.js; each
+// test registers the cache and waitUntil it would have found there.
+type FakePlatform = {
+	caches?: { default?: unknown };
+	context?: { waitUntil?: (promise: Promise<unknown>) => void };
+};
+const fakePlatform = vi.hoisted(() => ({ current: undefined as FakePlatform | undefined }));
+vi.mock('#lib/server/platform.js', () => ({
+	edgeCache: () => fakePlatform.current?.caches?.default,
+	hyperdriveConnectionString: () => undefined,
+	runAfterResponse: (promise: Promise<unknown>) =>
+		fakePlatform.current?.context?.waitUntil?.(promise)
+}));
+const usePlatform = (platform: FakePlatform) => {
+	fakePlatform.current = platform;
+	return platform;
+};
+beforeEach(() => {
+	fakePlatform.current = undefined;
+});
 
 const mocked = vi.hoisted(() => ({
 	getArtworkMedia: vi.fn(),
@@ -9,18 +30,18 @@ const mocked = vi.hoisted(() => ({
 	updateArtworkTitle: vi.fn()
 }));
 
-vi.mock('$lib/server/artwork/service', () => ({
+vi.mock('#lib/server/artwork/service.js', () => ({
 	deleteArtwork: mocked.deleteArtwork,
 	updateArtworkTitle: mocked.updateArtworkTitle,
 	withoutDrawingDocument: <T>(artwork: T) => ({ ...artwork, drawingDocument: null })
 }));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	getArtworkMedia: mocked.getArtworkMedia,
 	getArtworkDetail: mocked.getArtworkDetail
 }));
 
-vi.mock('$lib/server/artwork/storage', () => ({
+vi.mock('#lib/server/artwork/storage.js', () => ({
 	streamArtworkStorageObject: mocked.streamArtworkStorageObject
 }));
 
@@ -42,7 +63,7 @@ describe('artwork detail endpoints', () => {
 		await DELETE({
 			locals: { user: { id: 'user-1' } },
 			params: { artworkId: 'artwork-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil } }),
 			request: new Request('https://gallery.test/api/artworks/artwork-1', { method: 'DELETE' }),
 			url: new URL('https://gallery.test/api/artworks/artwork-1')
 		} as never);
@@ -61,7 +82,7 @@ describe('artwork detail endpoints', () => {
 		await PATCH({
 			locals: { user: { id: 'user-1' } },
 			params: { artworkId: 'artwork-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil: vi.fn() } }),
 			request: new Request('https://gallery.test/api/artworks/artwork-1', {
 				body: JSON.stringify({ title: 'New title' }),
 				headers: { 'content-type': 'application/json' },
@@ -158,7 +179,7 @@ describe('artwork detail endpoints', () => {
 		const response = await GET({
 			locals: {},
 			params: { artworkId: 'artwork-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil: vi.fn() } }),
 			request: new Request('https://gallery.test/api/artworks/artwork-1')
 		} as never);
 
@@ -177,7 +198,7 @@ describe('artwork detail endpoints', () => {
 		const response = await GET({
 			locals: { user: { id: 'user-1' } },
 			params: { artworkId: 'artwork-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil: vi.fn() } }),
 			request: new Request('https://gallery.test/api/artworks/artwork-1')
 		} as never);
 
@@ -200,7 +221,7 @@ describe('artwork detail endpoints', () => {
 		const response = await GET({
 			locals: {},
 			params: { artworkId: 'artwork-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil } }),
 			request: new Request('https://gallery.test/api/artworks/artwork-1')
 		} as never);
 
@@ -282,7 +303,7 @@ describe('artwork detail endpoints', () => {
 		const response = await GET({
 			locals: {},
 			params: { artworkId: 'artwork-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil: vi.fn() } }),
 			request: new Request('https://gallery.test/api/artworks/artwork-1/media')
 		} as never);
 
@@ -313,7 +334,7 @@ describe('artwork detail endpoints', () => {
 		const response = await GET({
 			locals: {},
 			params: { artworkId: 'artwork-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil } }),
 			request: new Request('https://gallery.test/api/artworks/artwork-1/media')
 		} as never);
 

@@ -1,21 +1,21 @@
 import sharp from 'sharp';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import type { UserRecord } from '$lib/server/user/types';
-import { createAvifTestFile, fileToBytes } from '$lib/server/media/test-helpers';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import type { UserRecord } from '#lib/server/user/types.js';
+import { createAvifTestFile, fileToBytes } from '#lib/server/media/test-helpers.js';
 
 const mocked = vi.hoisted(() => ({
 	findUserAvatarRefById: vi.fn(),
 	streamAvatarStorageObject: vi.fn()
 }));
 
-vi.mock('$lib/server/user/repository', () => ({
+vi.mock('#lib/server/user/repository.js', () => ({
 	userRepository: {
 		findUserAvatarRefById: mocked.findUserAvatarRefById
 	}
 }));
 
-vi.mock('$lib/server/user/storage', () => ({
+vi.mock('#lib/server/user/storage.js', () => ({
 	streamAvatarStorageObject: mocked.streamAvatarStorageObject
 }));
 

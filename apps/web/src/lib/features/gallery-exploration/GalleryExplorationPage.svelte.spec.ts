@@ -1,27 +1,13 @@
 import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakePage } from '#lib/testing/fake-page-state.svelte.js';
 import { render } from 'vitest-browser-svelte';
 
-const {
-	createRealtimeClient,
-	goto,
-	getBrowserRealtimeClient,
-	invalidateAll,
-	pushState,
-	replaceState,
-	pageStore,
-	setPageValue
-} = vi.hoisted(() => {
+const { createRealtimeClient, goto, getBrowserRealtimeClient, refreshAll } = vi.hoisted(() => {
 	type RealtimeClientOptions = {
 		onChannelEvent?: (table: string | undefined, handler: (payload: unknown) => void) => void;
 		onSubscribe?: (callback?: (status: string) => void) => void;
 	};
-
-	let currentValue = {
-		state: {},
-		url: new URL('http://localhost/gallery')
-	};
-	const subscribers = new Set<(value: typeof currentValue) => void>();
 
 	const createRealtimeClient = (
 		options: RealtimeClientOptions | ((callback?: (status: string) => void) => void) = {}
@@ -52,76 +38,43 @@ const {
 
 	return {
 		createRealtimeClient,
-		goto: vi.fn(),
+		// A shallow goto (SvelteKit 3's pushState/replaceState) moves the page the
+		// way the router would.
+		goto: vi.fn(
+			async (
+				url: string | URL,
+				options: { replace?: boolean; shallow?: boolean; state?: Record<string, unknown> } = {}
+			) => {
+				if (options.shallow) fakePage.set({ state: options.state ?? {}, url });
+			}
+		),
 		getBrowserRealtimeClient: vi.fn(() => createRealtimeClient()),
-		invalidateAll: vi.fn(async () => {}),
-		pushState: vi.fn((url: string | URL, state: Record<string, unknown>) => {
-			currentValue = {
-				state,
-				url: url instanceof URL ? url : new URL(url, currentValue.url)
-			};
-
-			for (const subscriber of subscribers) {
-				subscriber(currentValue);
-			}
-		}),
-		pageStore: {
-			subscribe(callback: (value: typeof currentValue) => void) {
-				subscribers.add(callback);
-				callback(currentValue);
-
-				return () => {
-					subscribers.delete(callback);
-				};
-			}
-		},
-		replaceState: vi.fn((url: string | URL, state: Record<string, unknown>) => {
-			currentValue = {
-				state,
-				url: url instanceof URL ? url : new URL(url, currentValue.url)
-			};
-
-			for (const subscriber of subscribers) {
-				subscriber(currentValue);
-			}
-		}),
-		setPageValue(url: string, state: Record<string, unknown> = {}) {
-			currentValue = {
-				state,
-				url: new URL(url, 'http://localhost')
-			};
-
-			for (const subscriber of subscribers) {
-				subscriber(currentValue);
-			}
-		}
+		refreshAll: vi.fn(async () => {})
 	};
 });
 
-vi.mock('$app/navigation', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$app/navigation')>();
-	return {
-		...actual,
-		goto,
-		invalidateAll,
-		pushState,
-		replaceState
-	};
-});
+const setPageValue = (url: string, state: Record<string, unknown> = {}) =>
+	fakePage.set({ state, url: new URL(url, 'http://localhost') });
 
-vi.mock('$app/stores', () => ({
-	navigating: { subscribe: (run: (value: null) => void) => (run(null), () => {}) },
-	page: pageStore
+vi.mock('$app/navigation', async () => ({
+	...(await import('#lib/testing/fake-navigation.js')).fakeNavigation,
+	goto,
+	refreshAll
 }));
 
-vi.mock('$lib/features/realtime/browser-client', () => ({
+vi.mock(
+	'$app/state',
+	async () => (await import('#lib/testing/fake-page-state.svelte.js')).fakeAppState
+);
+
+vi.mock('#lib/features/realtime/browser-client.js', () => ({
 	getBrowserRealtimeClient
 }));
 
 import GalleryExplorationPage from './GalleryExplorationPageLayoutHarness.svelte';
 import { clearRoomFeedCache, writeRoomFeedSnapshot } from './model/feed-cache';
 import { getGalleryRoom } from './model/rooms';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 
 const baseArtwork: Artwork = {
 	artist: 'journey_artist',
@@ -161,9 +114,7 @@ describe('GalleryExplorationPage', () => {
 		goto.mockReset();
 		getBrowserRealtimeClient.mockReset();
 		getBrowserRealtimeClient.mockImplementation(() => createRealtimeClient());
-		invalidateAll.mockReset();
-		pushState.mockReset();
-		replaceState.mockReset();
+		refreshAll.mockReset();
 		setPageValue('/gallery');
 		window.scrollTo(0, 0);
 	});
@@ -171,7 +122,7 @@ describe('GalleryExplorationPage', () => {
 	it('cleans the home return query param only once', async () => {
 		setPageValue('/gallery?from=home');
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [],
 			emptyStateMessage: 'No artworks have reached this gallery room yet.',
 			room: getGalleryRoom('hall-of-fame'),
@@ -181,11 +132,15 @@ describe('GalleryExplorationPage', () => {
 		await expect
 			.element(page.getByText('No artworks have reached this gallery room yet.'))
 			.toBeVisible();
-		expect(replaceState).toHaveBeenCalledTimes(1);
+		// Cleaning `?from=` off the URL is a shallow, replacing goto.
+		expect(goto).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({ replace: true, shallow: true })
+		);
 	});
 
 	it('renders real discovery artwork cards from route data', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' },
 				{ ...baseArtwork, id: 'artwork-2', title: 'Second Work' }
@@ -201,7 +156,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('includes the tightened mobile gallery header shell', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
 			emptyStateMessage: null,
 			room: getGalleryRoom('hall-of-fame'),
@@ -214,7 +169,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('renders the hot wall with a lead artwork and supporting grid', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', title: 'Lead Heat' },
 				{ ...baseArtwork, id: 'artwork-2', title: 'Second Spark' },
@@ -232,7 +187,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('renders the hot wall own empty state instead of a generic empty state', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [],
 			emptyStateMessage: 'No artworks have reached this gallery room yet.',
 			room: getGalleryRoom('hot-wall'),
@@ -247,7 +202,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('renders the mystery room directly when switching from another room', async () => {
-		const screen = render(GalleryExplorationPage, {
+		const screen = await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'public-1', rank: 1, title: 'Champion' },
 				{ ...baseArtwork, id: 'public-2', rank: 2, title: 'Runner Up' },
@@ -273,7 +228,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('reseeds mystery from mystery data after navigating from your-studio', async () => {
-		const screen = render(GalleryExplorationPage, {
+		const screen = await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'studio-1', title: 'My Studio Piece' }],
 			discovery: {
 				pageInfo: { hasMore: true, nextCursor: 'studio-cursor-1' },
@@ -304,7 +259,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('reseeds your-studio from viewer-scoped data after navigating from hall-of-fame', async () => {
-		const screen = render(GalleryExplorationPage, {
+		const screen = await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'public-1', rank: 1, title: 'Public Champion' },
 				{ ...baseArtwork, id: 'public-2', rank: 2, title: 'Public Runner Up' },
@@ -345,7 +300,7 @@ describe('GalleryExplorationPage', () => {
 			pageInfo: { hasMore: false, nextCursor: null }
 		}));
 
-		const screen = render(GalleryExplorationPage, {
+		const screen = await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'public-1', rank: 1, title: 'Public Champion' },
 				{ ...baseArtwork, id: 'public-2', rank: 2, title: 'Public Runner Up' },
@@ -411,7 +366,7 @@ describe('GalleryExplorationPage', () => {
 			pageInfo: { hasMore: false, nextCursor: null }
 		}));
 
-		const screen = render(GalleryExplorationPage, {
+		const screen = await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'mine-1', title: 'Only Mine', score: 10 }],
 			discovery: {
 				pageInfo: { hasMore: true, nextCursor: 'studio-cursor-1' },
@@ -464,7 +419,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('prioritizes the hall-of-fame podium and lets the virtualizer drive ranked card loading', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
 				{ ...baseArtwork, id: 'artwork-2', rank: 2, title: 'Runner Up' },
@@ -492,7 +447,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('shows a product empty state instead of fixture content', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [],
 			emptyStateMessage: 'No artworks have reached this gallery room yet.',
 			room: getGalleryRoom('hall-of-fame'),
@@ -506,7 +461,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('hides authenticated-only gallery chrome from signed-out visitors', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [],
 			emptyStateMessage: 'No artworks have reached this gallery room yet.',
 			room: getGalleryRoom('hall-of-fame'),
@@ -523,9 +478,9 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('shows authenticated gallery chrome and personal empty-state guidance for users', async () => {
-		invalidateAll.mockReset();
+		refreshAll.mockReset();
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [],
 			emptyStateMessage: 'You have not published any artworks yet.',
 			room: getGalleryRoom('your-studio'),
@@ -543,11 +498,11 @@ describe('GalleryExplorationPage', () => {
 			.toBeVisible();
 
 		await page.getByRole('button', { name: 'Refresh' }).click();
-		expect(invalidateAll).toHaveBeenCalledTimes(1);
+		expect(refreshAll).toHaveBeenCalledTimes(1);
 	});
 
 	it('renders the your studio room note in normal flow above the artworks', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Desk Study' }],
 			emptyStateMessage: null,
 			room: getGalleryRoom('your-studio'),
@@ -568,7 +523,7 @@ describe('GalleryExplorationPage', () => {
 			title: 'Deterministic Gallery Study'
 		}));
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
 			emptyStateMessage: null,
 			loadArtworkDetail,
@@ -599,7 +554,7 @@ describe('GalleryExplorationPage', () => {
 			pageInfo: { hasMore: false, nextCursor: null }
 		}));
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: Array.from({ length: 3 }, (_, index) => ({
 				...baseArtwork,
 				id: `artwork-${index + 1}`,
@@ -645,7 +600,7 @@ describe('GalleryExplorationPage', () => {
 			title: 'Deterministic Gallery Study'
 		}));
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
 			emptyStateMessage: null,
 			loadArtworkDetail,
@@ -675,7 +630,7 @@ describe('GalleryExplorationPage', () => {
 
 		setPageValue('/gallery/your-studio');
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
 			emptyStateMessage: null,
 			loadArtworkDetail,
@@ -691,13 +646,16 @@ describe('GalleryExplorationPage', () => {
 				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
 			)
 			.toBeVisible();
-		expect(pushState).toHaveBeenCalledWith(
+		expect(goto).toHaveBeenCalledWith(
 			'/gallery/your-studio',
 			expect.objectContaining({
-				galleryDetail: expect.objectContaining({
-					artworkId: 'artwork-1',
-					roomId: 'your-studio',
-					source: 'local-room-selection'
+				shallow: true,
+				state: expect.objectContaining({
+					galleryDetail: expect.objectContaining({
+						artworkId: 'artwork-1',
+						roomId: 'your-studio',
+						source: 'local-room-selection'
+					})
 				})
 			})
 		);
@@ -731,7 +689,7 @@ describe('GalleryExplorationPage', () => {
 			}
 		});
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
 			emptyStateMessage: null,
 			loadArtworkDetail,
@@ -749,7 +707,10 @@ describe('GalleryExplorationPage', () => {
 		await page.getByRole('button', { name: 'Dismiss details' }).click();
 
 		expect(historyBack).not.toHaveBeenCalled();
-		expect(replaceState).toHaveBeenCalledWith('/gallery/your-studio', {});
+		expect(goto).toHaveBeenCalledWith(
+			'/gallery/your-studio',
+			expect.objectContaining({ replace: true, shallow: true, state: {} })
+		);
 		await expect
 			.element(
 				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
@@ -775,7 +736,7 @@ describe('GalleryExplorationPage', () => {
 			})
 		);
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
 			emptyStateMessage: null,
 			loadArtworkDetail,
@@ -839,7 +800,7 @@ describe('GalleryExplorationPage', () => {
 			})
 		);
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{
 					...baseArtwork,
@@ -877,7 +838,9 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByRole('button', { name: /👍\s*1/ })).toBeVisible();
 		await expect.element(roomCard.getByText('⭐ 1')).toBeVisible();
 		await expect.element(roomCard.getByText('💬 1')).toBeVisible();
-		await expect.element(page.getByText('Realtime hello')).toBeVisible();
+		// The visitor's book is on the back of the postcard, inert until it turns.
+		await page.getByRole('button', { name: 'Read the comments' }).click();
+		await expect.element(page.getByText('Realtime hello', { exact: false })).toBeVisible();
 	});
 
 	it('opens artwork detail from a visible virtualized studio card without losing room context', async () => {
@@ -888,7 +851,7 @@ describe('GalleryExplorationPage', () => {
 			title: 'Artwork 3'
 		}));
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: Array.from({ length: 6 }, (_, index) => ({
 				...baseArtwork,
 				id: `artwork-${index + 1}`,
@@ -916,7 +879,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('shows end-of-list indicator in your-studio when all artworks are loaded', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: Array.from({ length: 6 }, (_, index) => ({
 				...baseArtwork,
 				id: `artwork-${index + 1}`,
@@ -943,7 +906,7 @@ describe('GalleryExplorationPage', () => {
 		}>();
 		const loadMoreArtworks = vi.fn(() => deferred.promise);
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: Array.from({ length: 3 }, (_, index) => ({
 				...baseArtwork,
 				id: `artwork-${index + 1}`,
@@ -1008,7 +971,7 @@ describe('GalleryExplorationPage', () => {
 			}
 		);
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: Array.from({ length: 3 }, (_, index) => ({
 				...baseArtwork,
 				id: `artwork-${index + 1}`,
@@ -1074,7 +1037,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('renders your-studio grid rows matching the responsive column count', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: Array.from({ length: 6 }, (_, index) => ({
 				...baseArtwork,
 				id: `artwork-${index + 1}`,
@@ -1102,7 +1065,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('renders a partially-filled hall-of-fame podium without duplicate key crashes', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
 				{ ...baseArtwork, id: 'artwork-2', rank: 2, title: 'Runner Up' }
@@ -1127,7 +1090,7 @@ describe('GalleryExplorationPage', () => {
 			pageInfo: { hasMore: false, nextCursor: null }
 		}));
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
 				{ ...baseArtwork, id: 'artwork-2', rank: 2, title: 'Runner Up' },
@@ -1183,7 +1146,7 @@ describe('GalleryExplorationPage', () => {
 		}>();
 		const loadMoreArtworks = vi.fn(() => deferred.promise);
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
 				{ ...baseArtwork, id: 'artwork-2', rank: 2, title: 'Runner Up' },
@@ -1235,7 +1198,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('shows end-of-list in hall-of-fame when all ranked artworks are loaded', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
 				{ ...baseArtwork, id: 'artwork-2', rank: 2, title: 'Runner Up' },
@@ -1260,7 +1223,7 @@ describe('GalleryExplorationPage', () => {
 			throw new Error('Gallery discovery could not be loaded');
 		});
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
 				{ ...baseArtwork, id: 'artwork-2', rank: 2, title: 'Runner Up' },
@@ -1310,7 +1273,7 @@ describe('GalleryExplorationPage', () => {
 		);
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			adultContentEnabled: false,
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', isNsfw: true, rank: 1, title: 'Adults only study' }
@@ -1340,7 +1303,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('does not show the 18+ note in your studio', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			adultContentEnabled: false,
 			artworks: [{ ...baseArtwork, id: 'artwork-1', isNsfw: true, title: 'Private Study' }],
 			emptyStateMessage: null,
@@ -1354,7 +1317,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('uses frames only for the top-three podium artworks in hall of fame', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion' },
 				{ ...baseArtwork, id: 'artwork-2', rank: 2, title: 'Runner Up' },
@@ -1399,7 +1362,7 @@ describe('GalleryExplorationPage', () => {
 			pageInfo: { hasMore: false, nextCursor: null }
 		}));
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: mysteryArtworks,
 			discovery: {
 				pageInfo: { hasMore: true, nextCursor: 'mystery-cursor-1' },
@@ -1435,7 +1398,7 @@ describe('GalleryExplorationPage', () => {
 		const fetchRandomArtwork = vi.fn(async () => landedArtwork);
 		const loadArtworkDetail = vi.fn(async () => landedArtwork);
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'mystery-0', title: 'Mystery Art 0' },
 				{ ...baseArtwork, id: 'mystery-1', title: 'Mystery Art 1' }
@@ -1493,7 +1456,7 @@ describe('GalleryExplorationPage', () => {
 			pageInfo: { hasMore: false, nextCursor: null }
 		}));
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: mysteryArtworks,
 			discovery: {
 				pageInfo: { hasMore: true, nextCursor: 'mystery-cursor-1' },
@@ -1526,7 +1489,7 @@ describe('GalleryExplorationPage', () => {
 	it('reserves the podium shape while the hall of fame room streams', async () => {
 		const pending = createDeferred<never>();
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			room: getGalleryRoom('hall-of-fame'),
 			roomContent: pending.promise,
 			roomId: 'hall-of-fame'
@@ -1547,7 +1510,7 @@ describe('GalleryExplorationPage', () => {
 	it('reserves the reel shape — and no grid — while the mystery room streams', async () => {
 		const pending = createDeferred<never>();
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			room: getGalleryRoom('mystery'),
 			roomContent: pending.promise,
 			roomId: 'mystery'
@@ -1570,7 +1533,7 @@ describe('GalleryExplorationPage', () => {
 			emptyStateMessage: string | null;
 		}>();
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			room: getGalleryRoom('your-studio'),
 			roomContent: deferred.promise,
 			roomId: 'your-studio',
@@ -1602,7 +1565,7 @@ describe('GalleryExplorationPage', () => {
 			throw new Error('Artwork details could not be loaded');
 		});
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
 			emptyStateMessage: null,
 			loadArtworkDetail,
@@ -1614,7 +1577,7 @@ describe('GalleryExplorationPage', () => {
 		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
 
 		const statusRegion = page.getByTestId('gallery-status-region');
-		await expect.element(statusRegion).toHaveTextContent('Artwork details could not be loaded');
+		await expect.element(statusRegion).toMatchTextContent('Artwork details could not be loaded');
 		// A failure is worth interrupting for — and it says so from a fixed
 		// region, so the room is not shoved down to make room for the notice.
 		await expect.element(statusRegion).toHaveAttribute('role', 'alert');
@@ -1642,7 +1605,7 @@ describe('GalleryExplorationPage', () => {
 			emptyStateMessage: string | null;
 		}>();
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			room: getGalleryRoom('hot-wall'),
 			roomContent: deferred.promise,
 			roomId: 'hot-wall',
@@ -1680,7 +1643,7 @@ describe('GalleryExplorationPage', () => {
 			emptyStateMessage: string | null;
 		}>();
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			room: getGalleryRoom('your-studio'),
 			roomContent: deferred.promise,
 			roomId: 'your-studio',
@@ -1688,7 +1651,7 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		const status = page.getByTestId('gallery-room-status');
-		await expect.element(status).toHaveTextContent('Loading artworks');
+		await expect.element(status).toMatchTextContent('Loading artworks');
 		// The region predates its message and survives the skeleton it describes.
 		expect(
 			document.querySelector('[data-testid="room-loading-skeleton"] [role="status"]')
@@ -1711,14 +1674,14 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		// The end of the wait is announced too, from the same region.
-		await expect.element(status).toHaveTextContent('2 artworks loaded.');
+		await expect.element(status).toMatchTextContent('2 artworks loaded.');
 	});
 
 	it('announces a room that failed to stream as an alert', async () => {
 		const deferred = createDeferred<never>();
 		deferred.promise.catch(() => {});
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			room: getGalleryRoom('hot-wall'),
 			roomContent: deferred.promise,
 			roomId: 'hot-wall',
@@ -1733,11 +1696,11 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('tells a hot wall failure apart from a quiet hot wall', async () => {
-		invalidateAll.mockReset();
+		refreshAll.mockReset();
 		const deferred = createDeferred<never>();
 		deferred.promise.catch(() => {});
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			room: getGalleryRoom('hot-wall'),
 			roomContent: deferred.promise,
 			roomId: 'hot-wall',
@@ -1754,7 +1717,7 @@ describe('GalleryExplorationPage', () => {
 
 		await page.getByRole('button', { name: 'Try again' }).click();
 		await vi.waitFor(() => {
-			expect(invalidateAll).toHaveBeenCalledTimes(1);
+			expect(refreshAll).toHaveBeenCalledTimes(1);
 		});
 	});
 
@@ -1765,7 +1728,7 @@ describe('GalleryExplorationPage', () => {
 			title: 'Champion Study'
 		}));
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion Study' },
 				{ ...baseArtwork, id: 'artwork-2', title: 'Runner Up Study' },
@@ -1804,7 +1767,7 @@ describe('GalleryExplorationPage', () => {
 			title: 'Artwork 3'
 		}));
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: Array.from({ length: 6 }, (_, index) => ({
 				...baseArtwork,
 				id: `artwork-${index + 1}`,
@@ -1849,7 +1812,7 @@ describe('GalleryExplorationPage', () => {
 			title: 'Champion Study'
 		}));
 
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [
 				{ ...baseArtwork, id: 'artwork-1', rank: 1, title: 'Champion Study' },
 				{ ...baseArtwork, id: 'artwork-2', title: 'Runner Up Study' },
@@ -1876,7 +1839,7 @@ describe('GalleryExplorationPage', () => {
 	});
 
 	it('gives anonymous visitors a way in from the empty room', async () => {
-		render(GalleryExplorationPage, {
+		await render(GalleryExplorationPage, {
 			artworks: [],
 			emptyStateMessage: 'No artworks have reached this gallery room yet.',
 			room: getGalleryRoom('hall-of-fame'),

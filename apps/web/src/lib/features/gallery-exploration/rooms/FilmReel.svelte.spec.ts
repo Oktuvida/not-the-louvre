@@ -7,7 +7,7 @@ vi.mock('$app/environment', () => ({
 	browser: true
 }));
 
-vi.mock('$lib/client/gsap', () => {
+vi.mock('#lib/client/gsap.js', () => {
 	return {
 		gsap: {
 			to: (proxy: Record<string, number>, config: Record<string, unknown>) => {
@@ -35,8 +35,8 @@ vi.mock('$lib/client/gsap', () => {
 	};
 });
 
-import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import { makeArtwork } from '#lib/features/gallery-exploration/fixtures/artworks.js';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 import FilmReel from './FilmReel.svelte';
 import RoomHarness from './RoomHarness.svelte';
 
@@ -62,7 +62,7 @@ describe('FilmReel', () => {
 	it('renders frame images with width and height attributes matching frameSize', async () => {
 		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
 
-		renderReel({ artworks });
+		await renderReel({ artworks });
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
@@ -85,7 +85,7 @@ describe('FilmReel', () => {
 	it('keeps only transform and opacity in the per-tick inline style', async () => {
 		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
 
-		renderReel({ artworks });
+		await renderReel({ artworks });
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
@@ -100,7 +100,7 @@ describe('FilmReel', () => {
 		const onIdleProgress = vi.fn();
 		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
 
-		renderReel({ artworks, onIdleProgress });
+		await renderReel({ artworks, onIdleProgress });
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
@@ -114,7 +114,7 @@ describe('FilmReel', () => {
 		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
 		let reel: Record<string, unknown> | undefined;
 
-		renderReel({ artworks }, (instance) => {
+		await renderReel({ artworks }, (instance) => {
 			reel = instance;
 		});
 
@@ -137,7 +137,7 @@ describe('FilmReel', () => {
 			createArtwork('f3')
 		];
 
-		renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
+		await renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
@@ -151,7 +151,7 @@ describe('FilmReel', () => {
 			createArtwork('f3')
 		];
 
-		renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
+		await renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
 
@@ -171,7 +171,7 @@ describe('FilmReel', () => {
 				createArtwork('f3')
 			];
 
-			renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
+			await renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
 
 			await expect.element(page.getByTestId('film-reel')).toBeVisible();
 

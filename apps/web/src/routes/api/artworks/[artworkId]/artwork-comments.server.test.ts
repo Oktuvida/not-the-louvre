@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 const mocked = vi.hoisted(() => ({
 	createArtworkComment: vi.fn(),
@@ -8,16 +8,16 @@ const mocked = vi.hoisted(() => ({
 	listArtworkCommentsForViewer: vi.fn()
 }));
 
-vi.mock('$lib/server/artwork/service', () => ({
+vi.mock('#lib/server/artwork/service.js', () => ({
 	createArtworkComment: mocked.createArtworkComment,
 	deleteArtworkComment: mocked.deleteArtworkComment
 }));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	listArtworkCommentsForViewer: mocked.listArtworkCommentsForViewer
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		options: {}
 	}

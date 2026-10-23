@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 const mocked = {
 	getIp: vi.fn(() => '127.0.0.1'),
@@ -8,13 +8,13 @@ const mocked = {
 	submitContentReport: vi.fn()
 };
 
-vi.mock('$lib/server/artwork/service', () => ({
+vi.mock('#lib/server/artwork/service.js', () => ({
 	moderateArtwork: mocked.moderateArtwork,
 	moderateComment: mocked.moderateComment,
 	submitContentReport: mocked.submitContentReport
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		options: {}
 	}

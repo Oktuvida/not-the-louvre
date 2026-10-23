@@ -1,12 +1,12 @@
 <script lang="ts">
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import type {
 		GalleryPageInfo,
 		LoadMoreArtworks
-	} from '$lib/features/gallery-exploration/model/discovery';
-	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
-	import { createSeededAccumulator } from '$lib/features/gallery-exploration/use-seeded-accumulator.svelte';
+	} from '#lib/features/gallery-exploration/model/discovery.js';
+	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
+	import { createSeededAccumulator } from '#lib/features/gallery-exploration/use-seeded-accumulator.svelte.js';
 	import type { Writable } from 'svelte/store';
 	import FilmReel from './FilmReel.svelte';
 

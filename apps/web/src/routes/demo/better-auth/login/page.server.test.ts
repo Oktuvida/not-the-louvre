@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Actions } from './$types';
 
 type LoginActionEvent = Parameters<Actions['signUp']>[0];
-import { AuthFlowError } from '$lib/server/auth/errors';
+import { AuthFlowError } from '#lib/server/auth/errors.js';
 
 const mocked = vi.hoisted(() => ({
 	getNicknameAvailability: vi.fn(),
@@ -13,14 +13,14 @@ const mocked = vi.hoisted(() => ({
 	getIp: vi.fn(() => '127.0.0.1')
 }));
 
-vi.mock('$lib/server/auth/service', () => ({
+vi.mock('#lib/server/auth/service.js', () => ({
 	getNicknameAvailability: mocked.getNicknameAvailability,
 	recoverAccount: mocked.recoverAccount,
 	signInWithNickname: mocked.signInWithNickname,
 	signUpWithNickname: mocked.signUpWithNickname
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		options: {}
 	}

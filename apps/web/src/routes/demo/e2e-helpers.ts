@@ -29,7 +29,9 @@ export const deterministicArtwork = {
 } as const;
 
 export const resetDemoState = async (request: APIRequestContext) => {
-	const response = await request.post('/demo/test-support/reset');
+	// A body makes this a JSON request: SvelteKit 3 refuses body-less cross-site
+	// POSTs as if they were form submissions.
+	const response = await request.post('/demo/test-support/reset', { data: {} });
 	expect(response.ok(), 'expected demo reset endpoint to succeed').toBe(true);
 	return response;
 };

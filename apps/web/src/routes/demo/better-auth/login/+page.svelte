@@ -6,10 +6,7 @@
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
-<nav>
-	<a href={resolve('/demo')}>Back to demo index</a>
-</nav>
-
+<nav><a href={resolve('demo')}>Back to demo index</a></nav>
 <h1>Nickname Auth Demo</h1>
 <p>Authentication demo state: signed out</p>
 <p>Use this page to test nickname availability, account creation, login, and recovery.</p>
@@ -30,9 +27,11 @@
 			class="mt-1 rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
 		/>
 	</label>
+
 	<button class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
 		>Login with nickname</button
 	>
+
 	<button
 		formaction="?/signUp"
 		class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"

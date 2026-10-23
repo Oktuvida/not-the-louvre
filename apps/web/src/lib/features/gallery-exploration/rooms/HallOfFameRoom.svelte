@@ -1,20 +1,20 @@
 <script lang="ts">
-	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
-	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
-	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
-	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import ArtworkFrame from '#lib/features/artwork-presentation/components/ArtworkFrame.svelte';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import { resolveArtworkFrame } from '#lib/features/artwork-presentation/model/frame.js';
+	import NsfwImage from '#lib/features/gallery-exploration/components/NsfwImage.svelte';
+	import ScrollSentinel from '#lib/features/gallery-exploration/components/ScrollSentinel.svelte';
+	import VirtualizedGrid from '#lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
 	import type {
 		GalleryPageInfo,
 		LoadMoreArtworks
-	} from '$lib/features/gallery-exploration/model/discovery';
-	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
-	import { createSeededAccumulator } from '$lib/features/gallery-exploration/use-seeded-accumulator.svelte';
-	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
-	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
-	import WaxSealMedal from '$lib/features/shared-ui/components/WaxSealMedal.svelte';
+	} from '#lib/features/gallery-exploration/model/discovery.js';
+	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import { createSeededAccumulator } from '#lib/features/gallery-exploration/use-seeded-accumulator.svelte.js';
+	import PolaroidCard from '#lib/features/shared-ui/components/PolaroidCard.svelte';
+	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import WaxSealMedal from '#lib/features/shared-ui/components/WaxSealMedal.svelte';
 	import { writable, type Writable } from 'svelte/store';
 
 	interface Props {

@@ -5,7 +5,7 @@ import {
 	decodeImage,
 	encodePng,
 	sniffImageFormat
-} from '$lib/server/media/codecs';
+} from '#lib/server/media/codecs/index.js';
 
 const FAVICON_SIZE = 64;
 const FAVICON_RADIUS = 18;

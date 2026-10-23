@@ -7,7 +7,7 @@ import type { Sql } from 'postgres';
 import {
 	createEmptyDrawingDocument,
 	serializeDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 
 const testFileDirectory = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(testFileDirectory, '../../../../../../');

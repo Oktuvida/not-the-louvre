@@ -21,7 +21,7 @@ describe('AmbientParticleOverlay', () => {
 	});
 
 	it('runs the ambience while the layer is on screen and the tab is visible', async () => {
-		render(AmbientParticleOverlay, {});
+		await render(AmbientParticleOverlay, {});
 
 		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
 
@@ -31,7 +31,7 @@ describe('AmbientParticleOverlay', () => {
 	});
 
 	it('pauses 23 permanently-animating elements when the tab is hidden', async () => {
-		render(AmbientParticleOverlay, {});
+		await render(AmbientParticleOverlay, {});
 
 		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
 
@@ -47,7 +47,7 @@ describe('AmbientParticleOverlay', () => {
 	});
 
 	it('resumes when the tab comes back', async () => {
-		render(AmbientParticleOverlay, {});
+		await render(AmbientParticleOverlay, {});
 
 		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
 

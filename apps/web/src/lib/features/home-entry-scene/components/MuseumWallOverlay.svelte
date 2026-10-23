@@ -1,30 +1,30 @@
 <script lang="ts">
 	import { Paintbrush } from 'lucide-svelte';
 	import { onMount } from 'svelte';
-	import { gsap } from '$lib/client/gsap';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import graffitiLogoUrl from '$lib/assets/logo-graffiti.svg';
-	import { applyMuseumWallWillChange } from '$lib/features/home-entry-scene/components/museum-wall-will-change';
+	import { gsap } from '#lib/client/gsap.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import graffitiLogoUrl from '#lib/assets/logo-graffiti.svg';
+	import { applyMuseumWallWillChange } from '#lib/features/home-entry-scene/components/museum-wall-will-change.js';
 	import {
 		WALL_ZOOM_REDUCED_MOTION_DURATION_MS,
 		playWallZoomIn,
 		playWallZoomOut,
 		resetWallZoom,
 		type WallZoomGeometry
-	} from '$lib/features/home-entry-scene/components/museum-wall-zoom';
-	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
-	import { waitForPageLayoutReady } from '$lib/features/home-entry-scene/components/page-layout-ready';
-	import MuseumWindowFrame from '$lib/features/home-entry-scene/components/MuseumWindowFrame.svelte';
+	} from '#lib/features/home-entry-scene/components/museum-wall-zoom.js';
+	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import { waitForPageLayoutReady } from '#lib/features/home-entry-scene/components/page-layout-ready.js';
+	import MuseumWindowFrame from '#lib/features/home-entry-scene/components/MuseumWindowFrame.svelte';
 	import {
 		museumWindowAspectRatio,
 		museumWindowOpening
-	} from '$lib/features/home-entry-scene/canvas/museum-canvas';
-	import { rasterizeSvgUrl } from '$lib/features/home-entry-scene/canvas/svg-bitmap';
-	import { museumWallPatternAssetUrl } from '$lib/features/shared-ui/generated-art';
+	} from '#lib/features/home-entry-scene/canvas/museum-canvas.js';
+	import { rasterizeSvgUrl } from '#lib/features/home-entry-scene/canvas/svg-bitmap.js';
+	import { museumWallPatternAssetUrl } from '#lib/features/shared-ui/generated-art.js';
 	import type {
 		EntryFlowEvent,
 		EntryFlowState
-	} from '$lib/features/home-entry-scene/state/entry-state.svelte';
+	} from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
 
 	const WINDOW_MARGIN = 80;
 	const FINAL_ZOOM_MULTIPLIER = 1.1;

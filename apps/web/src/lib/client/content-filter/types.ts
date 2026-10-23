@@ -1,4 +1,4 @@
-import type { TextModerationContext } from '$lib/shared/moderation/text-policy';
+import type { TextModerationContext } from '#lib/shared/moderation/text-policy.js';
 
 export type ContentFilterResult =
 	| { status: 'allowed' }

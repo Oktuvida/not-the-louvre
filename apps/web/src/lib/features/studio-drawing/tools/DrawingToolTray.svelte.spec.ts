@@ -1,7 +1,7 @@
 import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
+import { drawingPalette } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 // The paper is a global utility, which the browser project does not load for a
 // component under test; the tray's own sheet is what this spec is checking.
 import '../../../../routes/layout.css';
@@ -12,7 +12,7 @@ describe('DrawingToolTray', () => {
 		const onClear = vi.fn();
 		const onPublish = vi.fn();
 
-		render(DrawingToolTray, { onClear, onPublish });
+		await render(DrawingToolTray, { onClear, onPublish });
 
 		await expect
 			.element(page.getByRole('button', { name: 'Clear' }))
@@ -28,13 +28,13 @@ describe('DrawingToolTray', () => {
 	});
 
 	it('disables publish while a publish request is in flight', async () => {
-		render(DrawingToolTray, { isPublishing: true });
+		await render(DrawingToolTray, { isPublishing: true });
 
 		await expect.element(page.getByRole('button', { name: 'Publishing…' })).toBeDisabled();
 	});
 
 	it('is cut from the same paper as every other sheet in the museum', async () => {
-		render(DrawingToolTray, {});
+		await render(DrawingToolTray, {});
 
 		const tray = document.querySelector<HTMLElement>('.tool-tray');
 		expect(tray).not.toBeNull();
@@ -61,7 +61,7 @@ describe('DrawingToolTray', () => {
 	});
 
 	it('draws the shared focus ring on the brush size slider', async () => {
-		render(DrawingToolTray, {});
+		await render(DrawingToolTray, {});
 
 		const slider = document.querySelector<HTMLInputElement>('#brush-size');
 		expect(slider).not.toBeNull();
@@ -82,7 +82,7 @@ describe('DrawingToolTray', () => {
 	});
 
 	it('shows the full color palette directly on mobile', async () => {
-		render(DrawingToolTray, { mobile: true });
+		await render(DrawingToolTray, { mobile: true });
 
 		await expect
 			.element(page.getByRole('button', { name: `Select color ${drawingPalette[10]}` }))

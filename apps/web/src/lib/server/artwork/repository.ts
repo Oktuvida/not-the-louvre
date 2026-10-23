@@ -1,5 +1,5 @@
 import { and, asc, count, eq, sql } from 'drizzle-orm';
-import { db } from '$lib/server/db';
+import { db } from '#lib/server/db/index.js';
 import {
 	artworkComments,
 	artworkEngagementRateLimits,
@@ -8,8 +8,11 @@ import {
 	artworkVotes,
 	artworks,
 	users
-} from '$lib/server/db/schema';
-import { rateLimitAttemptSet, rateLimitFirstAttemptBlockedUntil } from '$lib/server/db/rate-limit';
+} from '#lib/server/db/schema.js';
+import {
+	rateLimitAttemptSet,
+	rateLimitFirstAttemptBlockedUntil
+} from '#lib/server/db/rate-limit.js';
 import type {
 	ArtworkCommentRecord,
 	ArtworkCommentView,

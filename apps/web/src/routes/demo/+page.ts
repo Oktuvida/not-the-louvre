@@ -1,5 +1,5 @@
 import type { PageLoad } from './$types';
-import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
+import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
 
 // The demo index has no data of its own; it exists so the route can name
 // itself the way every other route does. The root layout renders the only
