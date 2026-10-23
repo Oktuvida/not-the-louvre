@@ -51,4 +51,32 @@ test.describe('sign-in lockout', () => {
 			status: 429
 		});
 	});
+
+	test("a locked-out visitor cannot sign in through Better Auth's own endpoint instead", async ({
+		baseURL,
+		request
+	}) => {
+		const { nickname, password } = deterministicAuthUser;
+		const headers = { origin: baseURL ?? '', 'x-sveltekit-action': 'true' };
+		const post = async (action: string, form: Record<string, string>) =>
+			(await request.post(`/?/${action}`, { form, headers })).json();
+
+		expect(await post('signUp', { nickname, password })).toMatchObject({ type: 'success' });
+		let lastGuess: unknown;
+		for (let guess = 1; guess <= 5; guess++) {
+			lastGuess = await post('signIn', { nickname, password: 'not-the-password' });
+		}
+		expect(lastGuess).toMatchObject({ type: 'failure', status: 429 });
+
+		// Better Auth answers on the configured ORIGIN, as production does, and the
+		// e2e server is configured with 127.0.0.1.
+		const origin = new URL(baseURL ?? '').origin.replace('localhost', '127.0.0.1');
+		const response = await request.post(`${origin}/api/auth/sign-in/username`, {
+			data: { username: nickname, password },
+			headers: { origin }
+		});
+
+		expect(response.ok()).toBe(false);
+		expect(response.headers()['set-cookie'] ?? '').not.toContain('session_token');
+	});
 });

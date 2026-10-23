@@ -1,12 +1,9 @@
 import { type RequestEvent } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit/hooks';
-import { building } from '$app/env';
-import { auth } from '#lib/server/auth.js';
 import { resolveSessionContext } from '#lib/server/auth/service.js';
 import { runWithRequestDbConnection } from '#lib/server/db/index.js';
 import { logSecurityEvent } from '#lib/server/security/logging.js';
 import { getTrustedOriginDecision } from '#lib/server/security/trusted-origin.js';
-import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { hyperdriveConnectionString } from '#lib/server/platform.js';
 
 // Reads whose answer depends only on the route params: the media reader ignores
@@ -68,7 +65,10 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 		event.locals.user = sessionContext.user;
 	}
 
-	return svelteKitHandler({ event, resolve, auth, building });
+	// Better Auth's own HTTP endpoints (/api/auth/*) stay unmounted. Sign-up and
+	// sign-in go through the product's form actions, which apply the lockout
+	// and create the gallery profile; the raw endpoints skipped both.
+	return resolve(event);
 };
 
 export const handle: Handle = (input) =>
