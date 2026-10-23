@@ -33,15 +33,15 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 
 **Se quita o se reemplaza:**
 
-| Hoy | Por qué sobra | Reemplazo |
-|---|---|---|
-| Codec Rust/WASM y compactación de trazos | gzip y validación ya existen en la plataforma y en TS; la compactación destruye el historial | Paquete TS `stroke` con `CompressionStream` |
-| Escalera AVIF 4:2:0 en el Worker | Degrada visiblemente los trazos de color | Una WebP sin pérdida de 768 px renderizada con resvg |
-| Documentos en base64 dentro de Postgres, escritos en trozos | Workaround del pooler de Supabase | Objetos inmutables en R2 |
-| Supabase Storage y Realtime | Realtime solo avisa "vuelve a cargar" | R2, polling y Durable Objects para las salas |
-| Drizzle con postgres.js y `prepare: false` sobre Hyperdrive | Cloudflare lo declara no soportado | `pg` con `drizzle-orm/node-postgres` |
-| Capas service/repository probadas con fakes que reimplementan el SQL | El SQL real no se probaba en CI | Módulos por feature probados contra Postgres |
-| openspec, devenv, tests que hacen grep del CSS | Ceremonia sin retorno | Se conservan marcados como obsoletos; los tests de CSS caen con su componente |
+| Hoy                                                                  | Por qué sobra                                                                                | Reemplazo                                                                     |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Codec Rust/WASM y compactación de trazos                             | gzip y validación ya existen en la plataforma y en TS; la compactación destruye el historial | Paquete TS `stroke` con `CompressionStream`                                   |
+| Escalera AVIF 4:2:0 en el Worker                                     | Degrada visiblemente los trazos de color                                                     | Una WebP sin pérdida de 768 px renderizada con resvg                          |
+| Documentos en base64 dentro de Postgres, escritos en trozos          | Workaround del pooler de Supabase                                                            | Objetos inmutables en R2                                                      |
+| Supabase Storage y Realtime                                          | Realtime solo avisa "vuelve a cargar"                                                        | R2, polling y Durable Objects para las salas                                  |
+| Drizzle con postgres.js y `prepare: false` sobre Hyperdrive          | Cloudflare lo declara no soportado                                                           | `pg` con `drizzle-orm/node-postgres`                                          |
+| Capas service/repository probadas con fakes que reimplementan el SQL | El SQL real no se probaba en CI                                                              | Módulos por feature probados contra Postgres                                  |
+| openspec, devenv, tests que hacen grep del CSS                       | Ceremonia sin retorno                                                                        | Se conservan marcados como obsoletos; los tests de CSS caen con su componente |
 
 ## Fases
 
@@ -54,10 +54,12 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Cuarentena de e2e: los 3 de compactación se sustituyeron por tests de recorrido (se publica cada trazo dibujado; el borrador sobrevive a una recarga) y el de la sala misteriosa era un test desactualizado (los comentarios están en el reverso de la postal). Quedan 2 de buffering del lienzo, que se reescriben en la fase 4.
 - [x] Bug: sin WebGL no se podía entrar; la escena 3D vive ahora dentro de un `<svelte:boundary>` (`be8a92d`).
 - [x] Driver `pg` con `drizzle-orm/node-postgres`: un `Client` por petición en Workers, sin `end()`, y un pool en Node. Probado en workerd con `wrangler dev` y Hyperdrive emulado.
-- [ ] Dos configuraciones de Hyperdrive, con y sin caché, y elegir la correcta por petición. **Bloquea el corte:** con `pg` la caché de Hyperdrive (60 s, sin invalidar al escribir) empieza a aplicar. *Requiere acceso a Cloudflare.*
+- [ ] Dos configuraciones de Hyperdrive, con y sin caché, y elegir la correcta por petición. **Bloquea el corte:** con `pg` la caché de Hyperdrive (60 s, sin invalidar al escribir) empieza a aplicar. _Requiere acceso a Cloudflare._
 - [ ] Los reintentos de `chunked-write.ts` y de la publicación detectan códigos de postgres.js y asumen reconexión automática; con `pg` quedan inertes. Desaparecen en la fase 2 al mover los documentos a R2; hasta entonces, un corte de conexión en una publicación es un 500.
-- [ ] Conexión directa a Supabase por IPv4. *Requiere acceso a Supabase.*
-- [ ] Better Auth 1.7, rate limit en base de datos y un e2e de petición abortada.
+- [ ] Conexión directa a Supabase por IPv4. _Requiere acceso a Supabase._
+- [x] Better Auth 1.7.12 (`a480b83`), sin migración de datos: desde la 1.7.3 la tabla `account` es la misma que en la 1.6. La 1.4.22 de producción carga `node:async_hooks` con una importación dinámica dentro de la primera petición; en Workers, si esa petición se cancela, el isolate deja de responder a todo lo que pase por Better Auth (issue upstream #10315). La 1.7.12 usa `process.getBuiltinModule`, síncrono en workerd, y no tiene ese fallo.
+- [x] Bug de seguridad: la IP de los rate limits salía del primer valor de `X-Forwarded-For`, que escribe el cliente; con un valor inventado por petición se saltaban el bloqueo de login, el de recuperación y los límites de votos, comentarios y reportes. Ahora sale de `CF-Connecting-IP` (`538abae`).
+- [x] Bug de seguridad: `/api/auth/*` exponía la API HTTP entera de Better Auth, que la app no usa; con ella una cuenta bloqueada entraba igual y se podían crear usuarios sin perfil. Ya no se monta (`d653ad5`). Como el bloqueo propio cubre el login, el rate limit de Better Auth no hace falta.
 
 ### 1. Plataforma y poda
 
