@@ -51,9 +51,8 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Plan e informe dentro del repo.
 - [x] Suite de contrato SQL en CI contra Postgres (job `database`).
 - [x] Tests e2e en CI, excepto los `@realtime`, que necesitan Supabase Realtime y desaparecen en la fase 2.
-- [ ] Sacar de cuarentena los 6 e2e marcados con `test.fixme`: 3 de compactación (la compactación ya no existe; se reescriben como "publica el dibujo tal como se dibujó"), 2 de buffering del lienzo (fase 4) y el de la sala misteriosa (bug de interfaz, abajo).
-- [ ] Bug: sin WebGL no se puede entrar. La escena 3D de la home lanza un error y "Come In" nunca abre el panel de login. Comprobado en producción con Chromium headless. El login no puede depender de la escena.
-- [ ] Bug: en el detalle, a 1280×720, el pie de la postal tapa el botón "Send comment".
+- [x] Cuarentena de e2e: los 3 de compactación se sustituyeron por tests de recorrido (se publica cada trazo dibujado; el borrador sobrevive a una recarga) y el de la sala misteriosa era un test desactualizado (los comentarios están en el reverso de la postal). Quedan 2 de buffering del lienzo, que se reescriben en la fase 4.
+- [x] Bug: sin WebGL no se podía entrar; la escena 3D vive ahora dentro de un `<svelte:boundary>` (`be8a92d`).
 - [ ] Driver `pg` y dos configuraciones de Hyperdrive, con y sin caché. *Requiere acceso a Cloudflare.*
 - [ ] Conexión directa a Supabase por IPv4. *Requiere acceso a Supabase.*
 - [ ] Better Auth 1.7, rate limit en base de datos y un e2e de petición abortada.
