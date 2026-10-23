@@ -7,7 +7,7 @@ type PublishActionEvent = Parameters<Actions['publish']>[0];
 
 const mocked = vi.hoisted(() => ({
 	getArtworkDetail: vi.fn(),
-	getIp: vi.fn(() => '127.0.0.1'),
+	getIP: vi.fn(() => '127.0.0.1'),
 	listArtworkDiscovery: vi.fn(),
 	publishArtwork: vi.fn()
 }));
@@ -28,7 +28,7 @@ vi.mock('#lib/server/auth.js', () => ({
 }));
 
 vi.mock('better-auth/api', () => ({
-	getIp: mocked.getIp
+	getIP: mocked.getIP
 }));
 
 const authenticatedUser = {
@@ -70,7 +70,7 @@ describe('artwork publish demo page', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mocked.getArtworkDetail.mockReset();
-		mocked.getIp.mockClear();
+		mocked.getIP.mockClear();
 		mocked.listArtworkDiscovery.mockReset();
 		mocked.publishArtwork.mockReset();
 		mocked.listArtworkDiscovery.mockResolvedValue({

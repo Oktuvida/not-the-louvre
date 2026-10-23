@@ -13,7 +13,7 @@ type HomeActionEvent = Parameters<Actions['signUp']>[0];
 const mocked = vi.hoisted(() => ({
 	decodeCompressedDrawingDocumentToEditableDocument: vi.fn(),
 	findUserById: vi.fn(),
-	getIp: vi.fn(() => '127.0.0.1'),
+	getIP: vi.fn(() => '127.0.0.1'),
 	getViewerContentPreferences: vi.fn(),
 	getNicknameAvailability: vi.fn(),
 	listArtworkDiscovery: vi.fn(),
@@ -64,7 +64,7 @@ vi.mock('#lib/server/drawing-document/storage.js', () => ({
 }));
 
 vi.mock('better-auth/api', () => ({
-	getIp: mocked.getIp
+	getIP: mocked.getIP
 }));
 
 const createEvent = (
@@ -101,7 +101,7 @@ const createEvent = (
 describe('home route auth contract', () => {
 	beforeEach(() => {
 		vi.resetModules();
-		mocked.getIp.mockClear();
+		mocked.getIP.mockClear();
 		mocked.getViewerContentPreferences.mockReset();
 		mocked.getNicknameAvailability.mockReset();
 		mocked.listArtworkDiscovery.mockReset();

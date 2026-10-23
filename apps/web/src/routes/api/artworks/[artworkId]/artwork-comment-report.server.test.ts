@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 const mocked = {
-	getIp: vi.fn(() => '127.0.0.1'),
+	getIP: vi.fn(() => '127.0.0.1'),
 	moderateArtwork: vi.fn(),
 	moderateComment: vi.fn(),
 	submitContentReport: vi.fn()
@@ -21,12 +21,12 @@ vi.mock('#lib/server/auth.js', () => ({
 }));
 
 vi.mock('better-auth/api', () => ({
-	getIp: mocked.getIp
+	getIP: mocked.getIP
 }));
 
 describe('artwork comment report endpoint', () => {
 	beforeEach(() => {
-		mocked.getIp.mockClear();
+		mocked.getIP.mockClear();
 		mocked.submitContentReport.mockReset();
 	});
 

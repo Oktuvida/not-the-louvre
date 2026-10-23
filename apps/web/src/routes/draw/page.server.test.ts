@@ -7,7 +7,7 @@ type DrawPublishActionEvent = Parameters<Actions['publish']>[0];
 
 const mocked = vi.hoisted(() => ({
 	decodeCompressedDrawingDocumentToEditableDocument: vi.fn(),
-	getIp: vi.fn(() => '127.0.0.1'),
+	getIP: vi.fn(() => '127.0.0.1'),
 	getArtworkDetail: vi.fn(),
 	publishArtwork: vi.fn()
 }));
@@ -32,7 +32,7 @@ vi.mock('#lib/server/auth.js', () => ({
 }));
 
 vi.mock('better-auth/api', () => ({
-	getIp: mocked.getIp
+	getIP: mocked.getIP
 }));
 
 const authenticatedUser = {
@@ -89,7 +89,7 @@ describe('draw route page', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockReset();
-		mocked.getIp.mockClear();
+		mocked.getIP.mockClear();
 		mocked.getArtworkDetail.mockReset();
 		mocked.publishArtwork.mockReset();
 		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockResolvedValue({

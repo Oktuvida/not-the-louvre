@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { getIp } from 'better-auth/api';
+import { getIP } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '#lib/server/auth.js';
 import { decodeCompressedDrawingDocumentToEditableDocument } from '#lib/server/drawing-document/storage.js';
@@ -98,7 +98,7 @@ export const actions: Actions = {
 					title
 				},
 				{
-					ipAddress: getIp(event.request, auth.options),
+					ipAddress: getIP(event.request, auth.options),
 					user: event.locals.user
 				}
 			);

@@ -1,4 +1,4 @@
-import { getIp } from 'better-auth/api';
+import { getIP } from 'better-auth/api';
 import type { RequestHandler } from './$types';
 import { auth } from '#lib/server/auth.js';
 import { listArtworkCommentsForViewer } from '#lib/server/artwork/read.service.js';
@@ -22,7 +22,7 @@ export const POST: RequestHandler = async (event) => {
 		const body = (await event.request.json()) as { body?: string };
 		const comment = await createArtworkComment(
 			{ artworkId: event.params.artworkId, body: body.body ?? '' },
-			{ ipAddress: getIp(event.request, auth.options), user: event.locals.user }
+			{ ipAddress: getIP(event.request, auth.options), user: event.locals.user }
 		);
 
 		return Response.json({ comment }, { status: 201 });

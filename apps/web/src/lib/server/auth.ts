@@ -1,6 +1,5 @@
 import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { createFieldAttribute } from 'better-auth/db';
 import { username } from 'better-auth/plugins/username';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { ORIGIN, BETTER_AUTH_SECRET } from '$app/env/private';
@@ -23,7 +22,9 @@ export const auth = betterAuth({
 		}
 	}),
 	logger: {
-		disabled: __PLAYWRIGHT__
+		// Vite defines __PLAYWRIGHT__; the Better Auth CLI loads this file without
+		// Vite (`bun run auth:schema`), where the name is undeclared.
+		disabled: typeof __PLAYWRIGHT__ !== 'undefined' && __PLAYWRIGHT__
 	},
 	emailAndPassword: {
 		enabled: true,
@@ -43,10 +44,11 @@ export const auth = betterAuth({
 	},
 	user: {
 		additionalFields: {
-			nickname: createFieldAttribute('string', {
+			nickname: {
+				type: 'string',
 				required: false,
 				returned: false
-			})
+			}
 		}
 	},
 	plugins: [
