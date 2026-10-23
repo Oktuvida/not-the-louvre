@@ -1,5 +1,9 @@
 import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+	installFakeIntersectionObserver,
+	revealElement
+} from '#lib/testing/fake-intersection-observer.js';
 import { fakePage } from '#lib/testing/fake-page-state.svelte.js';
 import { render } from 'vitest-browser-svelte';
 
@@ -105,12 +109,18 @@ const createDeferred = <T>() => {
 	return { promise, reject, resolve };
 };
 
+// Paging starts when the scroll sentinel comes into view; the fake observer
+// lets a spec say so instead of scrolling and hoping the layout cooperates.
+const revealScrollSentinel = () =>
+	revealElement(document.querySelector('[data-testid="scroll-sentinel"]'));
+
 describe('GalleryExplorationPage', () => {
 	beforeEach(() => {
 		// The per-room feed cache is module scope on purpose (it has to survive
 		// the layout's keyed remount); tests must not inherit each other's feeds.
 		clearRoomFeedCache();
 		vi.unstubAllGlobals?.();
+		installFakeIntersectionObserver();
 		goto.mockReset();
 		getBrowserRealtimeClient.mockReset();
 		getBrowserRealtimeClient.mockImplementation(() => createRealtimeClient());
@@ -334,22 +344,11 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByText('Only Mine')).toBeVisible();
 
-		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
-		if (loadMoreArtworks.mock.calls.length === 0) {
-			sentinel?.scrollIntoView({ behavior: 'instant', block: 'center' });
-		}
+		revealScrollSentinel();
 
-		await vi.waitFor(
-			() => {
-				// Re-issue the scroll on every poll: on a saturated CI runner a single
-				// scrollIntoView can land before layout and never intersect.
-				document
-					.querySelector('[data-testid="scroll-sentinel"]')
-					?.scrollIntoView({ behavior: 'instant', block: 'center' });
-				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
-			},
-			{ timeout: 10_000 }
-		);
+		await vi.waitFor(() => {
+			expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+		});
 
 		expect(loadMoreArtworks).toHaveBeenCalledWith({
 			authorId: 'user-1',
@@ -381,22 +380,11 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByText('Only Mine')).toBeVisible();
 
-		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
-		if (loadMoreArtworks.mock.calls.length === 0) {
-			sentinel?.scrollIntoView({ behavior: 'instant', block: 'center' });
-		}
+		revealScrollSentinel();
 
-		await vi.waitFor(
-			() => {
-				// Re-issue the scroll on every poll: on a saturated CI runner a single
-				// scrollIntoView can land before layout and never intersect.
-				document
-					.querySelector('[data-testid="scroll-sentinel"]')
-					?.scrollIntoView({ behavior: 'instant', block: 'center' });
-				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
-			},
-			{ timeout: 10_000 }
-		);
+		await vi.waitFor(() => {
+			expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+		});
 
 		await expect.element(page.getByText('Loaded Mine 2')).toBeVisible();
 
@@ -575,20 +563,11 @@ describe('GalleryExplorationPage', () => {
 		// Wait for artworks to render, then scroll sentinel into view
 		await expect.element(page.getByRole('button', { name: /Artwork 1/ })).toBeVisible();
 
-		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
-		sentinel?.scrollIntoView({ behavior: 'instant', block: 'center' });
+		revealScrollSentinel();
 
-		await vi.waitFor(
-			() => {
-				// Re-issue the scroll on every poll: on a saturated CI runner a single
-				// scrollIntoView can land before layout and never intersect.
-				document
-					.querySelector('[data-testid="scroll-sentinel"]')
-					?.scrollIntoView({ behavior: 'instant', block: 'center' });
-				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
-			},
-			{ timeout: 10_000 }
-		);
+		await vi.waitFor(() => {
+			expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+		});
 		expect(loadArtworkDetail).not.toHaveBeenCalled();
 	});
 
@@ -929,22 +908,11 @@ describe('GalleryExplorationPage', () => {
 		// The sentinel may already be in the viewport on a mobile screen (414px wide,
 		// 1-column layout with ~120px initial virtua item heights). If the observer
 		// already fired, loadMoreArtworks is already called. Otherwise scroll it in.
-		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
-		if (loadMoreArtworks.mock.calls.length === 0) {
-			sentinel?.scrollIntoView({ behavior: 'instant', block: 'center' });
-		}
+		revealScrollSentinel();
 
-		await vi.waitFor(
-			() => {
-				// Re-issue the scroll on every poll: on a saturated CI runner a single
-				// scrollIntoView can land before layout and never intersect.
-				document
-					.querySelector('[data-testid="scroll-sentinel"]')
-					?.scrollIntoView({ behavior: 'instant', block: 'center' });
-				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
-			},
-			{ timeout: 10_000 }
-		);
+		await vi.waitFor(() => {
+			expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+		});
 
 		// Verify skeleton cards are rendered in the DOM while the fetch is in flight.
 		// Note: we check DOM presence rather than visibility because Tailwind's
@@ -991,24 +959,12 @@ describe('GalleryExplorationPage', () => {
 		// Wait for artworks to render
 		await expect.element(page.getByRole('button', { name: /Artwork 1/ })).toBeVisible();
 
-		// The sentinel may already be visible (mobile viewport). If not, scroll it in.
-		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
-		if (loadMoreArtworks.mock.calls.length === 0) {
-			sentinel?.scrollIntoView({ behavior: 'instant', block: 'center' });
-		}
+		revealScrollSentinel();
 
 		// Wait for the failed fetch to complete
-		await vi.waitFor(
-			() => {
-				// Re-issue the scroll on every poll: on a saturated CI runner a single
-				// scrollIntoView can land before layout and never intersect.
-				document
-					.querySelector('[data-testid="scroll-sentinel"]')
-					?.scrollIntoView({ behavior: 'instant', block: 'center' });
-				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
-			},
-			{ timeout: 10_000 }
-		);
+		await vi.waitFor(() => {
+			expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+		});
 
 		// Error message and retry button should be visible
 		await expect.element(page.getByTestId('scroll-sentinel-error')).toBeVisible();
@@ -1117,22 +1073,11 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByRole('button', { name: /Ranked 4/ })).toBeVisible();
 
 		// Scroll sentinel into view to trigger load-more
-		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
-		if (loadMoreArtworks.mock.calls.length === 0) {
-			sentinel?.scrollIntoView({ behavior: 'instant', block: 'center' });
-		}
+		revealScrollSentinel();
 
-		await vi.waitFor(
-			() => {
-				// Re-issue the scroll on every poll: on a saturated CI runner a single
-				// scrollIntoView can land before layout and never intersect.
-				document
-					.querySelector('[data-testid="scroll-sentinel"]')
-					?.scrollIntoView({ behavior: 'instant', block: 'center' });
-				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
-			},
-			{ timeout: 10_000 }
-		);
+		await vi.waitFor(() => {
+			expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+		});
 
 		// New artworks should appear
 		await expect.element(page.getByRole('button', { name: /Ranked 8/ })).toBeVisible();
@@ -1167,22 +1112,11 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByRole('button', { name: /Ranked 4/ })).toBeVisible();
 
 		// Trigger load-more
-		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
-		if (loadMoreArtworks.mock.calls.length === 0) {
-			sentinel?.scrollIntoView({ behavior: 'instant', block: 'center' });
-		}
+		revealScrollSentinel();
 
-		await vi.waitFor(
-			() => {
-				// Re-issue the scroll on every poll: on a saturated CI runner a single
-				// scrollIntoView can land before layout and never intersect.
-				document
-					.querySelector('[data-testid="scroll-sentinel"]')
-					?.scrollIntoView({ behavior: 'instant', block: 'center' });
-				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
-			},
-			{ timeout: 10_000 }
-		);
+		await vi.waitFor(() => {
+			expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+		});
 
 		// Podium is still visible while loading
 		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
@@ -1245,22 +1179,11 @@ describe('GalleryExplorationPage', () => {
 		// Wait for ranked grid to render so the sentinel observer is set up
 		await expect.element(page.getByRole('button', { name: /Ranked 4/ })).toBeVisible();
 
-		const sentinel = document.querySelector('[data-testid="scroll-sentinel"]');
-		if (loadMoreArtworks.mock.calls.length === 0) {
-			sentinel?.scrollIntoView({ behavior: 'instant', block: 'center' });
-		}
+		revealScrollSentinel();
 
-		await vi.waitFor(
-			() => {
-				// Re-issue the scroll on every poll: on a saturated CI runner a single
-				// scrollIntoView can land before layout and never intersect.
-				document
-					.querySelector('[data-testid="scroll-sentinel"]')
-					?.scrollIntoView({ behavior: 'instant', block: 'center' });
-				expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
-			},
-			{ timeout: 10_000 }
-		);
+		await vi.waitFor(() => {
+			expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
+		});
 
 		await expect.element(page.getByTestId('scroll-sentinel-error')).toBeVisible();
 		await expect.element(page.getByText('Gallery discovery could not be loaded')).toBeVisible();
