@@ -14,6 +14,7 @@
 	import HomeHeroOverlay from '#lib/features/home-entry-scene/components/HomeHeroOverlay.svelte';
 	import PersistentNav from '#lib/features/home-entry-scene/components/PersistentNav.svelte';
 	import StudioLoadingFallback from '#lib/features/shared-3d-world/components/StudioLoadingFallback.svelte';
+	import { browserSupportsWebGL } from '#lib/features/shared-3d-world/webgl-support.js';
 	import {
 		homeGalleryTarget,
 		homeStudioTarget,
@@ -114,6 +115,13 @@
 		 * fetching it twice.
 		 */
 		const cancelStudioBackgroundWarmup = scheduleStudioBackgroundWarmup();
+
+		// Without WebGL the scene could only fail, after downloading three.js to
+		// find out; the paused card is the whole answer.
+		if (!browserSupportsWebGL()) {
+			sceneMediaState = 'error';
+			return cancelStudioBackgroundWarmup;
+		}
 
 		void import('#lib/features/home-entry-scene/scene/StudioScene.svelte')
 			.then((module) => {

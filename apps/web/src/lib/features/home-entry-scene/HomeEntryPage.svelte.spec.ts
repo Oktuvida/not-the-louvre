@@ -10,6 +10,13 @@ vi.mock('#lib/features/home-entry-scene/scene/StudioScene.svelte', async () => (
 	default: (await import('./components/StudioSceneStub.svelte')).default
 }));
 
+// For the same reason the WebGL probe answers what each test needs.
+const webgl = vi.hoisted(() => ({ supported: true }));
+
+vi.mock('#lib/features/shared-3d-world/webgl-support.js', () => ({
+	browserSupportsWebGL: () => webgl.supported
+}));
+
 const navigation = vi.hoisted(() => ({ goto: vi.fn() }));
 
 const setPageUrl = (href: string) => fakePage.set({ state: {}, url: href });
@@ -72,6 +79,19 @@ describe('HomeEntryPage', () => {
 	afterEach(() => {
 		setPageUrl('http://localhost/');
 		navigation.goto.mockClear();
+		webgl.supported = true;
+	});
+
+	it('shows the paused scene card at once when the browser has no WebGL', async () => {
+		webgl.supported = false;
+
+		await render(HomeEntryPage, {});
+
+		await expect.element(page.getByText('Scene preview paused')).toBeVisible();
+
+		await settlePrefetches();
+		// The 3D scene, three.js and all, is never downloaded.
+		expect(document.querySelector('[data-testid="studio-scene-stub"]')).toBeNull();
 	});
 
 	it('lifts the shared grey veil when the visitor comes back from a room', async () => {
