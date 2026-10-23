@@ -71,6 +71,5 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 
 export const handle: Handle = (input) =>
 	runWithRequestDbConnection(async () => handleBetterAuth(input), {
-		connectionString: input.event.platform?.env?.HYPERDRIVE?.connectionString,
-		context: input.event.platform?.context
+		connectionString: input.event.platform?.env?.HYPERDRIVE?.connectionString
 	});

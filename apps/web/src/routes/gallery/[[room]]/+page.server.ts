@@ -39,8 +39,7 @@ export const load: PageServerLoad = async ({ locals, params, parent, platform })
 						adultContentEnabled: (await parent()).adultContentEnabled
 					}),
 				{
-					connectionString: platform?.env?.HYPERDRIVE?.connectionString,
-					context: platform?.context
+					connectionString: platform?.env?.HYPERDRIVE?.connectionString
 				}
 			)
 		}
