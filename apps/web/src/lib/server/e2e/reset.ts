@@ -1,4 +1,5 @@
-import { dbClient } from '$lib/server/db';
+import { sql } from 'drizzle-orm';
+import { db } from '$lib/server/db';
 import { resetPlaywrightArtworkStorage } from '$lib/server/artwork/storage';
 import { resetPlaywrightAvatarStorage } from '$lib/server/user/storage';
 
@@ -22,7 +23,7 @@ const RESET_SQL = `
 `;
 
 export const resetBackendState = async () => {
-	await dbClient.unsafe(RESET_SQL);
+	await db.execute(sql.raw(RESET_SQL));
 	resetPlaywrightArtworkStorage();
 	resetPlaywrightAvatarStorage();
 

@@ -53,7 +53,9 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Tests e2e en CI, excepto los `@realtime`, que necesitan Supabase Realtime y desaparecen en la fase 2.
 - [x] Cuarentena de e2e: los 3 de compactación se sustituyeron por tests de recorrido (se publica cada trazo dibujado; el borrador sobrevive a una recarga) y el de la sala misteriosa era un test desactualizado (los comentarios están en el reverso de la postal). Quedan 2 de buffering del lienzo, que se reescriben en la fase 4.
 - [x] Bug: sin WebGL no se podía entrar; la escena 3D vive ahora dentro de un `<svelte:boundary>` (`be8a92d`).
-- [ ] Driver `pg` y dos configuraciones de Hyperdrive, con y sin caché. *Requiere acceso a Cloudflare.*
+- [x] Driver `pg` con `drizzle-orm/node-postgres`: un `Client` por petición en Workers, sin `end()`, y un pool en Node. Probado en workerd con `wrangler dev` y Hyperdrive emulado.
+- [ ] Dos configuraciones de Hyperdrive, con y sin caché, y elegir la correcta por petición. **Bloquea el corte:** con `pg` la caché de Hyperdrive (60 s, sin invalidar al escribir) empieza a aplicar. *Requiere acceso a Cloudflare.*
+- [ ] Los reintentos de `chunked-write.ts` y de la publicación detectan códigos de postgres.js y asumen reconexión automática; con `pg` quedan inertes. Desaparecen en la fase 2 al mover los documentos a R2; hasta entonces, un corte de conexión en una publicación es un 500.
 - [ ] Conexión directa a Supabase por IPv4. *Requiere acceso a Supabase.*
 - [ ] Better Auth 1.7, rate limit en base de datos y un e2e de petición abortada.
 

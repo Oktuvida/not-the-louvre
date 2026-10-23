@@ -1,15 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocked = vi.hoisted(() => ({
-	end: vi.fn(async () => undefined),
-	drizzle: vi.fn(() => ({}))
+	clients: [] as {
+		connect: ReturnType<typeof vi.fn>;
+		end: ReturnType<typeof vi.fn>;
+		options: unknown;
+	}[],
+	pools: [] as { options: unknown }[],
+	drizzle: vi.fn((client: unknown) => ({ client }))
 }));
 
-vi.mock('postgres', () => ({
-	default: () => ({ end: mocked.end })
+vi.mock('pg', () => ({
+	default: {
+		Client: class {
+			connect = vi.fn(async () => undefined);
+			end = vi.fn(async () => undefined);
+			constructor(readonly options: unknown) {
+				mocked.clients.push(this);
+			}
+		},
+		Pool: class {
+			constructor(readonly options: unknown) {
+				mocked.pools.push(this);
+			}
+		}
+	}
 }));
 
-vi.mock('drizzle-orm/postgres-js', () => ({
+vi.mock('drizzle-orm/node-postgres', () => ({
 	drizzle: mocked.drizzle
 }));
 
@@ -17,62 +35,71 @@ vi.mock('$env/dynamic/private', () => ({
 	env: { DATABASE_URL: 'postgres://user:pass@localhost:5432/db' }
 }));
 
-describe('request-scoped database connection', () => {
+const HYPERDRIVE = 'postgres://user:pass@hyperdrive.local:5432/db';
+
+describe('database connection', () => {
 	beforeEach(() => {
 		vi.resetModules();
-		mocked.end.mockClear();
+		mocked.clients.length = 0;
+		mocked.pools.length = 0;
 		mocked.drizzle.mockClear();
-		// The module decides at import time whether it is running on Workers,
-		// and it recognises the runtime by `caches.default`.
-		vi.stubGlobal('caches', { default: {} });
 	});
 
 	afterEach(() => {
 		vi.unstubAllGlobals();
 	});
 
-	it('hands the connection drain to waitUntil so it outlives the response', async () => {
-		const waitUntil = vi.fn();
-		const { runWithRequestDbConnection } = await import('./index');
+	describe('on Cloudflare Workers', () => {
+		// The module recognises the runtime by `caches.default` at import time.
+		beforeEach(() => vi.stubGlobal('caches', { default: {} }));
 
-		await runWithRequestDbConnection(async () => 'done', { context: { waitUntil } });
+		it('gives each request its own connected client on the Hyperdrive connection', async () => {
+			const { db, runWithRequestDbConnection } = await import('./index');
 
-		expect(mocked.end).toHaveBeenCalledWith({ timeout: 5 });
-		expect(waitUntil).toHaveBeenCalledOnce();
-		await expect(waitUntil.mock.calls[0]![0]).resolves.toBeUndefined();
+			const seen = await runWithRequestDbConnection(
+				async () => (db as unknown as { client: unknown }).client,
+				{ connectionString: HYPERDRIVE }
+			);
+			await runWithRequestDbConnection(async () => undefined, { connectionString: HYPERDRIVE });
+
+			expect(mocked.clients).toHaveLength(2);
+			expect(mocked.clients[0]?.options).toMatchObject({ connectionString: HYPERDRIVE });
+			expect(mocked.clients[0]?.connect).toHaveBeenCalledOnce();
+			expect(seen).toBe(mocked.clients[0]);
+			expect(mocked.pools).toHaveLength(0);
+		});
+
+		// Hyperdrive cleans up when the request ends, and ending postgres
+		// connections by hand on workerd left unhandled rejections behind.
+		it('never ends the client by hand, even when the work throws', async () => {
+			const { runWithRequestDbConnection } = await import('./index');
+
+			await runWithRequestDbConnection(async () => 'done', { connectionString: HYPERDRIVE });
+			await expect(
+				runWithRequestDbConnection(
+					async () => {
+						throw new Error('query failed');
+					},
+					{ connectionString: HYPERDRIVE }
+				)
+			).rejects.toThrow('query failed');
+
+			for (const client of mocked.clients) expect(client.end).not.toHaveBeenCalled();
+		});
 	});
 
-	it('still closes the connection when the platform exposes no execution context', async () => {
-		const { runWithRequestDbConnection } = await import('./index');
+	describe('on Node', () => {
+		it('runs every request on one process-wide pool from DATABASE_URL', async () => {
+			const { db, runWithRequestDbConnection } = await import('./index');
 
-		await expect(runWithRequestDbConnection(async () => 'done')).resolves.toBe('done');
-		expect(mocked.end).toHaveBeenCalledOnce();
-	});
+			await runWithRequestDbConnection(async () => (db as unknown as { client: unknown }).client);
+			await runWithRequestDbConnection(async () => (db as unknown as { client: unknown }).client);
 
-	it('registers the drain even when the wrapped work throws', async () => {
-		const waitUntil = vi.fn();
-		const { runWithRequestDbConnection } = await import('./index');
-
-		await expect(
-			runWithRequestDbConnection(
-				async () => {
-					throw new Error('query failed');
-				},
-				{ context: { waitUntil } }
-			)
-		).rejects.toThrow('query failed');
-
-		expect(waitUntil).toHaveBeenCalledOnce();
-	});
-
-	it('swallows a failing drain instead of surfacing an unhandled rejection', async () => {
-		mocked.end.mockRejectedValueOnce(new Error('socket already gone'));
-
-		const waitUntil = vi.fn();
-		const { runWithRequestDbConnection } = await import('./index');
-
-		await runWithRequestDbConnection(async () => 'done', { context: { waitUntil } });
-
-		await expect(waitUntil.mock.calls[0]![0]).resolves.toBeUndefined();
+			expect(mocked.clients).toHaveLength(0);
+			expect(mocked.pools).toHaveLength(1);
+			expect(mocked.pools[0]?.options).toMatchObject({
+				connectionString: 'postgres://user:pass@localhost:5432/db'
+			});
+		});
 	});
 });
