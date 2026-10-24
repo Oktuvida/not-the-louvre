@@ -1,28 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-	ARTWORK_MEDIA_HEIGHT,
-	ARTWORK_MEDIA_MAX_BYTES,
-	ARTWORK_MEDIA_WIDTH,
-	ARTWORK_PUBLISH_RATE_LIMIT
-} from './config';
+import { ARTWORK_MEDIA_HEIGHT, ARTWORK_MEDIA_WIDTH, ARTWORK_PUBLISH_RATE_LIMIT } from './config';
 import {
 	createEmptyDrawingDocument,
 	countDrawingPoints,
 	parseDrawingDocument,
 	parseDrawingDocumentV2,
 	serializeCanonicalDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import { ArtworkFlowError } from './errors';
-import {
-	createAvifTestFile,
-	createJpegTestFile,
-	createMalformedAvifFile,
-	createPngTestFile,
-	createWebpTestFile,
-	fileToBytes
-} from '../media/test-helpers';
-import { applyRateLimitAttempt } from '$lib/server/db/fixtures/rate-limit';
+import { applyRateLimitAttempt } from '#lib/server/db/fixtures/rate-limit.js';
 import type {
 	ArtworkRecord,
 	ArtworkRepository,
@@ -31,10 +18,30 @@ import type {
 	PublishRateLimitRecord
 } from './types';
 
-// storage.ts is gone: gzip/base64 is the Rust runtime's job in production, so
-// these suites unwrap the payload they gzipped themselves.
-const gunzipBase64 = (payload: string) =>
-	strFromU8(gunzipSync(new Uint8Array(Buffer.from(payload, 'base64'))));
+// prepareDrawingDocumentForStorage is mocked, so the suite unwraps the gzip it
+// produced itself.
+const gunzip = (payload: Uint8Array) => strFromU8(gunzipSync(payload));
+
+// Object storage for drawings, in memory: publishes keep their documents here.
+const storedDocuments = vi.hoisted(() => {
+	const objects = new Map<string, Uint8Array>();
+	return {
+		objects,
+		store: {
+			async put(compressed: Uint8Array) {
+				const key = `documents/test-${objects.size + 1}.json.gz`;
+				objects.set(key, compressed);
+				return key;
+			},
+			async read(key: string) {
+				return objects.get(key)!;
+			}
+		}
+	};
+});
+
+const readStoredDocument = (record: ArtworkRecord | undefined) =>
+	gunzip(storedDocuments.objects.get(record!.drawingDocumentKey!)!);
 
 type ModerationCheckResult = { status: 'allowed' } | { message: string; status: 'blocked' };
 
@@ -48,23 +55,19 @@ const runtime = vi.hoisted(() => ({
 	prepareDrawingDocumentForStorage: vi.fn()
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	checkTextModeration: moderation.checkTextModeration
 }));
 
-vi.mock('$lib/features/stroke-json/runtime.server', () => ({
+vi.mock('#lib/server/drawing-document/storage.js', () => ({
 	prepareDrawingDocumentForStorage: runtime.prepareDrawingDocumentForStorage
 }));
 
-const createUnsupportedImageFile = (size = 128) =>
-	new File([new Uint8Array(size)], 'artwork.gif', { type: 'image/gif' });
+vi.mock('#lib/server/drawing-document/document-store.js', () => ({
+	drawingDocumentStore: storedDocuments.store
+}));
 
-const createConnectionClosedError = () =>
-	Object.assign(new Error('Failed query: insert into artworks'), {
-		cause: Object.assign(new Error('write CONNECTION_CLOSED host:5432'), {
-			code: 'CONNECTION_CLOSED'
-		})
-	});
+const ARTWORK_DRAWING_DOCUMENT = JSON.stringify(createEmptyDrawingDocument('artwork'));
 
 // Mirrors the repository's RETURNING projection: every artworks column except
 // drawing_document, which no writer's caller reads back.
@@ -93,30 +96,6 @@ const createRepository = () => {
 	>();
 
 	const repository: ArtworkRepository = {
-		appendArtworkDrawingDocumentChunk: vi.fn(
-			async (id: string, chunk: string, expectedLength: number, updatedAt: Date) => {
-				const current = artworks.get(id);
-				if (!current) return false;
-				const existing = current.drawingDocument ?? '';
-				if (existing.length !== expectedLength) return false;
-				artworks.set(id, { ...current, drawingDocument: existing + chunk, updatedAt });
-				return true;
-			}
-		),
-		finalizeArtworkDrawingDocument: vi.fn(
-			async (id: string, version: number, expectedTotalLength: number, updatedAt: Date) => {
-				const current = artworks.get(id);
-				if (!current) return null;
-				if ((current.drawingDocument ?? '').length !== expectedTotalLength) return null;
-				const next = { ...current, drawingVersion: version, updatedAt };
-				artworks.set(id, next);
-				return asReturnedRecord(next);
-			}
-		),
-		findArtworkDrawingDocumentLength: vi.fn(async (id: string) => {
-			const current = artworks.get(id);
-			return current ? (current.drawingDocument ?? '').length : null;
-		}),
 		createContentReport: vi.fn(async (input) => {
 			const record: ContentReportRecord = { ...input };
 			reports.set(record.id, record);
@@ -259,13 +238,11 @@ describe('artwork service', () => {
 		runtime.prepareDrawingDocumentForStorage.mockImplementation(async (documentJson: string) => {
 			const document = parseDrawingDocumentV2(documentJson);
 			const canonicalDocumentJson = serializeCanonicalDrawingDocument(document);
-			const compressedDocumentBase64 = Buffer.from(
-				gzipSync(strToU8(canonicalDocumentJson))
-			).toString('base64');
+			const compressed = new Uint8Array(gzipSync(strToU8(canonicalDocumentJson)));
 
 			return {
 				canonicalDocumentJson,
-				compressedDocumentBase64,
+				compressed,
 				document,
 				height: document.height,
 				kind: document.kind,
@@ -282,16 +259,10 @@ describe('artwork service', () => {
 		const { artworks, repository } = createRepository();
 		const { storage, uploads } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			quality: 95,
-			width: ARTWORK_MEDIA_WIDTH
-		});
 
 		const result = await publishArtwork(
 			{
-				media,
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				title: 'Evening Light'
 			},
 			{
@@ -319,17 +290,16 @@ describe('artwork service', () => {
 		);
 
 		expect(result.id).toBe('artwork-1');
-		expect(result.storageKey).toBe('artworks/user-1/artwork-1.avif');
+		expect(result.storageKey).toBe('artworks/user-1/artwork-1.webp');
 		expect(result.parentId).toBeNull();
 		expect(result.forkCount).toBe(0);
 		expect(uploads).toHaveLength(1);
-		expect(uploads[0]?.key).toBe('artworks/user-1/artwork-1.avif');
-		expect(await fileToBytes(uploads[0]!.file)).not.toEqual(await fileToBytes(media));
+		expect(uploads[0]?.key).toBe('artworks/user-1/artwork-1.webp');
 		expect(artworks.get('artwork-1')).toMatchObject({
 			title: 'Evening Light',
 			authorId: 'user-1',
 			isNsfw: false,
-			storageKey: 'artworks/user-1/artwork-1.avif',
+			storageKey: 'artworks/user-1/artwork-1.webp',
 			parentId: null,
 			forkCount: 0
 		});
@@ -384,15 +354,14 @@ describe('artwork service', () => {
 			}
 		);
 
-		expect(result.storageKey).toBe('artworks/user-1/artwork-1.avif');
+		expect(result.storageKey).toBe('artworks/user-1/artwork-1.webp');
 		expect(result.drawingVersion).toBe(2);
-		// The finalize RETURNING must not hand the ~100 KB document back over the
-		// pooler that the chunked write just fed it 16 KiB at a time.
+		// The row only names the drawing, which lives in object storage.
 		expect(result.drawingDocument).toBeUndefined();
 		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(drawingDocument);
 		expect(uploads).toHaveLength(1);
-		expect(uploads[0]?.file.type).toBe('image/avif');
-		expect(gunzipBase64(artworks.get('artwork-1')!.drawingDocument!)).toBe(
+		expect(uploads[0]?.file.type).toBe('image/webp');
+		expect(readStoredDocument(artworks.get('artwork-1'))).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
 		);
 		expect(artworks.get('artwork-1')).toMatchObject({
@@ -400,62 +369,6 @@ describe('artwork service', () => {
 			title: 'Vector First'
 		});
 	});
-
-	// The studio only ever posts a drawing document, so a null placeholder here
-	// means every real artwork loads from an empty grey card instead of a
-	// blur-up.
-	it('stores a blur-up placeholder for artworks published from a drawing document', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage } = createStorage();
-		const now = new Date('2026-03-26T10:00:00.000Z');
-		const drawingDocument = JSON.stringify({
-			...createEmptyDrawingDocument('artwork'),
-			strokes: [
-				{
-					color: '#2d2420',
-					points: [
-						[48, 48] as [number, number],
-						[320, 320] as [number, number],
-						[540, 220] as [number, number]
-					],
-					size: 12
-				}
-			]
-		});
-
-		await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Blurred Up'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: now,
-					updatedAt: now
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				now: () => now,
-				repository,
-				storage
-			}
-		);
-
-		const created = vi.mocked(repository.createArtwork).mock.calls[0]![0];
-		expect(created.mediaPlaceholder).toMatch(/^data:image\/png;base64,/);
-	}, 10000);
 
 	it('rejects runtime-prepared avatar payloads on artwork publish', async () => {
 		const { publishArtwork } = await import('./service');
@@ -465,7 +378,7 @@ describe('artwork service', () => {
 			canonicalDocumentJson: serializeCanonicalDrawingDocument(
 				createEmptyDrawingDocument('avatar')
 			),
-			compressedDocumentBase64: 'AA==',
+			compressed: new Uint8Array([0]),
 			document: parseDrawingDocumentV2(
 				serializeCanonicalDrawingDocument(createEmptyDrawingDocument('avatar'))
 			),
@@ -509,16 +422,11 @@ describe('artwork service', () => {
 		const { artworks, repository } = createRepository();
 		const { storage } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
 
 		const result = await publishArtwork(
 			{
 				isNsfw: true,
-				media,
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				title: 'Figure Study'
 			},
 			{
@@ -568,11 +476,7 @@ describe('artwork service', () => {
 		await expect(
 			publishArtwork(
 				{
-					media: await createAvifTestFile({
-						height: ARTWORK_MEDIA_HEIGHT,
-						name: 'artwork.avif',
-						width: ARTWORK_MEDIA_WIDTH
-					}),
+					drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 					title: 'mierda'
 				},
 				{
@@ -692,7 +596,7 @@ describe('artwork service', () => {
 			parentId: 'artwork-parent',
 			forkCount: 0
 		});
-		expect(gunzipBase64(artworks.get('artwork-child')!.drawingDocument!)).toBe(
+		expect(readStoredDocument(artworks.get('artwork-child'))).toBe(
 			serializeCanonicalDrawingDocument(parseDrawingDocument(childDocument))
 		);
 		expect(artworks.get('artwork-parent')).toMatchObject({
@@ -740,380 +644,17 @@ describe('artwork service', () => {
 		expect(storage.upload).not.toHaveBeenCalled();
 	});
 
-	it('publishes browser-exported WebP source media and stores canonical AVIF output', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { storage, uploads } = createStorage();
-		const media = await createWebpTestFile({ height: 768, width: 768 });
-		const now = new Date('2026-03-26T10:00:00.000Z');
-
-		const result = await publishArtwork(
-			{
-				media,
-				title: 'Browser export'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: now,
-					updatedAt: now
-				}
-			},
-			{
-				generateId: () => 'artwork-webp',
-				now: () => now,
-				repository,
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-webp');
-		expect(uploads).toHaveLength(1);
-		expect(uploads[0]?.file.type).toBe('image/avif');
-		expect(artworks.get('artwork-webp')?.mediaContentType).toBe('image/avif');
-		expect(await fileToBytes(uploads[0]!.file)).not.toEqual(await fileToBytes(media));
-	}, 30000);
-
-	it('publishes browser-exported JPEG source media and stores canonical AVIF output', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage, uploads } = createStorage();
-		const media = await createJpegTestFile({ height: 900, width: 900 });
-
-		await publishArtwork(
-			{
-				media,
-				title: 'JPEG browser export'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{ repository, storage }
-		);
-
-		expect(uploads).toHaveLength(1);
-		expect(uploads[0]?.file.type).toBe('image/avif');
-	});
-
-	it('publishes browser-exported PNG source media as the last fallback and stores canonical AVIF output', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage, uploads } = createStorage();
-		const media = await createPngTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			width: ARTWORK_MEDIA_WIDTH
-		});
-
-		await publishArtwork(
-			{
-				media,
-				title: 'PNG browser export'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{ repository, storage }
-		);
-
-		expect(uploads).toHaveLength(1);
-		expect(uploads[0]?.file.type).toBe('image/avif');
-	});
-
-	it('rejects unsupported source media before touching storage', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage } = createStorage();
-
-		await expect(
-			publishArtwork(
-				{
-					media: createUnsupportedImageFile(),
-					title: 'Wrong format'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{ repository, storage }
-			)
-		).rejects.toMatchObject({
-			code: 'INVALID_MEDIA_FORMAT',
-			message: 'Artwork media must be AVIF, WebP, JPEG, or PNG',
-			status: 400
-		});
-
-		expect(storage.upload).not.toHaveBeenCalled();
-	});
-
-	it('rejects oversized media before touching storage', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage } = createStorage();
-
-		await expect(
-			publishArtwork(
-				{
-					media: new File([new Uint8Array(ARTWORK_MEDIA_MAX_BYTES + 1)], 'artwork.avif', {
-						type: 'image/avif'
-					}),
-					title: 'Too large'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{ repository, storage }
-			)
-		).rejects.toMatchObject({
-			code: 'MEDIA_TOO_LARGE',
-			status: 400
-		});
-
-		expect(storage.upload).not.toHaveBeenCalled();
-	});
-
-	it('rejects malformed AVIF payloads before touching storage', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage } = createStorage();
-
-		await expect(
-			publishArtwork(
-				{
-					media: createMalformedAvifFile(),
-					title: 'Broken payload'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{ repository, storage }
-			)
-		).rejects.toMatchObject({
-			code: 'INVALID_MEDIA_CONTENT',
-			status: 400
-		});
-
-		expect(storage.upload).not.toHaveBeenCalled();
-	});
-
-	it('rejects JPEG payloads disguised as .avif before touching storage', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage } = createStorage();
-		const jpegPayload = await createJpegTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
-		const disguisedFile = new File([await jpegPayload.arrayBuffer()], 'artwork.avif', {
-			type: 'image/avif'
-		});
-
-		await expect(
-			publishArtwork(
-				{
-					media: disguisedFile,
-					title: 'Disguised payload'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{ repository, storage }
-			)
-		).rejects.toMatchObject({
-			code: 'INVALID_MEDIA_CONTENT',
-			status: 400
-		});
-
-		expect(storage.upload).not.toHaveBeenCalled();
-	});
-
-	it('rejects artwork media whose decoded dimensions are not canonical', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH + 256
-		});
-
-		await expect(
-			publishArtwork(
-				{
-					media,
-					title: 'Wrong dimensions'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{ repository, storage }
-			)
-		).rejects.toMatchObject({
-			code: 'INVALID_MEDIA_DIMENSIONS',
-			status: 400
-		});
-
-		expect(storage.upload).not.toHaveBeenCalled();
-	});
-
-	it('publishes complex artwork media within the stored-media budget after adaptive sanitization', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage, uploads } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			pattern: 'noise',
-			quality: 5,
-			width: ARTWORK_MEDIA_WIDTH
-		});
-
-		expect(media.size).toBeLessThanOrEqual(ARTWORK_MEDIA_MAX_BYTES);
-
-		const result = await publishArtwork(
-			{
-				media,
-				title: 'Too complex'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{ repository, storage }
-		);
-
-		expect(result.mediaSizeBytes).toBeLessThanOrEqual(ARTWORK_MEDIA_MAX_BYTES);
-		expect(uploads).toHaveLength(1);
-		expect(uploads[0]?.file.type).toBe('image/avif');
-	}, 30000);
-
 	it('cleans up uploaded media if record creation fails', async () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();
 		const { deletes, storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
 
 		vi.mocked(repository.createArtwork).mockRejectedValueOnce(new Error('db insert failed'));
 
 		await expect(
 			publishArtwork(
 				{
-					media,
+					drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 					title: 'Cleanup me'
 				},
 				{
@@ -1143,648 +684,21 @@ describe('artwork service', () => {
 			status: 500
 		});
 
-		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
-	});
-
-	it('retries the artwork insert with backoff when the connection closed mid-write', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
-
-		vi.mocked(repository.createArtwork).mockRejectedValueOnce(createConnectionClosedError());
-		const sleeps: number[] = [];
-
-		const result = await publishArtwork(
-			{
-				media,
-				title: 'Retry me'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async (ms: number) => {
-					sleeps.push(ms);
-				},
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-1');
-		expect(repository.createArtwork).toHaveBeenCalledTimes(2);
-		expect(sleeps).toEqual([500]);
-	});
-
-	it('gives up after exhausting delayed retries and cleans up the uploaded media', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
-
-		vi.mocked(repository.createArtwork).mockRejectedValue(createConnectionClosedError());
-		const sleeps: number[] = [];
-
-		await expect(
-			publishArtwork(
-				{
-					media,
-					title: 'Never lands'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{
-					generateId: () => 'artwork-1',
-					repository,
-					sleep: async (ms: number) => {
-						sleeps.push(ms);
-					},
-					storage
-				}
-			)
-		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
-
-		expect(repository.createArtwork).toHaveBeenCalledTimes(3);
-		expect(sleeps).toEqual([500, 2000]);
-		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
-	});
-
-	it('recovers via read-back when the final retry committed but the ack was lost', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
-
-		const insert = vi.mocked(repository.createArtwork);
-		const commitRow = insert.getMockImplementation()!;
-		insert
-			.mockRejectedValueOnce(createConnectionClosedError())
-			.mockRejectedValueOnce(createConnectionClosedError())
-			.mockImplementationOnce(async (input) => {
-				// The last attempt committed, but the socket died before the ack.
-				await commitRow(input);
-				throw createConnectionClosedError();
-			});
-
-		const result = await publishArtwork(
-			{
-				media,
-				title: 'Committed on the last try'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-1');
-		expect(repository.createArtwork).toHaveBeenCalledTimes(3);
-		expect(deletes).toEqual([]);
-	});
-
-	it('treats a unique violation on the first attempt as a genuine failure and cleans up', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
-
-		vi.mocked(repository.createArtwork).mockRejectedValueOnce(
-			Object.assign(new Error('duplicate key value violates unique constraint "artworks_pkey"'), {
-				code: '23505'
-			})
-		);
-
-		await expect(
-			publishArtwork(
-				{
-					media,
-					title: 'Genuine duplicate'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{
-					generateId: () => 'artwork-1',
-					repository,
-					sleep: async () => {},
-					storage
-				}
-			)
-		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
-
-		expect(repository.createArtwork).toHaveBeenCalledTimes(1);
-		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
-	});
-
-	it('keeps retrying when a redial fails with CONNECT_TIMEOUT mid-ladder', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
-
-		vi.mocked(repository.createArtwork)
-			.mockRejectedValueOnce(createConnectionClosedError())
-			.mockRejectedValueOnce(
-				Object.assign(new Error('write CONNECT_TIMEOUT host:5432'), { code: 'CONNECT_TIMEOUT' })
-			);
-		const sleeps: number[] = [];
-
-		const result = await publishArtwork(
-			{
-				media,
-				title: 'Through the outage'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async (ms: number) => {
-					sleeps.push(ms);
-				},
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-1');
-		expect(repository.createArtwork).toHaveBeenCalledTimes(3);
-		expect(sleeps).toEqual([500, 2000]);
-		expect(deletes).toEqual([]);
-	});
-
-	it('recovers the committed artwork when a retry hits a unique violation after a lost ack', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
-
-		const insert = vi.mocked(repository.createArtwork);
-		const commitRow = insert.getMockImplementation()!;
-		insert
-			.mockImplementationOnce(async (input) => {
-				// The insert committed, but the socket died before the ack arrived.
-				await commitRow(input);
-				throw createConnectionClosedError();
-			})
-			.mockImplementationOnce(async () => {
-				throw Object.assign(new Error('Failed query: insert into artworks'), {
-					cause: Object.assign(
-						new Error('duplicate key value violates unique constraint "artworks_pkey"'),
-						{ code: '23505' }
-					)
-				});
-			});
-
-		const result = await publishArtwork(
-			{
-				media,
-				title: 'Committed after all'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-1');
-		expect(repository.createArtwork).toHaveBeenCalledTimes(2);
-		expect(repository.findArtworkById).toHaveBeenCalledWith('artwork-1');
-		expect(deletes).toEqual([]);
-	});
-
-	it('preserves stored media when a unique violation proves the insert committed but recovery fails', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { deletes, storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
-
-		vi.mocked(repository.createArtwork)
-			.mockRejectedValueOnce(createConnectionClosedError())
-			.mockRejectedValueOnce(
-				Object.assign(new Error('duplicate key value violates unique constraint "artworks_pkey"'), {
-					code: '23505'
-				})
-			);
-		vi.mocked(repository.findArtworkById).mockRejectedValueOnce(createConnectionClosedError());
-
-		await expect(
-			publishArtwork(
-				{
-					media,
-					title: 'Committed but unreadable'
-				},
-				{
-					ipAddress: '127.0.0.1',
-					user: {
-						id: 'user-1',
-						authUserId: 'user-1',
-						nickname: 'artist_1',
-						role: 'user',
-						avatarUrl: null,
-						name: 'artist_1',
-						email: 'artist_1@not-the-louvre.local',
-						emailVerified: true,
-						image: null,
-						createdAt: new Date(),
-						updatedAt: new Date()
-					}
-				},
-				{
-					generateId: () => 'artwork-1',
-					repository,
-					sleep: async () => {},
-					storage
-				}
-			)
-		).rejects.toMatchObject({ code: 'PUBLISH_FAILED', status: 500 });
-
-		expect(deletes).toEqual([]);
-	});
-
-	it('writes the drawing document in multiple chunks and finalizes with the version', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { storage } = createStorage();
-		const drawingDocument = JSON.stringify({
-			...createEmptyDrawingDocument('artwork'),
-			strokes: [
-				{
-					color: '#2d2420',
-					points: [
-						[48, 48] as [number, number],
-						[320, 320] as [number, number],
-						[540, 220] as [number, number]
-					],
-					size: 12
-				}
-			]
-		});
-
-		const result = await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Chunked Vector'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				drawingDocumentChunkChars: 16,
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		const storedDocument = artworks.get('artwork-1')!.drawingDocument!;
-		expect(vi.mocked(repository.createArtwork).mock.calls[0]![0].drawingDocument).toBeNull();
-		expect(repository.appendArtworkDrawingDocumentChunk).toHaveBeenCalledTimes(
-			Math.ceil(storedDocument.length / 16)
-		);
-		expect(result.drawingVersion).toBe(2);
-		expect(gunzipBase64(storedDocument)).toBe(
-			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
-		);
-		expect(result.drawingDocument).toBeUndefined();
-	});
-
-	it('resumes chunk appends after a lost-ack append via the length read-back', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { storage } = createStorage();
-		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
-
-		const append = vi.mocked(repository.appendArtworkDrawingDocumentChunk);
-		const applyChunk = append.getMockImplementation()!;
-		append.mockImplementationOnce(async (id, chunk, expectedLength, updatedAt) => {
-			// The append committed, but the socket died before the ack arrived.
-			await applyChunk(id, chunk, expectedLength, updatedAt);
-			throw createConnectionClosedError();
-		});
-
-		const result = await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Resumed chunks'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				drawingDocumentChunkChars: 16,
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.drawingVersion).toBe(2);
-		expect(gunzipBase64(artworks.get('artwork-1')!.drawingDocument!)).toBe(
-			serializeCanonicalDrawingDocument(parseDrawingDocument(drawingDocument))
-		);
-	});
-
-	it('keeps the chunk ladder alive when the length read-back itself fails', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { storage } = createStorage();
-		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
-
-		vi.mocked(repository.appendArtworkDrawingDocumentChunk).mockRejectedValueOnce(
-			createConnectionClosedError()
-		);
-		vi.mocked(repository.findArtworkDrawingDocumentLength).mockRejectedValueOnce(
-			Object.assign(new Error('write CONNECT_TIMEOUT host:5432'), { code: 'CONNECT_TIMEOUT' })
-		);
-
-		const result = await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Read-back hiccup'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.drawingVersion).toBe(2);
-		expect(artworks.get('artwork-1')?.drawingVersion).toBe(2);
-	});
-
-	it('recovers a finalize whose commit lost its ack', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { storage } = createStorage();
-		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
-
-		const finalize = vi.mocked(repository.finalizeArtworkDrawingDocument);
-		const commitFinalize = finalize.getMockImplementation()!;
-		finalize.mockImplementation(async (id, version, expectedTotalLength, updatedAt) => {
-			// Every finalize attempt commits but the ack never arrives.
-			await commitFinalize(id, version, expectedTotalLength, updatedAt);
-			throw createConnectionClosedError();
-		});
-
-		const result = await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Finalize lost ack'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.drawingVersion).toBe(2);
-		expect(artworks.get('artwork-1')?.drawingVersion).toBe(2);
-	});
-
-	it('keeps the publish successful without a document when chunk writing fails', async () => {
-		const { publishArtwork } = await import('./service');
-		const { artworks, repository } = createRepository();
-		const { deletes, storage } = createStorage();
-		const drawingDocument = JSON.stringify(createEmptyDrawingDocument('artwork'));
-
-		vi.mocked(repository.appendArtworkDrawingDocumentChunk).mockResolvedValue(false);
-
-		const result = await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Doc-less survivor'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: new Date(),
-					updatedAt: new Date()
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				repository,
-				sleep: async () => {},
-				storage
-			}
-		);
-
-		expect(result.id).toBe('artwork-1');
-		expect(result.drawingDocument ?? null).toBeNull();
-		expect(artworks.get('artwork-1')?.drawingVersion).toBeNull();
-		expect(deletes).toEqual([]);
+		expect(deletes).toEqual(['artworks/user-1/artwork-1.webp']);
 	});
 
 	it('keeps a committed publish successful when rate limit bookkeeping fails afterwards', async () => {
 		const { publishArtwork } = await import('./service');
 		const { artworks, repository } = createRepository();
 		const { deletes, storage } = createStorage();
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
 
 		vi.mocked(repository.recordPublishRateLimitAttempt).mockRejectedValueOnce(
-			createConnectionClosedError()
+			new Error('connection terminated unexpectedly')
 		);
 
 		const result = await publishArtwork(
 			{
-				media,
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				title: 'Still published'
 			},
 			{
@@ -1823,11 +737,7 @@ describe('artwork service', () => {
 
 		await publishArtwork(
 			{
-				media: await createAvifTestFile({
-					height: ARTWORK_MEDIA_HEIGHT,
-					name: 'artwork.avif',
-					width: ARTWORK_MEDIA_WIDTH
-				}),
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				title: 'Original'
 			},
 			{
@@ -1910,11 +820,7 @@ describe('artwork service', () => {
 
 		await publishArtwork(
 			{
-				media: await createAvifTestFile({
-					height: ARTWORK_MEDIA_HEIGHT,
-					name: 'artwork.avif',
-					width: ARTWORK_MEDIA_WIDTH
-				}),
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				title: 'Original'
 			},
 			{
@@ -1977,11 +883,7 @@ describe('artwork service', () => {
 
 		await publishArtwork(
 			{
-				media: await createAvifTestFile({
-					height: ARTWORK_MEDIA_HEIGHT,
-					name: 'artwork.avif',
-					width: ARTWORK_MEDIA_WIDTH
-				}),
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				title: 'Disposable'
 			},
 			{
@@ -2054,7 +956,7 @@ describe('artwork service', () => {
 		);
 
 		expect(deleted.id).toBe('artwork-1');
-		expect(deletes).toEqual(['artworks/user-1/artwork-1.avif']);
+		expect(deletes).toEqual(['artworks/user-1/artwork-1.webp']);
 	});
 
 	it('decrements the parent fork count when a child fork is deleted', async () => {
@@ -2062,15 +964,10 @@ describe('artwork service', () => {
 		const { artworks, repository } = createRepository();
 		const { storage } = createStorage();
 		const now = new Date('2026-03-26T10:00:00.000Z');
-		const media = await createAvifTestFile({
-			height: ARTWORK_MEDIA_HEIGHT,
-			name: 'artwork.avif',
-			width: ARTWORK_MEDIA_WIDTH
-		});
 
 		await publishArtwork(
 			{
-				media,
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				title: 'Original artwork'
 			},
 			{
@@ -2099,7 +996,7 @@ describe('artwork service', () => {
 
 		await publishArtwork(
 			{
-				media,
+				drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 				parentArtworkId: 'artwork-parent',
 				title: 'Forked artwork'
 			},
@@ -2158,19 +1055,21 @@ describe('artwork service', () => {
 		const { storage } = createStorage();
 		let idCounter = 0;
 		const now = new Date('2026-03-26T10:00:00.000Z');
-		const media = new File([new Uint8Array([1, 2, 3])], 'artwork.avif', { type: 'image/avif' });
-		const sanitizeMedia = vi.fn(async (file: File) => ({
-			contentType: 'image/avif',
-			file,
-			height: ARTWORK_MEDIA_HEIGHT,
-			sizeBytes: file.size,
-			width: ARTWORK_MEDIA_WIDTH
-		}));
+		const renderDrawingDocumentMedia = vi.fn(async () => {
+			const file = new File([new Uint8Array([1, 2, 3])], 'artwork.avif', { type: 'image/avif' });
+			return {
+				contentType: 'image/avif',
+				file,
+				height: ARTWORK_MEDIA_HEIGHT,
+				sizeBytes: file.size,
+				width: ARTWORK_MEDIA_WIDTH
+			};
+		});
 
 		for (let attempt = 0; attempt < ARTWORK_PUBLISH_RATE_LIMIT.maxAttempts; attempt += 1) {
 			await publishArtwork(
 				{
-					media,
+					drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 					title: `Artwork ${attempt + 1}`
 				},
 				{
@@ -2193,7 +1092,7 @@ describe('artwork service', () => {
 					generateId: () => `artwork-${++idCounter}`,
 					now: () => now,
 					repository,
-					sanitizeMedia,
+					renderDrawingDocumentMedia,
 					storage
 				}
 			);
@@ -2202,7 +1101,7 @@ describe('artwork service', () => {
 		await expect(
 			publishArtwork(
 				{
-					media,
+					drawingDocument: ARTWORK_DRAWING_DOCUMENT,
 					title: 'Blocked artwork'
 				},
 				{
@@ -2225,7 +1124,7 @@ describe('artwork service', () => {
 					generateId: () => `artwork-${++idCounter}`,
 					now: () => now,
 					repository,
-					sanitizeMedia,
+					renderDrawingDocumentMedia,
 					storage
 				}
 			)

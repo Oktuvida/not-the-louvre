@@ -55,7 +55,7 @@ describe('AmbientAudioController', () => {
 		const fakeAudio = createFakeAudio();
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: false,
 			playlist: [{ id: 'track-1', src: '/audio/ambient/test.wav', title: 'Gallery Rain' }],
@@ -78,7 +78,7 @@ describe('AmbientAudioController', () => {
 	it('stays off on first visit when no local or bootstrapped preference exists', async () => {
 		const fakeAudio = createFakeAudio();
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: null,
 			playlist: [{ id: 'track-1', src: '/audio/ambient/test.wav', title: 'Gallery Rain' }],
@@ -95,7 +95,7 @@ describe('AmbientAudioController', () => {
 		const fakeAudio = createFakeAudio();
 		window.localStorage.setItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY, 'track-2');
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: true,
 			playlist: [
@@ -119,7 +119,7 @@ describe('AmbientAudioController', () => {
 		vi.stubGlobal('fetch', fetchSpy);
 		window.localStorage.setItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY, 'track-2');
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: false,
 			playlist: [
@@ -147,7 +147,7 @@ describe('AmbientAudioController', () => {
 	it('persists the next track identifier when the playlist advances', async () => {
 		const fakeAudio = createFakeAudio();
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: true,
 			playlist: [
@@ -173,7 +173,7 @@ describe('AmbientAudioController', () => {
 	it('pauses on mute even when animation frames stop being delivered', async () => {
 		const fakeAudio = createFakeAudio();
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: true,
 			playlist: [{ id: 'track-1', src: '/audio/ambient/test.wav', title: 'Gallery Rain' }],
@@ -203,7 +203,7 @@ describe('AmbientAudioController', () => {
 	it('pauses and resumes the current stream position when toggled off and on', async () => {
 		const fakeAudio = createFakeAudio();
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: true,
 			playlist: [{ id: 'track-1', src: '/audio/ambient/test.wav', title: 'Gallery Rain' }],

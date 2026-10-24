@@ -41,7 +41,7 @@ const createQueryBuilder = (recorded: RecordedQuery) => {
 	return builder;
 };
 
-vi.mock('$lib/server/db', () => ({
+vi.mock('#lib/server/db/index.js', () => ({
 	db: {
 		select: (fields: Record<string, unknown>) => {
 			const recorded: RecordedQuery = { calls: [], fields };
@@ -73,7 +73,6 @@ const artworkRow = (overrides: Record<string, unknown> = {}) => ({
 	isHidden: false,
 	isNsfw: false,
 	mediaContentType: 'image/avif',
-	mediaPlaceholder: null,
 	mediaSizeBytes: 128,
 	parentId: null,
 	score: 7,

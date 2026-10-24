@@ -1,11 +1,11 @@
+import { edgeCache, runAfterResponse } from '#lib/server/platform.js';
+
 // On Cloudflare the Worker runs in *front* of the CDN cache, so a response it
 // returns is never stored just because it carries `cache-control` — that header
 // only buys browser caching. Reaching the shared colo cache means using the
 // Cache API explicitly, which is what the media, avatar and favicon handlers
 // already do. This is that pattern, factored out so JSON endpoints can reuse it
 // without each one re-deriving the waitUntil bookkeeping.
-
-type EdgeCachePlatform = Pick<App.Platform, 'caches' | 'context'> | undefined;
 
 /**
  * Builds a cache-control value for a response the edge is allowed to share.
@@ -23,11 +23,8 @@ export const edgeCacheControl = (ttlSeconds: number, staleWhileRevalidateSeconds
 			: [])
 	].join(', ');
 
-export const readEdgeCache = async (
-	platform: EdgeCachePlatform,
-	request: Request
-): Promise<Response | undefined> => {
-	const cache = platform?.caches?.default;
+export const readEdgeCache = async (request: Request): Promise<Response | undefined> => {
+	const cache = edgeCache();
 	if (!cache) return undefined;
 
 	return (await cache.match(request.url)) ?? undefined;
@@ -48,22 +45,16 @@ export const artworkDetailEdgeCacheKeys = (origin: string | URL, artworkId: stri
  * the change visible where the moderator is, and the `s-maxage` above is what
  * bounds it everywhere else.
  */
-export const purgeFromEdgeCache = (platform: EdgeCachePlatform, urls: string[]) => {
-	const cache = platform?.caches?.default;
+export const purgeFromEdgeCache = (urls: string[]) => {
+	const cache = edgeCache();
 	if (!cache) return;
 
-	const purged = Promise.all(urls.map((url) => cache.delete(url))).catch(() => {});
-	platform?.context?.waitUntil(purged);
+	runAfterResponse(Promise.all(urls.map((url) => cache.delete(url))).catch(() => {}));
 };
 
-export const storeInEdgeCache = (
-	platform: EdgeCachePlatform,
-	request: Request,
-	response: Response
-) => {
-	const cache = platform?.caches?.default;
+export const storeInEdgeCache = (request: Request, response: Response) => {
+	const cache = edgeCache();
 	if (!cache) return;
 
-	const stored = cache.put(request.url, response.clone()).catch(() => {});
-	platform?.context?.waitUntil(stored);
+	runAfterResponse(cache.put(request.url, response.clone()).catch(() => {}));
 };

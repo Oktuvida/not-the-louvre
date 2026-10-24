@@ -2,13 +2,13 @@ import type { ComponentProps } from 'svelte';
 import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 
 vi.mock('$app/environment', () => ({
 	browser: true
 }));
 
-vi.mock('$lib/client/gsap', () => {
+vi.mock('#lib/client/gsap.js', () => {
 	// Track idle cycle depth to prevent infinite recursion from startIdle → onComplete → startIdle
 	let idleDepth = 0;
 	const MAX_IDLE_CYCLES = 2;
@@ -54,7 +54,7 @@ vi.mock('$lib/client/gsap', () => {
 	};
 });
 
-import { makeArtwork as makeArtworkFixture } from '$lib/features/gallery-exploration/fixtures/artworks';
+import { makeArtwork as makeArtworkFixture } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import MysteryRoom from './MysteryRoom.svelte';
 import RoomHarness from './RoomHarness.svelte';
 
@@ -88,12 +88,12 @@ const defaultPageInfo = { hasMore: true, nextCursor: 'cursor-1' };
 describe('MysteryRoom', () => {
 	beforeEach(async () => {
 		// Reset the GSAP mock's idle depth counter between tests
-		const { gsap } = await import('$lib/client/gsap');
+		const { gsap } = await import('#lib/client/gsap.js');
 		(gsap as unknown as { __resetIdleDepth: () => void }).__resetIdleDepth();
 	});
 
 	it('renders a film reel with artwork frames visible on the strip', async () => {
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo
 		});
@@ -106,7 +106,7 @@ describe('MysteryRoom', () => {
 	});
 
 	it('applies the tighter mystery mobile shell layout hooks', async () => {
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo
 		});
@@ -118,7 +118,7 @@ describe('MysteryRoom', () => {
 	});
 
 	it('shows the spin button that triggers the reel animation', async () => {
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo
 		});
@@ -130,7 +130,7 @@ describe('MysteryRoom', () => {
 		// fetchRandomArtwork never resolves so the spin stays active
 		const fetchRandomArtwork = vi.fn(() => new Promise<Artwork>(() => {}));
 
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo,
 			fetchRandomArtwork
@@ -147,7 +147,7 @@ describe('MysteryRoom', () => {
 		const fetchRandomArtwork = vi.fn().mockResolvedValue(randomArtwork);
 		const onSelect = vi.fn();
 
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo,
 			fetchRandomArtwork,
@@ -181,7 +181,7 @@ describe('MysteryRoom', () => {
 		// Never resolves: the reel has to move on its own until it is retargeted.
 		const fetchRandomArtwork = vi.fn(() => new Promise<Artwork>(() => {}));
 
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo,
 			fetchRandomArtwork
@@ -198,7 +198,7 @@ describe('MysteryRoom', () => {
 	it('surfaces a failed spin instead of swallowing it', async () => {
 		const fetchRandomArtwork = vi.fn().mockRejectedValue(new Error('Network error'));
 
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo,
 			fetchRandomArtwork
@@ -209,7 +209,9 @@ describe('MysteryRoom', () => {
 		const notice = page.getByTestId('mystery-spin-error');
 		await expect.element(notice).toBeVisible();
 		await expect.element(notice).toHaveAttribute('role', 'alert');
-		await expect.element(notice).toHaveTextContent(/give it another go/i);
+		await expect
+			.element(notice)
+			.toMatchTextContent('That spin came up empty — give it another go.');
 		// The run-up is wound back down rather than left turning forever.
 		await expect.element(page.getByTestId('film-reel')).toHaveAttribute('data-reel-state', 'idle');
 	});
@@ -217,7 +219,7 @@ describe('MysteryRoom', () => {
 	it('spin error keeps FilmReel in idle and re-enables the spin button', async () => {
 		const fetchRandomArtwork = vi.fn().mockRejectedValue(new Error('Network error'));
 
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo,
 			fetchRandomArtwork
@@ -239,7 +241,7 @@ describe('MysteryRoom', () => {
 	});
 
 	it('renders artwork images inside the reel viewport', async () => {
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo
 		});
@@ -248,7 +250,7 @@ describe('MysteryRoom', () => {
 	});
 
 	it('renders helper text explaining the feature', async () => {
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo
 		});
@@ -265,7 +267,7 @@ describe('MysteryRoom', () => {
 			makeArtwork('safe-4', 'Super Safe')
 		];
 
-		renderRoom({
+		await renderRoom({
 			adultContentEnabled: false,
 			artworks: nsfwArtworks,
 			pageInfo: defaultPageInfo
@@ -283,7 +285,7 @@ describe('MysteryRoom', () => {
 			makeArtwork('safe-4', 'Super Safe')
 		];
 
-		renderRoom({
+		await renderRoom({
 			adultContentEnabled: true,
 			artworks: nsfwArtworks,
 			pageInfo: defaultPageInfo
@@ -298,7 +300,7 @@ describe('MysteryRoom', () => {
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
 
-		renderRoom({
+		await renderRoom({
 			artworks: sampleArtworks,
 			pageInfo: defaultPageInfo,
 			loadMoreArtworks

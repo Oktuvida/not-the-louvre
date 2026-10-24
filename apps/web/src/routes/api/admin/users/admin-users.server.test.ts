@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 const mocked = vi.hoisted(() => ({
 	listUsers: vi.fn(),
 	updateUserRole: vi.fn()
 }));
 
-vi.mock('$lib/server/user/admin.service', () => ({
+vi.mock('#lib/server/user/admin.service.js', () => ({
 	listUsers: mocked.listUsers,
 	updateUserRole: mocked.updateUserRole
 }));

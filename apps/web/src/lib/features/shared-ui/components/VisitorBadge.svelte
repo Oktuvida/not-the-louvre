@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { UserRound } from 'lucide-svelte';
-	import { hashString } from '$lib/features/artwork-presentation/model/frame';
+	import { hashString } from '#lib/features/artwork-presentation/model/frame.js';
 
 	const BADGE_COLORS = [
 		{ fill: '#c84f4f', footer: '#c84f4f' },

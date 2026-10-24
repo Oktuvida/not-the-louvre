@@ -14,7 +14,7 @@ describe('GalleryStatusRegion', () => {
 	});
 
 	it('keeps the live region in the DOM while it has nothing to say', async () => {
-		render(GalleryStatusRegion, { message: null, onDismiss: vi.fn() });
+		await render(GalleryStatusRegion, { message: null, onDismiss: vi.fn() });
 
 		const container = region();
 		expect(container).not.toBeNull();
@@ -27,7 +27,7 @@ describe('GalleryStatusRegion', () => {
 	});
 
 	it('interrupts for a failure and waits its turn for anything else', async () => {
-		const { rerender } = render(GalleryStatusRegion, {
+		const { rerender } = await render(GalleryStatusRegion, {
 			message: 'That vote did not make it onto the ledger.',
 			onDismiss: vi.fn()
 		});
@@ -42,7 +42,10 @@ describe('GalleryStatusRegion', () => {
 	});
 
 	it('outranks the persistent pills and clears the ambient audio tab', async () => {
-		render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss: vi.fn() });
+		await render(GalleryStatusRegion, {
+			message: 'Gallery could not be refreshed.',
+			onDismiss: vi.fn()
+		});
 
 		const tokens = getComputedStyle(document.documentElement);
 		const status = Number(tokens.getPropertyValue('--z-status'));
@@ -62,7 +65,7 @@ describe('GalleryStatusRegion', () => {
 
 	it('hands the message back on dismiss', async () => {
 		const onDismiss = vi.fn();
-		render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss });
+		await render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss });
 
 		await expect.element(page.getByText('Gallery could not be refreshed.')).toBeVisible();
 		await page.getByRole('button', { name: 'Dismiss message' }).click();
@@ -74,7 +77,7 @@ describe('GalleryStatusRegion', () => {
 		vi.useFakeTimers();
 		const onDismiss = vi.fn();
 
-		render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss });
+		await render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss });
 
 		vi.advanceTimersByTime(7999);
 		expect(onDismiss).not.toHaveBeenCalled();
@@ -87,7 +90,10 @@ describe('GalleryStatusRegion', () => {
 		vi.useFakeTimers();
 		const onDismiss = vi.fn();
 
-		const { rerender } = render(GalleryStatusRegion, { message: 'First failure.', onDismiss });
+		const { rerender } = await render(GalleryStatusRegion, {
+			message: 'First failure.',
+			onDismiss
+		});
 
 		vi.advanceTimersByTime(6000);
 		await rerender({ message: 'Second failure.', onDismiss });

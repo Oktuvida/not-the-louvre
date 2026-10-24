@@ -1,15 +1,14 @@
-import { env } from '$env/dynamic/private';
 import { error, redirect } from '@sveltejs/kit';
-import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
-import { getViewerContentPreferences } from '$lib/server/moderation/service';
-import { toGalleryArtwork } from '$lib/features/gallery-exploration/gallery-adapter';
-import type { GalleryRoomContent } from '$lib/features/gallery-exploration/model/discovery';
+import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
+import { getViewerContentPreferences } from '#lib/server/moderation/service.js';
+import { toGalleryArtwork } from '#lib/features/gallery-exploration/gallery-adapter.js';
+import type { GalleryRoomContent } from '#lib/features/gallery-exploration/model/discovery.js';
 import {
 	getGalleryRoom,
 	isGalleryRoomId,
 	type GalleryRoomId
-} from '$lib/features/gallery-exploration/model/rooms';
-import type { Viewer } from '$lib/shared/viewer';
+} from '#lib/features/gallery-exploration/model/rooms.js';
+import type { Viewer } from '#lib/shared/viewer.js';
 
 type ProductUser = Viewer;
 
@@ -48,30 +47,6 @@ const emptyStateMessageForRoom = (roomId: GalleryRoomId) =>
 		? 'You have not published any artworks yet.'
 		: 'No artworks have reached this gallery room yet.';
 
-/*
- * A missing anon key degrades silently: the browser never opens a realtime
- * channel, so live votes and comments simply stop arriving with no error
- * anywhere. Warn once per isolate so a misconfigured deployment is visible in
- * `wrangler tail`. The latch is module scope rather than a hooks check because
- * hooks run per request on Workers, and `$env/dynamic/private` is empty at
- * module init under adapter-cloudflare, so the read has to happen in here.
- */
-let warnedAboutMissingAnonKey = false;
-
-const resolveRealtimeConfig = () => {
-	const anonKey = env.PUBLIC_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || env.ANON_KEY || null;
-	const url = env.PUBLIC_SUPABASE_URL || env.SUPABASE_PUBLIC_URL || null;
-
-	if (!anonKey && !warnedAboutMissingAnonKey) {
-		warnedAboutMissingAnonKey = true;
-		console.warn(
-			'[gallery] SUPABASE_ANON_KEY is not set: realtime votes and comments are disabled for browsers.'
-		);
-	}
-
-	return { anonKey, url };
-};
-
 // The shell resolves without touching the database, so navigations render
 // the room chrome immediately while the artwork content streams in.
 export const loadGalleryRoomShell = (roomId: string, user?: ProductUser) => {
@@ -84,7 +59,6 @@ export const loadGalleryRoomShell = (roomId: string, user?: ProductUser) => {
 	}
 
 	return {
-		realtimeConfig: resolveRealtimeConfig(),
 		room: getGalleryRoom(roomId),
 		roomId: roomId as GalleryRoomId,
 		viewer: user ?? null

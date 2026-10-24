@@ -5,7 +5,7 @@ import WaxSealAvatar from './WaxSealAvatar.svelte';
 
 describe('WaxSealAvatar', () => {
 	it('renders the artist avatar image inside a wax seal', async () => {
-		render(WaxSealAvatar, {
+		await render(WaxSealAvatar, {
 			alt: 'journey_artist',
 			src: '/avatars/journey.png'
 		});
@@ -17,7 +17,7 @@ describe('WaxSealAvatar', () => {
 	});
 
 	it('applies a seal shape variation based on the seed', async () => {
-		render(WaxSealAvatar, {
+		await render(WaxSealAvatar, {
 			alt: 'artist_a',
 			seed: 'user-abc-123',
 			src: '/avatars/a.png'
@@ -30,7 +30,7 @@ describe('WaxSealAvatar', () => {
 	});
 
 	it('renders at the specified size', async () => {
-		render(WaxSealAvatar, {
+		await render(WaxSealAvatar, {
 			alt: 'big_artist',
 			size: 'xl',
 			src: '/avatars/big.png'
@@ -42,7 +42,7 @@ describe('WaxSealAvatar', () => {
 	});
 
 	it('defaults to medium size when no size is specified', async () => {
-		render(WaxSealAvatar, {
+		await render(WaxSealAvatar, {
 			alt: 'default_artist',
 			src: '/avatars/default.png'
 		});
@@ -53,7 +53,7 @@ describe('WaxSealAvatar', () => {
 	});
 
 	it('keeps avatars out of the artwork images priority lane by default', async () => {
-		render(WaxSealAvatar, {
+		await render(WaxSealAvatar, {
 			alt: 'lazy_artist',
 			src: '/avatars/lazy.png'
 		});
@@ -66,7 +66,7 @@ describe('WaxSealAvatar', () => {
 	});
 
 	it('lets above-the-fold callers ask for an eager seal', async () => {
-		render(WaxSealAvatar, {
+		await render(WaxSealAvatar, {
 			alt: 'eager_artist',
 			loading: 'eager',
 			src: '/avatars/eager.png'
@@ -78,7 +78,7 @@ describe('WaxSealAvatar', () => {
 	});
 
 	it('produces different seal shapes for different seeds', async () => {
-		const { unmount } = render(WaxSealAvatar, {
+		const { unmount } = await render(WaxSealAvatar, {
 			alt: 'artist_a',
 			seed: 'seed-alpha',
 			src: '/avatars/a.png'
@@ -90,7 +90,7 @@ describe('WaxSealAvatar', () => {
 
 		unmount();
 
-		render(WaxSealAvatar, {
+		await render(WaxSealAvatar, {
 			alt: 'artist_b',
 			seed: 'seed-beta',
 			src: '/avatars/b.png'

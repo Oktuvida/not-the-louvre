@@ -4,7 +4,7 @@ import {
 	PASSWORD_MAX_LENGTH,
 	PASSWORD_MIN_LENGTH,
 	normalizeNickname
-} from '$lib/shared/auth/credentials';
+} from '#lib/shared/auth/credentials.js';
 import { RECOVERY_KEY_LENGTH } from './config';
 
 const nicknameSchema = z

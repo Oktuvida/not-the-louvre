@@ -1,4 +1,4 @@
-import type { ArtworkFrameRenderOptions } from '$lib/features/artwork-presentation/model/frame';
+import type { ArtworkFrameRenderOptions } from '#lib/features/artwork-presentation/model/frame.js';
 
 type Rgb = [number, number, number];
 

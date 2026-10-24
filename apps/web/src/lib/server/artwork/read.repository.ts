@@ -16,9 +16,10 @@ import {
 	type SQLWrapper
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { db } from '$lib/server/db';
-import { artworkComments, artworks, contentReports, users } from '$lib/server/db/schema';
-import type { ArtworkVoteValue } from '$lib/shared/content/votes';
+import { db } from '#lib/server/db/index.js';
+import { artworkComments, artworks, contentReports, users } from '#lib/server/db/schema.js';
+import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
+import { voteCountSql } from './vote-counts';
 import type {
 	ArtworkDiscoveryCursor,
 	ArtworkDiscoveryTopWindow,
@@ -103,7 +104,6 @@ const discoverySelect = {
 	title: artworks.title,
 	storageKey: artworks.storageKey,
 	mediaContentType: artworks.mediaContentType,
-	mediaPlaceholder: artworks.mediaPlaceholder,
 	mediaSizeBytes: artworks.mediaSizeBytes,
 	isHidden: artworks.isHidden,
 	isNsfw: artworks.isNsfw,
@@ -120,6 +120,7 @@ const discoverySelect = {
 
 const drawingDocumentSelect = {
 	drawingDocument: artworks.drawingDocument,
+	drawingDocumentKey: artworks.drawingDocumentKey,
 	drawingVersion: artworks.drawingVersion
 };
 
@@ -143,14 +144,6 @@ const parentSelect = {
 	parentAuthorNickname: parentAuthors.nickname,
 	parentTitle: parentArtworks.title
 };
-
-const voteCountSql = (value: ArtworkVoteValue) =>
-	sql<number>`coalesce((
-		select count(*)::int
-		from "app"."artwork_votes" vote
-		where vote.artwork_id = ${artworks.id}
-			and vote.value = ${sql.raw(`'${value}'::app.artwork_vote_value`)}
-	), 0)`;
 
 const viewerVoteSql = (viewer: { isModerator: boolean; userId: string | null }) =>
 	viewer.userId
@@ -197,9 +190,9 @@ type ArtworkReadRow = {
 	isHidden: boolean;
 	isNsfw: boolean;
 	drawingDocument?: string | null;
+	drawingDocumentKey?: string | null;
 	drawingVersion?: number | null;
 	mediaContentType: string;
-	mediaPlaceholder?: string | null;
 	mediaSizeBytes: number;
 	commentCount: number;
 	forkCount: number;
@@ -250,9 +243,9 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	isHidden: row.isHidden,
 	isNsfw: row.isNsfw,
 	drawingDocument: row.drawingDocument ?? null,
+	drawingDocumentKey: row.drawingDocumentKey ?? null,
 	drawingVersion: row.drawingVersion ?? null,
 	mediaContentType: row.mediaContentType,
-	mediaPlaceholder: row.mediaPlaceholder ?? null,
 	mediaSizeBytes: row.mediaSizeBytes,
 	parentAuthorAvatarUrl: row.parentAuthorAvatarUrl ?? null,
 	parentAuthorId: row.parentAuthorId ?? null,
@@ -414,6 +407,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				createdAt: artworks.createdAt,
 				id: artworks.id,
 				isNsfw: artworks.isNsfw,
+				mediaContentType: artworks.mediaContentType,
 				title: artworks.title
 			})
 			.from(artworks)

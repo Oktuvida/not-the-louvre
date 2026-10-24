@@ -1,43 +1,50 @@
 <script lang="ts">
 	import { Brush } from 'lucide-svelte';
-	import { browser } from '$app/environment';
-	import { goto, invalidateAll, pushState, replaceState } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { browser } from '$app/env';
+	import { goto, refreshAll } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { get } from 'svelte/store';
-	import { apiErrorMessage, requestJson } from '$lib/client/api';
-	import { setAdultContentEnabled } from '$lib/client/avatar-upload';
-	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
-	import { getGalleryLayoutContext } from '$lib/features/gallery-exploration/gallery-layout-context';
+	import { apiErrorMessage, requestJson } from '#lib/client/api.js';
+	import { setAdultContentEnabled } from '#lib/client/avatar-upload.js';
+	import { getGalleryLayoutContext } from '#lib/features/gallery-exploration/gallery-layout-context.js';
 	import { onMount } from 'svelte';
 	import { writable } from 'svelte/store';
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import {
+		artworkEngagement,
+		type Artwork
+	} from '#lib/features/artwork-presentation/model/artwork.js';
 	import {
 		toGalleryArtwork,
-		toGalleryArtworkDetail
-	} from '$lib/features/gallery-exploration/gallery-adapter';
-	import { createDetailPrefetcher } from '$lib/features/gallery-exploration/detail-prefetch';
+		toGalleryArtworkDetail,
+		toGalleryComments
+	} from '#lib/features/gallery-exploration/gallery-adapter.js';
+	import { createDetailPrefetcher } from '#lib/features/gallery-exploration/detail-prefetch.js';
 	import type {
 		GalleryDiscovery,
 		GalleryDiscoveryRequest,
 		GalleryRoomContent
-	} from '$lib/features/gallery-exploration/model/discovery';
-	import { suppressNextRoomFeedSnapshot } from '$lib/features/gallery-exploration/model/feed-cache';
+	} from '#lib/features/gallery-exploration/model/discovery.js';
+	import {
+		patchCachedArtwork,
+		suppressNextRoomFeedSnapshot
+	} from '#lib/features/gallery-exploration/model/feed-cache.js';
 	import {
 		type GalleryRoomConfig,
 		type GalleryRoomId
-	} from '$lib/features/gallery-exploration/model/rooms';
-	import { createRealtimeSubscription } from '$lib/features/gallery-exploration/use-realtime-subscription.svelte';
-	import type { Viewer } from '$lib/shared/viewer';
-	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
-	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
-	import GalleryStatusRegion from '$lib/features/gallery-exploration/components/GalleryStatusRegion.svelte';
-	import RoomLoadingSkeleton from '$lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
-	import HallOfFameRoom from '$lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
-	import HotWallRoom from '$lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
-	import MysteryRoom from '$lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
-	import YourStudioRoom from '$lib/features/gallery-exploration/rooms/YourStudioRoom.svelte';
+	} from '#lib/features/gallery-exploration/model/rooms.js';
+	import { applyArtworkLiveChange } from '#lib/features/gallery-exploration/artwork-live-change.js';
+	import { createArtworkLiveUpdates } from '#lib/features/gallery-exploration/artwork-live-updates.js';
+	import type { Viewer } from '#lib/shared/viewer.js';
+	import PostItNote from '#lib/features/shared-ui/components/PostItNote.svelte';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
+	import GalleryStatusRegion from '#lib/features/gallery-exploration/components/GalleryStatusRegion.svelte';
+	import RoomLoadingSkeleton from '#lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
+	import HallOfFameRoom from '#lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
+	import HotWallRoom from '#lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
+	import MysteryRoom from '#lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
+	import YourStudioRoom from '#lib/features/gallery-exploration/rooms/YourStudioRoom.svelte';
 
 	type GalleryDetailHistoryState = NonNullable<App.PageState['galleryDetail']>;
 
@@ -131,14 +138,9 @@
 				).catch((error: unknown) => {
 					throw new Error(apiErrorMessage(error, ARTWORK_DETAIL_ERROR_MESSAGE), { cause: error });
 				}),
-				requestJson<{
-					comments: Array<{
-						author: { nickname: string };
-						body: string;
-						createdAt: Date | string;
-						id: string;
-					}>;
-				}>(`/api/artworks/${artworkId}/comments`).catch(() => null)
+				requestJson<{ comments: Parameters<typeof toGalleryComments>[0] }>(
+					`/api/artworks/${artworkId}/comments`
+				).catch(() => null)
 			]);
 
 			const detail = toGalleryArtworkDetail(payload.artwork);
@@ -147,18 +149,7 @@
 				return detail;
 			}
 
-			return {
-				...detail,
-				comments: commentsPayload.comments.map((comment) => ({
-					author: comment.author.nickname,
-					id: comment.id,
-					text: comment.body,
-					timestamp:
-						comment.createdAt instanceof Date
-							? comment.createdAt.getTime()
-							: new Date(comment.createdAt).getTime()
-				}))
-			};
+			return { ...detail, comments: toGalleryComments(commentsPayload.comments) };
 		},
 		fetchRandomArtwork = async () => {
 			try {
@@ -175,22 +166,22 @@
 		},
 		room,
 		roomId,
-		realtimeConfig = { anonKey: null, url: null },
 		viewer = null
-	}: {
-		adultContentEnabled?: boolean;
-		artworks?: Artwork[];
-		discovery?: GalleryDiscovery;
-		emptyStateMessage?: string | null;
-		isRoomLoading?: boolean;
+
 		/** Set only by the route's failure path; never reuses the empty-state slot. */
-		loadError?: string | null;
 		/**
 		 * The streamed room payload. Owning the await here — instead of branching
 		 * three `<GalleryExplorationPage>` instances around it in the route — is
 		 * what keeps one instance alive across the skeleton→room hand-off, so the
 		 * entry fade, the layout bindings and the detail state survive it.
 		 */
+	}: {
+		adultContentEnabled?: boolean;
+		artworks?: Artwork[];
+		discovery?: GalleryDiscovery;
+		emptyStateMessage?: string | null;
+		isRoomLoading?: boolean;
+		loadError?: string | null;
 		roomContent?: Promise<GalleryRoomContent> | null;
 		fetchRandomArtwork?: () => Promise<Artwork>;
 		loadMoreArtworks?: (request: GalleryDiscoveryRequest & { cursor: string }) => Promise<{
@@ -198,7 +189,6 @@
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
 		loadArtworkDetail?: (artworkId: string) => Promise<Artwork>;
-		realtimeConfig?: { anonKey: string | null; url: string | null };
 		room: GalleryRoomConfig;
 		roomId: GalleryRoomId;
 		viewer?: Viewer | null;
@@ -207,15 +197,9 @@
 	const galleryLayout = getGalleryLayoutContext();
 	const revealedArtworkIds = galleryLayout?.revealedArtworkIds ?? writable(new Set<string>());
 
-	// Values deliberately frozen at construction (the realtime channel is opened
-	// once for the viewer that mounted the page); the IIFE keeps them out of the
-	// reactive graph without tripping `state_referenced_locally`.
-	const { initialArtworks, initialRealtimeConfig, initialRoomContent, initialViewer } = (() => ({
-		initialArtworks: $state.snapshot(routeArtworks),
-		initialRealtimeConfig: $state.snapshot(realtimeConfig),
-		initialRoomContent: roomContent,
-		initialViewer: $state.snapshot(viewer)
-	}))();
+	// Deliberately frozen at construction; the IIFE keeps it out of the reactive
+	// graph without tripping `state_referenced_locally`.
+	const { initialRoomContent } = (() => ({ initialRoomContent: roomContent }))();
 
 	// --- Streamed room content ---------------------------------------------
 	// The template awaits the same promise so SvelteKit still streams the room
@@ -265,6 +249,7 @@
 	});
 
 	const seedArtworks = $derived(roomContent ? (streamedContent?.artworks ?? []) : routeArtworks);
+
 	const seedDiscovery = $derived<GalleryDiscovery>(
 		roomContent
 			? (streamedContent?.discovery ?? {
@@ -273,14 +258,18 @@
 				})
 			: routeDiscovery
 	);
+
 	const roomEmptyStateMessage = $derived(
 		roomContent ? (streamedContent?.emptyStateMessage ?? null) : emptyStateMessage
 	);
+
 	const isRoomBusy = $derived(
 		roomContent ? streamedContent === null && !streamFailed : isRoomLoading
 	);
 
-	let artworks = $state<Artwork[]>(initialRoomContent ? [] : initialArtworks);
+	// Reseeds from route data on navigation; votes and comment counts patch it
+	// locally in between.
+	let artworks = $derived<Artwork[]>(seedArtworks);
 
 	/*
 	 * What the room tells a screen reader while it streams.
@@ -326,7 +315,9 @@
 	let selectedArtwork = $state<Artwork | null>(null);
 	let isHydratingDetail = $state(false);
 	let detailErrorMessage = $state<string | null>(null);
-	const enteredFromHome = browser ? $page.url?.searchParams?.get('from') === 'home' : false;
+
+	const enteredFromHome = browser ? page.url?.searchParams?.get('from') === 'home' : false;
+
 	let showEntryFade = $state(enteredFromHome);
 	let showExitFade = $state(false);
 	let isExitingToHome = $state(false);
@@ -336,10 +327,12 @@
 	let detailLoadSequence = 0;
 
 	const selectedArtworkId = $derived(selectedArtwork?.id ?? null);
+
 	const adultContentAllowed = $derived(
 		adultContentPreferenceOverride ??
 			(roomContent ? (streamedContent?.adultContentEnabled ?? false) : adultContentEnabled)
 	);
+
 	const hasSensitiveArtwork = $derived(
 		artworks.some((artwork) => artwork.isNsfw) || Boolean(selectedArtwork?.isNsfw)
 	);
@@ -349,12 +342,8 @@
 			? resolve('/gallery/[[room]]', {})
 			: resolve('/gallery/[[room]]', { room: roomId })
 	);
-	const historyDetailState = $derived(readGalleryDetailHistoryState($page.state));
 
-	// --- Reseed artworks from route data on navigation ---
-	$effect(() => {
-		artworks = seedArtworks;
-	});
+	const historyDetailState = $derived(readGalleryDetailHistoryState(page.state));
 
 	// --- Room-scoped loadMoreArtworks that binds discovery request context ---
 	const roomLoadMoreArtworks = $derived.by(() => {
@@ -410,15 +399,20 @@
 			detailOrigin = null;
 			detailErrorMessage = error instanceof Error ? error.message : ARTWORK_DETAIL_ERROR_MESSAGE;
 
-			const currentHistoryState = readGalleryDetailHistoryState($page.state);
+			const currentHistoryState = readGalleryDetailHistoryState(page.state);
+
 			if (
 				browser &&
 				currentHistoryState?.artworkId === historyState.artworkId &&
 				currentHistoryState.roomId === historyState.roomId
 			) {
 				didCreateLocalDetailHistoryEntry = false;
-				// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
-				replaceState(currentGalleryUrl, clearGalleryDetailHistoryState($page.state));
+
+				goto(currentGalleryUrl, {
+					shallow: true,
+					replace: true,
+					state: clearGalleryDetailHistoryState(page.state)
+				});
 			}
 		} finally {
 			if (requestSequence === detailLoadSequence) {
@@ -427,16 +421,21 @@
 		}
 	};
 
+	// The address bar names the artwork while it is open, so a copied link or a
+	// reload lands on its permalink; the room stays mounted underneath.
 	const openArtwork = (artwork: Artwork) => {
 		detailErrorMessage = null;
 		didCreateLocalDetailHistoryEntry = true;
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
-		pushState(currentGalleryUrl, {
-			...$page.state,
-			galleryDetail: {
-				artworkId: artwork.id,
-				roomId,
-				source: LOCAL_GALLERY_DETAIL_SOURCE
+
+		goto(resolve('/artwork/[artworkId]', { artworkId: artwork.id }), {
+			shallow: true,
+			state: {
+				...page.state,
+				galleryDetail: {
+					artworkId: artwork.id,
+					roomId,
+					source: LOCAL_GALLERY_DETAIL_SOURCE
+				}
 			}
 		});
 	};
@@ -449,7 +448,7 @@
 		detailLoadSequence += 1;
 		isHydratingDetail = false;
 
-		const currentHistoryState = readGalleryDetailHistoryState($page.state);
+		const currentHistoryState = readGalleryDetailHistoryState(page.state);
 
 		if (
 			browser &&
@@ -463,8 +462,11 @@
 		}
 
 		if (browser && currentHistoryState) {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
-			replaceState(currentGalleryUrl, clearGalleryDetailHistoryState($page.state));
+			goto(currentGalleryUrl, {
+				shallow: true,
+				replace: true,
+				state: clearGalleryDetailHistoryState(page.state)
+			});
 		}
 
 		selectedArtwork = null;
@@ -483,22 +485,14 @@
 
 	const syncArtwork = (nextArtwork: Artwork) => {
 		selectedArtwork = nextArtwork;
+		const engagement = artworkEngagement(nextArtwork);
+		patchCachedArtwork(nextArtwork.id, engagement);
+
 		const index = artworks.findIndex((candidate) => candidate.id === nextArtwork.id);
 		if (index === -1) return;
 
 		artworks = artworks.map((candidate, candidateIndex) =>
-			candidateIndex === index
-				? {
-						...candidate,
-						commentCount: nextArtwork.commentCount,
-						comments: nextArtwork.comments,
-						downvotes: nextArtwork.downvotes,
-						forkCount: nextArtwork.forkCount,
-						score: nextArtwork.score,
-						upvotes: nextArtwork.upvotes,
-						viewerVote: nextArtwork.viewerVote
-					}
-				: candidate
+			candidateIndex === index ? { ...candidate, ...engagement } : candidate
 		);
 	};
 
@@ -509,6 +503,7 @@
 		if (selectedArtwork?.id === artworkId) {
 			selectedArtwork = { ...selectedArtwork, ...patch };
 		}
+		patchCachedArtwork(artworkId, patch);
 
 		artworks = artworks.map((candidate) =>
 			candidate.id === artworkId ? { ...candidate, ...patch } : candidate
@@ -535,22 +530,26 @@
 		}
 	};
 
-	// --- Realtime subscription ---
-	const realtime =
-		browser && initialViewer && initialRealtimeConfig.url && initialRealtimeConfig.anonKey
-			? createRealtimeSubscription({
-					getRealtimeClient: () =>
-						getBrowserRealtimeClient(initialRealtimeConfig.url!, initialRealtimeConfig.anonKey!),
-					fetchToken: async () =>
-						requestJson<{ expiresAt?: string; token: string }>('/api/realtime/token').catch(
-							() => null
-						),
-					viewerId: initialViewer.id,
-					onRefresh: (artworkId: string) => {
+	// --- Live updates ---
+	// Signed in or not, whoever has an artwork open sees its votes and comments
+	// change as they happen. A change carries its data; only one that does not
+	// (a comment taken down, a reconnect) reads the artwork again.
+	const realtime = browser
+		? createArtworkLiveUpdates({
+				onChange: (artworkId, change) => {
+					const patched =
+						change && selectedArtwork?.id === artworkId
+							? applyArtworkLiveChange(selectedArtwork, change)
+							: null;
+
+					if (!patched) {
 						void refreshSelectedArtwork(artworkId);
+					} else if (patched !== selectedArtwork) {
+						syncArtwork(patched);
 					}
-				})
-			: null;
+				}
+			})
+		: null;
 
 	const refreshSelectedArtwork = async (artworkId: string) => {
 		try {
@@ -576,7 +575,7 @@
 			return;
 		}
 
-		void realtime.start(artworkId);
+		realtime.start(artworkId);
 
 		return () => {
 			realtime.stop();
@@ -595,8 +594,13 @@
 			didCreateLocalDetailHistoryEntry = false;
 			selectedArtwork = null;
 			detailOrigin = null;
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
-			replaceState(galleryUrl, clearGalleryDetailHistoryState($page.state));
+
+			goto(galleryUrl, {
+				shallow: true,
+				replace: true,
+				state: clearGalleryDetailHistoryState(page.state)
+			});
+
 			return;
 		}
 
@@ -654,7 +658,7 @@
 		detailPrefetcher.clear();
 
 		try {
-			await invalidateAll();
+			await refreshAll();
 		} catch (error) {
 			detailErrorMessage =
 				error instanceof Error ? error.message : 'Gallery could not be refreshed.';
@@ -668,9 +672,17 @@
 		if (!enteredFromHome) return;
 
 		if (roomId === 'hall-of-fame') {
-			replaceState(resolve('/gallery/[[room]]', {}), window.history.state);
+			goto(resolve('/gallery/[[room]]', {}), {
+				shallow: true,
+				replace: true,
+				state: window.history.state
+			});
 		} else {
-			replaceState(resolve('/gallery/[[room]]', { room: roomId }), window.history.state);
+			goto(resolve('/gallery/[[room]]', { room: roomId }), {
+				shallow: true,
+				replace: true,
+				state: window.history.state
+			});
 		}
 	});
 
@@ -792,7 +804,7 @@
 				<div class="mt-6 flex justify-center">
 					<GameLink href="/" variant="primary" size="sm">
 						<Brush class="h-5 w-5" />
-						<span class="font-semibold">Join &amp; draw</span>
+						<span class="font-semibold">Join & draw</span>
 					</GameLink>
 				</div>
 			{/if}

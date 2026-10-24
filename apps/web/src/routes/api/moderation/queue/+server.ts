@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
-import { listModerationQueue } from '$lib/server/artwork/read.service';
-import { toApiErrorResponse } from '$lib/server/http/errors';
+import { listModerationQueue } from '#lib/server/artwork/read.service.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
 
 const MODERATION_QUEUE_ERROR = {
 	fallbackCode: 'MODERATION_QUEUE_FAILED',

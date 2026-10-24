@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { preloadCode, preloadData } = vi.hoisted(() => ({
-	preloadCode: vi.fn(async () => undefined),
+const { preloadData } = vi.hoisted(() => ({
 	preloadData: vi.fn(async () => ({ type: 'loaded' as const, status: 200, data: {} }))
 }));
 
-vi.mock('$app/navigation', () => ({ preloadCode, preloadData }));
+vi.mock('$app/navigation', () => ({ preloadData }));
 
 const {
 	homeGalleryTarget,
@@ -17,7 +16,6 @@ const {
 
 describe('navigation warm-up', () => {
 	beforeEach(() => {
-		preloadCode.mockClear();
 		preloadData.mockClear();
 	});
 
@@ -26,10 +24,10 @@ describe('navigation warm-up', () => {
 		expect(homeStudioTarget).toBe('/draw');
 	});
 
-	it('preloads the route module by pathname and the data by full URL', () => {
+	// preloadData loads the route's code as well as its data.
+	it('preloads the route by its full URL', () => {
 		warmNavigationTarget('/gallery/hall-of-fame?from=home');
 
-		expect(preloadCode).toHaveBeenCalledWith('/gallery/hall-of-fame');
 		expect(preloadData).toHaveBeenCalledWith('/gallery/hall-of-fame?from=home');
 	});
 
@@ -38,7 +36,6 @@ describe('navigation warm-up', () => {
 		warmNavigationTarget('/gallery/mystery?from=home');
 		warmNavigationTarget('/gallery/mystery?from=home');
 
-		expect(preloadCode).toHaveBeenCalledTimes(1);
 		expect(preloadData).toHaveBeenCalledTimes(1);
 	});
 
@@ -76,7 +73,7 @@ describe('navigation warm-up', () => {
 		warmNavigationTargetWhenIdle('/gallery/newest?from=home');
 
 		await vi.waitFor(() => {
-			expect(preloadCode).toHaveBeenCalledTimes(1);
+			expect(preloadData).toHaveBeenCalledTimes(1);
 		});
 	});
 });

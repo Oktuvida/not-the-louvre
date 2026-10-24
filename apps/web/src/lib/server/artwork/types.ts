@@ -1,13 +1,17 @@
-import type { CanonicalUser } from '$lib/server/auth/types';
-import type { ArtworkReportReason, ContentReportStatus } from '$lib/shared/content/report-reasons';
-import type { ArtworkVoteValue } from '$lib/shared/content/votes';
-import type { RateLimitPolicy } from '$lib/server/db/rate-limit';
+import type { CanonicalUser } from '#lib/server/auth/types.js';
+import type {
+	ArtworkReportReason,
+	ContentReportStatus
+} from '#lib/shared/content/report-reasons.js';
+import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
+import type { RateLimitPolicy } from '#lib/server/db/rate-limit.js';
 
 export type ArtworkRecord = {
 	authorId: string;
 	commentCount: number;
 	createdAt: Date;
 	drawingDocument?: string | null;
+	drawingDocumentKey?: string | null;
 	drawingVersion?: number | null;
 	forkCount: number;
 	hiddenAt?: Date | null;
@@ -15,7 +19,6 @@ export type ArtworkRecord = {
 	isHidden?: boolean;
 	isNsfw: boolean;
 	mediaContentType: string;
-	mediaPlaceholder?: string | null;
 	mediaSizeBytes: number;
 	nsfwLabeledAt?: Date | null;
 	nsfwSource?: 'creator' | 'moderator' | null;
@@ -41,7 +44,6 @@ export type ArtworkFeedCard = {
 	id: string;
 	isNsfw: boolean;
 	lineage: ArtworkLineageSummary;
-	mediaPlaceholder?: string | null;
 	mediaUrl: string;
 	score: number;
 	title: string;
@@ -73,6 +75,7 @@ export type ArtworkChildForkSummary = {
 export type ArtworkDetail = ArtworkFeedCard & {
 	childForks: ArtworkChildForkSummary[];
 	drawingDocument?: string | null;
+	drawingDocumentKey?: string | null;
 	drawingVersion?: number | null;
 	mediaContentType: string;
 	mediaSizeBytes: number;
@@ -127,6 +130,7 @@ export type ArtworkReadRecord = ArtworkRecord & {
 		createdAt: Date;
 		id: string;
 		isNsfw: boolean;
+		mediaContentType: string;
 		title: string;
 	}>;
 	parentAuthorAvatarUrl?: string | null;
@@ -207,10 +211,12 @@ export type ArtworkEngagementRateLimitRecord = {
 // else the browser never touches) rather than shipping a full ArtworkRecord.
 export type ArtworkVoteSummary = {
 	commentCount: number;
+	downvotes: number;
 	forkCount: number;
 	id: string;
 	score: number;
 	updatedAt: Date;
+	upvotes: number;
 };
 
 export type ArtworkVoteMutationResult = {
@@ -266,7 +272,6 @@ export type SanitizedMedia = {
 	contentType: string;
 	file: File;
 	height: number;
-	placeholder?: string | null;
 	sizeBytes: number;
 	width: number;
 };
@@ -320,21 +325,8 @@ export type RecordEngagementRateLimitAttemptInput = RecordRateLimitAttemptInput 
 };
 
 export type ArtworkRepository = {
-	appendArtworkDrawingDocumentChunk(
-		id: string,
-		chunk: string,
-		expectedLength: number,
-		updatedAt: Date
-	): Promise<boolean>;
 	createComment(input: CreateArtworkCommentInput): Promise<ArtworkCommentView | null>;
 	createArtwork(input: CreateArtworkInput): Promise<ArtworkRecord>;
-	finalizeArtworkDrawingDocument(
-		id: string,
-		version: number,
-		expectedTotalLength: number,
-		updatedAt: Date
-	): Promise<ArtworkRecord | null>;
-	findArtworkDrawingDocumentLength(id: string): Promise<number | null>;
 	createContentReport(input: CreateContentReportInput): Promise<ContentReportRecord>;
 	deleteArtwork(id: string): Promise<ArtworkRecord | null>;
 	deleteComment(id: string, updatedAt: Date): Promise<ArtworkCommentRecord | null>;

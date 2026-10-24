@@ -1,12 +1,12 @@
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { assertNotBanned } from '$lib/server/auth/guards';
-import type { CanonicalUser } from '$lib/server/auth/types';
-import { TEXT_MODERATION_BLOCKED_MESSAGES } from '$lib/shared/moderation/messages';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import { assertNotBanned } from '#lib/server/auth/guards.js';
+import type { CanonicalUser } from '#lib/server/auth/types.js';
+import { TEXT_MODERATION_BLOCKED_MESSAGES } from '#lib/shared/moderation/messages.js';
 import {
 	buildBaselineProfanityMatcher,
 	buildPhraseMatcher,
 	type TextModerationContext
-} from '$lib/shared/moderation/text-policy';
+} from '#lib/shared/moderation/text-policy.js';
 import { moderationRepository } from './repository';
 import type { ModerationRepository, TextModerationPolicyRecord } from './types';
 

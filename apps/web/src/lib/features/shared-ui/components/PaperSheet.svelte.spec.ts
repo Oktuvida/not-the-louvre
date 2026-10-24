@@ -15,7 +15,7 @@ const sheet = () => document.querySelector<HTMLElement>('.paper-sheet');
 
 describe('PaperSheet', () => {
 	it('paints the one paper the whole museum is printed on', async () => {
-		render(PaperSheet, { children: sheetContent('Studio access') });
+		await render(PaperSheet, { children: sheetContent('Studio access') });
 
 		await expect.element(page.getByText('Studio access')).toBeVisible();
 
@@ -35,7 +35,7 @@ describe('PaperSheet', () => {
 	});
 
 	it('wears the shared paper grain, and lends it to its content when it scrolls', async () => {
-		const { rerender } = render(PaperSheet, { children: sheetContent('Grainy') });
+		const { rerender } = await render(PaperSheet, { children: sheetContent('Grainy') });
 
 		expect(sheet()?.classList.contains('paper-grain')).toBe(true);
 
@@ -53,7 +53,7 @@ describe('PaperSheet', () => {
 	});
 
 	it('keeps the call site in charge of geometry and semantics', async () => {
-		render(PaperSheet, {
+		await render(PaperSheet, {
 			'aria-modal': 'true',
 			as: 'section',
 			children: sheetContent('Redraw your avatar'),

@@ -1,4 +1,4 @@
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 
 /*
  * The paging vocabulary of the gallery feed. The `{ hasMore, nextCursor }`

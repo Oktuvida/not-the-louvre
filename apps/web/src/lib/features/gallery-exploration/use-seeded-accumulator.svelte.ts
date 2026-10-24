@@ -1,20 +1,25 @@
 import { untrack } from 'svelte';
 import { beforeNavigate } from '$app/navigation';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 import {
 	createArtworkAccumulator,
 	type ArtworkAccumulator
-} from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
+} from '#lib/features/gallery-exploration/artwork-accumulator.svelte.js';
 import type {
 	GalleryPageInfo,
 	LoadMoreArtworks
-} from '$lib/features/gallery-exploration/model/discovery';
+} from '#lib/features/gallery-exploration/model/discovery.js';
+
 import {
 	readRoomFeedSnapshot,
 	restoreRoomFeedScroll,
 	writeRoomFeedSnapshot
-} from '$lib/features/gallery-exploration/model/feed-cache';
-import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+} from '#lib/features/gallery-exploration/model/feed-cache.js';
+import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
+import {
+	roomIdForPath,
+	type GalleryRoomId
+} from '#lib/features/gallery-exploration/model/rooms.js';
 
 /*
  * The seed reconciliation every room needs, written once.
@@ -54,6 +59,13 @@ export type SeededAccumulatorOptions = {
 	getFeedCacheKey?: () => GalleryRoomId | null | undefined;
 	/** The reel has no scroll of its own. */
 	restoreScroll?: boolean;
+	/** Reads the room grid's measured rows (VirtualizedGrid's `snapshotLayout`). */
+	getLayout?: () => GridLayoutSnapshot | null;
+};
+
+export type SeededAccumulator = ArtworkAccumulator & {
+	/** The grid layout the room had when it was left, for its grid to remount with. */
+	readonly restoredLayout: GridLayoutSnapshot | null;
 };
 
 const EMPTY_PAGE_INFO: GalleryPageInfo = { hasMore: false, nextCursor: null };
@@ -62,7 +74,7 @@ const seedIdentity = (items: Artwork[]) => items.map((artwork) => artwork.id).jo
 
 const pageInfoIdentity = (info: GalleryPageInfo) => `${info.hasMore}:${info.nextCursor ?? ''}`;
 
-export function createSeededAccumulator(options: SeededAccumulatorOptions): ArtworkAccumulator {
+export function createSeededAccumulator(options: SeededAccumulatorOptions): SeededAccumulator {
 	const transformSeed = options.transformSeed ?? ((artworks: Artwork[]) => artworks);
 	const watchPageInfo = options.watchPageInfo ?? true;
 
@@ -153,23 +165,39 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Artw
 		 * the restore a no-op.
 		 */
 		let lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
-		beforeNavigate(() => {
-			lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
-		});
+		// Read with the scroll: by teardown the grid has already gone.
+		let lastLayout: GridLayoutSnapshot | null = null;
 
-		// Teardown-only: hand the feed to the cache as the room leaves.
-		$effect(() => () => {
+		const handOverFeed = () =>
 			writeRoomFeedSnapshot(feedCacheKey, {
 				artworks: $state.snapshot(accumulator.allArtworks),
+				layout: lastLayout,
 				pageInfo: $state.snapshot(accumulator.pageInfo),
 				scrollY: lastScrollY
 			});
+
+		beforeNavigate(({ from, shallow, type }) => {
+			if (shallow && type === 'goto') return;
+			// A copy of this room that is still sliding out hears the next
+			// navigation too, from whatever room replaced it; its scroll is not
+			// this room's, and writing it would clobber the snapshot.
+			if (from && roomIdForPath(from.url.pathname) !== feedCacheKey) return;
+
+			lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
+			lastLayout = options.getLayout?.() ?? null;
+			// Handed over now as well as at teardown: that same out-transition
+			// delay means a quick Back mounts the next copy of this room before
+			// this one is destroyed, and it would find nothing to restore.
+			handOverFeed();
 		});
+
+		// Teardown covers the leaves that are not navigations (a refresh).
+		$effect(() => () => handOverFeed());
 
 		if (restored && options.restoreScroll !== false) {
 			$effect(() => restoreRoomFeedScroll(restored.scrollY));
 		}
 	}
 
-	return accumulator;
+	return Object.assign(accumulator, { restoredLayout: restored?.layout ?? null });
 }

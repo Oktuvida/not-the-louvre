@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { hashString } from '$lib/features/artwork-presentation/model/frame';
+	import { hashString } from '#lib/features/artwork-presentation/model/frame.js';
 
 	type WaxSealSize = 'xl' | 'lg' | 'md' | 'sm';
 

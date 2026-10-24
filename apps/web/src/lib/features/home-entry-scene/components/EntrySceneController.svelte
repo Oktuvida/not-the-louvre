@@ -3,19 +3,19 @@
 		HomeAuthActionForm,
 		HomeAuthBootstrap,
 		HomeAuthUser
-	} from '$lib/features/home-entry-scene/auth-contract';
+	} from '#lib/features/home-entry-scene/auth-contract.js';
 	import type {
 		HomePreviewCard,
 		HomeSceneArtworkSlot
-	} from '$lib/features/home-entry-scene/state/home-entry.svelte';
-	import HomeEntryPage from '$lib/features/home-entry-scene/HomeEntryPage.svelte';
-	import AuthOverlay from '$lib/features/home-entry-scene/components/AuthOverlay.svelte';
-	import MuseumWallOverlay from '$lib/features/home-entry-scene/components/MuseumWallOverlay.svelte';
-	import StudioPanel from '$lib/features/shared-ui/components/StudioPanel.svelte';
+	} from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
+	import HomeEntryPage from '#lib/features/home-entry-scene/HomeEntryPage.svelte';
+	import AuthOverlay from '#lib/features/home-entry-scene/components/AuthOverlay.svelte';
+	import MuseumWallOverlay from '#lib/features/home-entry-scene/components/MuseumWallOverlay.svelte';
+	import StudioPanel from '#lib/features/shared-ui/components/StudioPanel.svelte';
 	import {
 		createEntryState,
 		type EntryFlowEvent
-	} from '$lib/features/home-entry-scene/state/entry-state.svelte';
+	} from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
 
 	let {
 		auth,
@@ -49,7 +49,9 @@
 	const entryState = createEntryState(getInitialEntryState());
 
 	type AvatarOverride = {
-		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
+		avatarDrawingDocument?:
+			| import('#lib/features/stroke-json/document.js').DrawingDocumentV2
+			| null;
 		avatarOnboardingCompletedAt: Date;
 		avatarUrl: string;
 		userId: string;

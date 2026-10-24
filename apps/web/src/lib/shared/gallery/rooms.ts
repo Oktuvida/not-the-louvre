@@ -11,3 +11,11 @@ export const isGalleryRoomId = (value: string): value is GalleryRoomId =>
 // the annotation the template literal widens to `string`.
 export const roomHref = (roomId: GalleryRoomId): '/gallery' | `/gallery/${GalleryRoomId}` =>
 	roomId === 'hall-of-fame' ? '/gallery' : `/gallery/${roomId}`;
+
+/** The room a pathname addresses, or null outside the rooms. */
+export const roomIdForPath = (pathname: string): GalleryRoomId | null => {
+	if (pathname === '/gallery') return 'hall-of-fame';
+
+	const roomId = /^\/gallery\/([^/]+)$/.exec(pathname)?.[1];
+	return roomId && isGalleryRoomId(roomId) ? roomId : null;
+};

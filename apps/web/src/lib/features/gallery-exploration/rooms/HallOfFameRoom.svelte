@@ -1,20 +1,21 @@
 <script lang="ts">
-	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
-	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
-	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
-	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import ArtworkFrame from '#lib/features/artwork-presentation/components/ArtworkFrame.svelte';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import { resolveArtworkFrame } from '#lib/features/artwork-presentation/model/frame.js';
+	import NsfwImage from '#lib/features/gallery-exploration/components/NsfwImage.svelte';
+	import ScrollSentinel from '#lib/features/gallery-exploration/components/ScrollSentinel.svelte';
+	import VirtualizedGrid from '#lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
 	import type {
 		GalleryPageInfo,
 		LoadMoreArtworks
-	} from '$lib/features/gallery-exploration/model/discovery';
-	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
-	import { createSeededAccumulator } from '$lib/features/gallery-exploration/use-seeded-accumulator.svelte';
-	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
-	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
-	import WaxSealMedal from '$lib/features/shared-ui/components/WaxSealMedal.svelte';
+	} from '#lib/features/gallery-exploration/model/discovery.js';
+	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import { createSeededAccumulator } from '#lib/features/gallery-exploration/use-seeded-accumulator.svelte.js';
+	import PolaroidCard from '#lib/features/shared-ui/components/PolaroidCard.svelte';
+	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import WaxSealMedal from '#lib/features/shared-ui/components/WaxSealMedal.svelte';
 	import { writable, type Writable } from 'svelte/store';
 
 	interface Props {
@@ -122,9 +123,14 @@
 	// The podium owns the top three; the grid below it starts at the fourth. The
 	// seed identity is still computed on the whole list, so a reorder confined to
 	// the podium keeps reseeding the grid underneath it.
+	// The grid's measured rows travel with the feed, so coming back lands on
+	// the same card rather than on the same pixel of an estimated layout.
+	let grid = $state<{ snapshotLayout(): GridLayoutSnapshot | null }>();
+
 	const accumulator = createSeededAccumulator({
 		getFeedCacheKey: () => feedCacheKey,
 		getArtworks: () => artworks,
+		getLayout: () => grid?.snapshotLayout() ?? null,
 		getLoadMoreArtworks: () => loadMoreArtworks,
 		getPageInfo: () => pageInfo,
 		transformSeed: (items) => items.slice(3)
@@ -181,7 +187,6 @@
 									<NsfwImage
 										src={artwork.imageUrl}
 										alt={artwork.title}
-										placeholder={artwork.imagePlaceholder}
 										blurred={isPodiumBlurred(artwork)}
 										ariaLabel={viewerId
 											? 'Sensitive artwork, click to reveal'
@@ -229,7 +234,11 @@
 	</div>
 
 	<div class="w-full">
-		<VirtualizedGrid items={accumulator.allArtworks}>
+		<VirtualizedGrid
+			bind:this={grid}
+			items={accumulator.allArtworks}
+			restoredLayout={accumulator.restoredLayout}
+		>
 			{#snippet renderCard(artwork)}
 				<PolaroidCard
 					{artwork}

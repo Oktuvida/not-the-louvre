@@ -1,89 +1,55 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import pg from 'pg';
 import * as schema from './schema';
-import { env } from '$env/dynamic/private';
+import { runningOnWorkers } from '#lib/server/runtime.js';
+import { DATABASE_URL } from '$app/env/private';
 
-type DbConnection = {
-	client: ReturnType<typeof postgres>;
-	db: PostgresJsDatabase<typeof schema>;
-};
+type Database = NodePgDatabase<typeof schema>;
 
-const createDbConnection = (connectionString?: string): DbConnection => {
-	const databaseUrl = connectionString || env.DATABASE_URL;
+const resolveDatabaseUrl = (connectionString?: string) => {
+	const databaseUrl = connectionString || DATABASE_URL;
 
 	// Validated here rather than at module load so importing this module stays
 	// side-effect-free (SvelteKit's postbuild `analyse` step imports server
 	// modules without runtime env present).
 	if (!databaseUrl) throw new Error('DATABASE_URL is not set');
 
-	// Production connects through Supabase's Supavisor pooler (session mode,
-	// :5432). prepare: false keeps the client compatible with transaction mode
-	// too, and with per-request connections prepared statements are never
-	// reused anyway. connect_timeout keeps a connection that dies during
-	// startup from silently redialing for postgres.js's 30s default before
-	// surfacing CONNECT_TIMEOUT.
-	const client = postgres(databaseUrl, { connect_timeout: 10, prepare: false });
-
-	return { client, db: drizzle(client, { schema }) };
+	return databaseUrl;
 };
 
-// Cloudflare Workers forbid using a TCP socket opened during one request from
-// another request, so a module-level connection pool breaks there. Each
-// request runs inside this storage with its own connection (see
-// hooks.server.ts), while Node keeps the usual process-wide pool.
-const requestScopedConnection = new AsyncLocalStorage<DbConnection>();
+// node-postgres is the driver Cloudflare supports for Drizzle over Hyperdrive.
+// Workers forbid reusing a socket across requests, so each request gets its own
+// client; Hyperdrive pools behind it and cleans the connection up when the
+// request ends, so it is never closed by hand. Node keeps one process-wide pool.
+const requestScopedDatabase = new AsyncLocalStorage<Database>();
 
-const runningInCloudflareWorkers =
-	typeof caches !== 'undefined' &&
-	(caches as unknown as { default?: unknown }).default !== undefined;
+let processDatabase: Database | undefined;
 
-let processConnection: DbConnection | undefined;
+const resolveDatabase = (): Database => {
+	const scoped = requestScopedDatabase.getStore();
+	if (scoped) return scoped;
 
-const resolveConnection = (): DbConnection => {
-	const scoped = requestScopedConnection.getStore();
-
-	if (scoped) {
-		return scoped;
-	}
-
-	processConnection ??= createDbConnection();
-
-	return processConnection;
+	processDatabase ??= drizzle(
+		new pg.Pool({ connectionString: resolveDatabaseUrl(), connectionTimeoutMillis: 10_000 }),
+		{ schema }
+	);
+	return processDatabase;
 };
 
-// Each request's fresh dial crosses to Supavisor (TCP + TLS + auth, around a
-// second per navigation) unless a Hyperdrive connection string is provided:
-// Hyperdrive terminates Postgres at the local colo over warm pooled origin
-// connections, so per-request connections stay correct on Workers and cheap.
 export const runWithRequestDbConnection = async <T>(
 	fn: () => Promise<T>,
-	options: {
-		connectionString?: string;
-		context?: { waitUntil(promise: Promise<unknown>): void };
-	} = {}
+	options: { connectionString?: string } = {}
 ): Promise<T> => {
-	if (!runningInCloudflareWorkers) {
-		return fn();
-	}
+	if (!runningOnWorkers) return fn();
 
-	const connection = createDbConnection(options.connectionString);
+	const client = new pg.Client({
+		connectionString: resolveDatabaseUrl(options.connectionString),
+		connectionTimeoutMillis: 10_000
+	});
+	await client.connect();
 
-	try {
-		return await requestScopedConnection.run(connection, fn);
-	} finally {
-		// Waits for in-flight queries before closing the request's connection.
-		// Registered with waitUntil so the drain outlives the response instead
-		// of being cut short when the isolate is suspended; the timeout stays
-		// at 5s because waitUntil work is billed as wall time.
-		const closing = connection.client.end({ timeout: 5 }).catch(() => undefined);
-
-		if (options.context) {
-			options.context.waitUntil(closing);
-		} else {
-			void closing;
-		}
-	}
+	return requestScopedDatabase.run(drizzle(client, { schema }), fn);
 };
 
 const createConnectionBoundProxy = <T extends object>(resolveTarget: () => T): T =>
@@ -103,6 +69,4 @@ const createConnectionBoundProxy = <T extends object>(resolveTarget: () => T): T
 		has: (_target, property) => property in resolveTarget()
 	});
 
-export const dbClient = createConnectionBoundProxy(() => resolveConnection().client);
-
-export const db = createConnectionBoundProxy(() => resolveConnection().db);
+export const db = createConnectionBoundProxy(resolveDatabase);

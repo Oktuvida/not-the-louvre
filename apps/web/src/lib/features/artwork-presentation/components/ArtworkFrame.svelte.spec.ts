@@ -5,11 +5,11 @@ import { render } from 'vitest-browser-svelte';
 const { paintSpy } = vi.hoisted(() => ({ paintSpy: vi.fn() }));
 
 vi.mock(
-	'$lib/features/artwork-presentation/canvas/artwork-frame-canvas',
+	'#lib/features/artwork-presentation/canvas/artwork-frame-canvas.js',
 	async (importOriginal) => {
 		const actual =
 			await importOriginal<
-				typeof import('$lib/features/artwork-presentation/canvas/artwork-frame-canvas')
+				typeof import('#lib/features/artwork-presentation/canvas/artwork-frame-canvas.js')
 			>();
 
 		return {
@@ -81,7 +81,7 @@ describe('ArtworkFrame', () => {
 	it('paints the frame bitmap exactly once per mount', async () => {
 		paintSpy.mockClear();
 
-		render(ArtworkFrameHarness, { artworkId: 'artwork-single-paint', size: 132 });
+		await render(ArtworkFrameHarness, { artworkId: 'artwork-single-paint', size: 132 });
 
 		await expect.element(page.getByTestId('harness-frame-0')).toBeVisible();
 		await vi.waitFor(() => {
@@ -97,7 +97,7 @@ describe('ArtworkFrame', () => {
 	it('reuses one painted bitmap for identical frames of the same size', async () => {
 		paintSpy.mockClear();
 
-		render(ArtworkFrameHarness, { artworkId: 'artwork-shared-bitmap', count: 3, size: 148 });
+		await render(ArtworkFrameHarness, { artworkId: 'artwork-shared-bitmap', count: 3, size: 148 });
 
 		await expect.element(page.getByTestId('harness-frame-2')).toBeVisible();
 		await vi.waitFor(() => {
@@ -113,7 +113,7 @@ describe('ArtworkFrame', () => {
 		// A zero-sized box never measures, which is exactly the server's
 		// situation: the opening still has to come out of the preset's ratio
 		// rather than filling the whole frame and snapping in at hydration.
-		render(ArtworkFrameHarness, { artworkId: 'artwork-ssr-geometry', size: 0 });
+		await render(ArtworkFrameHarness, { artworkId: 'artwork-ssr-geometry', size: 0 });
 
 		const opening = openingOf('harness-frame-0');
 		const inset = Number.parseFloat(opening.style.left);
@@ -129,7 +129,7 @@ describe('ArtworkFrame', () => {
 		vi.stubGlobal('devicePixelRatio', 1);
 		stubResolutionQueries();
 
-		render(ArtworkFrameHarness, { artworkId: 'artwork-dpr-repaint', size: 132 });
+		await render(ArtworkFrameHarness, { artworkId: 'artwork-dpr-repaint', size: 132 });
 
 		await expect.element(page.getByTestId('harness-frame-0')).toBeVisible();
 		await vi.waitFor(() => {

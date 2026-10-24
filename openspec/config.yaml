@@ -1,3 +1,5 @@
+# DEPRECATED: historical specs, no longer maintained. The stack below predates the
+# remaster (no Rust/WASM, Cloudflare adapter). Source of truth: docs/remaster/README.md
 schema: spec-driven
 
 context: |

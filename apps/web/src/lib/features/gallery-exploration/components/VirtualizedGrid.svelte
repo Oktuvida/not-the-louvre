@@ -1,10 +1,12 @@
 <script lang="ts" generics="T">
 	import { WindowVirtualizer } from 'virtua/svelte';
 	import type { Snippet } from 'svelte';
+	import type { CacheSnapshot } from 'virtua';
 	import {
 		GALLERY_GRID_GAP,
-		GALLERY_GRID_MIN_COLUMN_WIDTH
-	} from '$lib/features/gallery-exploration/model/grid';
+		GALLERY_GRID_MIN_COLUMN_WIDTH,
+		type GridLayoutSnapshot
+	} from '#lib/features/gallery-exploration/model/grid.js';
 
 	interface Props {
 		items: T[];
@@ -13,13 +15,16 @@
 		gap?: number;
 		/** Minimum column width in pixels, mirroring the CSS auto-fill behavior. */
 		minColumnWidth?: number;
+		/** The layout this grid had when its room was left (see `snapshotLayout`). */
+		restoredLayout?: GridLayoutSnapshot | null;
 	}
 
 	let {
 		items,
 		renderCard,
 		gap = GALLERY_GRID_GAP,
-		minColumnWidth = GALLERY_GRID_MIN_COLUMN_WIDTH
+		minColumnWidth = GALLERY_GRID_MIN_COLUMN_WIDTH,
+		restoredLayout = null
 	}: Props = $props();
 
 	// Before the container is measured (SSR / first paint) we fall back to
@@ -82,6 +87,31 @@
 		return typeof key === 'string' || typeof key === 'number' ? key : index;
 	};
 
+	let virtualizer = $state<{ getCache(): CacheSnapshot }>();
+
+	/*
+	 * Coming back to a room, the virtualizer is handed the row sizes it had
+	 * measured. Without them it estimates every row it has not seen yet, so the
+	 * saved scroll offset lands on another card. The cache is read once, on
+	 * mount, and describes rows of a given width: the virtualizer waits for the
+	 * real column count, and a grid that now chunks differently (the window was
+	 * resized) starts from estimates as before.
+	 */
+	const restoring = (() => restoredLayout !== null)();
+	const restoredCache = $derived(
+		restoredLayout &&
+			restoredLayout.columnCount === columnCount &&
+			restoredLayout.rowCount === rows.length
+			? restoredLayout.cache
+			: undefined
+	);
+
+	/** The measured rows, for the room to keep while the visitor is away. */
+	export const snapshotLayout = (): GridLayoutSnapshot | null =>
+		virtualizer && isMeasured
+			? { cache: virtualizer.getCache(), columnCount, rowCount: rows.length }
+			: null;
+
 	const gridTemplateColumns = $derived(
 		isMeasured
 			? `repeat(${columnCount}, minmax(0, 1fr))`
@@ -90,20 +120,28 @@
 </script>
 
 <div bind:this={containerElement}>
-	<WindowVirtualizer data={rows} getKey={rowKey} bufferSize={600}>
-		{#snippet children(row)}
-			<div
-				data-testid="virtualized-row"
-				class="virtualized-row"
-				style:grid-template-columns={gridTemplateColumns}
-				style:--grid-gap={`${gap}px`}
-			>
-				{#each row as item (itemKey(item))}
-					{@render renderCard(item)}
-				{/each}
-			</div>
-		{/snippet}
-	</WindowVirtualizer>
+	{#if !restoring || isMeasured}
+		<WindowVirtualizer
+			bind:this={virtualizer}
+			data={rows}
+			getKey={rowKey}
+			bufferSize={600}
+			cache={restoredCache}
+		>
+			{#snippet children(row)}
+				<div
+					data-testid="virtualized-row"
+					class="virtualized-row"
+					style:grid-template-columns={gridTemplateColumns}
+					style:--grid-gap={`${gap}px`}
+				>
+					{#each row as item (itemKey(item))}
+						{@render renderCard(item)}
+					{/each}
+				</div>
+			{/snippet}
+		</WindowVirtualizer>
+	{/if}
 </div>
 
 <style>

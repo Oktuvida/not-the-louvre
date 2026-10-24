@@ -20,9 +20,6 @@
 			"entry": ["scripts/**/*.{ts,mjs}", "src/**/*.e2e.ts"],
 			"project": ["src/**/*.{ts,svelte,css}", "scripts/**/*.{ts,mjs}"],
 			"ignoreDependencies": ["prettier-plugin-svelte", "prettier-plugin-tailwindcss"]
-		},
-		"packages/stroke-json-runtime": {
-			"project": ["src/**/*.ts"]
 		}
 	}
 }

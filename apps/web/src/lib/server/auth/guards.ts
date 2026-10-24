@@ -1,4 +1,4 @@
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import type { CanonicalUser } from './types';
 
 export const assertAuthenticatedUser = (user: CanonicalUser | null | undefined): CanonicalUser => {

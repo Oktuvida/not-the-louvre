@@ -1,12 +1,12 @@
-import { json } from '@sveltejs/kit';
 import type { RequestEvent, RequestHandler } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { toApiErrorResponse } from '$lib/server/http/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
 import {
 	getTextModerationSnapshot,
 	updateTextModerationPolicies
-} from '$lib/server/moderation/service';
-import type { TextModerationContext } from '$lib/shared/moderation/text-policy';
+} from '#lib/server/moderation/service.js';
+import type { TextModerationContext } from '#lib/shared/moderation/text-policy.js';
+import { edgeCache, runAfterResponse } from '#lib/server/platform.js';
 
 // The public snapshot at /api/moderation/text-policy is stored in the colo
 // cache, so an admin edit has to drop the local copy or the admin keeps reading
@@ -14,13 +14,13 @@ import type { TextModerationContext } from '$lib/shared/moderation/text-policy';
 // local datacenter, which is exactly where the editing admin's next request
 // lands; remote colos wait out the short TTL.
 const purgeTextPolicyEdgeCache = (event: RequestEvent) => {
-	const edgeCache = event.platform?.caches?.default;
-	if (!edgeCache) return;
+	const cache = edgeCache();
+	if (!cache) return;
 
-	const purge = edgeCache
+	const purge = cache
 		.delete(new URL('/api/moderation/text-policy', event.url.origin).href)
 		.catch(() => {});
-	event.platform?.context?.waitUntil(purge);
+	runAfterResponse(purge);
 };
 
 const POLICY_READ_ERROR = {
@@ -45,7 +45,7 @@ export const GET: RequestHandler = async (event) => {
 			);
 		}
 
-		return json(await getTextModerationSnapshot());
+		return Response.json(await getTextModerationSnapshot());
 	} catch (error) {
 		return toApiErrorResponse(error, POLICY_READ_ERROR);
 	}
@@ -70,7 +70,7 @@ export const PUT: RequestHandler = async (event) => {
 		);
 		purgeTextPolicyEdgeCache(event);
 
-		return json(snapshot);
+		return Response.json(snapshot);
 	} catch (error) {
 		return toApiErrorResponse(error, POLICY_UPDATE_ERROR);
 	}

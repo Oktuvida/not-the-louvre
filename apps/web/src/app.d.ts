@@ -1,5 +1,5 @@
 import type { Session, User } from 'better-auth';
-import type { AuthIntegrityFailure, CanonicalUser } from '$lib/server/auth/types';
+import type { AuthIntegrityFailure, CanonicalUser } from '#lib/server/auth/types.js';
 
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
@@ -29,11 +29,6 @@ declare global {
 				roomId: string;
 				source: 'external' | 'local-room-selection';
 			};
-		}
-		interface Platform {
-			caches?: CacheStorage & { default: Cache };
-			context?: { waitUntil(promise: Promise<unknown>): void };
-			env?: { HYPERDRIVE?: { connectionString: string } };
 		}
 	}
 }

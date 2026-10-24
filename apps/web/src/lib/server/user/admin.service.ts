@@ -1,7 +1,7 @@
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { assertNotBanned } from '$lib/server/auth/guards';
-import type { CanonicalUser, ProductRole } from '$lib/server/auth/types';
-import { resolveUserAvatarUrl } from '$lib/shared/user/avatar-url';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import { assertNotBanned } from '#lib/server/auth/guards.js';
+import type { CanonicalUser, ProductRole } from '#lib/server/auth/types.js';
+import { resolveUserAvatarUrl } from '#lib/shared/user/avatar-url.js';
 import { userRepository as defaultRepository } from './repository';
 import type { UserRecord, UserRepository } from './types';
 

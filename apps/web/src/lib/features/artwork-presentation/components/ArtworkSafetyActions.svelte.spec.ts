@@ -2,7 +2,7 @@ import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import ArtworkSafetyActions from './ArtworkSafetyActions.svelte';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 
 const artwork = {
 	artist: 'journey_artist',
@@ -34,7 +34,7 @@ describe('ArtworkSafetyActions', () => {
 				})
 		);
 
-		render(ArtworkSafetyActions, {
+		await render(ArtworkSafetyActions, {
 			artwork,
 			request: fetchSpy as typeof fetch,
 			viewer: { id: 'user-1', role: 'user' },
@@ -67,7 +67,7 @@ describe('ArtworkSafetyActions', () => {
 				)
 		);
 
-		render(ArtworkSafetyActions, {
+		await render(ArtworkSafetyActions, {
 			artwork,
 			request: fetchSpy as typeof fetch,
 			viewer: { id: 'admin-1', role: 'admin' },
@@ -98,7 +98,7 @@ describe('ArtworkSafetyActions', () => {
 				)
 		);
 
-		render(ArtworkSafetyActions, {
+		await render(ArtworkSafetyActions, {
 			artwork: { ...artwork, isHidden: true, isNsfw: true },
 			request: fetchSpy as typeof fetch,
 			viewer: { id: 'moderator-1', role: 'moderator' },

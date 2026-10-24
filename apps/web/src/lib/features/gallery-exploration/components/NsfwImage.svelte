@@ -4,11 +4,6 @@
 	// buffer must reappear instantly instead of replaying the 200ms fade.
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- session-wide memo, deliberately non-reactive
 	const settledSources = new Set<string>();
-
-	// Once the photo is opaque the LQIP underneath is invisible, so its blur is
-	// pure GPU cost. Retire it a beat after the crossfade ends — on a timer, not
-	// on `transitionend`, because a cached image never runs a transition at all.
-	const PLACEHOLDER_RETIRE_MS = 250;
 </script>
 
 <script lang="ts">
@@ -21,8 +16,7 @@
 		ariaLabel = undefined,
 		loading = 'lazy',
 		decoding = 'async',
-		fetchpriority = 'auto',
-		placeholder = null
+		fetchpriority = 'auto'
 	}: {
 		src: string;
 		alt: string;
@@ -40,14 +34,12 @@
 		loading?: 'eager' | 'lazy';
 		decoding?: 'async' | 'sync';
 		fetchpriority?: 'auto' | 'high' | 'low';
-		placeholder?: string | null;
 	} = $props();
 
 	let imageElement = $state<HTMLImageElement>();
 	// Starts opaque so the server-rendered markup shows the real photo; the
 	// effect below only opens the fade when the image genuinely has not landed.
 	let isLoaded = $state(true);
-	let placeholderRetired = $state(true);
 
 	const markSettled = (settledSrc: string) => {
 		settledSources.add(settledSrc);
@@ -59,42 +51,16 @@
 
 		if (settledSources.has(currentSrc) || (imageElement?.complete ?? false)) {
 			markSettled(currentSrc);
-			placeholderRetired = true;
 			return;
 		}
 
 		isLoaded = false;
-		placeholderRetired = false;
-	});
-
-	$effect(() => {
-		if (!isLoaded) return;
-
-		const timer = setTimeout(() => {
-			placeholderRetired = true;
-		}, PLACEHOLDER_RETIRE_MS);
-
-		return () => {
-			clearTimeout(timer);
-		};
 	});
 </script>
 
+<!-- The linen background is the placeholder: the cream paper every drawing is
+     made on, at no cost, until the photo fades in over it. -->
 <div class={`relative h-full w-full bg-linen ${className}`}>
-	{#if placeholder}
-		<!-- Blurred tiny preview stays mounted beneath the real image so a
-		     recycled card never re-decodes it; the slight scale hides the blur's
-		     soft edges at the frame border. -->
-		<img
-			src={placeholder}
-			alt=""
-			aria-hidden="true"
-			draggable="false"
-			class={`nsfw-layer nsfw-placeholder ${blurred ? 'is-sensitive' : ''} ${
-				placeholderRetired && !blurred ? 'is-retired' : ''
-			}`}
-		/>
-	{/if}
 	<img
 		bind:this={imageElement}
 		{src}
@@ -125,22 +91,6 @@
 	/* The NSFW treatment is written once, here, and read from the shared
 	 * `--nsfw-*` tokens so the Hot Wall, the podium, the home preview stack and
 	 * the Mystery reel all censor artwork at the same radius and scrim. */
-	.nsfw-layer {
-		position: absolute;
-		inset: 0;
-		height: 100%;
-		width: 100%;
-		object-fit: cover;
-	}
-
-	.nsfw-placeholder {
-		scale: 1.06;
-		filter: blur(var(--nsfw-placeholder-blur, 12px));
-		transition:
-			opacity var(--duration-ui) ease,
-			filter var(--duration-ui) ease;
-	}
-
 	.nsfw-photo {
 		opacity: 0;
 		transition:
@@ -153,16 +103,9 @@
 		opacity: 1;
 	}
 
-	.nsfw-placeholder.is-sensitive,
 	.nsfw-photo.is-sensitive {
 		scale: 1.04;
 		filter: blur(var(--nsfw-blur, 20px)) saturate(0);
-	}
-
-	/* Only ever applied once the opaque photo covers it. */
-	.nsfw-placeholder.is-retired {
-		opacity: 0;
-		filter: none;
 	}
 
 	.nsfw-scrim {

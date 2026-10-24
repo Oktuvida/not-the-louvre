@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 const mocked = vi.hoisted(() => ({
 	banUser: vi.fn(),
 	unbanUser: vi.fn()
 }));
 
-vi.mock('$lib/server/user/admin.service', async () => {
-	const actual = await vi.importActual<object>('$lib/server/user/admin.service');
+vi.mock('#lib/server/user/admin.service.js', async () => {
+	const actual = await vi.importActual<object>('#lib/server/user/admin.service.js');
 	return {
 		...actual,
 		banUser: mocked.banUser,
