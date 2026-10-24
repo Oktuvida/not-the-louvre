@@ -1,9 +1,12 @@
+import type { ArtworkLiveChange } from '#lib/shared/artwork/live-change.js';
+import { readArtworkLiveChange } from './artwork-live-change';
+
 /*
  * Keeps the open artwork detail current. A WebSocket to the artwork's live
  * endpoint (served by the realtime Worker's Durable Object) reports every vote
- * or comment change, and the page refetches the detail. A dropped socket
- * reconnects with backoff while the same artwork stays open, and refetches once
- * it is back, since changes made in the gap were never announced.
+ * or comment change, usually with its data. A dropped socket reconnects with
+ * backoff while the same artwork stays open and reports a change without data
+ * once it is back, since changes made in the gap were never announced.
  */
 
 // Under the idle timeout of the proxies between browser and Cloudflare; the
@@ -12,23 +15,14 @@ const PING_INTERVAL_MS = 30_000;
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 
 export type ArtworkLiveUpdatesOptions = {
-	onChange: (artworkId: string) => void;
+	/** `change` is null when the artwork has to be read again to catch up. */
+	onChange: (artworkId: string, change: ArtworkLiveChange | null) => void;
 };
 
 const liveUrl = (artworkId: string) => {
 	const url = new URL(`/api/artworks/${encodeURIComponent(artworkId)}/live`, window.location.href);
 	url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
 	return url.href;
-};
-
-const readChangedArtworkId = (data: unknown) => {
-	if (typeof data !== 'string') return null;
-	try {
-		const change = JSON.parse(data) as { artworkId?: unknown };
-		return typeof change.artworkId === 'string' ? change.artworkId : null;
-	} catch {
-		return null;
-	}
 };
 
 export const createArtworkLiveUpdates = (options: ArtworkLiveUpdatesOptions) => {
@@ -57,13 +51,12 @@ export const createArtworkLiveUpdates = (options: ArtworkLiveUpdatesOptions) => 
 			pingTimer = setInterval(() => {
 				if (next.readyState === WebSocket.OPEN) next.send('ping');
 			}, PING_INTERVAL_MS);
-			if (isReconnect) options.onChange(artworkId);
+			if (isReconnect) options.onChange(artworkId, null);
 		};
 
 		next.onmessage = (event) => {
-			if (readChangedArtworkId(event.data) === artworkId) {
-				options.onChange(artworkId);
-			}
+			const change = readArtworkLiveChange(event.data);
+			if (change?.artworkId === artworkId) options.onChange(artworkId, change);
 		};
 
 		next.onclose = () => {

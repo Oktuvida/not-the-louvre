@@ -19,6 +19,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { db } from '#lib/server/db/index.js';
 import { artworkComments, artworks, contentReports, users } from '#lib/server/db/schema.js';
 import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
+import { voteCountSql } from './vote-counts';
 import type {
 	ArtworkDiscoveryCursor,
 	ArtworkDiscoveryTopWindow,
@@ -143,14 +144,6 @@ const parentSelect = {
 	parentAuthorNickname: parentAuthors.nickname,
 	parentTitle: parentArtworks.title
 };
-
-const voteCountSql = (value: ArtworkVoteValue) =>
-	sql<number>`coalesce((
-		select count(*)::int
-		from "app"."artwork_votes" vote
-		where vote.artwork_id = ${artworks.id}
-			and vote.value = ${sql.raw(`'${value}'::app.artwork_vote_value`)}
-	), 0)`;
 
 const viewerVoteSql = (viewer: { isModerator: boolean; userId: string | null }) =>
 	viewer.userId

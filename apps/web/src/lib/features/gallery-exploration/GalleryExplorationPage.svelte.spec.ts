@@ -695,7 +695,7 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByText(/could not be loaded/i)).not.toBeInTheDocument();
 	});
 
-	it('refreshes the open artwork when someone votes or comments on it', async () => {
+	it('asks for the open artwork again when a change arrives without its data', async () => {
 		const loadArtworkDetail = vi
 			.fn<(...args: [string]) => Promise<Artwork>>()
 			.mockResolvedValueOnce({
@@ -761,6 +761,79 @@ describe('GalleryExplorationPage', () => {
 		// The visitor's book is on the back of the postcard, inert until it turns.
 		await page.getByRole('button', { name: 'Read the comments' }).click();
 		await expect.element(page.getByText('Realtime hello', { exact: false })).toBeVisible();
+	});
+
+	it('applies a vote pushed with its totals without asking for the artwork again', async () => {
+		const loadArtworkDetail = vi.fn(async () => ({
+			...baseArtwork,
+			id: 'artwork-1',
+			score: 0,
+			title: 'Deterministic Gallery Study',
+			upvotes: 0
+		}));
+
+		await render(GalleryExplorationPage, {
+			artworks: [
+				{ ...baseArtwork, id: 'artwork-1', score: 0, title: 'Deterministic Gallery Study' }
+			],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		const roomCard = page.getByTestId('virtualized-artwork-card-artwork-1');
+		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
+		await expect.element(page.getByRole('button', { name: /👍\s*0/ })).toBeVisible();
+
+		const socket = await connectedSocket('/api/artworks/artwork-1/live');
+		socket.receive(
+			JSON.stringify({
+				artworkId: 'artwork-1',
+				change: 'votes',
+				votes: { downvotes: 0, score: 1, upvotes: 1 }
+			})
+		);
+
+		await expect.element(page.getByRole('button', { name: /👍\s*1/ })).toBeVisible();
+		await expect.element(roomCard.getByText('⭐ 1')).toBeVisible();
+		expect(loadArtworkDetail).toHaveBeenCalledTimes(1);
+	});
+
+	it('adds a comment pushed with the change once, without asking for the artwork again', async () => {
+		const loadArtworkDetail = vi.fn(async () => ({
+			...baseArtwork,
+			id: 'artwork-1',
+			title: 'Deterministic Gallery Study'
+		}));
+
+		await render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		const roomCard = page.getByTestId('virtualized-artwork-card-artwork-1');
+		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
+		await expect.element(roomCard.getByText('💬 0')).toBeVisible();
+
+		const socket = await connectedSocket('/api/artworks/artwork-1/live');
+		const pushed = JSON.stringify({
+			artworkId: 'artwork-1',
+			change: 'comments',
+			comment: { author: 'guest_artist', id: 'comment-1', text: 'Realtime hello', timestamp: 1 }
+		});
+		socket.receive(pushed);
+		socket.receive(pushed);
+
+		await expect.element(roomCard.getByText('💬 1')).toBeVisible();
+		await page.getByRole('button', { name: 'Read the comments' }).click();
+		await expect.element(page.getByText('Realtime hello', { exact: false })).toBeVisible();
+		expect(loadArtworkDetail).toHaveBeenCalledTimes(1);
 	});
 
 	it('keeps the open artwork live for visitors who are not signed in', async () => {

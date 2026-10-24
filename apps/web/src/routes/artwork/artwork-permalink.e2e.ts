@@ -37,6 +37,42 @@ test.describe('artwork permalinks', () => {
 		expect(ogContent(html, 'og:image')).toBe('https://not-the-louvre.art/og-cover.png');
 	});
 
+	test('an artwork opened from a shared link shows votes as they happen', async ({
+		baseURL,
+		page,
+		request
+	}) => {
+		const id = await publishArtworkThroughActions(request, baseURL, { title: 'Live Piece' });
+		// A vote is only passed on to sockets that are already open.
+		await page.addInitScript(() => {
+			const NativeWebSocket = window.WebSocket;
+			window.WebSocket = class extends NativeWebSocket {
+				constructor(...args: ConstructorParameters<typeof WebSocket>) {
+					super(...args);
+					this.addEventListener('open', () => document.body.setAttribute('data-live', 'open'));
+				}
+			};
+		});
+
+		await page.goto(`/artwork/${id}`);
+		const score = (value: number) =>
+			page
+				.getByRole('dialog', { name: /Artwork details for Live Piece/ })
+				.getByText(new RegExp(`⭐\\s*${value}$`))
+				.filter({ visible: true })
+				.first();
+		await expect(score(0)).toBeVisible();
+		await expect(page.locator('body[data-live="open"]')).toHaveCount(1);
+
+		const vote = await request.post(`/api/artworks/${id}/vote`, {
+			data: { value: 'up' },
+			headers: { origin: baseURL ?? '' }
+		});
+		expect(vote.status(), await vote.text()).toBe(200);
+
+		await expect(score(1)).toBeVisible();
+	});
+
 	test('a link to an artwork that is not there is a not found', async ({ request }) => {
 		const response = await request.get('/artwork/no-such-artwork');
 

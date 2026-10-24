@@ -514,21 +514,24 @@
 				};
 			}>(`/api/artworks/${artwork.id}/comments`, { json: { body }, method: 'POST' });
 
-			syncArtwork({
-				...artwork,
-				commentCount: (artwork.commentCount ?? artwork.comments.length) + 1,
-				comments: [
-					...artwork.comments,
-					{
-						author: payload.comment.author.nickname,
-						id: payload.comment.id,
-						text: payload.comment.body,
-						timestamp: payload.comment.createdAt
-							? Date.parse(payload.comment.createdAt)
-							: Date.now()
-					}
-				]
-			});
+			// The live copy of this comment can land before this answer does.
+			if (!artwork.comments.some((comment) => comment.id === payload.comment.id)) {
+				syncArtwork({
+					...artwork,
+					commentCount: (artwork.commentCount ?? artwork.comments.length) + 1,
+					comments: [
+						...artwork.comments,
+						{
+							author: payload.comment.author.nickname,
+							id: payload.comment.id,
+							text: payload.comment.body,
+							timestamp: payload.comment.createdAt
+								? Date.parse(payload.comment.createdAt)
+								: Date.now()
+						}
+					]
+				});
+			}
 			commentBody = '';
 			commentInput?.focus();
 		} catch (error) {

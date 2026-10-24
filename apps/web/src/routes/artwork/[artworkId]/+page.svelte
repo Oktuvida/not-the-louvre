@@ -5,6 +5,8 @@
 	import { setAdultContentEnabled } from '#lib/client/avatar-upload.js';
 	import ArtworkDetailPanel from '#lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte';
 	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import { applyArtworkLiveChange } from '#lib/features/gallery-exploration/artwork-live-change.js';
+	import { createArtworkLiveUpdates } from '#lib/features/gallery-exploration/artwork-live-updates.js';
 	import { createGalleryLayoutContext } from '#lib/features/gallery-exploration/gallery-layout-context.js';
 	import GalleryLayoutFrame from '#lib/features/gallery-exploration/GalleryLayoutFrame.svelte';
 	import type { PageProps } from './$types';
@@ -29,6 +31,23 @@
 		await setAdultContentEnabled(enabled);
 		adultContentEnabled = enabled;
 	};
+
+	// Live, as the gallery's postcard is: a change applies its own data, and one
+	// without (a comment taken down, a reconnect) reloads the page's data.
+	const artworkId = $derived(data.artwork.id);
+
+	$effect(() => {
+		const liveUpdates = createArtworkLiveUpdates({
+			onChange: (_, change) => {
+				const patched = change ? applyArtworkLiveChange(artwork, change) : null;
+				if (patched) artwork = patched;
+				else void invalidateAll();
+			}
+		});
+		liveUpdates.start(artworkId);
+
+		return () => liveUpdates.stop();
+	});
 
 	const patchArtwork = (
 		artworkId: string,

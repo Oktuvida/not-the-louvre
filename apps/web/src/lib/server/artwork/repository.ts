@@ -13,6 +13,7 @@ import {
 	rateLimitAttemptSet,
 	rateLimitFirstAttemptBlockedUntil
 } from '#lib/server/db/rate-limit.js';
+import { voteCountSql } from './vote-counts';
 import type {
 	ArtworkCommentRecord,
 	ArtworkCommentView,
@@ -60,12 +61,16 @@ const artworkRecordProjection = {
 // The vote routes serialise this straight to the browser and the client reads
 // only `score`, so the transaction reads back five columns instead of the
 // whole row (three times, document included, before this narrowing).
+// The totals ride along so the change can go out to everyone watching the
+// artwork without each of them reading it again.
 const artworkVoteSummaryProjection = {
 	commentCount: artworks.commentCount,
+	downvotes: voteCountSql('down'),
 	forkCount: artworks.forkCount,
 	id: artworks.id,
 	score: artworks.score,
-	updatedAt: artworks.updatedAt
+	updatedAt: artworks.updatedAt,
+	upvotes: voteCountSql('up')
 };
 
 export const artworkRepository: ArtworkRepository = {
@@ -141,7 +146,7 @@ export const artworkRepository: ArtworkRepository = {
 				: await tx.insert(artworkVotes).values(input).returning();
 
 			// `score` is maintained by sync_artwork_score_trigger, so the count has
-			// to be re-read — but only the five columns the callers use.
+			// to be re-read — but only the columns the callers use.
 			const [updatedArtwork] = await tx
 				.select(artworkVoteSummaryProjection)
 				.from(artworks)
@@ -156,31 +161,23 @@ export const artworkRepository: ArtworkRepository = {
 	},
 	async removeVote(artworkId, userId) {
 		return db.transaction(async (tx) => {
+			// A missing artwork has no votes (they cascade with it), so the
+			// summary read after the delete is also the existence check.
+			const existing =
+				(await tx.query.artworkVotes.findFirst({
+					where: and(eq(artworkVotes.artworkId, artworkId), eq(artworkVotes.userId, userId))
+				})) ?? null;
+			if (existing) await tx.delete(artworkVotes).where(eq(artworkVotes.id, existing.id));
+
 			const [artwork] = await tx
 				.select(artworkVoteSummaryProjection)
 				.from(artworks)
 				.where(eq(artworks.id, artworkId));
 			if (!artwork) return null;
 
-			const existing =
-				(await tx.query.artworkVotes.findFirst({
-					where: and(eq(artworkVotes.artworkId, artworkId), eq(artworkVotes.userId, userId))
-				})) ?? null;
-
-			if (!existing) {
-				return { artwork: artwork as ArtworkVoteSummary, removed: null };
-			}
-
-			await tx.delete(artworkVotes).where(eq(artworkVotes.id, existing.id));
-			const [updatedArtwork] = await tx
-				.select(artworkVoteSummaryProjection)
-				.from(artworks)
-				.where(eq(artworks.id, artworkId));
-			if (!updatedArtwork) return null;
-
 			return {
-				artwork: updatedArtwork as ArtworkVoteSummary,
-				removed: existing as ArtworkVoteRecord
+				artwork: artwork as ArtworkVoteSummary,
+				removed: (existing as ArtworkVoteRecord | null) ?? null
 			};
 		});
 	},

@@ -348,6 +348,32 @@ describeWithDatabase('artwork DB contract', () => {
 		}
 	});
 
+	it('reports the fresh up and down counts with every vote change', async () => {
+		const { applyArtworkVote, removeArtworkVote } = await import('./service');
+		const voter = (id: string) => ({ ipAddress: '127.0.0.1', user: createCanonicalUser(id) });
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-totals' });
+
+		await applyArtworkVote({ artworkId: 'artwork-totals', value: 'up' }, voter('viewer-1'));
+		const second = await applyArtworkVote(
+			{ artworkId: 'artwork-totals', value: 'down' },
+			voter('viewer-2')
+		);
+		expect(second.artwork).toMatchObject({ downvotes: 1, score: 0, upvotes: 1 });
+
+		const removal = await removeArtworkVote({ artworkId: 'artwork-totals' }, voter('viewer-1'));
+		expect(removal).toMatchObject({
+			artwork: { downvotes: 1, score: -1, upvotes: 0 },
+			removed: { userId: 'viewer-1' }
+		});
+
+		const repeat = await removeArtworkVote({ artworkId: 'artwork-totals' }, voter('viewer-1'));
+		expect(repeat).toMatchObject({
+			artwork: { downvotes: 1, score: -1, upvotes: 0 },
+			removed: null
+		});
+	});
+
 	it('maintains canonical public comment counts across create, hide, unhide, and delete transitions', async () => {
 		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-comments' });
 		await insertComment(sql, {
