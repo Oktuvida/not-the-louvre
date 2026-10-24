@@ -1,13 +1,12 @@
 import { artworkTopics, runAfterResponse } from '#lib/server/platform.js';
+import type { ArtworkLiveChange, ArtworkLiveChangeBody } from '#lib/shared/artwork/live-change.js';
 
 /*
  * Live updates for an open artwork. Each artwork has a Durable Object in the
  * realtime Worker (apps/realtime) that holds the WebSockets of everyone with
- * its detail open; the services post every vote and comment change to it, and
- * it passes the change on.
+ * its detail open; the services post every vote and comment change to it, with
+ * its data when they have it, and it passes the change on.
  */
-
-export type ArtworkChange = 'comments' | 'votes';
 
 const topicFor = (artworkId: string) => {
 	const topics = artworkTopics();
@@ -15,14 +14,14 @@ const topicFor = (artworkId: string) => {
 };
 
 /** Tells everyone watching the artwork that it changed. Never fails the caller. */
-export const publishArtworkChange = (artworkId: string, change: ArtworkChange) => {
+export const publishArtworkChange = (artworkId: string, change: ArtworkLiveChangeBody) => {
 	const topic = topicFor(artworkId);
 	if (!topic) return;
 
 	runAfterResponse(
 		topic
 			.fetch('https://artwork-topic/changes', {
-				body: JSON.stringify({ artworkId, change }),
+				body: JSON.stringify({ artworkId, ...change } satisfies ArtworkLiveChange),
 				method: 'POST'
 			})
 			.catch(() => {})

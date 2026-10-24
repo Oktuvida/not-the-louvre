@@ -27,6 +27,7 @@
 		type GalleryRoomConfig,
 		type GalleryRoomId
 	} from '#lib/features/gallery-exploration/model/rooms.js';
+	import { applyArtworkLiveChange } from '#lib/features/gallery-exploration/artwork-live-change.js';
 	import { createArtworkLiveUpdates } from '#lib/features/gallery-exploration/artwork-live-updates.js';
 	import type { Viewer } from '#lib/shared/viewer.js';
 	import PostItNote from '#lib/features/shared-ui/components/PostItNote.svelte';
@@ -532,11 +533,21 @@
 
 	// --- Live updates ---
 	// Signed in or not, whoever has an artwork open sees its votes and comments
-	// change as they happen.
+	// change as they happen. A change carries its data; only one that does not
+	// (a comment taken down, a reconnect) reads the artwork again.
 	const realtime = browser
 		? createArtworkLiveUpdates({
-				onChange: (artworkId: string) => {
-					void refreshSelectedArtwork(artworkId);
+				onChange: (artworkId, change) => {
+					const patched =
+						change && selectedArtwork?.id === artworkId
+							? applyArtworkLiveChange(selectedArtwork, change)
+							: null;
+
+					if (!patched) {
+						void refreshSelectedArtwork(artworkId);
+					} else if (patched !== selectedArtwork) {
+						syncArtwork(patched);
+					}
 				}
 			})
 		: null;

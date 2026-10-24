@@ -211,10 +211,12 @@ export type ArtworkEngagementRateLimitRecord = {
 // else the browser never touches) rather than shipping a full ArtworkRecord.
 export type ArtworkVoteSummary = {
 	commentCount: number;
+	downvotes: number;
 	forkCount: number;
 	id: string;
 	score: number;
 	updatedAt: Date;
+	upvotes: number;
 };
 
 export type ArtworkVoteMutationResult = {

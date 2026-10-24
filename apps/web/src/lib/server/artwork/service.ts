@@ -25,6 +25,7 @@ import type {
 	ArtworkStorage,
 	ArtworkVoteMutationResult,
 	ArtworkVoteRemovalResult,
+	ArtworkVoteSummary,
 	ContentReportStatus,
 	ArtworkVisibilityActor,
 	ArtworkVoteValue
@@ -35,6 +36,7 @@ import {
 } from '#lib/server/drawing-document/document-store.js';
 import { renderArtworkMedia } from '#lib/server/render/client.js';
 import { publishArtworkChange } from '#lib/server/realtime/artwork-topics.js';
+import type { ArtworkVoteTotals } from '#lib/shared/artwork/live-change.js';
 import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
 type PublishArtworkInput = {
@@ -160,6 +162,12 @@ const normalizeVoteValue = (value: string): ArtworkVoteValue => {
 
 	throw new ArtworkFlowError(400, 'Vote must be either up or down', 'INVALID_VOTE');
 };
+
+const toVoteTotals = ({ downvotes, score, upvotes }: ArtworkVoteSummary): ArtworkVoteTotals => ({
+	downvotes,
+	score,
+	upvotes
+});
 
 // Artwork limits block for exactly as long as the window they were counted in.
 const artworkRateLimitPolicy = (config: {
@@ -508,7 +516,7 @@ export const applyArtworkVote = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 
-	publishArtworkChange(input.artworkId, 'votes');
+	publishArtworkChange(input.artworkId, { change: 'votes', votes: toVoteTotals(result.artwork) });
 	return result;
 };
 
@@ -525,7 +533,7 @@ export const removeArtworkVote = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 
-	publishArtworkChange(input.artworkId, 'votes');
+	publishArtworkChange(input.artworkId, { change: 'votes', votes: toVoteTotals(result.artwork) });
 	return result;
 };
 
@@ -567,7 +575,15 @@ export const createArtworkComment = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 
-	publishArtworkChange(input.artworkId, 'comments');
+	publishArtworkChange(input.artworkId, {
+		change: 'comments',
+		comment: {
+			author: comment.author.nickname,
+			id: comment.id,
+			text: comment.body,
+			timestamp: comment.createdAt.getTime()
+		}
+	});
 	return comment;
 };
 
@@ -606,7 +622,7 @@ export const deleteArtworkComment = async (
 		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 	}
 
-	publishArtworkChange(deleted.artworkId, 'comments');
+	publishArtworkChange(deleted.artworkId, { change: 'comments' });
 	return {
 		artworkId: deleted.artworkId,
 		body: deleted.body,
@@ -671,7 +687,7 @@ export const submitContentReport = async (
 	// Enough reports hide a comment inside the database, so whoever is watching
 	// the artwork rechecks its comments after every comment report.
 	if (reportedCommentArtworkId) {
-		publishArtworkChange(reportedCommentArtworkId, 'comments');
+		publishArtworkChange(reportedCommentArtworkId, { change: 'comments' });
 	}
 
 	return report;
@@ -785,7 +801,7 @@ export const moderateComment = async (
 			throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 		}
 
-		publishArtworkChange(input.artworkId, 'comments');
+		publishArtworkChange(input.artworkId, { change: 'comments' });
 		return deleted;
 	}
 
@@ -805,6 +821,6 @@ export const moderateComment = async (
 		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 	}
 
-	publishArtworkChange(input.artworkId, 'comments');
+	publishArtworkChange(input.artworkId, { change: 'comments' });
 	return updated;
 };
