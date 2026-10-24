@@ -10,7 +10,7 @@ import {
 	drawingDocumentStore,
 	type DrawingDocumentStore
 } from '#lib/server/drawing-document/document-store.js';
-import { createAvatarDrawingDocumentMedia } from '#lib/server/drawing-document/media.js';
+import { renderAvatarMedia } from '#lib/server/render/client.js';
 import type { ArtworkStorage } from '#lib/server/artwork/types.js';
 import type { CanonicalUser } from '#lib/server/auth/types.js';
 import { userRepository } from './repository';
@@ -40,7 +40,7 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 				);
 			}
 
-			const sanitizedMedia = await createAvatarDrawingDocumentMedia(preparedDocument.document);
+			const sanitizedMedia = await renderAvatarMedia(preparedDocument.document);
 
 			// The drawing and its image go to object storage first; the row update
 			// comes last and names both, so the editor never reopens a half-saved

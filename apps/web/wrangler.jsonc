@@ -23,6 +23,9 @@
 	// the bucket locally; production needs it created in the account before the
 	// first deploy that carries this binding.
 	"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "not-the-louvre" }],
+	// Drawings become images in the renderer Worker (wrangler.renderer.jsonc),
+	// which holds the WebAssembly codecs so this Worker stays small.
+	"services": [{ "binding": "RENDERER", "service": "not-the-louvre-renderer" }],
 	// Live updates: one Durable Object per artwork, hosted by the realtime Worker
 	// (apps/realtime), which deploys first. `wrangler dev` runs both together.
 	"durable_objects": {
