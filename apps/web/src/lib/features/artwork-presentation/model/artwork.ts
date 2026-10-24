@@ -43,3 +43,18 @@ export interface Artwork {
 	rank?: number;
 	viewerVote?: ArtworkVoteValue | null;
 }
+
+/**
+ * What votes, comments and forks change about an artwork. A room's copy takes
+ * only these from a fresher one: its `rank` belongs to the room, not to the
+ * artwork, and the detail endpoint does not return it.
+ */
+export const artworkEngagement = (artwork: Artwork) => ({
+	commentCount: artwork.commentCount,
+	comments: artwork.comments,
+	downvotes: artwork.downvotes,
+	forkCount: artwork.forkCount,
+	score: artwork.score,
+	upvotes: artwork.upvotes,
+	viewerVote: artwork.viewerVote
+});

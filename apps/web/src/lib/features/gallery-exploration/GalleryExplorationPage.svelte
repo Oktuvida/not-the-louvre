@@ -10,7 +10,10 @@
 	import { getGalleryLayoutContext } from '#lib/features/gallery-exploration/gallery-layout-context.js';
 	import { onMount } from 'svelte';
 	import { writable } from 'svelte/store';
-	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import {
+		artworkEngagement,
+		type Artwork
+	} from '#lib/features/artwork-presentation/model/artwork.js';
 	import {
 		toGalleryArtwork,
 		toGalleryArtworkDetail,
@@ -22,7 +25,10 @@
 		GalleryDiscoveryRequest,
 		GalleryRoomContent
 	} from '#lib/features/gallery-exploration/model/discovery.js';
-	import { suppressNextRoomFeedSnapshot } from '#lib/features/gallery-exploration/model/feed-cache.js';
+	import {
+		patchCachedArtwork,
+		suppressNextRoomFeedSnapshot
+	} from '#lib/features/gallery-exploration/model/feed-cache.js';
 	import {
 		type GalleryRoomConfig,
 		type GalleryRoomId
@@ -479,22 +485,14 @@
 
 	const syncArtwork = (nextArtwork: Artwork) => {
 		selectedArtwork = nextArtwork;
+		const engagement = artworkEngagement(nextArtwork);
+		patchCachedArtwork(nextArtwork.id, engagement);
+
 		const index = artworks.findIndex((candidate) => candidate.id === nextArtwork.id);
 		if (index === -1) return;
 
 		artworks = artworks.map((candidate, candidateIndex) =>
-			candidateIndex === index
-				? {
-						...candidate,
-						commentCount: nextArtwork.commentCount,
-						comments: nextArtwork.comments,
-						downvotes: nextArtwork.downvotes,
-						forkCount: nextArtwork.forkCount,
-						score: nextArtwork.score,
-						upvotes: nextArtwork.upvotes,
-						viewerVote: nextArtwork.viewerVote
-					}
-				: candidate
+			candidateIndex === index ? { ...candidate, ...engagement } : candidate
 		);
 	};
 
@@ -505,6 +503,7 @@
 		if (selectedArtwork?.id === artworkId) {
 			selectedArtwork = { ...selectedArtwork, ...patch };
 		}
+		patchCachedArtwork(artworkId, patch);
 
 		artworks = artworks.map((candidate) =>
 			candidate.id === artworkId ? { ...candidate, ...patch } : candidate
