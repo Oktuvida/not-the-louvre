@@ -25,7 +25,7 @@
 		"db:migrate": "drizzle-kit migrate",
 		"db:platform-objects": "bun run scripts/db/apply-sql.ts scripts/db/supabase-platform-objects.sql",
 		"db:studio": "drizzle-kit studio",
-		"db:seed": "bun run scripts/seed-artworks.ts",
+		"db:seed": "bun --preload ./scripts/lib-alias.ts scripts/seed-artworks.ts",
 		"db:reset": "cd ../.. && bun run db:reset",
 		"check:bundle": "bun run scripts/check-web-worker-bundle.ts",
 		"cutover": "bun --preload ./scripts/lib-alias.ts scripts/cutover.ts",
