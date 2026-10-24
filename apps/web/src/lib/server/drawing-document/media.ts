@@ -11,12 +11,7 @@ import {
 } from '#lib/server/artwork/config.js';
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import type { SanitizedMedia } from '#lib/server/artwork/types.js';
-import {
-	encodeLosslessWebp,
-	renderSvgToRaster,
-	type RawImage
-} from '#lib/server/media/codecs/index.js';
-import { encodeArtworkMediaPlaceholder } from '#lib/server/media/placeholder.js';
+import { encodeLosslessWebp, renderSvgToRaster } from '#lib/server/media/codecs/index.js';
 import {
 	AVATAR_MEDIA_CONTENT_TYPE,
 	AVATAR_MEDIA_HEIGHT,
@@ -28,9 +23,6 @@ const renderDocumentToMedia = async (
 	document: DrawingDocument,
 	options: {
 		contentType: string;
-		// Only the artwork variant has a placeholder column, so the avatar path
-		// leaves this unset instead of paying the extra resize plus PNG encode.
-		encodePlaceholder?: (raster: RawImage) => Promise<string>;
 		height: number;
 		kind: DrawingDocument['kind'];
 		label: 'artwork' | 'avatar';
@@ -56,11 +48,6 @@ const renderDocumentToMedia = async (
 		width: options.width
 	});
 
-	// Encoded from the same raster the image is, and before it, so the blur-up
-	// colors always match the final media and the encoder cannot have consumed
-	// the buffer first.
-	const placeholder = options.encodePlaceholder ? await options.encodePlaceholder(raster) : null;
-
 	// Lossless: the stored image is the canonical render of the strokes, pixel
 	// for pixel. The lossy AVIF ladder it replaces visibly smeared thin lines.
 	const outputBuffer = await encodeLosslessWebp(raster);
@@ -79,7 +66,6 @@ const renderDocumentToMedia = async (
 			type: options.contentType
 		}),
 		height: options.height,
-		placeholder,
 		sizeBytes: outputBuffer.byteLength,
 		width: options.width
 	};
@@ -88,7 +74,6 @@ const renderDocumentToMedia = async (
 export const createArtworkDrawingDocumentMedia = (document: DrawingDocument) =>
 	renderDocumentToMedia(document, {
 		contentType: ARTWORK_MEDIA_CONTENT_TYPE,
-		encodePlaceholder: encodeArtworkMediaPlaceholder,
 		height: ARTWORK_MEDIA_HEIGHT,
 		kind: 'artwork',
 		label: 'artwork',

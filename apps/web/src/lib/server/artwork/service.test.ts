@@ -370,62 +370,6 @@ describe('artwork service', () => {
 		});
 	});
 
-	// The studio only ever posts a drawing document, so a null placeholder here
-	// means every real artwork loads from an empty grey card instead of a
-	// blur-up.
-	it('stores a blur-up placeholder for artworks published from a drawing document', async () => {
-		const { publishArtwork } = await import('./service');
-		const { repository } = createRepository();
-		const { storage } = createStorage();
-		const now = new Date('2026-03-26T10:00:00.000Z');
-		const drawingDocument = JSON.stringify({
-			...createEmptyDrawingDocument('artwork'),
-			strokes: [
-				{
-					color: '#2d2420',
-					points: [
-						[48, 48] as [number, number],
-						[320, 320] as [number, number],
-						[540, 220] as [number, number]
-					],
-					size: 12
-				}
-			]
-		});
-
-		await publishArtwork(
-			{
-				drawingDocument,
-				title: 'Blurred Up'
-			},
-			{
-				ipAddress: '127.0.0.1',
-				user: {
-					id: 'user-1',
-					authUserId: 'user-1',
-					nickname: 'artist_1',
-					role: 'user',
-					avatarUrl: null,
-					name: 'artist_1',
-					email: 'artist_1@not-the-louvre.local',
-					emailVerified: true,
-					image: null,
-					createdAt: now,
-					updatedAt: now
-				}
-			},
-			{
-				generateId: () => 'artwork-1',
-				now: () => now,
-				repository,
-				storage
-			}
-		);
-
-		const created = vi.mocked(repository.createArtwork).mock.calls[0]![0];
-		expect(created.mediaPlaceholder).toMatch(/^data:image\/png;base64,/);
-	}, 10000);
-
 	it('rejects runtime-prepared avatar payloads on artwork publish', async () => {
 		const { publishArtwork } = await import('./service');
 		const { repository } = createRepository();

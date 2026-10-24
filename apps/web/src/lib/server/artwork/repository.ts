@@ -47,7 +47,6 @@ const artworkRecordProjection = {
 	isHidden: artworks.isHidden,
 	isNsfw: artworks.isNsfw,
 	mediaContentType: artworks.mediaContentType,
-	mediaPlaceholder: artworks.mediaPlaceholder,
 	mediaSizeBytes: artworks.mediaSizeBytes,
 	nsfwLabeledAt: artworks.nsfwLabeledAt,
 	nsfwSource: artworks.nsfwSource,

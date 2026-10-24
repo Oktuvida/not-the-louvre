@@ -132,7 +132,7 @@ describeWithDatabase('the cutover to object storage', () => {
 		expect(report.failures).toEqual([]);
 
 		const { rows: artworks } = await db.query(
-			`select id, storage_key, media_content_type, drawing_document_key, media_placeholder
+			`select id, storage_key, media_content_type, drawing_document_key
 			 from app.artworks where author_id = $1 order by id`,
 			[userId]
 		);
@@ -142,19 +142,16 @@ describeWithDatabase('the cutover to object storage', () => {
 		const drawn = byId[drawnArtworkId];
 		expect(drawn.storage_key).toBe(`artworks/${userId}/${drawnArtworkId}.webp`);
 		expect(drawn.media_content_type).toBe('image/webp');
-		expect(drawn.media_placeholder).toMatch(/^data:image\/png;base64,/);
 		expect(await target.has(drawn.storage_key)).toBe(true);
 		const storedDrawing = await decodeDrawingDocument(
 			await target.read(drawn.drawing_document_key)
 		);
 		expect(getRenderableDrawingStrokes(storedDrawing)).toEqual(artworkStrokes);
 
-		// Without a whole drawing the AVIF is all there is: copied as it was, with
-		// the blur-up placeholder it was missing.
+		// Without a whole drawing the AVIF is all there is: copied as it was.
 		const torn = byId[tornArtworkId];
 		expect(torn.storage_key).toBe(`artworks/${userId}/${tornArtworkId}.avif`);
 		expect(torn.drawing_document_key).toBeNull();
-		expect(torn.media_placeholder).toMatch(/^data:image\/png;base64,/);
 		expect(await target.has(torn.storage_key)).toBe(true);
 
 		// The avatar is redrawn too, under its versioned key.
@@ -181,6 +178,5 @@ describeWithDatabase('the cutover to object storage', () => {
 		expect(report.movedDocuments).toBe(0);
 		expect(report.redrawnArtworks).toBe(0);
 		expect(report.redrawnAvatars).toBe(0);
-		expect(report.filledPlaceholders).toBe(0);
 	});
 });

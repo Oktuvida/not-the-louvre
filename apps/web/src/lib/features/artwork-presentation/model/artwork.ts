@@ -30,7 +30,6 @@ export interface Artwork {
 	authorId: string;
 	artistAvatar?: string;
 	imageUrl: string;
-	imagePlaceholder?: string | null;
 	isHidden?: boolean;
 	score: number;
 	upvotes: number;

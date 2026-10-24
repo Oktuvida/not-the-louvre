@@ -73,7 +73,6 @@ const artworkRow = (overrides: Record<string, unknown> = {}) => ({
 	isHidden: false,
 	isNsfw: false,
 	mediaContentType: 'image/avif',
-	mediaPlaceholder: null,
 	mediaSizeBytes: 128,
 	parentId: null,
 	score: 7,

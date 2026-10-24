@@ -1,4 +1,3 @@
-import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import {
 	createEmptyDrawingDocument,
@@ -86,31 +85,6 @@ describe('drawing-document backend media', () => {
 		expect(media.sizeBytes).toBeGreaterThan(100 * 1024);
 	});
 
-	it('derives the blur-up placeholder from the same raster as the artwork image', async () => {
-		const media = await createArtworkDrawingDocumentMedia({
-			...createEmptyDrawingDocument('artwork'),
-			strokes: [
-				{
-					color: '#2d2420',
-					points: [
-						[48, 48],
-						[320, 320],
-						[540, 220]
-					],
-					size: 12
-				}
-			]
-		});
-
-		expect(media.placeholder).toMatch(/^data:image\/png;base64,/);
-
-		const placeholderBuffer = Buffer.from(media.placeholder!.split(',')[1]!, 'base64');
-		const metadata = await sharp(placeholderBuffer).metadata();
-		expect(metadata.format).toBe('png');
-		expect(metadata.width).toBe(24);
-		expect(metadata.height).toBe(24);
-	});
-
 	it('stores the avatar exactly as its strokes render', async () => {
 		const document = {
 			...createEmptyDrawingDocument('avatar'),
@@ -132,9 +106,6 @@ describe('drawing-document backend media', () => {
 		expect(media.contentType).toBe('image/webp');
 		expect(media.width).toBe(256);
 		expect(media.height).toBe(256);
-		// Avatars have no placeholder column, so they must not pay the extra
-		// resize plus PNG encode on every save.
-		expect(media.placeholder ?? null).toBeNull();
 
 		const stored = await decodeImage(new Uint8Array(await media.file.arrayBuffer()), 'webp');
 		const canonical = await renderSvgToRaster(drawingDocumentToSvg(document), {

@@ -630,7 +630,6 @@
 										className="postcard-photo-layer"
 										src={artwork.imageUrl}
 										alt={artwork.title}
-										placeholder={artwork.imagePlaceholder ?? null}
 										blurred={isSensitiveBlurred}
 										showScrim={false}
 										loading="eager"

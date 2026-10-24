@@ -7,8 +7,6 @@ import NsfwImage from './NsfwImage.svelte';
 // way they do against the media route.
 const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-const placeholderLayer = () => document.querySelector('.nsfw-placeholder');
-
 describe('NsfwImage', () => {
 	it('applies blur classes when blurred prop is true', async () => {
 		await render(NsfwImage, {
@@ -77,49 +75,6 @@ describe('NsfwImage', () => {
 		expect(image.element().className).toContain('is-sensitive');
 		await expect.element(page.getByText('18+', { exact: true })).not.toBeInTheDocument();
 		expect(document.querySelector('.nsfw-scrim')).toBeNull();
-	});
-
-	it('keeps the placeholder mounted but drops its blur once the photo is opaque', async () => {
-		await render(NsfwImage, {
-			src: PIXEL,
-			alt: 'Retired placeholder artwork',
-			placeholder: PIXEL
-		});
-
-		const image = page.getByAltText('Retired placeholder artwork');
-		await expect.element(image).toBeInTheDocument();
-
-		await vi.waitFor(() => {
-			expect(image.element().className).toContain('is-loaded');
-		});
-		await vi.waitFor(
-			() => {
-				const layer = placeholderLayer();
-				expect(layer).not.toBeNull();
-				expect(layer?.className).toContain('is-retired');
-			},
-			{ timeout: 2000 }
-		);
-	});
-
-	it('never retires the placeholder under a sensitive photo, so no sharp LQIP leaks', async () => {
-		await render(NsfwImage, {
-			src: PIXEL,
-			alt: 'Sensitive placeholder artwork',
-			blurred: true,
-			placeholder: PIXEL
-		});
-
-		const image = page.getByAltText('Sensitive placeholder artwork');
-		await expect.element(image).toBeInTheDocument();
-
-		await vi.waitFor(() => {
-			expect(image.element().className).toContain('is-loaded');
-		});
-
-		const layer = placeholderLayer();
-		expect(layer?.className).toContain('is-sensitive');
-		expect(layer?.className).not.toContain('is-retired');
 	});
 
 	it('re-shows a recycled card instantly instead of replaying the fade', async () => {
