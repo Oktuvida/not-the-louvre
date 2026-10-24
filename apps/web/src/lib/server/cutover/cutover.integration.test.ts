@@ -22,6 +22,8 @@ const userId = `cutover-user-${suffix}`;
 const drawnArtworkId = `cutover-drawn-${suffix}`;
 const tornArtworkId = `cutover-torn-${suffix}`;
 const missingArtworkId = `cutover-missing-${suffix}`;
+const heavyArtworkId = `cutover-heavy-${suffix}`;
+const HEAVY_IMAGE_BYTES = 410 * 1024;
 
 const artworkStrokes = [
 	{
@@ -76,6 +78,12 @@ describeWithDatabase('the cutover to object storage', () => {
 			bytes: avif,
 			contentType: 'image/avif'
 		});
+		// Already lossless and big: a drawing dense enough that WebP cannot
+		// shrink it, which the owner wants counted before choosing a policy.
+		supabaseObjects.set(`artworks/${userId}/${heavyArtworkId}.webp`, {
+			bytes: new Uint8Array(16),
+			contentType: 'image/webp'
+		});
 		supabaseObjects.set(`avatars/${userId}.avif`, {
 			bytes: avatarAvif,
 			contentType: 'image/avif'
@@ -111,6 +119,12 @@ describeWithDatabase('the cutover to object storage', () => {
 		// A chunked write that died half way: text without a version.
 		await insertArtwork(tornArtworkId, 'H4sIAAAA-partial', null);
 		await insertArtwork(missingArtworkId, null, null);
+		await db.query(
+			`insert into app.artworks (id, author_id, title, storage_key, media_content_type,
+				media_size_bytes, created_at, updated_at)
+			 values ($1, $2, $1, $3, 'image/webp', $4, $5, $5)`,
+			[heavyArtworkId, userId, `artworks/${userId}/${heavyArtworkId}.webp`, HEAVY_IMAGE_BYTES, now]
+		);
 	});
 
 	afterAll(async () => {
@@ -178,5 +192,16 @@ describeWithDatabase('the cutover to object storage', () => {
 		expect(report.movedDocuments).toBe(0);
 		expect(report.redrawnArtworks).toBe(0);
 		expect(report.redrawnAvatars).toBe(0);
+	});
+
+	it('names the artworks whose image is heavier than 300 KiB', async () => {
+		const report = await runCutover({
+			db,
+			ownedBy: [userId],
+			source,
+			target: bucketObjectTarget(proxy.env.BUCKET)
+		});
+
+		expect(report.heavyImages).toEqual([{ id: heavyArtworkId, sizeBytes: HEAVY_IMAGE_BYTES }]);
 	});
 });
