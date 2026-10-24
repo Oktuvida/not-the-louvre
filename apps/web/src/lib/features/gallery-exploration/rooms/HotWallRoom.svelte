@@ -3,6 +3,7 @@
 	import NsfwImage from '#lib/features/gallery-exploration/components/NsfwImage.svelte';
 	import ScrollSentinel from '#lib/features/gallery-exploration/components/ScrollSentinel.svelte';
 	import VirtualizedGrid from '#lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
 	import type {
 		GalleryPageInfo,
 		LoadMoreArtworks
@@ -37,9 +38,14 @@
 		viewerId = null
 	}: Props = $props();
 
+	// The grid's measured rows travel with the feed, so coming back lands on
+	// the same card rather than on the same pixel of an estimated layout.
+	let grid = $state<{ snapshotLayout(): GridLayoutSnapshot | null }>();
+
 	const accumulator = createSeededAccumulator({
 		getFeedCacheKey: () => feedCacheKey,
 		getArtworks: () => artworks,
+		getLayout: () => grid?.snapshotLayout() ?? null,
 		getLoadMoreArtworks: () => loadMoreArtworks,
 		getPageInfo: () => pageInfo
 	});
@@ -143,7 +149,11 @@
 		<!-- Supporting wall: remaining artworks in a virtualized grid -->
 		{#if supportingArtworks.length > 0}
 			<div class="w-full">
-				<VirtualizedGrid items={supportingArtworks}>
+				<VirtualizedGrid
+					bind:this={grid}
+					items={supportingArtworks}
+					restoredLayout={accumulator.restoredLayout}
+				>
 					{#snippet renderCard(artwork)}
 						<div data-testid={`hot-wall-card-${artwork.id}`}>
 							<PolaroidCard

@@ -3,7 +3,12 @@
 // re-exports the vocabulary so the existing importers keep working.
 import type { GalleryRoomId } from '#lib/shared/gallery/rooms.js';
 
-export { galleryRoomIds, isGalleryRoomId, roomHref } from '#lib/shared/gallery/rooms.js';
+export {
+	galleryRoomIds,
+	isGalleryRoomId,
+	roomHref,
+	roomIdForPath
+} from '#lib/shared/gallery/rooms.js';
 export type { GalleryRoomId } from '#lib/shared/gallery/rooms.js';
 
 export type GalleryRoomConfig = {

@@ -1,3 +1,5 @@
+import type { CacheSnapshot } from 'virtua';
+
 /*
  * Grid geometry for the gallery feed.
  *
@@ -16,3 +18,10 @@ export const GALLERY_GRID_MIN_COLUMN_WIDTH = 280;
 
 /** The auto-fill template the grid falls back to before it is measured. */
 export const GALLERY_GRID_TEMPLATE_COLUMNS = `repeat(auto-fill, minmax(${GALLERY_GRID_MIN_COLUMN_WIDTH}px, 1fr))`;
+
+/** A grid's measured rows, to mount it again exactly as it was laid out. */
+export type GridLayoutSnapshot = {
+	cache: CacheSnapshot;
+	columnCount: number;
+	rowCount: number;
+};
