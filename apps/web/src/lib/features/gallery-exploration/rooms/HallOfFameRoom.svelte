@@ -5,6 +5,7 @@
 	import NsfwImage from '#lib/features/gallery-exploration/components/NsfwImage.svelte';
 	import ScrollSentinel from '#lib/features/gallery-exploration/components/ScrollSentinel.svelte';
 	import VirtualizedGrid from '#lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
 	import type {
 		GalleryPageInfo,
 		LoadMoreArtworks
@@ -122,9 +123,14 @@
 	// The podium owns the top three; the grid below it starts at the fourth. The
 	// seed identity is still computed on the whole list, so a reorder confined to
 	// the podium keeps reseeding the grid underneath it.
+	// The grid's measured rows travel with the feed, so coming back lands on
+	// the same card rather than on the same pixel of an estimated layout.
+	let grid = $state<{ snapshotLayout(): GridLayoutSnapshot | null }>();
+
 	const accumulator = createSeededAccumulator({
 		getFeedCacheKey: () => feedCacheKey,
 		getArtworks: () => artworks,
+		getLayout: () => grid?.snapshotLayout() ?? null,
 		getLoadMoreArtworks: () => loadMoreArtworks,
 		getPageInfo: () => pageInfo,
 		transformSeed: (items) => items.slice(3)
@@ -228,7 +234,11 @@
 	</div>
 
 	<div class="w-full">
-		<VirtualizedGrid items={accumulator.allArtworks}>
+		<VirtualizedGrid
+			bind:this={grid}
+			items={accumulator.allArtworks}
+			restoredLayout={accumulator.restoredLayout}
+		>
 			{#snippet renderCard(artwork)}
 				<PolaroidCard
 					{artwork}

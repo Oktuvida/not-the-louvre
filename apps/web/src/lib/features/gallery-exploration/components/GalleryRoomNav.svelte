@@ -4,6 +4,7 @@
 	import {
 		galleryRooms,
 		roomHref,
+		roomIdForPath,
 		type GalleryRoomId
 	} from '#lib/features/gallery-exploration/model/rooms.js';
 	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
@@ -34,12 +35,6 @@
 	const visibleRooms = $derived(
 		viewer ? galleryRooms : galleryRooms.filter((room) => room.id !== 'your-studio')
 	);
-
-	const roomIdForPath = (pathname: string): GalleryRoomId | null => {
-		if (pathname === '/gallery') return 'hall-of-fame';
-		const match = galleryRooms.find((room) => pathname === `/gallery/${room.id}`);
-		return match?.id ?? null;
-	};
 
 	// The active sticker follows the click, not the server round-trip: while
 	// a room navigation is in flight the destination tab lights up right away.

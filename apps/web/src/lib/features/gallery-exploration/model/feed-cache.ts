@@ -1,5 +1,6 @@
 import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 import type { GalleryPageInfo } from '#lib/features/gallery-exploration/model/discovery.js';
+import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
 import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
 
 /*
@@ -19,6 +20,8 @@ import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/room
 
 export type RoomFeedSnapshot = {
 	artworks: Artwork[];
+	/** The grid's measured rows, so the saved scroll lands on the same card. */
+	layout?: GridLayoutSnapshot | null;
 	pageInfo: GalleryPageInfo;
 	scrollY: number;
 };
@@ -77,6 +80,7 @@ export const writeRoomFeedSnapshot = (roomId: GalleryRoomId, snapshot: RoomFeedS
 	snapshots.delete(roomId);
 	snapshots.set(roomId, {
 		artworks: [...snapshot.artworks],
+		layout: snapshot.layout ?? null,
 		pageInfo: { ...snapshot.pageInfo },
 		scrollY: Math.max(0, snapshot.scrollY)
 	});
