@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import {
+		clampDrawingPoint,
 		cloneDrawingDocumentV2,
 		createEmptyDrawingDocumentV2,
 		serializeEditableDrawingDocument,
@@ -8,25 +9,14 @@
 		type DrawingPoint,
 		type DrawingStroke
 	} from '#lib/features/stroke-json/document.js';
-	import {
-		renderDrawingDocumentToCanvas,
-		renderDrawingStroke
-	} from '#lib/features/stroke-json/canvas.js';
-	import {
-		appendBufferedStrokePoint,
-		appendCommittedStroke,
-		createBufferedStroke,
-		shouldUseResponsiveDrawing
-	} from '#lib/features/stroke-json/responsive-editing.js';
+	import { appendCommittedStroke } from '#lib/features/stroke-json/responsive-editing.js';
 	import {
 		attachPointerReleaseSafetyNet,
-		ensureCommittedCacheCanvas,
-		getCanvasDrawingPoint,
-		hasLostPrimaryButton,
-		isSameDrawingRenderSignature,
-		readDrawingRenderSignature,
-		type DrawingRenderSignature
+		getCanvasContentRect,
+		getDrawingPointInRect,
+		hasLostPrimaryButton
 	} from '#lib/features/studio-drawing/pointer-drawing.js';
+	import { createInkSurface, type InkSurface } from '#lib/features/studio-drawing/ink-surface.js';
 	import { drawingTools } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 
 	let {
@@ -47,9 +37,8 @@
 		interactive?: boolean;
 		/**
 		 * Observation channel only. The studio page reads the document through
-		 * `bind:drawingDocument`; wiring both cost a second deep clone per point and
-		 * bounced a different object identity back down. Kept for the spec, which
-		 * captures every commit through it.
+		 * `bind:drawingDocument`; this reports each committed document to the
+		 * spec and to anything else that only needs to watch.
 		 */
 		onDocumentChange?: (document: DrawingDocumentV2) => void;
 		onStrokeCommitted?: (input: {
@@ -61,216 +50,152 @@
 		statusTone?: 'error' | 'success' | 'idle';
 	} = $props();
 
-	let baselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
-	let activeStroke = $state<DrawingStroke | null>(null);
-	let activePointerId = $state<number | null>(null);
-	let isDrawing = $state(false);
-	let lastAppliedClearVersion = $state<number | null>(null);
-	let lastHydratedInitialDocumentSeed = $state<string | null | undefined>(undefined);
-	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
-	let committedCacheCanvas: HTMLCanvasElement | null = null;
-	let committedCacheDirty = true;
-	let cachedCommittedDocument: DrawingDocumentV2 | null = null;
-	let renderedSignature: DrawingRenderSignature | null = null;
-	let overlayRef: HTMLCanvasElement | null = null;
+	let overlayRef = $state<HTMLCanvasElement | null>(null);
+	let surface: InkSurface | null = null;
+	let baselineDocument = createEmptyDrawingDocumentV2('artwork');
+	let lastAppliedClearVersion: number | null = null;
+	let lastHydratedInitialDocumentSeed: string | null | undefined = undefined;
+	// The document the dry layer is showing. Anything else arriving through the
+	// binding (opening a drawing, clearing) is painted again from scratch.
+	let shownDocument: DrawingDocumentV2 | null = null;
 
-	function syncOverlaySize() {
-		if (!canvasRef || !overlayRef) return;
-		overlayRef.width = canvasRef.width;
-		overlayRef.height = canvasRef.height;
-	}
-
-	function clearOverlay() {
-		if (!overlayRef) return;
-		const ctx = overlayRef.getContext('2d');
-		if (!ctx) return;
-		ctx.clearRect(0, 0, overlayRef.width, overlayRef.height);
-	}
-
-	function drawPreviewOnOverlayAt(clientX: number, clientY: number) {
-		if (!overlayRef) return;
-		const rect = overlayRef.getBoundingClientRect();
-		if (rect.width === 0 || rect.height === 0) return;
-		const scaleX = overlayRef.width / rect.width;
-		const scaleY = overlayRef.height / rect.height;
-
-		const cx = (clientX - rect.left) * scaleX;
-		const cy = (clientY - rect.top) * scaleY;
-		const radius = drawingTools.brushSize / 2;
-
-		const ctx = overlayRef.getContext('2d');
-		if (!ctx) return;
-
-		ctx.clearRect(0, 0, overlayRef.width, overlayRef.height);
-		ctx.beginPath();
-		ctx.fillStyle = drawingTools.activeColor;
-		ctx.globalAlpha = 0.6;
-		ctx.ellipse(cx, cy, radius, radius, 0, 0, Math.PI * 2);
-		ctx.fill();
-		ctx.globalAlpha = 1;
-	}
-
-	function scheduleOverlayUpdate(event: PointerEvent) {
-		const clientX = event.clientX;
-		const clientY = event.clientY;
-		drawPreviewOnOverlayAt(clientX, clientY);
-	}
+	/*
+	 * The line under the pen lives outside Svelte: it grows on every sample and
+	 * only the canvas needs to see it. The document takes it, once, when the
+	 * pen lifts.
+	 */
+	let wetStroke: DrawingStroke | null = null;
+	let activePointerId: number | null = null;
+	// Laid out once per stroke: reading the box on every sample forces layout.
+	let strokeRect: ReturnType<typeof getCanvasContentRect> | null = null;
 
 	const cloneStroke = (stroke: DrawingStroke): DrawingStroke => ({
 		color: stroke.color,
-		points: stroke.points.map((point) => [point[0], point[1]] as [number, number]),
+		points: stroke.points.map((point) => [point[0], point[1]] as DrawingPoint),
 		size: stroke.size
 	});
 
-	const emitStrokeCommitted = (
-		previousDocument: DrawingDocumentV2,
-		nextDocument: DrawingDocumentV2,
-		stroke: DrawingStroke
-	) => {
+	const commitDrawingDocument = (nextDocument: DrawingDocumentV2) => {
+		drawingDocument = nextDocument;
+		onDocumentChange?.(cloneDrawingDocumentV2(nextDocument));
+	};
+
+	const toDocumentPoint = (position: { clientX: number; clientY: number }) =>
+		strokeRect ? getDrawingPointInRect(strokeRect, position, drawingDocument) : null;
+
+	const toPredictedPoint = (position: { clientX: number; clientY: number }) => {
+		if (!strokeRect) return null;
+		const point = getDrawingPointInRect(strokeRect, position, {
+			height: Number.POSITIVE_INFINITY,
+			width: Number.POSITIVE_INFINITY
+		});
+		return point ? clampDrawingPoint(point, drawingDocument) : null;
+	};
+
+	const showCursor = (event: PointerEvent) => {
+		if (!canvasRef || !interactive) return;
+		const point = getDrawingPointInRect(
+			strokeRect ?? getCanvasContentRect(canvasRef),
+			event,
+			drawingDocument
+		);
+		surface?.cursor(point, drawingTools.activeColor, drawingTools.brushSize);
+	};
+
+	const hideCursor = () => surface?.cursor(null, '', 0);
+
+	function startDrawing(event: PointerEvent) {
+		if (!interactive || !canvasRef || !event.isPrimary || activePointerId !== null) return;
+
+		strokeRect = getCanvasContentRect(canvasRef);
+		const point = toDocumentPoint(event);
+		if (!point) {
+			strokeRect = null;
+			return;
+		}
+
+		event.preventDefault();
+		canvasRef.setPointerCapture(event.pointerId);
+		activePointerId = event.pointerId;
+		wetStroke = { color: drawingTools.activeColor, points: [point], size: drawingTools.brushSize };
+		surface?.wet(wetStroke);
+	}
+
+	function draw(event: PointerEvent) {
+		if (!interactive || activePointerId !== event.pointerId || !wetStroke) return;
+
+		event.preventDefault();
+
+		// A mouse released outside the window delivers no pointerup here, so keep
+		// what was drawn instead of trailing ink from an unpressed button.
+		if (hasLostPrimaryButton(event)) {
+			finishDrawing(event);
+			return;
+		}
+
+		// The browser hands over one move a frame; the samples in between are in
+		// the coalesced list, and without them fast curves turn into polygons.
+		const coalesced = event.getCoalescedEvents?.() ?? [];
+		for (const sample of coalesced.length > 0 ? coalesced : [event]) {
+			const point = toDocumentPoint(sample);
+			const lastPoint = wetStroke.points.at(-1);
+			if (!point || (lastPoint && point[0] === lastPoint[0] && point[1] === lastPoint[1])) {
+				continue;
+			}
+			wetStroke.points.push(point);
+		}
+
+		const predicted = (event.getPredictedEvents?.() ?? [])
+			.map(toPredictedPoint)
+			.filter((point): point is DrawingPoint => point !== null);
+		surface?.wet(wetStroke, predicted);
+	}
+
+	function finishDrawing(event?: PointerEvent) {
+		if (event && activePointerId !== null && event.pointerId !== activePointerId) return;
+
+		if (canvasRef && activePointerId !== null && canvasRef.hasPointerCapture(activePointerId)) {
+			canvasRef.releasePointerCapture(activePointerId);
+		}
+
+		const stroke = wetStroke;
+		wetStroke = null;
+		activePointerId = null;
+		strokeRect = null;
+		surface?.wet(null);
+		if (!stroke) return;
+
+		const previousDocument = drawingDocument;
+		const nextDocument = appendCommittedStroke(previousDocument, stroke);
+		surface?.dryStroke(stroke);
+		commitDrawingDocument(nextDocument);
+		// Read back rather than kept: a bound document comes back as the
+		// parent's state proxy, which is never `===` the object assigned.
+		shownDocument = drawingDocument;
 		void onStrokeCommitted?.({
 			nextDocument: cloneDrawingDocumentV2(nextDocument),
 			previousDocument: cloneDrawingDocumentV2(previousDocument),
 			stroke: cloneStroke(stroke)
 		});
-	};
+	}
 
-	const commitDrawingDocument = (nextDocument: DrawingDocumentV2) => {
-		drawingDocument = nextDocument;
-		committedCacheDirty = true;
-		onDocumentChange?.(cloneDrawingDocumentV2(nextDocument));
-	};
-
-	const renderCommittedCache = () => {
-		if (!canvasRef) return;
-
-		committedCacheCanvas = ensureCommittedCacheCanvas(
-			committedCacheCanvas,
-			canvasRef.width,
-			canvasRef.height
-		);
-
-		renderDrawingDocumentToCanvas(committedCacheCanvas, drawingDocument);
-		cachedCommittedDocument = drawingDocument;
-		committedCacheDirty = false;
-	};
-
-	const markDocumentRendered = () => {
-		renderedSignature = readDrawingRenderSignature({
-			activeStroke,
-			document: drawingDocument,
-			responsive: responsiveDrawing,
-			target: canvasRef
-		});
-	};
-
-	const renderCurrentDocument = () => {
-		if (!canvasRef) return;
-
-		if (!responsiveDrawing) {
-			renderDrawingDocumentToCanvas(canvasRef, drawingDocument);
-			markDocumentRendered();
-			return;
-		}
-
-		if (
-			committedCacheDirty ||
-			!committedCacheCanvas ||
-			cachedCommittedDocument !== drawingDocument
-		) {
-			renderCommittedCache();
-		}
-
-		const context = canvasRef.getContext('2d');
-		if (!context) return;
-
-		context.fillStyle = drawingDocument.background;
-		context.fillRect(0, 0, canvasRef.width, canvasRef.height);
-		if (committedCacheCanvas) {
-			context.drawImage(committedCacheCanvas, 0, 0);
-		}
-		if (activeStroke) {
-			renderDrawingStroke(context, activeStroke);
-		}
-
-		markDocumentRendered();
-	};
-
-	const stopDrawing = () => {
-		activeStroke = null;
-		isDrawing = false;
-		activePointerId = null;
-	};
-
-	const preventCanvasDrag = (event: DragEvent) => {
+	function cancelDrawing(event: PointerEvent) {
 		event.preventDefault();
-	};
-
-	const getPoint = (event: PointerEvent): DrawingPoint | null =>
-		canvasRef ? getCanvasDrawingPoint(canvasRef, event, drawingDocument) : null;
-
-	const appendPoint = (point: DrawingPoint) => {
-		const nextDocument = cloneDrawingDocumentV2(drawingDocument);
-		const stroke = nextDocument.tail.at(-1);
-		if (!stroke) return;
-
-		const lastPoint = stroke.points.at(-1);
-		if (lastPoint && point[0] === lastPoint[0] && point[1] === lastPoint[1]) {
-			return;
-		}
-
-		stroke.points.push(point);
-		commitDrawingDocument(nextDocument);
-		renderCurrentDocument();
-	};
-
-	const appendPointToActiveStroke = (point: DrawingPoint) => {
-		if (!activeStroke) return;
-		if (!appendBufferedStrokePoint(activeStroke, point)) return;
-		renderCurrentDocument();
-	};
-
-	const commitActiveStroke = () => {
-		if (!activeStroke) return;
-
-		const previousDocument = cloneDrawingDocumentV2(drawingDocument);
-		const committedStroke = cloneStroke(activeStroke);
-		const nextDocument = appendCommittedStroke(previousDocument, committedStroke);
-		activeStroke = null;
-		commitDrawingDocument(nextDocument);
-		emitStrokeCommitted(previousDocument, nextDocument, committedStroke);
-		renderCurrentDocument();
-	};
+		finishDrawing(event);
+	}
 
 	$effect(() => {
 		const nextSeed = initialDrawingDocument
 			? serializeEditableDrawingDocument(initialDrawingDocument)
 			: null;
 
-		if (nextSeed === lastHydratedInitialDocumentSeed) {
-			return;
-		}
-
+		if (nextSeed === lastHydratedInitialDocumentSeed) return;
 		lastHydratedInitialDocumentSeed = nextSeed;
 
-		const nextBaseline = initialDrawingDocument
+		baselineDocument = initialDrawingDocument
 			? cloneDrawingDocumentV2(initialDrawingDocument)
 			: createEmptyDrawingDocumentV2('artwork');
-
-		baselineDocument = nextBaseline;
-		commitDrawingDocument(cloneDrawingDocumentV2(nextBaseline));
-	});
-
-	onMount(() => {
-		renderCurrentDocument();
-		syncOverlaySize();
-
-		const detachPointerReleaseSafetyNet = attachPointerReleaseSafetyNet(finishDrawing);
-		window.addEventListener('resize', syncOverlaySize);
-
-		return () => {
-			detachPointerReleaseSafetyNet();
-			window.removeEventListener('resize', syncOverlaySize);
-		};
+		commitDrawingDocument(cloneDrawingDocumentV2(baselineDocument));
 	});
 
 	$effect(() => {
@@ -282,149 +207,79 @@
 		if (clearVersion === lastAppliedClearVersion) return;
 
 		lastAppliedClearVersion = clearVersion;
-		activeStroke = null;
+		wetStroke = null;
+		surface?.wet(null);
 		commitDrawingDocument(cloneDrawingDocumentV2(baselineDocument));
 	});
 
-	// The pointer handlers already paint synchronously, so this effect exists for
-	// the repaints nothing else covers: mount, clearVersion, a new
-	// initialDrawingDocument and the parent's post-publish reset. The signature
-	// check keeps it from painting the very same frame a second time per point.
+	// A document this canvas did not draw itself (opened, cleared, reset after
+	// publishing) is painted again whole.
 	$effect(() => {
-		const nextSignature = readDrawingRenderSignature({
-			activeStroke,
-			document: drawingDocument,
-			responsive: responsiveDrawing,
-			target: canvasRef
-		});
+		const next = drawingDocument;
+		if (!surface || next === shownDocument) return;
 
-		if (isSameDrawingRenderSignature(renderedSignature, nextSignature)) return;
-
-		renderCurrentDocument();
+		shownDocument = next;
+		surface.showDocument(next);
 	});
 
-	function startDrawing(event: PointerEvent) {
-		if (!interactive) return;
-		if (!canvasRef) return;
-		if (!event.isPrimary) return;
+	onMount(() => {
+		if (!canvasRef || !overlayRef) return;
 
-		event.preventDefault();
+		const canvas = canvasRef;
+		const inkSurface = createInkSurface(canvas, overlayRef);
+		const fitToBox = () => {
+			const rect = getCanvasContentRect(canvas);
+			inkSurface.resize(rect.width, rect.height, window.devicePixelRatio || 1);
+		};
 
-		const point = getPoint(event);
-		if (!point) return;
+		fitToBox();
+		shownDocument = drawingDocument;
+		inkSurface.showDocument(drawingDocument);
+		surface = inkSurface;
 
-		canvasRef.setPointerCapture(event.pointerId);
-		activePointerId = event.pointerId;
-		isDrawing = true;
+		const resizeObserver = new ResizeObserver(fitToBox);
+		resizeObserver.observe(canvas);
+		// A window dragged to a screen of another density keeps its CSS size.
+		window.addEventListener('resize', fitToBox);
+		const detachPointerReleaseSafetyNet = attachPointerReleaseSafetyNet(finishDrawing);
 
-		if (responsiveDrawing) {
-			activeStroke = createBufferedStroke({
-				color: drawingTools.activeColor,
-				point,
-				size: drawingTools.brushSize
-			});
-			renderCurrentDocument();
-			return;
-		}
-
-		const nextDocument = cloneDrawingDocumentV2(drawingDocument);
-		nextDocument.tail.push({
-			color: drawingTools.activeColor,
-			points: [point],
-			size: drawingTools.brushSize
-		});
-		commitDrawingDocument(nextDocument);
-		renderCurrentDocument();
-	}
-
-	function draw(event: PointerEvent) {
-		if (!interactive) return;
-		if (!event.isPrimary) return;
-		if (activePointerId !== event.pointerId) return;
-
-		event.preventDefault();
-
-		if (!isDrawing) {
-			return;
-		}
-
-		// A mouse released outside the window delivers no pointerup here, so commit
-		// what was drawn instead of trailing ink from an unpressed button.
-		if (hasLostPrimaryButton(event)) {
-			finishDrawing(event);
-			return;
-		}
-
-		if (!canvasRef) return;
-		const point = getPoint(event);
-		if (!point) return;
-
-		if (responsiveDrawing) {
-			appendPointToActiveStroke(point);
-			return;
-		}
-
-		appendPoint(point);
-	}
-
-	function finishDrawing(event?: PointerEvent) {
-		if (
-			canvasRef &&
-			event &&
-			activePointerId === event.pointerId &&
-			canvasRef.hasPointerCapture(event.pointerId)
-		) {
-			canvasRef.releasePointerCapture(event.pointerId);
-		}
-
-		if (responsiveDrawing) {
-			commitActiveStroke();
-		} else if (isDrawing) {
-			const previousDocument = cloneDrawingDocumentV2(drawingDocument);
-			const committedStroke = previousDocument.tail.pop();
-			if (committedStroke) {
-				emitStrokeCommitted(previousDocument, drawingDocument, committedStroke);
-			}
-		}
-
-		stopDrawing();
-	}
-
-	function cancelDrawing(event: PointerEvent) {
-		event.preventDefault();
-		finishDrawing(event);
-	}
+		return () => {
+			resizeObserver.disconnect();
+			window.removeEventListener('resize', fitToBox);
+			detachPointerReleaseSafetyNet();
+			inkSurface.destroy();
+			surface = null;
+		};
+	});
 </script>
 
-<div class="relative h-full w-full items-center justify-center">
+<!-- Sized inline as well as by class: a canvas sized from its own pixel count
+     would grow with every resize to the screen's density. -->
+<div class="relative h-full w-full items-center justify-center" style="width: 100%; height: 100%;">
 	<canvas
 		bind:this={canvasRef}
-		width={768}
-		height={768}
 		class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
-		style="background: var(--color-paper-bright); touch-action: none;"
+		style="width: 100%; height: 100%; background: var(--color-paper-bright); touch-action: none;"
+		aria-label="Drawing canvas"
 		aria-disabled={!interactive}
-		data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
 		draggable="false"
-		ondragstart={preventCanvasDrag}
+		ondragstart={(event) => event.preventDefault()}
 		onpointerdown={startDrawing}
 		onpointermove={(event) => {
-			// Ink first: the brush preview is cosmetic and must never block drawing.
+			// Ink first: the brush cursor is cosmetic and must never hold up drawing.
 			draw(event);
-			scheduleOverlayUpdate(event);
+			showCursor(event);
 		}}
 		onpointerup={(event) => {
 			finishDrawing(event);
-			clearOverlay();
+			hideCursor();
 		}}
 		onpointercancel={cancelDrawing}
-		onpointerleave={clearOverlay}
+		onpointerleave={hideCursor}
 	></canvas>
 
 	<canvas
 		bind:this={overlayRef}
-		width={768}
-		height={768}
 		class="pointer-events-none block h-full w-full rounded-lg"
 		style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
 	></canvas>
