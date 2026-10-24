@@ -9,10 +9,6 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const describeWithDatabase = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
 
 type DbClient = Sql<Record<string, unknown>>;
-type TransactionContext = {
-	unsafe: DbClient['unsafe'];
-};
-
 const createCanonicalUser = (id: string, role: ProductRole = 'user') => {
 	const now = new Date('2026-03-27T10:00:00.000Z');
 
@@ -47,9 +43,7 @@ const truncateDatabase = async (sql: DbClient) => {
 			app.auth_rate_limits,
 			app.content_reports,
 			app.artwork_votes,
-			app.artwork_vote_realtime,
 			app.artwork_comments,
-			app.artwork_comment_realtime,
 			app.artworks,
 			app.users,
 			better_auth.account,
@@ -290,30 +284,6 @@ const getReportRows = async (sql: DbClient, target: { artworkId?: string; commen
 		order by id
 	`;
 };
-
-const asAuthenticated = async <T>(
-	sql: DbClient,
-	userId: string,
-	callback: (tx: TransactionContext) => Promise<T>
-) =>
-	sql.begin(async (tx) => {
-		await tx.unsafe('set local role authenticated');
-		await tx.unsafe("select set_config('request.jwt.claims', $1, true)", [
-			JSON.stringify({ role: 'authenticated', sub: userId })
-		]);
-
-		return callback({ unsafe: tx.unsafe.bind(tx) });
-	});
-
-const asAnonymous = async <T>(sql: DbClient, callback: (tx: TransactionContext) => Promise<T>) =>
-	sql.begin(async (tx) => {
-		await tx.unsafe('set local role anon');
-		await tx.unsafe("select set_config('request.jwt.claims', $1, true)", [
-			JSON.stringify({ role: 'anon' })
-		]);
-
-		return callback({ unsafe: tx.unsafe.bind(tx) });
-	});
 
 describeWithDatabase('artwork DB contract', () => {
 	let sql: DbClient;
@@ -711,160 +681,6 @@ describeWithDatabase('artwork DB contract', () => {
 				})
 			])
 		);
-	});
-
-	it('exposes only realtime-safe artwork-scoped vote and comment relations with publication and RLS protection', async () => {
-		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-visible' });
-		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-hidden', isHidden: true });
-
-		await sql`
-			insert into app.artwork_votes (id, artwork_id, user_id, value, created_at, updated_at)
-			values ('vote-visible', 'artwork-visible', 'viewer-1', 'up', now(), now())
-		`;
-		await insertComment(sql, {
-			authorId: 'viewer-1',
-			artworkId: 'artwork-visible',
-			id: 'comment-visible',
-			body: 'Visible comment'
-		});
-		await insertComment(sql, {
-			authorId: 'viewer-1',
-			artworkId: 'artwork-hidden',
-			id: 'comment-hidden',
-			body: 'Hidden comment'
-		});
-
-		const publicationRows = await sql<Array<{ tablename: string }>>`
-			select tablename
-			from pg_publication_tables
-			where pubname = 'supabase_realtime' and schemaname = 'app'
-			order by tablename
-		`;
-
-		expect(publicationRows.map((row) => row.tablename)).toEqual([
-			'artwork_comment_realtime',
-			'artwork_vote_realtime'
-		]);
-
-		const voteColumns = await sql<Array<{ column_name: string }>>`
-			select column_name
-			from information_schema.columns
-			where table_schema = 'app' and table_name = 'artwork_vote_realtime'
-			order by ordinal_position
-		`;
-		const commentColumns = await sql<Array<{ column_name: string }>>`
-			select column_name
-			from information_schema.columns
-			where table_schema = 'app' and table_name = 'artwork_comment_realtime'
-			order by ordinal_position
-		`;
-
-		expect(voteColumns.map((row) => row.column_name)).toEqual([
-			'id',
-			'artwork_id',
-			'value',
-			'created_at',
-			'updated_at'
-		]);
-		expect(commentColumns.map((row) => row.column_name)).toEqual([
-			'id',
-			'artwork_id',
-			'author_id',
-			'body',
-			'is_visible',
-			'created_at',
-			'updated_at'
-		]);
-
-		const visibleVoteRows = await asAuthenticated(sql, 'viewer-1', async (tx) =>
-			tx.unsafe<Array<{ artwork_id: string; id: string }>>(
-				"select id, artwork_id from app.artwork_vote_realtime where artwork_id = 'artwork-visible' order by id"
-			)
-		);
-		const hiddenCommentRows = await asAuthenticated(sql, 'viewer-1', async (tx) =>
-			tx.unsafe<Array<{ id: string }>>(
-				"select id from app.artwork_comment_realtime where artwork_id = 'artwork-hidden'"
-			)
-		);
-		const moderatorHiddenCommentRows = await asAuthenticated(sql, 'moderator-1', async (tx) =>
-			tx.unsafe<Array<{ id: string }>>(
-				"select id from app.artwork_comment_realtime where artwork_id = 'artwork-hidden'"
-			)
-		);
-
-		expect(visibleVoteRows).toEqual([{ artwork_id: 'artwork-visible', id: 'vote-visible' }]);
-		expect(hiddenCommentRows).toEqual([]);
-		expect(moderatorHiddenCommentRows).toEqual([{ id: 'comment-hidden' }]);
-
-		await expect(
-			asAnonymous(sql, async (tx) =>
-				tx.unsafe<Array<{ id: string }>>(
-					"select id from app.artwork_vote_realtime where artwork_id = 'artwork-visible'"
-				)
-			)
-		).rejects.toThrow();
-	});
-
-	it('keeps comment realtime rows in sync for create, hide, unhide, and delete transitions', async () => {
-		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-comment-events' });
-		await insertComment(sql, {
-			authorId: 'viewer-1',
-			artworkId: 'artwork-comment-events',
-			id: 'comment-event',
-			body: 'Initial body'
-		});
-
-		let [realtimeComment] = await sql<
-			Array<{ body: string | null; id: string; is_visible: boolean }>
-		>`
-			select id, body, is_visible
-			from app.artwork_comment_realtime
-			where id = 'comment-event'
-		`;
-		expect(realtimeComment).toEqual({
-			body: 'Initial body',
-			id: 'comment-event',
-			is_visible: true
-		});
-
-		await sql`
-			update app.artwork_comments
-			set is_hidden = true, hidden_at = now(), updated_at = now()
-			where id = 'comment-event'
-		`;
-
-		[realtimeComment] = await sql<Array<{ body: string | null; id: string; is_visible: boolean }>>`
-			select id, body, is_visible
-			from app.artwork_comment_realtime
-			where id = 'comment-event'
-		`;
-		expect(realtimeComment).toEqual({ body: null, id: 'comment-event', is_visible: false });
-
-		await sql`
-			update app.artwork_comments
-			set is_hidden = false, hidden_at = null, body = 'Restored body', updated_at = now()
-			where id = 'comment-event'
-		`;
-
-		[realtimeComment] = await sql<Array<{ body: string | null; id: string; is_visible: boolean }>>`
-			select id, body, is_visible
-			from app.artwork_comment_realtime
-			where id = 'comment-event'
-		`;
-		expect(realtimeComment).toEqual({
-			body: 'Restored body',
-			id: 'comment-event',
-			is_visible: true
-		});
-
-		await sql`delete from app.artwork_comments where id = 'comment-event'`;
-
-		const deletedRows = await sql<Array<{ id: string }>>`
-			select id
-			from app.artwork_comment_realtime
-			where id = 'comment-event'
-		`;
-		expect(deletedRows).toEqual([]);
 	});
 
 	it('keeps service and read boundaries consistent with DB-owned counters and visibility semantics', async () => {

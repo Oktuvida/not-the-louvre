@@ -94,13 +94,13 @@ exercises the production runtime rather than Node.
 
 Local development must be reproducible from a clean clone:
 
-- **Infrastructure**: `compose.yaml` defines all services. `bun run db:start` brings up only the ones the app talks to (`db`, `kong`, `rest`, `storage`, `imgproxy`, `realtime`). Supabase Studio, GoTrue, postgres-meta, logflare and the edge runtime sit behind the `tools` profile: `docker compose --env-file .env.supabase --profile tools up -d`.
+- **Infrastructure**: the app needs only Postgres; images, drawings and live updates run on Cloudflare bindings that `wrangler dev` emulates. `compose.yaml` still defines the old local Supabase stack, and `bun run db:start` brings up `db` with the services the app used to talk to (`kong`, `rest`, `storage`, `imgproxy`, `realtime`) until the file is trimmed to Postgres (remaster phase 6). Any plain Postgres works too: set `DATABASE_URL`, then run `db:platform-objects` and `db:migrate`.
 - **Live updates**: votes and comments reach open artworks through the realtime Worker in `apps/realtime` (one Durable Object per artwork). The e2e suite starts both Workers in one `wrangler dev`, which is the tested path. `bun run dev` serves the app without it and live updates stay off; running `bun run --filter @not-the-louvre/realtime dev` alongside should connect them through wrangler's dev registry, but that path is untested.
 - **Commit hooks**: run `bun run hooks:install` once per clone to enable the commit-message hook (`git config core.hooksPath .githooks`).
 - **Dependencies**: `bun install` from root. Lockfile is committed.
 - **Environment**: `.env.example` documents every required variable.
 - **Schema**: Drizzle migrations define the database state (see below).
-- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check`, `test:unit:server` and `test:unit:client` on every pull request and before every deploy, plus, in its `database` job, the integration suites and the e2e suite (except the `@realtime` demo) against a Postgres service container.
+- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check`, `test:unit:server` and `test:unit:client` on every pull request and before every deploy, plus, in its `database` job, the integration suites and the e2e suite against a Postgres service container.
 
 ---
 

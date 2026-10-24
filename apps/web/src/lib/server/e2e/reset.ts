@@ -6,9 +6,7 @@ const RESET_SQL = `
 	truncate table
 		app.content_reports,
 		app.artwork_votes,
-		app.artwork_vote_realtime,
 		app.artwork_comments,
-		app.artwork_comment_realtime,
 		app.artwork_engagement_rate_limits,
 		app.artwork_publish_rate_limits,
 		app.artworks,

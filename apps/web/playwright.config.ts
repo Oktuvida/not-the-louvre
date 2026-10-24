@@ -27,12 +27,9 @@ const databaseUrl =
 
 // Runtime variables the Worker reads through `$app/env/private`.
 const workerVariables = {
-	ANON_KEY: supabase.ANON_KEY ?? '',
 	BETTER_AUTH_SECRET: 'playwright-secret-value-1234567890',
 	DATABASE_URL: databaseUrl,
-	JWT_SECRET: supabase.JWT_SECRET ?? '',
-	ORIGIN: 'http://127.0.0.1:4173',
-	SUPABASE_PUBLIC_URL: supabase.SUPABASE_PUBLIC_URL ?? ''
+	ORIGIN: 'http://127.0.0.1:4173'
 };
 
 export default defineConfig({

@@ -2,14 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import {
 	account,
-	artworkCommentRealtime,
 	artworkComments,
 	artworkEngagementRateLimits,
 	artworkNsfwSource,
 	artworkPublishRateLimits,
 	contentReportStatus,
 	artworkReportReason,
-	artworkVoteRealtime,
 	artworkVoteValue,
 	artworkVotes,
 	artworks,
@@ -31,9 +29,7 @@ describe('database schema namespaces', () => {
 		expect(getTableConfig(authRateLimits).schema).toBe('app');
 		expect(getTableConfig(artworks).schema).toBe('app');
 		expect(getTableConfig(artworkVotes).schema).toBe('app');
-		expect(getTableConfig(artworkVoteRealtime).schema).toBe('app');
 		expect(getTableConfig(artworkComments).schema).toBe('app');
-		expect(getTableConfig(artworkCommentRealtime).schema).toBe('app');
 		expect(getTableConfig(contentReports).schema).toBe('app');
 		expect(getTableConfig(artworkEngagementRateLimits).schema).toBe('app');
 		expect(getTableConfig(artworkPublishRateLimits).schema).toBe('app');
@@ -193,28 +189,6 @@ describe('database schema namespaces', () => {
 		expect(
 			rateLimitColumns.find((candidate) => candidate.name === 'window_started_at')?.notNull
 		).toBe(true);
-	});
-
-	it('defines narrow realtime-safe vote and comment relations for artwork detail subscriptions', () => {
-		const voteRealtimeColumns = getTableConfig(artworkVoteRealtime).columns;
-		const commentRealtimeColumns = getTableConfig(artworkCommentRealtime).columns;
-
-		expect(voteRealtimeColumns.map((candidate) => candidate.name)).toEqual([
-			'id',
-			'artwork_id',
-			'value',
-			'created_at',
-			'updated_at'
-		]);
-		expect(commentRealtimeColumns.map((candidate) => candidate.name)).toEqual([
-			'id',
-			'artwork_id',
-			'author_id',
-			'body',
-			'is_visible',
-			'created_at',
-			'updated_at'
-		]);
 	});
 
 	it('stores hidden-state fields on artworks and comments', () => {

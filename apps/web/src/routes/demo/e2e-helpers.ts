@@ -179,22 +179,3 @@ export const recoverThroughNicknameDemo = async (
 	await page.getByRole('button', { name: 'Recover account' }).click();
 	await expect(page.getByText('Rotated recovery key:')).toBeVisible();
 };
-
-export const publishArtworkThroughRealtimeDemo = async (
-	page: Page,
-	input: { title?: string } = {}
-) => {
-	await page.goto('/demo/artwork-realtime-votes');
-	await expect(page.getByText('Realtime vote demo state: authenticated')).toBeVisible();
-	await page.getByLabel('Artwork title').fill(input.title ?? 'Realtime Gallery Study');
-	await page.getByRole('button', { name: 'Publish tracked artwork' }).click();
-	await expect(page).toHaveURL(/\/demo\/artwork-realtime-votes\?artworkId=/);
-
-	const trackedArtworkText = await page.getByText(/Tracked artwork ID:/).textContent();
-	const trackedArtworkId = trackedArtworkText?.split(': ').at(1)?.trim();
-	if (!trackedArtworkId) {
-		throw new Error('Tracked artwork ID was not rendered');
-	}
-
-	return trackedArtworkId;
-};

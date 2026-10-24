@@ -150,11 +150,11 @@ jobs:
         working-directory: apps/web
         run: bunx playwright install --with-deps chromium
 
-      # The e2e build swaps object storage for an in-memory store, so Postgres is
-      # all it needs; only the realtime demo needs Supabase Realtime.
+      # wrangler dev serves both Workers with a local R2 bucket and local
+      # Durable Objects, so Postgres is all the suite needs.
       - name: End-to-end tests
         working-directory: apps/web
-        run: bun run test:e2e --grep-invert @realtime
+        run: bun run test:e2e
 
       # The trace of a failed test holds the DOM, console and network at every
       # step, which is the only way to see a failure that does not reproduce
