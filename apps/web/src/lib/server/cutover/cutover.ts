@@ -22,7 +22,14 @@ import { avatarStorageKey } from '#lib/server/user/avatar-key.js';
  *   rendered again as lossless WebP, so the gallery stops showing the lossy
  *   AVIF ladder; artworks without one keep their AVIF. Rows move to the new
  *   keys, which main cannot read, so this runs after the deploy.
+ *
+ * Every run ends by naming the artworks whose image is heavier than 300 KiB:
+ * a dense drawing that lossless WebP cannot shrink. The owner decides what
+ * the grid does with those once their number is known.
  */
+
+/** Past this an image is worth a decision of its own (docs/remaster). */
+export const HEAVY_IMAGE_BYTES = 300 * 1024;
 
 export type ObjectSource = {
 	read(key: string): Promise<{ bytes: Uint8Array; contentType: string } | null>;
@@ -41,6 +48,8 @@ type Queryable = {
 export type CutoverReport = {
 	copiedImages: number;
 	failures: string[];
+	/** Heaviest first. */
+	heavyImages: { id: string; sizeBytes: number }[];
 	invalidDocuments: string[];
 	missingImages: string[];
 	movedDocuments: number;
@@ -101,6 +110,7 @@ export const runCutover = async (options: CutoverOptions): Promise<CutoverReport
 	const report: CutoverReport = {
 		copiedImages: 0,
 		failures: [],
+		heavyImages: [],
 		invalidDocuments: [],
 		missingImages: [],
 		movedDocuments: 0,
@@ -170,7 +180,24 @@ export const runCutover = async (options: CutoverOptions): Promise<CutoverReport
 	}
 	log(`drawings: ${report.movedDocuments} moved, ${report.tornDocuments.length} torn left inline`);
 
-	if (options.redraw === false) return report;
+	if (options.redraw !== false) await redraw(options, report);
+
+	const { rows: heavy } = await db.query(
+		`select id, media_size_bytes as "sizeBytes" from app.artworks
+		 where media_size_bytes > $1 and ($2::text[] is null or author_id = any($2))
+		 order by media_size_bytes desc, id`,
+		[HEAVY_IMAGE_BYTES, owners]
+	);
+	report.heavyImages = heavy as CutoverReport['heavyImages'];
+	log(`heavy images: ${report.heavyImages.length} over ${HEAVY_IMAGE_BYTES / 1024} KiB`);
+
+	return report;
+};
+
+const redraw = async (options: CutoverOptions, report: CutoverReport) => {
+	const { db, target } = options;
+	const log = options.log ?? (() => {});
+	const owners = options.ownedBy ?? null;
 
 	// --- redraw: artworks ---------------------------------------------------
 	const { rows: lossyArtworks } = await db.query(
@@ -231,6 +258,4 @@ export const runCutover = async (options: CutoverOptions): Promise<CutoverReport
 	}
 
 	log(`redraw: ${report.redrawnArtworks} artworks, ${report.redrawnAvatars} avatars`);
-
-	return report;
 };

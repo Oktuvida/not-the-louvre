@@ -94,7 +94,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [ ] Precarga desde la home y al tocar, restauración del scroll y feed cacheado en el edge.
 - [x] Permalink `/artwork/[id]` con tarjeta OG, sin morph: la página pinta en el servidor la misma postal sobre la pared del museo, y la tarjeta de vista previa lleva la imagen de la obra (las obras 18+ usan la tarjeta del sitio). Al abrir una obra desde la galería la barra de direcciones pasa a `/artwork/<id>` con enrutado superficial, así que copiar el enlace o recargar lleva al permalink, y Atrás vuelve a la sala.
 - [x] El tiempo real envía los datos en lugar de pedir recargar: un voto llega con los totales (contados una vez en el servidor, en la misma transacción) y un comentario nuevo llega entero. Solo borrar, reportar o moderar un comentario, y reconectar, vuelven a leer la obra. Antes cada cambio costaba dos peticiones por cada persona con la obra abierta, y un visitante sin sesión podía recibir la copia del edge de hasta 30 s. El permalink también se actualiza en vivo.
-- [ ] Contar cuántas obras superan ~300 KB y decidir la política para esas imágenes.
+- [ ] Contar cuántas obras superan ~300 KB y decidir la política para esas imágenes. El informe de `bun run cutover` ya las lista (`heavyImages`, de la más pesada a la más ligera), así que la cifra real sale del corte; la decisión queda para entonces.
 
 ### 4. Estudio v3 y timelapse
 
