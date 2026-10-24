@@ -9,13 +9,18 @@ import { hyperdriveConnectionString } from '#lib/server/platform.js';
 // the hall of fame, which is exactly what the bare URL loaded from its own
 // duplicate node before.
 //
-// The shell returns synchronously so navigation lands instantly; the room
-// content is a nested promise SvelteKit streams once the queries resolve.
-// The streamed work outlives the request's own DB connection (hooks close it
-// when the response headers go out), so it runs on a connection of its own.
-// `parent()` is awaited inside that promise, never in front of the shell: the
-// layout already read the viewer's content preferences for this request.
-export const load: PageServerLoad = async ({ locals, params, parent }) => {
+// Navigating between rooms, the shell returns synchronously so the move lands
+// instantly, and the room content is a nested promise SvelteKit streams once
+// the queries resolve. That streamed work outlives the request's own DB
+// connection (hooks close it when the response headers go out), so it runs on
+// a connection of its own. `parent()` is awaited inside that promise, never in
+// front of the shell: the layout already read the viewer's content
+// preferences for this request.
+//
+// A first visit (a shared link, a reload) renders the first page on the
+// server instead: the HTML then carries the artworks, so the browser fetches
+// the first images while the page's JavaScript is still on its way.
+export const load: PageServerLoad = async ({ isDataRequest, locals, params, parent }) => {
 	const shell = loadGalleryRoomShell(params.room ?? 'hall-of-fame', locals.user);
 
 	// The root layout owns the only <title> in the document; a route says who it
@@ -30,8 +35,20 @@ export const load: PageServerLoad = async ({ locals, params, parent }) => {
 			: { title: 'Gallery' }
 	) satisfies RouteMeta;
 
+	if (!isDataRequest) {
+		return {
+			...shell,
+			initialRoomContent: await loadGalleryRoomContent(shell.roomId, locals.user, {
+				adultContentEnabled: (await parent()).adultContentEnabled
+			}),
+			lazy: { roomContent: null },
+			meta
+		};
+	}
+
 	return {
 		...shell,
+		initialRoomContent: null,
 		meta,
 		lazy: {
 			roomContent: runWithRequestDbConnection(
