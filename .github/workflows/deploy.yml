@@ -51,6 +51,9 @@ jobs:
       - name: Typecheck
         run: bun run --filter @not-the-louvre/web check
 
+      - name: Typecheck the realtime Worker
+        run: bun run --filter @not-the-louvre/realtime check
+
       # Integration suites opt in through RUN_INTEGRATION=1 and are skipped
       # here; they run against real Postgres in the `database` job below.
       - name: Server unit tests
@@ -212,6 +215,17 @@ jobs:
         env:
           BETTER_AUTH_SECRET: build-time-placeholder-not-used-at-runtime
           ORIGIN: https://build.invalid
+
+      # The web Worker binds to the realtime Worker's Durable Objects by script
+      # name, so the realtime Worker (and its Durable Object migrations) ships
+      # first.
+      - name: Deploy the realtime Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/realtime
+          command: deploy
 
       - name: Deploy with Wrangler
         id: deploy

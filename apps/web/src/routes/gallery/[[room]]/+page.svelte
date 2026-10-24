@@ -12,7 +12,6 @@
 	a skeleton belonging to the instance that was about to be discarded.
 -->
 <GalleryExplorationPage
-	realtimeConfig={data.realtimeConfig}
 	room={data.room}
 	roomContent={data.lazy.roomContent}
 	roomId={data.roomId}

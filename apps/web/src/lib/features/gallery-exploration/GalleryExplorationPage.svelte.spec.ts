@@ -4,44 +4,16 @@ import {
 	installFakeIntersectionObserver,
 	revealElement
 } from '#lib/testing/fake-intersection-observer.js';
+import {
+	connectedSocket,
+	installFakeWebSocket,
+	openedSockets
+} from '#lib/testing/fake-websocket.js';
 import { fakePage } from '#lib/testing/fake-page-state.svelte.js';
 import { render } from 'vitest-browser-svelte';
 
-const { createRealtimeClient, goto, getBrowserRealtimeClient, refreshAll } = vi.hoisted(() => {
-	type RealtimeClientOptions = {
-		onChannelEvent?: (table: string | undefined, handler: (payload: unknown) => void) => void;
-		onSubscribe?: (callback?: (status: string) => void) => void;
-	};
-
-	const createRealtimeClient = (
-		options: RealtimeClientOptions | ((callback?: (status: string) => void) => void) = {}
-	) => {
-		const normalizedOptions = typeof options === 'function' ? { onSubscribe: options } : options;
-
-		const channel = {
-			on: vi.fn(
-				(_event: string, filter: { table?: string }, handler: (payload: unknown) => void) => {
-					normalizedOptions.onChannelEvent?.(filter.table, handler);
-					return channel;
-				}
-			),
-			subscribe: vi.fn((callback?: (status: string) => void) => {
-				normalizedOptions.onSubscribe?.(callback);
-				return channel;
-			})
-		};
-
-		return {
-			channel: vi.fn(() => channel),
-			removeChannel: vi.fn(),
-			realtime: {
-				setAuth: vi.fn(async () => {})
-			}
-		};
-	};
-
+const { goto, refreshAll } = vi.hoisted(() => {
 	return {
-		createRealtimeClient,
 		// A shallow goto (SvelteKit 3's pushState/replaceState) moves the page the
 		// way the router would.
 		goto: vi.fn(
@@ -52,7 +24,6 @@ const { createRealtimeClient, goto, getBrowserRealtimeClient, refreshAll } = vi.
 				if (options.shallow) fakePage.set({ state: options.state ?? {}, url });
 			}
 		),
-		getBrowserRealtimeClient: vi.fn(() => createRealtimeClient()),
 		refreshAll: vi.fn(async () => {})
 	};
 });
@@ -70,10 +41,6 @@ vi.mock(
 	'$app/state',
 	async () => (await import('#lib/testing/fake-page-state.svelte.js')).fakeAppState
 );
-
-vi.mock('#lib/features/realtime/browser-client.js', () => ({
-	getBrowserRealtimeClient
-}));
 
 import GalleryExplorationPage from './GalleryExplorationPageLayoutHarness.svelte';
 import { clearRoomFeedCache, writeRoomFeedSnapshot } from './model/feed-cache';
@@ -121,9 +88,8 @@ describe('GalleryExplorationPage', () => {
 		clearRoomFeedCache();
 		vi.unstubAllGlobals?.();
 		installFakeIntersectionObserver();
+		installFakeWebSocket();
 		goto.mockReset();
-		getBrowserRealtimeClient.mockReset();
-		getBrowserRealtimeClient.mockImplementation(() => createRealtimeClient());
 		refreshAll.mockReset();
 		setPageValue('/gallery');
 		window.scrollTo(0, 0);
@@ -697,10 +663,7 @@ describe('GalleryExplorationPage', () => {
 			.not.toBeInTheDocument();
 	});
 
-	it('keeps realtime subscription failures silent in artwork detail', async () => {
-		const fetchSpy = vi.fn(
-			async () => new Response(JSON.stringify({ token: 'realtime-token' }), { status: 200 })
-		);
+	it('stays quiet when live updates cannot connect', async () => {
 		const loadArtworkDetail = vi.fn(async () => ({
 			...baseArtwork,
 			forkCount: 0,
@@ -708,42 +671,31 @@ describe('GalleryExplorationPage', () => {
 			title: 'Deterministic Gallery Study'
 		}));
 
-		vi.stubGlobal('fetch', fetchSpy);
-		getBrowserRealtimeClient.mockImplementation(() =>
-			createRealtimeClient((callback) => {
-				callback?.('CHANNEL_ERROR');
-			})
-		);
-
 		await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
 			emptyStateMessage: null,
 			loadArtworkDetail,
-			realtimeConfig: { anonKey: 'anon-key', url: 'https://example.supabase.co' },
 			room: getGalleryRoom('your-studio'),
 			roomId: 'your-studio',
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
 		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
-		await expect
-			.element(
-				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
-			)
-			.toBeVisible();
-		await vi.waitFor(() => {
-			expect(fetchSpy).toHaveBeenCalledTimes(1);
+		const detail = page.getByRole('dialog', {
+			name: 'Artwork details for Deterministic Gallery Study'
 		});
-		await expect
-			.element(page.getByText('Realtime updates are temporarily unavailable.'))
-			.not.toBeInTheDocument();
+		await expect.element(detail).toBeVisible();
+		await vi.waitFor(() => {
+			expect(openedSockets()).toHaveLength(1);
+		});
+
+		openedSockets()[0]!.drop();
+
+		await expect.element(detail).toBeVisible();
+		await expect.element(page.getByText(/could not be loaded/i)).not.toBeInTheDocument();
 	});
 
-	it('propagates realtime detail refreshes back into the visible room card metadata', async () => {
-		let voteRefreshHandler: ((payload: unknown) => void) | undefined;
-		const fetchSpy = vi.fn(
-			async () => new Response(JSON.stringify({ token: 'realtime-token' }), { status: 200 })
-		);
+	it('refreshes the open artwork when someone votes or comments on it', async () => {
 		const loadArtworkDetail = vi
 			.fn<(...args: [string]) => Promise<Artwork>>()
 			.mockResolvedValueOnce({
@@ -768,17 +720,6 @@ describe('GalleryExplorationPage', () => {
 				upvotes: 1
 			});
 
-		vi.stubGlobal('fetch', fetchSpy);
-		getBrowserRealtimeClient.mockImplementation(() =>
-			createRealtimeClient({
-				onChannelEvent: (table, handler) => {
-					if (table === 'artwork_vote_realtime') {
-						voteRefreshHandler = handler;
-					}
-				}
-			})
-		);
-
 		await render(GalleryExplorationPage, {
 			artworks: [
 				{
@@ -791,7 +732,6 @@ describe('GalleryExplorationPage', () => {
 			],
 			emptyStateMessage: null,
 			loadArtworkDetail,
-			realtimeConfig: { anonKey: 'anon-key', url: 'https://example.supabase.co' },
 			room: getGalleryRoom('your-studio'),
 			roomId: 'your-studio',
 			viewer: { id: 'user-1', role: 'user' }
@@ -808,7 +748,8 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(roomCard.getByText('⭐ 0')).toBeVisible();
 		await expect.element(roomCard.getByText('💬 0')).toBeVisible();
 
-		voteRefreshHandler?.({ new: { artwork_id: 'artwork-1' } });
+		const socket = await connectedSocket('/api/artworks/artwork-1/live');
+		socket.receive(JSON.stringify({ artworkId: 'artwork-1', change: 'votes' }));
 
 		await vi.waitFor(() => {
 			expect(loadArtworkDetail).toHaveBeenCalledTimes(2);
@@ -820,6 +761,32 @@ describe('GalleryExplorationPage', () => {
 		// The visitor's book is on the back of the postcard, inert until it turns.
 		await page.getByRole('button', { name: 'Read the comments' }).click();
 		await expect.element(page.getByText('Realtime hello', { exact: false })).toBeVisible();
+	});
+
+	it('keeps the open artwork live for visitors who are not signed in', async () => {
+		const loadArtworkDetail = vi.fn(async () => ({
+			...baseArtwork,
+			forkCount: 0,
+			id: 'artwork-1',
+			title: 'Deterministic Gallery Study'
+		}));
+
+		await render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('hall-of-fame'),
+			roomId: 'hall-of-fame',
+			viewer: null
+		});
+
+		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
+		const socket = await connectedSocket('/api/artworks/artwork-1/live');
+		socket.receive(JSON.stringify({ artworkId: 'artwork-1', change: 'comments' }));
+
+		await vi.waitFor(() => {
+			expect(loadArtworkDetail).toHaveBeenCalledTimes(2);
+		});
 	});
 
 	it('opens artwork detail from a visible virtualized studio card without losing room context', async () => {

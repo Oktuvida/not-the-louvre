@@ -95,6 +95,7 @@ exercises the production runtime rather than Node.
 Local development must be reproducible from a clean clone:
 
 - **Infrastructure**: `compose.yaml` defines all services. `bun run db:start` brings up only the ones the app talks to (`db`, `kong`, `rest`, `storage`, `imgproxy`, `realtime`). Supabase Studio, GoTrue, postgres-meta, logflare and the edge runtime sit behind the `tools` profile: `docker compose --env-file .env.supabase --profile tools up -d`.
+- **Live updates**: votes and comments reach open artworks through the realtime Worker in `apps/realtime` (one Durable Object per artwork). The e2e suite starts both Workers in one `wrangler dev`, which is the tested path. `bun run dev` serves the app without it and live updates stay off; running `bun run --filter @not-the-louvre/realtime dev` alongside should connect them through wrangler's dev registry, but that path is untested.
 - **Commit hooks**: run `bun run hooks:install` once per clone to enable the commit-message hook (`git config core.hooksPath .githooks`).
 - **Dependencies**: `bun install` from root. Lockfile is committed.
 - **Environment**: `.env.example` documents every required variable.

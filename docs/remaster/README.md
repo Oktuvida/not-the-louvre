@@ -81,7 +81,9 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [ ] Worker `renderer` aparte, para sacar los códecs WASM del Worker principal.
 - [x] Documentos en R2 (`documents/<sha256>.json.gz`): primero se guardan el dibujo y la imagen, y la fila se escribe al final en una sola sentencia que los nombra, así que ya no hay dibujos a medias ni escrituras troceadas, y Supavisor nunca recibe un documento entero. Las filas anteriores siguen leyéndose de la columna base64 hasta la migración (migración `0017`: columnas `drawing_document_key` y `avatar_document_key`).
 - [ ] Script de migración: documentos byte a byte (omitiendo las escrituras rotas), AVIF copiados con sus claves y backfill a WebP por cola.
-- [ ] Dominio de medios con Tiered Cache y polling en lugar de Supabase Realtime.
+- [x] Tiempo real con Durable Objects en lugar de Supabase Realtime: el Worker `apps/realtime` tiene un `ArtworkTopic` por obra con WebSockets hibernados, el Worker web le reenvía la conexión desde `/api/artworks/[id]/live` (con la misma comprobación de visibilidad que la imagen) y cada voto, comentario o moderación de comentarios le avisa. Funciona también sin sesión, y la e2e de tiempo real corre ya en CI. De momento el aviso hace recargar el detalle, como antes; enviar los datos directamente llega con la galería nueva (fase 3).
+- [ ] Retirar Supabase Realtime: cliente `@supabase/supabase-js`, endpoint de tokens, tablas espejo con sus triggers, demo `artwork-realtime-votes` y variables de entorno.
+- [ ] Dominio de medios con Tiered Cache.
 - [ ] Medir la CPU real de render en Workers y la distribución real de puntos por documento.
 
 ### 3. Galería fluida
