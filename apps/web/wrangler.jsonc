@@ -23,6 +23,17 @@
 	// the bucket locally; production needs it created in the account before the
 	// first deploy that carries this binding.
 	"r2_buckets": [{ "binding": "BUCKET", "bucket_name": "not-the-louvre" }],
+	// Live updates: one Durable Object per artwork, hosted by the realtime Worker
+	// (apps/realtime), which deploys first. `wrangler dev` runs both together.
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "ARTWORK_TOPICS",
+				"class_name": "ArtworkTopic",
+				"script_name": "not-the-louvre-realtime"
+			}
+		]
+	},
 	// Mirrors the dashboard state so deploys don't flip logging: persisted
 	// Workers Logs on (incident forensics depend on them), traces off.
 	"observability": {

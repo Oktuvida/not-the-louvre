@@ -7,7 +7,6 @@
 	import { get } from 'svelte/store';
 	import { apiErrorMessage, requestJson } from '#lib/client/api.js';
 	import { setAdultContentEnabled } from '#lib/client/avatar-upload.js';
-	import { getBrowserRealtimeClient } from '#lib/features/realtime/browser-client.js';
 	import { getGalleryLayoutContext } from '#lib/features/gallery-exploration/gallery-layout-context.js';
 	import { onMount } from 'svelte';
 	import { writable } from 'svelte/store';
@@ -27,7 +26,7 @@
 		type GalleryRoomConfig,
 		type GalleryRoomId
 	} from '#lib/features/gallery-exploration/model/rooms.js';
-	import { createRealtimeSubscription } from '#lib/features/gallery-exploration/use-realtime-subscription.svelte.js';
+	import { createArtworkLiveUpdates } from '#lib/features/gallery-exploration/artwork-live-updates.js';
 	import type { Viewer } from '#lib/shared/viewer.js';
 	import PostItNote from '#lib/features/shared-ui/components/PostItNote.svelte';
 	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
@@ -175,7 +174,6 @@
 		},
 		room,
 		roomId,
-		realtimeConfig = { anonKey: null, url: null },
 		viewer = null
 
 		/** Set only by the route's failure path; never reuses the empty-state slot. */
@@ -199,7 +197,6 @@
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
 		loadArtworkDetail?: (artworkId: string) => Promise<Artwork>;
-		realtimeConfig?: { anonKey: string | null; url: string | null };
 		room: GalleryRoomConfig;
 		roomId: GalleryRoomId;
 		viewer?: Viewer | null;
@@ -208,14 +205,9 @@
 	const galleryLayout = getGalleryLayoutContext();
 	const revealedArtworkIds = galleryLayout?.revealedArtworkIds ?? writable(new Set<string>());
 
-	// Values deliberately frozen at construction (the realtime channel is opened
-	// once for the viewer that mounted the page); the IIFE keeps them out of the
-	// reactive graph without tripping `state_referenced_locally`.
-	const { initialRealtimeConfig, initialRoomContent, initialViewer } = (() => ({
-		initialRealtimeConfig: $state.snapshot(realtimeConfig),
-		initialRoomContent: roomContent,
-		initialViewer: $state.snapshot(viewer)
-	}))();
+	// Deliberately frozen at construction; the IIFE keeps it out of the reactive
+	// graph without tripping `state_referenced_locally`.
+	const { initialRoomContent } = (() => ({ initialRoomContent: roomContent }))();
 
 	// --- Streamed room content ---------------------------------------------
 	// The template awaits the same promise so SvelteKit still streams the room
@@ -551,22 +543,16 @@
 		}
 	};
 
-	// --- Realtime subscription ---
-	const realtime =
-		browser && initialViewer && initialRealtimeConfig.url && initialRealtimeConfig.anonKey
-			? createRealtimeSubscription({
-					getRealtimeClient: () =>
-						getBrowserRealtimeClient(initialRealtimeConfig.url!, initialRealtimeConfig.anonKey!),
-					fetchToken: async () =>
-						requestJson<{ expiresAt?: string; token: string }>('/api/realtime/token').catch(
-							() => null
-						),
-					viewerId: initialViewer.id,
-					onRefresh: (artworkId: string) => {
-						void refreshSelectedArtwork(artworkId);
-					}
-				})
-			: null;
+	// --- Live updates ---
+	// Signed in or not, whoever has an artwork open sees its votes and comments
+	// change as they happen.
+	const realtime = browser
+		? createArtworkLiveUpdates({
+				onChange: (artworkId: string) => {
+					void refreshSelectedArtwork(artworkId);
+				}
+			})
+		: null;
 
 	const refreshSelectedArtwork = async (artworkId: string) => {
 		try {
@@ -592,7 +578,7 @@
 			return;
 		}
 
-		void realtime.start(artworkId);
+		realtime.start(artworkId);
 
 		return () => {
 			realtime.stop();

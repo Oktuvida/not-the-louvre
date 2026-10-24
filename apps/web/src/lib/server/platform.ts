@@ -27,7 +27,20 @@ export type AppBucket = {
 	): Promise<unknown>;
 };
 
-type Bindings = { HYPERDRIVE?: { connectionString: string }; BUCKET?: AppBucket };
+/** The slice of a Durable Object namespace the app uses. */
+export type TopicNamespace = {
+	get(id: unknown): {
+		// A WebSocket upgrade answers with the socket alongside the 101.
+		fetch(input: Request | string, init?: RequestInit): Promise<Response & { webSocket?: unknown }>;
+	};
+	idFromName(name: string): unknown;
+};
+
+type Bindings = {
+	ARTWORK_TOPICS?: TopicNamespace;
+	BUCKET?: AppBucket;
+	HYPERDRIVE?: { connectionString: string };
+};
 
 /** The Hyperdrive binding's connection string, or undefined off Workers. */
 export const hyperdriveConnectionString = (): string | undefined => {
@@ -43,6 +56,15 @@ export const hyperdriveConnectionString = (): string | undefined => {
 export const appBucket = (): AppBucket | undefined => {
 	try {
 		return (env as Bindings).BUCKET;
+	} catch {
+		return undefined;
+	}
+};
+
+/** The realtime Worker's per-artwork Durable Objects, or undefined off Workers. */
+export const artworkTopics = (): TopicNamespace | undefined => {
+	try {
+		return (env as Bindings).ARTWORK_TOPICS;
 	} catch {
 		return undefined;
 	}

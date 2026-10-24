@@ -1,11 +1,3 @@
-import {
-	PUBLIC_SUPABASE_ANON_KEY,
-	SUPABASE_ANON_KEY,
-	ANON_KEY,
-	PUBLIC_SUPABASE_URL,
-	SUPABASE_PUBLIC_URL
-} from '$app/env/private';
-
 import { error, redirect } from '@sveltejs/kit';
 import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
 import { getViewerContentPreferences } from '#lib/server/moderation/service.js';
@@ -55,30 +47,6 @@ const emptyStateMessageForRoom = (roomId: GalleryRoomId) =>
 		? 'You have not published any artworks yet.'
 		: 'No artworks have reached this gallery room yet.';
 
-/*
- * A missing anon key degrades silently: the browser never opens a realtime
- * channel, so live votes and comments simply stop arriving with no error
- * anywhere. Warn once per isolate so a misconfigured deployment is visible in
- * `wrangler tail`. The latch is module scope rather than a hooks check because
- * hooks run per request on Workers, and `$app/env/private` is empty at
- * module init under adapter-cloudflare, so the read has to happen in here.
- */
-let warnedAboutMissingAnonKey = false;
-
-const resolveRealtimeConfig = () => {
-	const anonKey = PUBLIC_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY || ANON_KEY || null;
-	const url = PUBLIC_SUPABASE_URL || SUPABASE_PUBLIC_URL || null;
-
-	if (!anonKey && !warnedAboutMissingAnonKey) {
-		warnedAboutMissingAnonKey = true;
-		console.warn(
-			'[gallery] SUPABASE_ANON_KEY is not set: realtime votes and comments are disabled for browsers.'
-		);
-	}
-
-	return { anonKey, url };
-};
-
 // The shell resolves without touching the database, so navigations render
 // the room chrome immediately while the artwork content streams in.
 export const loadGalleryRoomShell = (roomId: string, user?: ProductUser) => {
@@ -91,7 +59,6 @@ export const loadGalleryRoomShell = (roomId: string, user?: ProductUser) => {
 	}
 
 	return {
-		realtimeConfig: resolveRealtimeConfig(),
 		room: getGalleryRoom(roomId),
 		roomId: roomId as GalleryRoomId,
 		viewer: user ?? null

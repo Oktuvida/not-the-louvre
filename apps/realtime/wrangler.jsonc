@@ -1,0 +1,17 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "not-the-louvre-realtime",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-06-01",
+	// Nothing reaches this Worker over HTTP: the web Worker talks to its Durable
+	// Objects through a binding and hands browsers' WebSockets to them.
+	"workers_dev": false,
+	"durable_objects": {
+		"bindings": [{ "name": "ARTWORK_TOPICS", "class_name": "ArtworkTopic" }]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["ArtworkTopic"] }],
+	"observability": {
+		"enabled": false,
+		"logs": { "enabled": true, "head_sampling_rate": 1, "persist": true, "invocation_logs": true }
+	}
+}

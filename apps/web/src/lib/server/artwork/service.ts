@@ -34,6 +34,7 @@ import {
 	type DrawingDocumentStore
 } from '#lib/server/drawing-document/document-store.js';
 import { createArtworkDrawingDocumentMedia } from '#lib/server/drawing-document/media.js';
+import { publishArtworkChange } from '#lib/server/realtime/artwork-topics.js';
 import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
 type PublishArtworkInput = {
@@ -509,6 +510,7 @@ export const applyArtworkVote = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 
+	publishArtworkChange(input.artworkId, 'votes');
 	return result;
 };
 
@@ -525,6 +527,7 @@ export const removeArtworkVote = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 
+	publishArtworkChange(input.artworkId, 'votes');
 	return result;
 };
 
@@ -566,6 +569,7 @@ export const createArtworkComment = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 
+	publishArtworkChange(input.artworkId, 'comments');
 	return comment;
 };
 
@@ -604,6 +608,7 @@ export const deleteArtworkComment = async (
 		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 	}
 
+	publishArtworkChange(deleted.artworkId, 'comments');
 	return {
 		artworkId: deleted.artworkId,
 		body: deleted.body,
@@ -627,6 +632,7 @@ export const submitContentReport = async (
 		await getArtworkOrThrow(artworkId, repository);
 	}
 
+	let reportedCommentArtworkId: string | null = null;
 	if (commentId) {
 		const comment = await repository.findCommentById(commentId);
 		if (!comment) {
@@ -635,6 +641,7 @@ export const submitContentReport = async (
 		if (comment.isHidden) {
 			throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 		}
+		reportedCommentArtworkId = comment.artworkId;
 	}
 
 	const report = await repository
@@ -662,6 +669,12 @@ export const submitContentReport = async (
 
 			throw error;
 		});
+
+	// Enough reports hide a comment inside the database, so whoever is watching
+	// the artwork rechecks its comments after every comment report.
+	if (reportedCommentArtworkId) {
+		publishArtworkChange(reportedCommentArtworkId, 'comments');
+	}
 
 	return report;
 };
@@ -774,6 +787,7 @@ export const moderateComment = async (
 			throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 		}
 
+		publishArtworkChange(input.artworkId, 'comments');
 		return deleted;
 	}
 
@@ -793,5 +807,6 @@ export const moderateComment = async (
 		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 	}
 
+	publishArtworkChange(input.artworkId, 'comments');
 	return updated;
 };
