@@ -88,7 +88,9 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 
 ### 3. Galería fluida
 
-- [ ] Rejilla cuadrada con marcador crema, primera fila prioritaria, virtualización y store normalizado.
+- [x] Primera visita con la primera página renderizada en el servidor: el HTML trae las obras y el navegador pide las primeras imágenes (ya con `fetchpriority="high"`) sin esperar al JavaScript; navegar entre salas sigue en streaming.
+- [x] Marcador crema por CSS en lugar del LQIP PNG: unos 65 KB menos por sala. Ya no se generan al publicar ni en el corte; la columna `media_placeholder` se borra en la fase 6, porque main todavía la lee.
+- [ ] Store normalizado para que el detalle abra al instante con lo que ya tiene la tarjeta.
 - [ ] Precarga desde la home y al tocar, restauración del scroll y feed cacheado en el edge.
 - [ ] Permalink `/artwork/[id]` con tarjeta OG, sin morph.
 - [ ] Contar cuántas obras superan ~300 KB y decidir la política para esas imágenes.

@@ -329,26 +329,20 @@ describe('ArtworkDetailPanel', () => {
 		await expect.element(page.getByRole('button', { name: 'Report artwork' })).toBeVisible();
 	});
 
-	it('opens the postcard window onto the LQIP instead of blank paper', async () => {
-		await render(ArtworkDetailPanel, {
-			artwork: { ...artwork, imagePlaceholder: 'data:image/webp;base64,lqip' }
-		});
+	it('asks for the postcard photo before anything else on the page', async () => {
+		await render(ArtworkDetailPanel, { artwork });
 
 		const photo = page.getByAltText('Detail artwork');
 
 		await expect.element(photo).toHaveAttribute('loading', 'eager');
 		await expect.element(photo).toHaveAttribute('decoding', 'async');
 		await expect.element(photo).toHaveAttribute('fetchpriority', 'high');
-
-		const placeholder = document.querySelector('.nsfw-placeholder');
-		expect(placeholder?.getAttribute('src')).toBe('data:image/webp;base64,lqip');
 	});
 
 	it('censors the detail with the same treatment as every grid card', async () => {
 		await render(ArtworkDetailPanel, {
 			artwork: {
 				...artwork,
-				imagePlaceholder: 'data:image/webp;base64,lqip',
 				isNsfw: true
 			},
 			viewer: { id: 'user-other', role: 'user' }
@@ -356,10 +350,8 @@ describe('ArtworkDetailPanel', () => {
 
 		await expect.element(page.getByText('Sensitive artwork')).toBeVisible();
 
-		// The photo and the LQIP under it both carry the shared blur, so no sharp
-		// thumbnail reads around the scrim.
+		// The photo carries the shared blur, so nothing sharp reads around the scrim.
 		expect(page.getByAltText('Detail artwork').element().className).toContain('is-sensitive');
-		expect(document.querySelector('.nsfw-placeholder')?.className).toContain('is-sensitive');
 
 		// The panel paints its own scrim — the one with the reveal CTA — so the
 		// shared component's badge must not be announced underneath it.

@@ -26,7 +26,6 @@ const toMedia = (outcome: RenderOutcome, fileName: string): SanitizedMedia => {
 		contentType: image.contentType,
 		file: new File([Uint8Array.from(image.bytes)], fileName, { type: image.contentType }),
 		height: image.height,
-		placeholder: image.placeholder,
 		sizeBytes: image.sizeBytes,
 		width: image.width
 	};

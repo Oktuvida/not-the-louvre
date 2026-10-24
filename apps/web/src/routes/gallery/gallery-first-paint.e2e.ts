@@ -42,5 +42,8 @@ test.describe('opening a gallery link', () => {
 
 		const artworkImage = /<img[^>]*src="\/api\/artworks\/[^"]+\/media\?v=webp"[^>]*>/.exec(html);
 		expect(artworkImage?.[0]).toContain('fetchpriority="high"');
+		// The cream paper is the placeholder; inline preview images cost about
+		// 2.7 KB per artwork, some 65 KB a room, before anything is visible.
+		expect(html).not.toContain('data:image/png;base64');
 	});
 });

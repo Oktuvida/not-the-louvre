@@ -154,7 +154,6 @@
 			<NsfwImage
 				src={artwork.imageUrl}
 				alt={artwork.title}
-				placeholder={artwork.imagePlaceholder}
 				{blurred}
 				ariaLabel={blurred
 					? canReveal

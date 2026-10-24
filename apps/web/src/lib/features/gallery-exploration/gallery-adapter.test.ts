@@ -11,7 +11,6 @@ const feedCard: ArtworkFeedCard = {
 	id: 'artwork-1',
 	isNsfw: false,
 	lineage: { isFork: false, parent: null, parentStatus: 'none' },
-	mediaPlaceholder: 'data:image/webp;base64,lqip',
 	mediaUrl: '/api/artworks/artwork-1/media',
 	score: 5,
 	title: 'Pinned Study',
@@ -28,11 +27,6 @@ const detail: ArtworkDetail = {
 };
 
 describe('gallery adapter', () => {
-	it('carries the LQIP placeholder onto the detail payload, not just the feed card', () => {
-		expect(toGalleryArtwork(feedCard).imagePlaceholder).toBe('data:image/webp;base64,lqip');
-		expect(toGalleryArtworkDetail(detail).imagePlaceholder).toBe('data:image/webp;base64,lqip');
-	});
-
 	it('keeps the room rank when hydrating a detail so the podium medal does not vanish', () => {
 		expect(toGalleryArtworkDetail(detail).rank).toBeUndefined();
 		expect(toGalleryArtworkDetail(detail, 1).rank).toBe(1);

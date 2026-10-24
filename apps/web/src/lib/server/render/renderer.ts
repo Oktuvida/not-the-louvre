@@ -18,7 +18,6 @@ export type RenderedImage = {
 	bytes: Uint8Array;
 	contentType: string;
 	height: number;
-	placeholder: string | null;
 	sizeBytes: number;
 	width: number;
 };
@@ -41,7 +40,6 @@ const outcomeOf = async (render: () => Promise<SanitizedMedia>): Promise<RenderO
 				bytes: new Uint8Array(await media.file.arrayBuffer()),
 				contentType: media.contentType,
 				height: media.height,
-				placeholder: media.placeholder ?? null,
 				sizeBytes: media.sizeBytes,
 				width: media.width
 			},

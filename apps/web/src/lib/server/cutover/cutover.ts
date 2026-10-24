@@ -4,8 +4,6 @@ import {
 } from '#lib/server/drawing-document/media.js';
 import { drawingDocumentKey } from '#lib/server/drawing-document/document-key.js';
 import { decodeDrawingDocument } from '#lib/server/drawing-document/storage.js';
-import { decodeImage } from '#lib/server/media/codecs/index.js';
-import { encodeArtworkMediaPlaceholder } from '#lib/server/media/placeholder.js';
 import type { AppBucket } from '#lib/server/platform.js';
 import { avatarStorageKey } from '#lib/server/user/avatar-key.js';
 
@@ -22,9 +20,8 @@ import { avatarStorageKey } from '#lib/server/user/avatar-key.js';
  *   on main reads changes, so this runs before the first remaster deploy.
  * - redraw: artworks and avatars that still have their whole drawing are
  *   rendered again as lossless WebP, so the gallery stops showing the lossy
- *   AVIF ladder; artworks without one keep their AVIF and get the blur-up
- *   placeholder they lacked. Rows move to the new keys, which main cannot
- *   read, so this runs after the deploy.
+ *   AVIF ladder; artworks without one keep their AVIF. Rows move to the new
+ *   keys, which main cannot read, so this runs after the deploy.
  */
 
 export type ObjectSource = {
@@ -44,7 +41,6 @@ type Queryable = {
 export type CutoverReport = {
 	copiedImages: number;
 	failures: string[];
-	filledPlaceholders: number;
 	invalidDocuments: string[];
 	missingImages: string[];
 	movedDocuments: number;
@@ -105,7 +101,6 @@ export const runCutover = async (options: CutoverOptions): Promise<CutoverReport
 	const report: CutoverReport = {
 		copiedImages: 0,
 		failures: [],
-		filledPlaceholders: 0,
 		invalidDocuments: [],
 		missingImages: [],
 		movedDocuments: 0,
@@ -196,9 +191,9 @@ export const runCutover = async (options: CutoverOptions): Promise<CutoverReport
 			await target.put(key, new Uint8Array(await media.file.arrayBuffer()), media.contentType);
 			await db.query(
 				`update app.artworks
-				 set storage_key = $1, media_content_type = $2, media_size_bytes = $3, media_placeholder = $4
-				 where id = $5 and media_content_type = 'image/avif'`,
-				[key, media.contentType, media.sizeBytes, media.placeholder ?? null, row.id]
+				 set storage_key = $1, media_content_type = $2, media_size_bytes = $3
+				 where id = $4 and media_content_type = 'image/avif'`,
+				[key, media.contentType, media.sizeBytes, row.id]
 			);
 			report.redrawnArtworks += 1;
 		} catch (error) {
@@ -235,31 +230,7 @@ export const runCutover = async (options: CutoverOptions): Promise<CutoverReport
 		}
 	}
 
-	// --- redraw: placeholders for the AVIFs that stay -----------------------
-	const { rows: bareArtworks } = await db.query(
-		`select id, storage_key from app.artworks
-		 where media_placeholder is null and media_content_type = 'image/avif'
-			and ($1::text[] is null or author_id = any($1))`,
-		[owners]
-	);
-	for (const row of bareArtworks as { id: string; storage_key: string }[]) {
-		try {
-			// A missing image was reported by the copy step already.
-			if (!(await target.has(row.storage_key))) continue;
-			const raster = await decodeImage(await target.read(row.storage_key), 'avif');
-			const placeholder = await encodeArtworkMediaPlaceholder(raster);
-			await db.query(
-				'update app.artworks set media_placeholder = $1 where id = $2 and media_placeholder is null',
-				[placeholder, row.id]
-			);
-			report.filledPlaceholders += 1;
-		} catch (error) {
-			report.failures.push(`placeholder artwork:${row.id}: ${describeError(error)}`);
-		}
-	}
-	log(
-		`redraw: ${report.redrawnArtworks} artworks, ${report.redrawnAvatars} avatars, ${report.filledPlaceholders} placeholders`
-	);
+	log(`redraw: ${report.redrawnArtworks} artworks, ${report.redrawnAvatars} avatars`);
 
 	return report;
 };
