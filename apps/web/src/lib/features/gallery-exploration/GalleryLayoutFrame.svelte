@@ -22,8 +22,9 @@
 		viewer,
 		context
 	}: {
-		children: Snippet;
-		roomId: GalleryRoomId;
+		children?: Snippet;
+		/** `null` on a page that is not a room, such as an artwork's permalink. */
+		roomId: GalleryRoomId | null;
 		viewer: Viewer | null;
 		context?: GalleryLayoutContext;
 	} = $props();
@@ -144,7 +145,7 @@
 		</div>
 	</div>
 
-	{@render children()}
+	{@render children?.()}
 
 	{#if $panelBindings}
 		<ArtworkDetailPanel

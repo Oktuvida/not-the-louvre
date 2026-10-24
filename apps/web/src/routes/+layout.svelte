@@ -117,7 +117,12 @@
 	/>
 </svelte:head>
 
-<SiteMeta title={documentTitle} description={routeMeta.description} {pathname} />
+<SiteMeta
+	title={documentTitle}
+	description={routeMeta.description}
+	image={page.error ? undefined : routeMeta.image}
+	{pathname}
+/>
 
 {@render children()}
 

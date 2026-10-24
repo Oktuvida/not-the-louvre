@@ -13,7 +13,8 @@
 	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 	import {
 		toGalleryArtwork,
-		toGalleryArtworkDetail
+		toGalleryArtworkDetail,
+		toGalleryComments
 	} from '#lib/features/gallery-exploration/gallery-adapter.js';
 	import { createDetailPrefetcher } from '#lib/features/gallery-exploration/detail-prefetch.js';
 	import type {
@@ -130,14 +131,9 @@
 				).catch((error: unknown) => {
 					throw new Error(apiErrorMessage(error, ARTWORK_DETAIL_ERROR_MESSAGE), { cause: error });
 				}),
-				requestJson<{
-					comments: Array<{
-						author: { nickname: string };
-						body: string;
-						createdAt: Date | string;
-						id: string;
-					}>;
-				}>(`/api/artworks/${artworkId}/comments`).catch(() => null)
+				requestJson<{ comments: Parameters<typeof toGalleryComments>[0] }>(
+					`/api/artworks/${artworkId}/comments`
+				).catch(() => null)
 			]);
 
 			const detail = toGalleryArtworkDetail(payload.artwork);
@@ -146,18 +142,7 @@
 				return detail;
 			}
 
-			return {
-				...detail,
-				comments: commentsPayload.comments.map((comment) => ({
-					author: comment.author.nickname,
-					id: comment.id,
-					text: comment.body,
-					timestamp:
-						comment.createdAt instanceof Date
-							? comment.createdAt.getTime()
-							: new Date(comment.createdAt).getTime()
-				}))
-			};
+			return { ...detail, comments: toGalleryComments(commentsPayload.comments) };
 		},
 		fetchRandomArtwork = async () => {
 			try {
@@ -429,11 +414,13 @@
 		}
 	};
 
+	// The address bar names the artwork while it is open, so a copied link or a
+	// reload lands on its permalink; the room stays mounted underneath.
 	const openArtwork = (artwork: Artwork) => {
 		detailErrorMessage = null;
 		didCreateLocalDetailHistoryEntry = true;
 
-		goto(currentGalleryUrl, {
+		goto(resolve('/artwork/[artworkId]', { artworkId: artwork.id }), {
 			shallow: true,
 			state: {
 				...page.state,

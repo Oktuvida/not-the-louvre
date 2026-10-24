@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext } from '@playwright/test';
+import { createEmptyDrawingDocument } from '../../lib/features/stroke-json/document';
 import type { Page } from '@playwright/test';
 import { ARTWORK_MEDIA_HEIGHT, ARTWORK_MEDIA_WIDTH } from '../../lib/server/artwork/config';
 import { createMalformedAvifFile, createWebpTestFile } from '../../lib/server/media/test-helpers';
@@ -25,6 +26,47 @@ export const resetDemoState = async (request: APIRequestContext) => {
 	const response = await request.post('/demo/test-support/reset', { data: {} });
 	expect(response.ok(), 'expected demo reset endpoint to succeed').toBe(true);
 	return response;
+};
+
+/**
+ * Signs up and publishes a one-stroke artwork through the product actions,
+ * then reads its id back from the gallery the way a visitor would find it.
+ */
+export const publishArtworkThroughActions = async (
+	request: APIRequestContext,
+	baseURL: string | undefined,
+	options: { isNsfw?: boolean; title: string }
+) => {
+	const { nickname, password } = deterministicAuthUser;
+	const headers = { origin: baseURL ?? '', 'x-sveltekit-action': 'true' };
+	await request.post('/?/signUp', { form: { nickname, password }, headers });
+
+	const published = await request.post('/draw?/publish', {
+		form: {
+			drawingDocument: JSON.stringify({
+				...createEmptyDrawingDocument('artwork'),
+				strokes: [
+					{
+						color: '#2d2420',
+						points: [
+							[120, 120],
+							[640, 640]
+						],
+						size: 12
+					}
+				]
+			}),
+			isNsfw: options.isNsfw ? 'true' : 'false',
+			title: options.title
+		},
+		headers
+	});
+	expect(await published.json()).toMatchObject({ type: 'success' });
+
+	const gallery = await (await request.get('/gallery/your-studio')).text();
+	const id = /\/api\/artworks\/([^/"]+)\/media/.exec(gallery)?.[1];
+	if (!id) throw new Error('The published artwork is not in the studio room');
+	return id;
 };
 
 export const openNicknameAuthDemo = async (page: Page) => {

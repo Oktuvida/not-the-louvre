@@ -1,11 +1,11 @@
 <script lang="ts">
 	import {
-		SHARE_IMAGE_ALT,
-		SHARE_IMAGE_PATH,
+		DEFAULT_SHARE_IMAGE,
 		SITE_DESCRIPTION,
 		SITE_NAME,
 		absoluteSiteUrl,
-		formatDocumentTitle
+		formatDocumentTitle,
+		type RouteShareImage
 	} from '../site-meta';
 
 	/*
@@ -16,16 +16,20 @@
 	let {
 		title = undefined,
 		description = undefined,
+		image = undefined,
 		pathname = undefined
 	}: {
 		title?: string;
 		description?: string;
+		/** The route's own preview image (an artwork); the site card otherwise. */
+		image?: RouteShareImage;
 		pathname?: string;
 	} = $props();
 
 	const documentTitle = $derived(formatDocumentTitle(title));
 	const shareDescription = $derived(description ?? SITE_DESCRIPTION);
-	const shareImageUrl = absoluteSiteUrl(SHARE_IMAGE_PATH);
+	const shareImage = $derived(image ?? DEFAULT_SHARE_IMAGE);
+	const shareImageUrl = $derived(absoluteSiteUrl(shareImage.path));
 	const canonicalUrl = $derived(pathname ? absoluteSiteUrl(pathname) : undefined);
 </script>
 
@@ -43,13 +47,13 @@
 	<meta property="og:title" content={documentTitle} />
 	<meta property="og:description" content={shareDescription} />
 	<meta property="og:image" content={shareImageUrl} />
-	<meta property="og:image:width" content="1200" />
-	<meta property="og:image:height" content="630" />
-	<meta property="og:image:alt" content={SHARE_IMAGE_ALT} />
+	<meta property="og:image:width" content={String(shareImage.width)} />
+	<meta property="og:image:height" content={String(shareImage.height)} />
+	<meta property="og:image:alt" content={shareImage.alt} />
 
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content={documentTitle} />
 	<meta name="twitter:description" content={shareDescription} />
 	<meta name="twitter:image" content={shareImageUrl} />
-	<meta name="twitter:image:alt" content={SHARE_IMAGE_ALT} />
+	<meta name="twitter:image:alt" content={shareImage.alt} />
 </svelte:head>
