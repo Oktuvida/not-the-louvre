@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeArtwork, makeArtworks } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import {
 	clearRoomFeedCache,
+	patchCachedArtwork,
 	readRoomFeedSnapshot,
 	restoreRoomFeedScroll,
 	suppressNextRoomFeedSnapshot,
@@ -25,6 +26,32 @@ describe('room feed cache', () => {
 		expect(restored?.artworks).toHaveLength(48);
 		expect(restored?.pageInfo).toEqual({ hasMore: true, nextCursor: 'cursor-3' });
 		expect(restored?.scrollY).toBe(4200);
+	});
+
+	it('carries a vote cast in one room into the feed another room left behind', () => {
+		const artworks = makeArtworks(48, { prefix: 'hall-' });
+		writeRoomFeedSnapshot('hall-of-fame', {
+			artworks,
+			pageInfo: { hasMore: true, nextCursor: 'cursor-2' },
+			scrollY: 900
+		});
+		writeRoomFeedSnapshot('hot-wall', {
+			artworks: makeArtworks(30, { prefix: 'hot-' }),
+			pageInfo: { hasMore: true, nextCursor: 'cursor-9' },
+			scrollY: 300
+		});
+		const deep = artworks[40]!;
+
+		patchCachedArtwork(deep.id, { score: deep.score + 1, upvotes: 1, viewerVote: 'up' });
+
+		expect(readRoomFeedSnapshot('hall-of-fame')?.artworks[40]).toMatchObject({
+			id: deep.id,
+			score: deep.score + 1,
+			upvotes: 1,
+			viewerVote: 'up'
+		});
+		expect(readRoomFeedSnapshot('hall-of-fame')?.scrollY).toBe(900);
+		expect(readRoomFeedSnapshot('hot-wall')?.artworks).toHaveLength(30);
 	});
 
 	it('does not remember a room that never paged past its first screen', () => {

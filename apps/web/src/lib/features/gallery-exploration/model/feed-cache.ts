@@ -92,6 +92,26 @@ export const writeRoomFeedSnapshot = (roomId: GalleryRoomId, snapshot: RoomFeedS
 	}
 };
 
+/*
+ * A room left behind keeps the artworks as they were when the visitor walked
+ * out. Its first page is replaced by the server's when it comes back, but the
+ * pages below are not, so a vote cast or a comment left in another room since
+ * would show up stale there. Every change goes into the cached copies too.
+ */
+export const patchCachedArtwork = (artworkId: string, patch: Partial<Artwork>): void => {
+	for (const [roomId, snapshot] of snapshots) {
+		if (!snapshot.artworks.some((artwork) => artwork.id === artworkId)) continue;
+
+		// Setting an existing key keeps its place in the eviction order.
+		snapshots.set(roomId, {
+			...snapshot,
+			artworks: snapshot.artworks.map((artwork) =>
+				artwork.id === artworkId ? { ...artwork, ...patch } : artwork
+			)
+		});
+	}
+};
+
 export const clearRoomFeedCache = (): void => {
 	snapshots.clear();
 	suppressed.clear();
