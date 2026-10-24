@@ -33,7 +33,7 @@ import {
 	drawingDocumentStore,
 	type DrawingDocumentStore
 } from '#lib/server/drawing-document/document-store.js';
-import { createArtworkDrawingDocumentMedia } from '#lib/server/drawing-document/media.js';
+import { renderArtworkMedia } from '#lib/server/render/client.js';
 import { publishArtworkChange } from '#lib/server/realtime/artwork-topics.js';
 import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
@@ -96,7 +96,7 @@ type ServiceDependencies = {
 	now?: () => Date;
 	randomSuffix?: () => number;
 	repository?: ArtworkRepository;
-	renderDrawingDocumentMedia?: typeof createArtworkDrawingDocumentMedia;
+	renderDrawingDocumentMedia?: typeof renderArtworkMedia;
 	storage?: ArtworkStorage;
 };
 
@@ -106,8 +106,7 @@ const getDependencies = (dependencies: ServiceDependencies = {}) => ({
 	now: dependencies.now ?? (() => new Date()),
 	randomSuffix: dependencies.randomSuffix ?? (() => Math.floor(Math.random() * 10000)),
 	repository: dependencies.repository ?? artworkRepository,
-	renderDrawingDocumentMedia:
-		dependencies.renderDrawingDocumentMedia ?? createArtworkDrawingDocumentMedia,
+	renderDrawingDocumentMedia: dependencies.renderDrawingDocumentMedia ?? renderArtworkMedia,
 	storage: dependencies.storage ?? artworkStorage
 });
 

@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
 import { etagMatches, notModified } from '#lib/server/http/conditional.js';
 import { toApiErrorResponse } from '#lib/server/http/errors.js';
-import { renderAvatarFaviconPng } from '#lib/server/user/favicon.js';
+import { renderAvatarFavicon } from '#lib/server/render/client.js';
 import { userRepository } from '#lib/server/user/repository.js';
 import { streamAvatarStorageObject } from '#lib/server/user/storage.js';
 import { edgeCache, runAfterResponse } from '#lib/server/platform.js';
@@ -48,11 +48,10 @@ export const GET: RequestHandler = async (event) => {
 		}
 
 		const upstream = await streamAvatarStorageObject(user.avatarUrl);
-		const sourceBuffer = Buffer.from(await upstream.arrayBuffer());
-		const faviconBuffer = await renderAvatarFaviconPng(sourceBuffer);
-		headers.set('content-length', String(faviconBuffer.length));
+		const favicon = await renderAvatarFavicon(new Uint8Array(await upstream.arrayBuffer()));
+		headers.set('content-length', String(favicon.byteLength));
 
-		const response = new Response(new Uint8Array(faviconBuffer), { headers, status: 200 });
+		const response = new Response(Uint8Array.from(favicon), { headers, status: 200 });
 
 		if (cache) {
 			const cachePut = cache.put(event.request.url, response.clone()).catch(() => {});

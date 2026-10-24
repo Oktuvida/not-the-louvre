@@ -1,4 +1,5 @@
 import { env, waitUntil } from 'cloudflare:workers';
+import type { Renderer } from '#lib/server/render/renderer.js';
 
 /*
  * The one module that reaches into the Cloudflare runtime. adapter-cloudflare 8
@@ -41,6 +42,7 @@ type Bindings = {
 	ARTWORK_TOPICS?: TopicNamespace;
 	BUCKET?: AppBucket;
 	HYPERDRIVE?: { connectionString: string };
+	RENDERER?: Renderer;
 };
 
 /** The Hyperdrive binding's connection string, or undefined off Workers. */
@@ -66,6 +68,15 @@ export const appBucket = (): AppBucket | undefined => {
 export const artworkTopics = (): TopicNamespace | undefined => {
 	try {
 		return (env as Bindings).ARTWORK_TOPICS;
+	} catch {
+		return undefined;
+	}
+};
+
+/** The renderer Worker, reached over RPC, or undefined off Workers. */
+export const boundRenderer = (): Renderer | undefined => {
+	try {
+		return (env as Bindings).RENDERER;
 	} catch {
 		return undefined;
 	}

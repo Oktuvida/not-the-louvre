@@ -27,9 +27,10 @@ export default defineConfig({
 		// The e2e build keeps the /demo routes and runs on workerd through `wrangler
 		// dev`, the runtime production uses: adapter-cloudflare's build imports
 		// `cloudflare:workers`, which Node cannot load, so `vite preview` is no option.
-		// The second config is the realtime Worker, whose Durable Objects the web
-		// Worker binds to; one `wrangler dev` runs both.
-		command: `bun run build:e2e && wrangler dev -c wrangler.jsonc -c ../realtime/wrangler.jsonc --ip 127.0.0.1 --port 4173 ${Object.entries(
+		// The other configs are the realtime Worker, whose Durable Objects the web
+		// Worker binds to, and the renderer Worker it calls for images; one
+		// `wrangler dev` runs all three.
+		command: `bun run build:e2e && wrangler dev -c wrangler.jsonc -c ../realtime/wrangler.jsonc -c wrangler.renderer.jsonc --ip 127.0.0.1 --port 4173 ${Object.entries(
 			workerVariables
 		)
 			.map(([key, value]) => `--var ${key}:${JSON.stringify(value)}`)

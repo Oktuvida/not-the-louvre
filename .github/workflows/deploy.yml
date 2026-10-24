@@ -156,6 +156,12 @@ jobs:
         working-directory: apps/web
         run: bun run test:e2e
 
+      # The e2e suite just built the Worker; the codecs must have stayed in the
+      # renderer Worker rather than ride along with every web request.
+      - name: Web Worker bundle carries no WebAssembly
+        working-directory: apps/web
+        run: bun run check:bundle
+
       # The trace of a failed test holds the DOM, console and network at every
       # step, which is the only way to see a failure that does not reproduce
       # on a laptop. Open it with `bunx playwright show-trace <zip>`.
@@ -226,6 +232,16 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/realtime
           command: deploy
+
+      # The web Worker calls the renderer through a service binding, so it ships
+      # first too.
+      - name: Deploy the renderer Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: deploy -c wrangler.renderer.jsonc
 
       - name: Deploy with Wrangler
         id: deploy
