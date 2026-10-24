@@ -1,7 +1,7 @@
 import type { DrawingDocumentV2 } from '#lib/features/stroke-json/document.js';
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
-import { contentHash } from '#lib/server/media/content-hash.js';
 import { requireAppBucket } from '#lib/server/media/object-storage.js';
+import { drawingDocumentKey } from './document-key';
 import { decodeDrawingDocument } from './storage';
 
 /*
@@ -20,7 +20,7 @@ export type DrawingDocumentStore = {
 
 export const drawingDocumentStore: DrawingDocumentStore = {
 	async put(compressed) {
-		const key = `documents/${await contentHash(compressed)}.json.gz`;
+		const key = await drawingDocumentKey(compressed);
 		await requireAppBucket().put(key, compressed.slice().buffer, {
 			httpMetadata: { contentType: 'application/gzip' }
 		});
