@@ -66,14 +66,14 @@ All quality checks run as scripts — never rely on manual review alone.
 
 After every change, run `bun run format`, `bun run lint`, `bun run check`, and `bun run test` before considering the work complete.
 
-| Script | What it checks |
-| --- | --- |
-| `bun run format` | Code formatting (Prettier) |
-| `bun run lint` | Lint rules (ESLint + Prettier check) |
-| `bun run check` | Type-checking (svelte-check + TypeScript) |
-| `bun run test:unit` | Unit & component tests (Vitest) |
-| `bun run test:e2e` | End-to-end tests (Playwright) |
-| `bun run test` | Unit + e2e combined |
+| Script                                                  | What it checks                                                                             |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `bun run format`                                        | Code formatting (Prettier)                                                                 |
+| `bun run lint`                                          | Lint rules (ESLint + Prettier check)                                                       |
+| `bun run check`                                         | Type-checking (svelte-check + TypeScript)                                                  |
+| `bun run test:unit`                                     | Unit & component tests (Vitest)                                                            |
+| `bun run test:e2e`                                      | End-to-end tests (Playwright)                                                              |
+| `bun run test`                                          | Unit + e2e combined                                                                        |
 | `bun run --filter @not-the-louvre/web test:integration` | Integration suites against a real Postgres and wrangler's local R2 (runs in CI, see below) |
 
 Before pushing code, all of the above must pass. Prefer running them in order: format → lint → check → test.
@@ -94,7 +94,7 @@ exercises the production runtime rather than Node.
 
 Local development must be reproducible from a clean clone:
 
-- **Infrastructure**: the app needs only Postgres; images, drawings and live updates run on Cloudflare bindings that `wrangler dev` emulates. `compose.yaml` still defines the old local Supabase stack, and `bun run db:start` brings up `db` with the services the app used to talk to (`kong`, `rest`, `storage`, `imgproxy`, `realtime`) until the file is trimmed to Postgres (remaster phase 6). Any plain Postgres works too: set `DATABASE_URL`, then run `db:platform-objects` and `db:migrate`.
+- **Infrastructure**: `compose.yaml` defines one Postgres, the only service the app needs locally; images, drawings and live updates run on Cloudflare bindings that `wrangler dev` emulates. `bun run db:start` serves it on port 55432 and applies the platform objects and migrations (`bun run db:reset` starts from empty). Any plain Postgres works too: set `DATABASE_URL`, then run `db:platform-objects` and `db:migrate`.
 - **Live updates**: votes and comments reach open artworks through the realtime Worker in `apps/realtime` (one Durable Object per artwork). The e2e suite starts both Workers in one `wrangler dev`, which is the tested path. `bun run dev` serves the app without it and live updates stay off; running `bun run --filter @not-the-louvre/realtime dev` alongside should connect them through wrangler's dev registry, but that path is untested.
 - **Commit hooks**: run `bun run hooks:install` once per clone to enable the commit-message hook (`git config core.hooksPath .githooks`).
 - **Dependencies**: `bun install` from root. Lockfile is committed.
@@ -157,15 +157,15 @@ This outputs to `apps/web/src/lib/server/db/auth.schema.ts`. Do not edit that fi
 
 Skills live in `.agents/skills/` and provide domain-specific knowledge to AI agents working on this codebase.
 
-| Skill | When to use |
-| --- | --- |
-| `brainstorming` | Before any creative work — creating features, building components, adding functionality, or modifying behavior. Explores intent and design before implementation. |
-| `drizzle-orm` | When working with Drizzle ORM — schema definitions, queries, migrations, or related TypeScript database code. |
-| `frontend-design` | When building web components, pages, dashboards, or styling/beautifying any web UI. Produces distinctive, production-grade interfaces. |
-| `rest-api-design` | When creating new APIs, designing endpoints, or improving existing API architecture. Covers resource modeling, HTTP methods, status codes, and versioning. |
-| `supabase-postgres-best-practices` | When writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations. |
-| `svelte-code-writer` | When creating, editing, or analyzing any Svelte component (`.svelte`) or Svelte module (`.svelte.ts` / `.svelte.js`). |
-| `threlte-official-docs` | When answering Threlte-specific questions or locating Threlte APIs, guides, or package docs. Restricts evidence to official Threlte docs and the official `threlte/threlte` repo. |
+| Skill                              | When to use                                                                                                                                                                       |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `brainstorming`                    | Before any creative work — creating features, building components, adding functionality, or modifying behavior. Explores intent and design before implementation.                 |
+| `drizzle-orm`                      | When working with Drizzle ORM — schema definitions, queries, migrations, or related TypeScript database code.                                                                     |
+| `frontend-design`                  | When building web components, pages, dashboards, or styling/beautifying any web UI. Produces distinctive, production-grade interfaces.                                            |
+| `rest-api-design`                  | When creating new APIs, designing endpoints, or improving existing API architecture. Covers resource modeling, HTTP methods, status codes, and versioning.                        |
+| `supabase-postgres-best-practices` | When writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations.                                                                              |
+| `svelte-code-writer`               | When creating, editing, or analyzing any Svelte component (`.svelte`) or Svelte module (`.svelte.ts` / `.svelte.js`).                                                             |
+| `threlte-official-docs`            | When answering Threlte-specific questions or locating Threlte APIs, guides, or package docs. Restricts evidence to official Threlte docs and the official `threlte/threlte` repo. |
 
 ---
 
@@ -191,19 +191,19 @@ This repository uses Angular-style Conventional Commits with a required emoji pr
 
 ### Types
 
-| Emoji | Type | Use |
-| --- | --- | --- |
-| ✨ | `feat` | New feature |
-| 🐛 | `fix` | Bug fix |
-| 📝 | `docs` | Documentation changes |
-| 💄 | `style` | Formatting or visual-only changes |
-| ♻️ | `refactor` | Internal refactor with no behavior change |
-| ⚡ | `perf` | Performance improvement |
-| ✅ | `test` | Tests added or updated |
-| 🏗️ | `build` | Build system or dependency changes |
-| 👷 | `ci` | CI/CD changes |
-| 🧹 | `chore` | Maintenance tasks |
-| ⏪ | `revert` | Revert a previous commit |
+| Emoji | Type       | Use                                       |
+| ----- | ---------- | ----------------------------------------- |
+| ✨    | `feat`     | New feature                               |
+| 🐛    | `fix`      | Bug fix                                   |
+| 📝    | `docs`     | Documentation changes                     |
+| 💄    | `style`    | Formatting or visual-only changes         |
+| ♻️    | `refactor` | Internal refactor with no behavior change |
+| ⚡    | `perf`     | Performance improvement                   |
+| ✅    | `test`     | Tests added or updated                    |
+| 🏗️    | `build`    | Build system or dependency changes        |
+| 👷    | `ci`       | CI/CD changes                             |
+| 🧹    | `chore`    | Maintenance tasks                         |
+| ⏪    | `revert`   | Revert a previous commit                  |
 
 ### Examples
 

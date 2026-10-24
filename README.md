@@ -2,8 +2,7 @@
   <img width="420" src="./assets/images/logo.svg" alt="Not The Louvre logo">
 </p>
 
-
-*[Leer en Español 🇪🇸](./README.es.md)*
+_[Leer en Español 🇪🇸](./README.es.md)_
 
 > "A very expensive frame for a very questionable drawing."
 
@@ -26,7 +25,7 @@ You open the app, sketch something mildly unhinged, hit publish, and wait for th
 - 🎩 **3D Navigation meets 2D Canvas (Threlte)**: We used Threlte so that navigating the app's routes feels like organically interacting with a 3D model of the studio. But when it's time to draw, we use the classic 2D Canvas API for maximum fluidity.
 - 🍅 **Realtime Social Loop**: Votes and comments update live without refreshing the page, thanks to Supabase Realtime.
 - 🧠 **Lossless JSON Drawing Documents**: To allow infinite forking without cumulative image degradation, the source of truth isn't a PNG. We store a versioned, compressed JSON document of brush strokes. When you fork, you clone the math, not the pixels.
-- 🛡️ **Moderation & The inevitable "TTP" Metric**: In any public multiplayer drawing app, the *Time To Penis (TTP)* inevitably trends to zero. To manage this, we built a real moderation system from day one: creators can label work as NSFW (hidden behind an 18+ filter), and admins have quick shortcuts to censor unacceptable chaos.
+- 🛡️ **Moderation & The inevitable "TTP" Metric**: In any public multiplayer drawing app, the _Time To Penis (TTP)_ inevitably trends to zero. To manage this, we built a real moderation system from day one: creators can label work as NSFW (hidden behind an 18+ filter), and admins have quick shortcuts to censor unacceptable chaos.
 - 📦 **Reproducible & Self-Hostable Infrastructure**
 
 ## 📦 Repository layout
@@ -36,18 +35,17 @@ The repository now uses a small Bun workspace so the root stays focused on share
 ```text
 .
 ├── apps/
-│   └── web/        # SvelteKit app
+│   ├── web/        # SvelteKit app
+│   └── realtime/   # Durable Objects for live updates
 ├── devenv.nix      # Linux-first devenv shell, tasks, and processes
 ├── devenv.yaml     # Pinned devenv inputs
 ├── docs/           # Product and project docs
-├── compose.yaml    # Local Supabase stack
-├── .env.supabase.example
+├── compose.yaml    # Local Postgres
 └── package.json    # Workspace scripts
 ```
 
-- Run the local Supabase stack with `bun run db:start` and stop it with `bun run db:stop`.
-- The first `bun run db:start` copies `.env.supabase.example` to `.env.supabase` if you have not customized it yet.
-- `bun run db:start` boots only the services the app talks to (`db`, `kong`, `rest`, `storage`, `imgproxy`, `realtime`). Supabase Studio, GoTrue, postgres-meta, logflare and the edge runtime are behind the `tools` profile: `docker compose --env-file .env.supabase --profile tools up -d`.
+- `bun run db:start` serves Postgres on port 55432 (`POSTGRES_PORT` changes it), then applies the platform objects and the migrations; `bun run db:stop` stops it and `bun run db:reset` starts over from an empty database.
+- Images, drawings and live updates run on Cloudflare bindings (R2, Durable Objects) that `wrangler dev` emulates, so Postgres is the only local service.
 - Run the app from the repository root with `bun run dev`, `bun run check`, `bun run build`, etc.
 - App-specific configuration now lives in `apps/web`.
 - Environment files for the app now live in `apps/web/.env` and `apps/web/.env.example`.
@@ -154,4 +152,5 @@ If the regression is in the code rather than in the configuration, revert the co
 The whole idea is to get people from "I opened the browser" to "I published a ridiculous drawing" in under two minutes. No long onboarding, no solemn creative process, no paywall pretending to be a feature. Just draw, laugh, judge, repeat.
 
 ---
-*Built with ❤️ and a medically unnecessary amount of caffeine for Cubepath 2026.*
+
+_Built with ❤️ and a medically unnecessary amount of caffeine for Cubepath 2026._

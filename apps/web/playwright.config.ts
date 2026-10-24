@@ -1,29 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { defineConfig } from '@playwright/test';
 
 // The e2e server uses DATABASE_URL when it is set (CI's Postgres service) and
-// otherwise the local compose stack described by ../../.env.supabase, or by its
-// committed example that `bun run db:start` copies on first boot.
-const readSupabaseEnv = (): Record<string, string> => {
-	const file = ['../../.env.supabase', '../../.env.supabase.example'].find((path) =>
-		existsSync(path)
-	);
-	if (!file) return {};
-
-	return Object.fromEntries(
-		readFileSync(file, 'utf8')
-			.split(/\r?\n/)
-			.map((line) => /^([A-Z0-9_]+)=(.*)$/.exec(line.trim()))
-			.filter((match) => match !== null)
-			.map(([, key, value]) => [key, value.replace(/^['"]|['"]$/g, '')])
-	);
-};
-
-const supabase = readSupabaseEnv();
+// otherwise the compose Postgres that `bun run db:start` serves.
 const databaseUrl =
-	process.env.DATABASE_URL ??
-	`postgres://postgres:${supabase.POSTGRES_PASSWORD}@127.0.0.1:${supabase.POSTGRES_PORT ?? '5432'}/${supabase.POSTGRES_DB ?? 'postgres'}`;
+	process.env.DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:55432/postgres';
 
 // Runtime variables the Worker reads through `$app/env/private`.
 const workerVariables = {

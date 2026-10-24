@@ -110,7 +110,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 ### 6. Cierre
 
 - [ ] Verificar los hashes migrados y borrar las columnas viejas.
-- [ ] `compose.yaml` solo con Postgres.
+- [x] `compose.yaml` solo con Postgres (`postgres:17-alpine`, como CI, en el puerto 55432); se fueron `supabase/volumes` y `.env.supabase.example`.
 - [ ] Opcional: mover la base de datos a PlanetScale.
 
 ## Decisiones abiertas
