@@ -1,5 +1,5 @@
 import type { ArtworkDetail, ArtworkFeedCard } from '#lib/server/artwork/types.js';
-import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+import type { Artwork, ArtworkComment } from '#lib/features/artwork-presentation/model/artwork.js';
 
 type SerializableArtworkFeedCard = Omit<ArtworkFeedCard, 'createdAt'> & {
 	createdAt: Date | string;
@@ -55,3 +55,19 @@ export const toGalleryArtworkDetail = (
 	...baseArtwork(artwork),
 	rank
 });
+
+type SerializableArtworkComment = {
+	author: { nickname: string };
+	body: string;
+	createdAt: Date | string;
+	id: string;
+};
+
+/** The comment thread as the detail panel shows it, from the API or the server. */
+export const toGalleryComments = (comments: SerializableArtworkComment[]): ArtworkComment[] =>
+	comments.map((comment) => ({
+		author: comment.author.nickname,
+		id: comment.id,
+		text: comment.body,
+		timestamp: toTimestamp(comment.createdAt)
+	}));

@@ -92,7 +92,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Marcador crema por CSS en lugar del LQIP PNG: unos 65 KB menos por sala. Ya no se generan al publicar ni en el corte; la columna `media_placeholder` se borra en la fase 6, porque main todavía la lee.
 - [ ] Store normalizado para que el detalle abra al instante con lo que ya tiene la tarjeta.
 - [ ] Precarga desde la home y al tocar, restauración del scroll y feed cacheado en el edge.
-- [ ] Permalink `/artwork/[id]` con tarjeta OG, sin morph.
+- [x] Permalink `/artwork/[id]` con tarjeta OG, sin morph: la página pinta en el servidor la misma postal sobre la pared del museo, y la tarjeta de vista previa lleva la imagen de la obra (las obras 18+ usan la tarjeta del sitio). Al abrir una obra desde la galería la barra de direcciones pasa a `/artwork/<id>` con enrutado superficial, así que copiar el enlace o recargar lleva al permalink, y Atrás vuelve a la sala.
 - [ ] Contar cuántas obras superan ~300 KB y decidir la política para esas imágenes.
 
 ### 4. Estudio v3 y timelapse

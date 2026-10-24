@@ -20,7 +20,7 @@
 		roomId,
 		viewer = null
 	}: {
-		roomId: GalleryRoomId;
+		roomId: GalleryRoomId | null;
 		viewer?: Viewer | null;
 	} = $props();
 

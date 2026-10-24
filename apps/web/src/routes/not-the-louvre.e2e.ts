@@ -1032,8 +1032,10 @@ test.describe('Not the Louvre frontend port', () => {
 			await actorContext.close();
 		}
 
+		// The open artwork owns the address bar, so a reload lands on its
+		// permalink with the postcard already open.
 		await page.reload();
-		await page.getByRole('button', { name: /Realtime Product Piece/ }).click();
+		await expect(page).toHaveURL(/\/artwork\/[^/]+$/);
 		await expect(
 			page.getByRole('dialog', { name: /Artwork details for Realtime Product Piece/ })
 		).toBeVisible();

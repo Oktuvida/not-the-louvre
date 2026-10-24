@@ -592,7 +592,7 @@ describe('GalleryExplorationPage', () => {
 			)
 			.toBeVisible();
 		expect(goto).toHaveBeenCalledWith(
-			'/gallery/your-studio',
+			'/artwork/artwork-1',
 			expect.objectContaining({
 				shallow: true,
 				state: expect.objectContaining({
