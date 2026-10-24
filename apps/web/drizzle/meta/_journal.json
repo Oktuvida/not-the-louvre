@@ -127,6 +127,20 @@
       "when": 1792796411168,
       "tag": "0017_chilly_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792806940246,
+      "tag": "0018_drop_supabase_realtime_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792806966924,
+      "tag": "0019_yielding_gunslinger",
+      "breakpoints": true
     }
   ]
 }

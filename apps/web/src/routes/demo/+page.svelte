@@ -6,12 +6,6 @@
 			description: 'Nickname signup, login, logout, availability, and recovery journey.',
 			href: '/demo/better-auth',
 			name: 'Nickname auth demo'
-		},
-		{
-			description:
-				'Publishes one artwork and watches live vote updates arrive in another browser context.',
-			href: '/demo/artwork-realtime-votes',
-			name: 'Artwork realtime vote demo'
 		}
 	] as const;
 </script>

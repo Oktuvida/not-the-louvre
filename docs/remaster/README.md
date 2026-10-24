@@ -50,7 +50,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Arreglar el upsert de rate limit, roto en producción desde el 8 de septiembre (`35a5e17`). Para producción está listo en `hotfix/rate-limit-upsert`.
 - [x] Plan e informe dentro del repo.
 - [x] Suite de contrato SQL en CI contra Postgres (job `database`).
-- [x] Tests e2e en CI, excepto los `@realtime`, que necesitan Supabase Realtime y desaparecen en la fase 2.
+- [x] Tests e2e en CI, todos: el de tiempo real dejó de necesitar Supabase en la fase 2.
 - [x] Cuarentena de e2e: los 3 de compactación se sustituyeron por tests de recorrido (se publica cada trazo dibujado; el borrador sobrevive a una recarga) y el de la sala misteriosa era un test desactualizado (los comentarios están en el reverso de la postal). Quedan 2 de buffering del lienzo, que se reescriben en la fase 4.
 - [x] Bug: sin WebGL no se podía entrar; la escena 3D vive ahora dentro de un `<svelte:boundary>` (`be8a92d`).
 - [x] Driver `pg` con `drizzle-orm/node-postgres`: un `Client` por petición en Workers, sin `end()`, y un pool en Node. Probado en workerd con `wrangler dev` y Hyperdrive emulado.
@@ -82,7 +82,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Documentos en R2 (`documents/<sha256>.json.gz`): primero se guardan el dibujo y la imagen, y la fila se escribe al final en una sola sentencia que los nombra, así que ya no hay dibujos a medias ni escrituras troceadas, y Supavisor nunca recibe un documento entero. Las filas anteriores siguen leyéndose de la columna base64 hasta la migración (migración `0017`: columnas `drawing_document_key` y `avatar_document_key`).
 - [ ] Script de migración: documentos byte a byte (omitiendo las escrituras rotas), AVIF copiados con sus claves y backfill a WebP por cola.
 - [x] Tiempo real con Durable Objects en lugar de Supabase Realtime: el Worker `apps/realtime` tiene un `ArtworkTopic` por obra con WebSockets hibernados, el Worker web le reenvía la conexión desde `/api/artworks/[id]/live` (con la misma comprobación de visibilidad que la imagen) y cada voto, comentario o moderación de comentarios le avisa. Funciona también sin sesión, y la e2e de tiempo real corre ya en CI. De momento el aviso hace recargar el detalle, como antes; enviar los datos directamente llega con la galería nueva (fase 3).
-- [ ] Retirar Supabase Realtime: cliente `@supabase/supabase-js`, endpoint de tokens, tablas espejo con sus triggers, demo `artwork-realtime-votes` y variables de entorno.
+- [x] Supabase Realtime retirado: cliente `@supabase/supabase-js`, endpoint de tokens y firma de JWT, demo `artwork-realtime-votes`, tablas espejo con sus triggers, funciones y políticas (migraciones `0018` y `0019`) y sus variables de entorno. De Supabase solo queda Postgres; el entorno se reduce a `ORIGIN`, `BETTER_AUTH_SECRET` y `DATABASE_URL`.
 - [ ] Dominio de medios con Tiered Cache.
 - [ ] Medir la CPU real de render en Workers y la distribución real de puntos por documento.
 
