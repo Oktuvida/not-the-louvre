@@ -7,6 +7,7 @@ import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
 import { getArtworkDetail } from '#lib/server/artwork/read.service.js';
 import { publishArtwork } from '#lib/server/artwork/service.js';
 import { toActionFailure } from '#lib/server/http/errors.js';
+import { resolveArtworkMediaUrl } from '#lib/shared/artwork/media-url.js';
 
 const toFailure = (errorValue: unknown, fallback: string) =>
 	toActionFailure(errorValue, {
@@ -108,7 +109,7 @@ export const actions: Actions = {
 				artwork: {
 					id: artwork.id,
 					isNsfw: artwork.isNsfw,
-					mediaUrl: `/api/artworks/${artwork.id}/media`,
+					mediaUrl: resolveArtworkMediaUrl(artwork.id, artwork.mediaContentType),
 					title: artwork.title
 				},
 				success: true

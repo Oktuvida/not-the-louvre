@@ -417,6 +417,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				createdAt: artworks.createdAt,
 				id: artworks.id,
 				isNsfw: artworks.isNsfw,
+				mediaContentType: artworks.mediaContentType,
 				title: artworks.title
 			})
 			.from(artworks)

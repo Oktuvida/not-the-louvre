@@ -310,7 +310,7 @@ describe('draw route page', () => {
 			action: 'publish',
 			artwork: {
 				id: 'artwork-1',
-				mediaUrl: '/api/artworks/artwork-1/media',
+				mediaUrl: '/api/artworks/artwork-1/media?v=avif',
 				title: 'Untitled #0001'
 			},
 			success: true
@@ -340,7 +340,7 @@ describe('draw route page', () => {
 			action: 'publish',
 			artwork: {
 				id: 'artwork-1',
-				mediaUrl: '/api/artworks/artwork-1/media',
+				mediaUrl: '/api/artworks/artwork-1/media?v=avif',
 				title: 'Untitled #0001'
 			},
 			success: true
