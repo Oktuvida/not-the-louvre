@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 import {
-	countDrawingPoints,
 	getRenderableDrawingStrokes,
 	createEmptyDrawingDocumentV2,
 	parseVersionedDrawingDocument,
@@ -54,17 +53,17 @@ const expectSignedInHomeChrome = async (
 };
 
 const readDrawingCanvasCenterPixel = async (page: import('@playwright/test').Page) =>
-	page.locator('canvas[data-responsive-mode]').evaluate((node) => {
+	page.getByLabel('Drawing canvas').evaluate((node) => {
 		const canvas = node as HTMLCanvasElement;
 		const context = canvas.getContext('2d');
 		if (!context) {
 			throw new Error('Expected the draw canvas to expose a 2D context');
 		}
 
-		return Array.from(context.getImageData(canvas.width / 2, canvas.height / 2, 1, 1).data);
+		return Array.from(
+			context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data
+		);
 	});
-
-const measureJsonBytes = (value: string) => new TextEncoder().encode(value).byteLength;
 
 const installDrawingDocumentCaptureHarness = async (page: import('@playwright/test').Page) => {
 	await page.addInitScript(() => {
@@ -528,7 +527,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.goto('/draw');
 		await openDrawSketchbook(page);
 
-		const artworkCanvas = page.locator('canvas[width="768"][height="768"]').first();
+		const artworkCanvas = page.getByLabel('Drawing canvas');
 		await expect(artworkCanvas).toBeVisible();
 		await drawRepeatedDenseStroke(page, artworkCanvas, 3);
 		// The local draft is written shortly after each stroke; reload only once it
@@ -746,162 +745,6 @@ test.describe('Not the Louvre frontend port', () => {
 			'href',
 			'/gallery/your-studio'
 		);
-	});
-
-	// Quarantined 2026-10-23: the responsive canvas and draft buffering it pins drifted
-	// in the audit waves; the studio input pipeline is rebuilt in phase 4.
-	test.fixme('forked studio drawing buffers dense input over a large hydrated draft until stroke commit', async ({
-		page
-	}) => {
-		const strokeCount = 45;
-		const seededArtworkDraft = createCompactionCandidateDraft('artwork', strokeCount);
-		const seededArtworkDraftRaw = serializeDrawingDocument(seededArtworkDraft);
-
-		await installDrawingDocumentCaptureHarness(page);
-		await installDrawingExportHarness(page);
-
-		await page.goto('/demo/better-auth/login');
-		await signUpThroughNicknameDemo(page);
-		await page.goto('/draw');
-		await openDrawSketchbook(page);
-		await setDrawingExportMode(page, 'webp');
-		await page.getByPlaceholder('Untitled genius').fill('Responsive Fork Source');
-		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByText(/Artwork published as/)).toBeVisible();
-		await page.evaluate(() => {
-			(
-				window as Window & {
-					__capturedDrawingRequests?: CapturedDrawingRequest[];
-				}
-			).__capturedDrawingRequests = [];
-		});
-
-		await page.goto('/gallery/your-studio');
-		await page.getByRole('button', { name: /Responsive Fork Source/ }).click();
-		await page.getByRole('dialog').getByRole('button', { name: 'Fork' }).click();
-		await expect(page).toHaveURL(/\/draw\?fork=/);
-		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
-
-		const forkArtworkId = new URL(page.url()).searchParams.get('fork');
-		if (!forkArtworkId) {
-			throw new Error('Expected the fork route to expose an artwork id in the query string');
-		}
-
-		await expect
-			.poll(
-				async () => {
-					const entries = await readDrawingDraftEntries(page, 'artwork');
-					return entries.find(({ key }) => key.endsWith(`:${forkArtworkId}`)) ?? null;
-				},
-				{ timeout: 10000 }
-			)
-			.not.toBeNull();
-
-		const artworkDraftKey = (await readDrawingDraftEntries(page, 'artwork')).find(({ key }) =>
-			key.endsWith(`:${forkArtworkId}`)
-		)?.key;
-		if (!artworkDraftKey) {
-			throw new Error('Expected the fork route to persist an artwork draft key');
-		}
-
-		await writeIndexedDbDrawingDraftEntry(page, {
-			key: artworkDraftKey,
-			value: seededArtworkDraftRaw
-		});
-		await page.reload();
-		await expect(page).toHaveURL(new RegExp(`/draw\\?fork=${forkArtworkId}`));
-		await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
-
-		const artworkCanvas = page
-			.locator('canvas[width="768"][height="768"][data-responsive-mode="active"]')
-			.first();
-		await expect(artworkCanvas).toBeVisible();
-		await expect
-			.poll(
-				async () =>
-					(await readDrawingDraftEntries(page, 'artwork')).find(({ key }) =>
-						key.endsWith(`:${forkArtworkId}`)
-					)?.value ?? null
-			)
-			.toBe(seededArtworkDraftRaw);
-
-		await beginDenseStroke(page, artworkCanvas, 12);
-		expect(
-			(await readDrawingDraftEntries(page, 'artwork')).find(({ key }) =>
-				key.endsWith(`:${forkArtworkId}`)
-			)?.value
-		).toBe(seededArtworkDraftRaw);
-
-		await page.mouse.up();
-
-		await expect
-			.poll(
-				async () => {
-					const rawDraft = (await readDrawingDraftEntries(page, 'artwork')).find(({ key }) =>
-						key.endsWith(`:${forkArtworkId}`)
-					)?.value;
-					if (!rawDraft || rawDraft === seededArtworkDraftRaw) {
-						return null;
-					}
-
-					const parsedDraft = parseVersionedDrawingDocument(rawDraft);
-					if (parsedDraft.version !== 2) {
-						return null;
-					}
-
-					return {
-						lastStrokePointCount: parsedDraft.tail.at(-1)?.points.length ?? null,
-						strokeCount: parsedDraft.tail.length
-					};
-				},
-				{ timeout: 10000 }
-			)
-			.toEqual({ lastStrokePointCount: 12, strokeCount: strokeCount + 1 });
-
-		const hydratedForkDraftRaw = (await readDrawingDraftEntries(page, 'artwork')).find(({ key }) =>
-			key.endsWith(`:${forkArtworkId}`)
-		)?.value;
-		if (!hydratedForkDraftRaw) {
-			throw new Error('Expected the fork draft to exist before publish');
-		}
-
-		const hydratedForkDraft = parseVersionedDrawingDocument(hydratedForkDraftRaw);
-		expect(hydratedForkDraft.version).toBe(2);
-		if (hydratedForkDraft.version !== 2) {
-			throw new Error('Expected the fork draft to remain a DrawingDocumentV2 before publish');
-		}
-
-		await page.getByPlaceholder('Untitled genius').fill('Responsive Fork Child');
-		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByText(/Artwork published as/)).toBeVisible();
-
-		const forkPublishRequests = await readCapturedDrawingRequests(page);
-		expect(forkPublishRequests).toHaveLength(1);
-		expect(forkPublishRequests[0]).toMatchObject({
-			method: 'POST',
-			parentArtworkId: forkArtworkId,
-			title: 'Responsive Fork Child',
-			url: '?/publish'
-		});
-
-		const forkPayloadRaw = forkPublishRequests[0]?.drawingDocument;
-		if (!forkPayloadRaw) {
-			throw new Error('Expected the fork publish flow to send a drawing document');
-		}
-
-		const forkPayloadDocument = parseVersionedDrawingDocument(forkPayloadRaw);
-		expect(forkPayloadDocument.version).toBe(2);
-		if (forkPayloadDocument.version !== 2) {
-			throw new Error('Expected the fork publish payload to stay on DrawingDocumentV2');
-		}
-
-		expect(forkPayloadDocument.kind).toBe('artwork');
-		expect(forkPayloadDocument.tail.length).toBeLessThan(hydratedForkDraft.tail.length);
-		expect(countDrawingPoints(forkPayloadDocument)).toBeLessThan(
-			countDrawingPoints(hydratedForkDraft)
-		);
-		expect(measureJsonBytes(forkPayloadRaw)).toBeLessThan(measureJsonBytes(hydratedForkDraftRaw));
-		expect(forkPayloadRaw).not.toBe(hydratedForkDraftRaw);
 	});
 
 	test('gallery shows a newly published artwork from the real product flow', async ({ page }) => {

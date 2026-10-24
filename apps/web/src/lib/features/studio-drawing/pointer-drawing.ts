@@ -13,21 +13,47 @@ import {
  * to drift between the two files.
  */
 
-/** Canvas-space point for a pointer event, clamped to the document bounds. */
+/**
+ * Document point for a client position on a canvas laid out at `rect`, or null
+ * outside the document. The canvas's own pixel count plays no part: it follows
+ * the screen's density, while the document is always the same size.
+ */
+export const getDrawingPointInRect = (
+	rect: Pick<DOMRect, 'height' | 'left' | 'top' | 'width'>,
+	position: { clientX: number; clientY: number },
+	document: Pick<DrawingDocumentV2, 'height' | 'width'>
+): DrawingPoint | null =>
+	getDrawingPointWithinBounds(
+		[
+			((position.clientX - rect.left) * document.width) / rect.width,
+			((position.clientY - rect.top) * document.height) / rect.height
+		],
+		document
+	);
+
+/**
+ * The box a canvas paints into: its border box less the border, so a point on
+ * the drawing's edge is the document's edge, not a pixel short of it.
+ */
+export const getCanvasContentRect = (canvas: HTMLCanvasElement) => {
+	const rect = canvas.getBoundingClientRect();
+	const borderX = canvas.offsetWidth - canvas.clientWidth;
+	const borderY = canvas.offsetHeight - canvas.clientHeight;
+
+	return {
+		height: rect.height - borderY,
+		left: rect.left + canvas.clientLeft,
+		top: rect.top + canvas.clientTop,
+		width: rect.width - borderX
+	};
+};
+
+/** Document point for a pointer event on a canvas, or null outside the document. */
 export const getCanvasDrawingPoint = (
 	canvas: HTMLCanvasElement,
 	event: PointerEvent,
 	document: DrawingDocumentV2
-): DrawingPoint | null => {
-	const rect = canvas.getBoundingClientRect();
-	const scaleX = canvas.width / rect.width;
-	const scaleY = canvas.height / rect.height;
-
-	return getDrawingPointWithinBounds(
-		[(event.clientX - rect.left) * scaleX, (event.clientY - rect.top) * scaleY],
-		document
-	);
-};
+): DrawingPoint | null => getDrawingPointInRect(canvas.getBoundingClientRect(), event, document);
 
 /**
  * True when a move arrives with the primary button no longer held. A mouse
