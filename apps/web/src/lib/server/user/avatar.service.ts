@@ -1,5 +1,4 @@
-import { AVATAR_STORAGE_KEY_PREFIX } from './config';
-import { contentHash } from '#lib/server/media/content-hash.js';
+import { avatarStorageKey } from './avatar-key';
 import { prepareDrawingDocumentForStorage } from '#lib/server/drawing-document/storage.js';
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import {
@@ -17,13 +16,6 @@ import type { CanonicalUser } from '#lib/server/auth/types.js';
 import { userRepository } from './repository';
 import { avatarStorage } from './storage';
 import type { UserRecord, UserRepository } from './types';
-
-// Named after the image itself, so a new avatar gets a new address and every
-// cache may keep the old one without ever showing it again (see avatar-url.ts).
-const getAvatarStorageKey = async (userId: string, image: File) => {
-	const hash = await contentHash(await image.arrayBuffer());
-	return `${AVATAR_STORAGE_KEY_PREFIX}/${userId}/${hash.slice(0, 16)}.webp`;
-};
 
 type AvatarServiceDependencies = {
 	documents?: DrawingDocumentStore;
@@ -54,7 +46,10 @@ export const createAvatarService = (deps: AvatarServiceDependencies) => {
 			// comes last and names both, so the editor never reopens a half-saved
 			// avatar.
 			const avatarDocumentKey = await documents.put(preparedDocument.compressed);
-			const storageKey = await getAvatarStorageKey(activeUser.id, sanitizedMedia.file);
+			const storageKey = await avatarStorageKey(
+				activeUser.id,
+				new Uint8Array(await sanitizedMedia.file.arrayBuffer())
+			);
 			await storage.upload(storageKey, sanitizedMedia.file);
 			const completedAt = new Date();
 

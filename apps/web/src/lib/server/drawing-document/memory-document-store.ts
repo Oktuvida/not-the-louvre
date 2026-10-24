@@ -1,5 +1,5 @@
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
-import { contentHash } from '#lib/server/media/content-hash.js';
+import { drawingDocumentKey } from './document-key';
 import type { DrawingDocumentStore } from './document-store';
 
 /** An in-memory DrawingDocumentStore for service unit tests, keyed like the real one. */
@@ -8,7 +8,7 @@ export const createMemoryDrawingDocumentStore = () => {
 
 	const store: DrawingDocumentStore = {
 		async put(compressed) {
-			const key = `documents/${await contentHash(compressed)}.json.gz`;
+			const key = await drawingDocumentKey(compressed);
 			objects.set(key, compressed);
 			return key;
 		},

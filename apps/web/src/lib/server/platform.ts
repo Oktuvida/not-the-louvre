@@ -17,6 +17,7 @@ export type AppBucket = {
 		httpMetadata?: { contentType?: string };
 		size: number;
 	} | null>;
+	head(key: string): Promise<unknown>;
 	list(options?: {
 		cursor?: string;
 	}): Promise<{ cursor?: string; objects: { key: string }[]; truncated: boolean }>;
