@@ -253,7 +253,7 @@ describe('artwork detail endpoints', () => {
 		const response = await GET({
 			locals: {},
 			params: { artworkId: 'artwork-1' },
-			request: new Request('https://gallery.test/api/artworks/artwork-1/media')
+			request: new Request('https://gallery.test/api/artworks/artwork-1/media?v=avif')
 		} as never);
 
 		expect(response.status).toBe(200);
@@ -266,6 +266,34 @@ describe('artwork detail endpoints', () => {
 		expect(mocked.streamArtworkStorageObject).toHaveBeenCalledWith(
 			'artworks/user-1/artwork-1.avif'
 		);
+	});
+
+	// The cutover redraws lossy AVIF artworks as WebP under the same artwork id;
+	// a browser that kept the AVIF forever must still get the WebP.
+	it('only lets browsers keep an image for good under the format it names', async () => {
+		mocked.getArtworkMedia.mockResolvedValue({
+			id: 'artwork-1',
+			mediaContentType: 'image/webp',
+			storageKey: 'artworks/user-1/artwork-1.webp'
+		});
+
+		const { GET } = await import('./media/+server');
+		for (const url of [
+			'https://gallery.test/api/artworks/artwork-1/media',
+			'https://gallery.test/api/artworks/artwork-1/media?v=avif'
+		]) {
+			mocked.streamArtworkStorageObject.mockResolvedValue(
+				new Response(new Uint8Array([1, 2, 3]), { status: 200 })
+			);
+			const response = await GET({
+				locals: {},
+				params: { artworkId: 'artwork-1' },
+				request: new Request(url)
+			} as never);
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get('cache-control')).toBe('public, max-age=300, s-maxage=3600');
+		}
 	});
 
 	it('answers matching if-none-match revalidations without touching storage', async () => {

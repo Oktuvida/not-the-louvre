@@ -132,6 +132,7 @@ export type ArtworkReadRecord = ArtworkRecord & {
 		createdAt: Date;
 		id: string;
 		isNsfw: boolean;
+		mediaContentType: string;
 		title: string;
 	}>;
 	parentAuthorAvatarUrl?: string | null;

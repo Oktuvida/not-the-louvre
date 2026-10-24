@@ -301,6 +301,7 @@ const createReadRepository = (
 						createdAt: child.createdAt,
 						id: child.id,
 						isNsfw: child.isNsfw,
+						mediaContentType: child.mediaContentType,
 						title: child.title
 					};
 				});
@@ -740,7 +741,7 @@ describe('artwork read service', () => {
 			author: { id: 'user-2', nickname: 'artist_2' },
 			commentCount: 2,
 			forkCount: 1,
-			mediaUrl: '/api/artworks/artwork-fresh-mid/media',
+			mediaUrl: '/api/artworks/artwork-fresh-mid/media?v=avif',
 			title: 'Fresh mid'
 		});
 		expect(firstPage.items[0]).not.toHaveProperty('storageKey');
@@ -1034,7 +1035,7 @@ describe('artwork read service', () => {
 			id: 'artwork-101',
 			isNsfw: false,
 			title: 'Projection test',
-			mediaUrl: '/api/artworks/artwork-101/media',
+			mediaUrl: '/api/artworks/artwork-101/media?v=avif',
 			commentCount: 0,
 			forkCount: 0,
 			lineage: {
@@ -1057,7 +1058,7 @@ describe('artwork read service', () => {
 			title: 'Projection test',
 			drawingDocument: 'compressed-drawing-document',
 			drawingVersion: 1,
-			mediaUrl: '/api/artworks/artwork-101/media',
+			mediaUrl: '/api/artworks/artwork-101/media?v=avif',
 			mediaContentType: 'image/avif',
 			mediaSizeBytes: 128,
 			childForks: [],

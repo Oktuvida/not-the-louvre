@@ -1,4 +1,5 @@
 import { assertNotBanned } from '#lib/server/auth/guards.js';
+import { resolveArtworkMediaUrl } from '#lib/shared/artwork/media-url.js';
 import { resolveUserAvatarUrl } from '#lib/shared/user/avatar-url.js';
 import type { Viewer } from '#lib/shared/viewer.js';
 import { ArtworkFlowError } from './errors';
@@ -61,8 +62,6 @@ const toAuthorSummary = (record: ArtworkReadRecord): ArtworkAuthorSummary => ({
 	nickname: record.authorNickname
 });
 
-const getArtworkMediaUrl = (artworkId: string) => `/api/artworks/${artworkId}/media`;
-
 const toLineage = (record: ArtworkReadRecord): ArtworkLineageSummary => {
 	if (!record.parentId) {
 		return {
@@ -109,7 +108,7 @@ const toChildForkSummary = (
 	createdAt: record.createdAt,
 	id: record.id,
 	isNsfw: record.isNsfw,
-	mediaUrl: getArtworkMediaUrl(record.id),
+	mediaUrl: resolveArtworkMediaUrl(record.id, record.mediaContentType),
 	title: record.title
 });
 
@@ -123,7 +122,7 @@ const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 	isNsfw: record.isNsfw,
 	lineage: toLineage(record),
 	mediaPlaceholder: record.mediaPlaceholder ?? null,
-	mediaUrl: getArtworkMediaUrl(record.id),
+	mediaUrl: resolveArtworkMediaUrl(record.id, record.mediaContentType),
 	score: record.score,
 	title: record.title,
 	upvotes: record.upvotes ?? 0,

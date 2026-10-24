@@ -4,12 +4,18 @@ import { getArtworkMedia } from '#lib/server/artwork/read.service.js';
 import { streamArtworkStorageObject } from '#lib/server/artwork/storage.js';
 import { etagMatches, notModified } from '#lib/server/http/conditional.js';
 import { edgeCache, runAfterResponse } from '#lib/server/platform.js';
+import { artworkMediaFormat } from '#lib/shared/artwork/media-url.js';
 
-// Browsers may hold media forever (a storage key never changes after publish).
-// The edge copy stays short-lived: cache.delete only reaches the local
-// datacenter, so hiding an artwork can only wait out this TTL elsewhere.
+// The URLs the app hands out name the image's format (shared/artwork/media-url.ts),
+// so browsers may hold those forever. The edge copy stays short-lived:
+// cache.delete only reaches the local datacenter, so hiding an artwork can only
+// wait out this TTL elsewhere.
 const EDGE_TTL_SECONDS = 3600;
-const CACHE_CONTROL = `public, max-age=31536000, immutable, s-maxage=${EDGE_TTL_SECONDS}`;
+const VERSIONED_CACHE_CONTROL = `public, max-age=31536000, immutable, s-maxage=${EDGE_TTL_SECONDS}`;
+
+// Any other address (the bare path, a format the artwork no longer has) gets
+// the image as it is now, rechecked within minutes.
+const UNVERSIONED_CACHE_CONTROL = `public, max-age=300, s-maxage=${EDGE_TTL_SECONDS}`;
 
 const toEtag = (storageKey: string) => `"${storageKey}"`;
 
@@ -32,7 +38,13 @@ export const GET: RequestHandler = async (event) => {
 
 		const headers = new Headers();
 		headers.set('content-type', media.mediaContentType);
-		headers.set('cache-control', CACHE_CONTROL);
+		const requestedFormat = new URL(event.request.url).searchParams.get('v');
+		headers.set(
+			'cache-control',
+			requestedFormat === artworkMediaFormat(media.mediaContentType)
+				? VERSIONED_CACHE_CONTROL
+				: UNVERSIONED_CACHE_CONTROL
+		);
 		headers.set('etag', etag);
 
 		if (etagMatches(event.request, etag)) {
