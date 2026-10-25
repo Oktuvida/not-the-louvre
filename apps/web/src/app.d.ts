@@ -9,10 +9,6 @@ declare global {
 	// everywhere else.
 	const __PLAYWRIGHT__: boolean;
 
-	interface Window {
-		__ntlBypassClientContentFilters?: boolean;
-	}
-
 	namespace App {
 		interface Locals {
 			authUser?: User;

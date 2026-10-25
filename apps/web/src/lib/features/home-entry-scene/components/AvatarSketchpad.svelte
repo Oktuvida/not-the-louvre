@@ -9,7 +9,6 @@
 		AVATAR_DRAWING_DIMENSIONS,
 		DRAWING_DOCUMENT_VERSION,
 		cloneDrawingDocumentV2,
-		createEmptyDrawingDocument,
 		createEmptyDrawingDocumentV2,
 		getRenderableDrawingStrokes,
 		serializeDrawingDocument,
@@ -43,26 +42,8 @@
 
 	let {
 		clearMode = 'initial',
-		createAvatarPayload = async (documentState: DrawingDocumentV2) => {
-			const mode =
-				typeof window === 'undefined'
-					? 'good'
-					: ((
-							window as Window & {
-								__avatarExportMode?: 'bad' | 'good' | 'unsupported';
-							}
-						).__avatarExportMode ?? 'good');
-
-			if (mode === 'unsupported') {
-				return null;
-			}
-
-			if (mode === 'bad') {
-				return JSON.stringify(createEmptyDrawingDocument('artwork'));
-			}
-
-			return serializeDrawingDocument(documentState);
-		},
+		createAvatarPayload = async (documentState: DrawingDocumentV2) =>
+			serializeDrawingDocument(documentState),
 		draftUserKey = null,
 		draftStore,
 		initialDrawingDocument = null,

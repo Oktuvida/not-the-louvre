@@ -6,13 +6,9 @@ import {
 import {
 	deterministicAuthUser,
 	deterministicActorUser,
-	installAvatarExportHarness,
-	installDrawingExportHarness,
 	openHomeAuthOverlay,
 	readVisibleOneTimeKey,
 	resetDemoState,
-	setAvatarExportMode,
-	setDrawingExportMode,
 	signUpThroughNicknameDemo
 } from './demo/e2e-helpers';
 
@@ -213,6 +209,20 @@ const buildDenseStrokePath = (box: { height: number; width: number; x: number; y
 	}));
 };
 
+/** A real line across the studio canvas, through its centre. */
+const drawLineThroughCentre = async (page: import('@playwright/test').Page) => {
+	const canvas = page.getByLabel('Drawing canvas');
+	// The canvas takes strokes once the local draft has loaded.
+	await expect(canvas).toHaveAttribute('aria-disabled', 'false');
+	const box = await canvas.boundingBox();
+	if (!box) throw new Error('Expected the drawing canvas to expose a bounding box');
+
+	await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2, { steps: 8 });
+	await page.mouse.up();
+};
+
 const drawRepeatedDenseStroke = async (
 	page: import('@playwright/test').Page,
 	canvas: import('@playwright/test').Locator,
@@ -308,7 +318,6 @@ test.describe('Not the Louvre frontend port', () => {
 
 	test('home sign-in flow enters the gallery chrome with a real backend user', async ({ page }) => {
 		await enableReducedMotion(page);
-		await installAvatarExportHarness(page);
 
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
@@ -331,7 +340,6 @@ test.describe('Not the Louvre frontend port', () => {
 		page
 	}) => {
 		await enableReducedMotion(page);
-		await installAvatarExportHarness(page);
 
 		await openHomeAuthOverlay(page);
 		await page.getByRole('button', { name: 'Sign up' }).click();
@@ -358,7 +366,6 @@ test.describe('Not the Louvre frontend port', () => {
 		page
 	}) => {
 		await enableReducedMotion(page);
-		await installAvatarExportHarness(page);
 
 		await openHomeAuthOverlay(page);
 		await page.getByRole('button', { name: 'Sign up' }).click();
@@ -379,7 +386,6 @@ test.describe('Not the Louvre frontend port', () => {
 	test('avatar onboarding publishes every stroke the visitor drew', async ({ page }) => {
 		await enableReducedMotion(page);
 		await installDrawingDocumentCaptureHarness(page);
-		await installAvatarExportHarness(page);
 
 		await openHomeAuthOverlay(page);
 		await page.getByRole('button', { name: 'Sign up' }).click();
@@ -407,7 +413,6 @@ test.describe('Not the Louvre frontend port', () => {
 		page
 	}) => {
 		await installDrawingDocumentCaptureHarness(page);
-		await installDrawingExportHarness(page);
 
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
@@ -447,7 +452,6 @@ test.describe('Not the Louvre frontend port', () => {
 		page
 	}) => {
 		await enableReducedMotion(page);
-		await installAvatarExportHarness(page);
 
 		await openHomeAuthOverlay(page);
 		await page.getByRole('button', { name: 'Sign up' }).click();
@@ -456,12 +460,26 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByRole('button', { name: 'Start account' }).click();
 		await page.getByText('I Stored It').click();
 
-		await setAvatarExportMode(page, 'bad');
+		// The first save is turned down the way the avatar endpoint would.
+		let refuseNext = true;
+		await page.route(
+			(url) => /^\/api\/users\/[^/]+\/avatar$/.test(url.pathname),
+			async (route) => {
+				if (route.request().method() !== 'PUT' || !refuseNext) return route.continue();
+				refuseNext = false;
+				await route.fulfill({
+					json: {
+						code: 'INVALID_MEDIA_FORMAT',
+						message: 'Avatar save requires an avatar drawing document'
+					},
+					status: 400
+				});
+			}
+		);
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expect(page.getByText('Avatar save requires an avatar drawing document')).toBeVisible();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 
-		await setAvatarExportMode(page, 'good');
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
@@ -471,7 +489,6 @@ test.describe('Not the Louvre frontend port', () => {
 		page
 	}) => {
 		await enableReducedMotion(page);
-		await installAvatarExportHarness(page);
 
 		await page.goto('/demo/better-auth/login');
 		const recoveryKey = await signUpThroughNicknameDemo(page);
@@ -516,7 +533,6 @@ test.describe('Not the Louvre frontend port', () => {
 		page
 	}) => {
 		await enableReducedMotion(page);
-		await installAvatarExportHarness(page);
 
 		await openHomeAuthOverlay(page);
 		await page.getByRole('button', { name: 'Sign up' }).click();
@@ -536,8 +552,6 @@ test.describe('Not the Louvre frontend port', () => {
 	});
 
 	test('draw route publishes real artwork through the product flow', async ({ page }) => {
-		await installDrawingExportHarness(page);
-
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
@@ -557,8 +571,6 @@ test.describe('Not the Louvre frontend port', () => {
 	});
 
 	test('gallery shows a newly published artwork from the real product flow', async ({ page }) => {
-		await installDrawingExportHarness(page);
-
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
@@ -586,8 +598,6 @@ test.describe('Not the Louvre frontend port', () => {
 	test('gallery browser back closes locally opened artwork detail before leaving the room', async ({
 		page
 	}) => {
-		await installDrawingExportHarness(page);
-
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
@@ -616,8 +626,6 @@ test.describe('Not the Louvre frontend port', () => {
 		browser,
 		page
 	}) => {
-		await installDrawingExportHarness(page);
-
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
@@ -638,7 +646,6 @@ test.describe('Not the Louvre frontend port', () => {
 		const actorPage = await actorContext.newPage();
 
 		try {
-			await installDrawingExportHarness(actorPage);
 			await actorPage.goto('/demo/better-auth/login');
 			await signUpThroughNicknameDemo(actorPage, deterministicActorUser);
 			await actorPage.goto('/gallery');
@@ -699,8 +706,6 @@ test.describe('Not the Louvre frontend port', () => {
 	test('mystery room loads persisted comments for the revealed artwork detail', async ({
 		page
 	}) => {
-		await installDrawingExportHarness(page);
-
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
@@ -747,25 +752,38 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Sunset Over Mountains')).not.toBeVisible();
 	});
 
-	test('draw route keeps the user on the page when export fails and allows retry', async ({
+	test('a publish the server turns down keeps the drawing on the page and can be retried', async ({
 		page
 	}) => {
-		await installDrawingExportHarness(page);
-
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
 		await openDrawSketchbook(page);
+		await drawLineThroughCentre(page);
 
-		await setDrawingExportMode(page, 'unsupported');
+		// The first publish is answered with a failure the way the action would.
+		let refuseNext = true;
+		await page.route(
+			(url) => url.pathname === '/draw' && url.search === '?/publish',
+			async (route) => {
+				if (!refuseNext) return route.continue();
+				refuseNext = false;
+				await route.fulfill({
+					body: JSON.stringify({
+						data: JSON.stringify([{ message: 1 }, 'The wall is busy, try again']),
+						status: 503,
+						type: 'failure'
+					}),
+					contentType: 'application/json'
+				});
+			}
+		);
+
 		await page.getByPlaceholder('Untitled genius').fill('Retry Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(
-			page.getByText('This browser could not prepare your drawing. Please try again.')
-		).toBeVisible();
+		await expect(page.getByText('The wall is busy, try again')).toBeVisible();
 		await expect(page).toHaveURL(/\/draw$/);
 
-		await setDrawingExportMode(page, 'webp');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 	});
@@ -773,13 +791,11 @@ test.describe('Not the Louvre frontend port', () => {
 	test('gallery detail can fork into the draw studio with the parent artwork preloaded', async ({
 		page
 	}) => {
-		await installDrawingExportHarness(page);
-
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
 		await openDrawSketchbook(page);
-		await setDrawingExportMode(page, 'webp');
+		await drawLineThroughCentre(page);
 		await page.getByPlaceholder('Untitled genius').fill('Fork Source');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText(/Artwork published as/)).toBeVisible();
@@ -806,13 +822,11 @@ test.describe('Not the Louvre frontend port', () => {
 	test('successful fork publish exits fork mode so draw again and reload stay empty', async ({
 		page
 	}) => {
-		await installDrawingExportHarness(page);
-
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
 		await openDrawSketchbook(page);
-		await setDrawingExportMode(page, 'webp');
+		await drawLineThroughCentre(page);
 		await page.getByPlaceholder('Untitled genius').fill('Fork Reset Source');
 		await page.getByRole('button', { name: 'Publish' }).click();
 		await expect(page.getByText(/Artwork published as/)).toBeVisible();
@@ -902,8 +916,6 @@ test.describe('Not the Louvre frontend port', () => {
 	test.skip('hot wall promotes a live artwork and still opens its detail view', async ({
 		page
 	}) => {
-		await installDrawingExportHarness(page);
-
 		await page.goto('/demo/better-auth/login');
 		await signUpThroughNicknameDemo(page);
 		await page.goto('/draw');
