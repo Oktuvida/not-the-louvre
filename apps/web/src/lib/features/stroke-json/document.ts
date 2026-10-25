@@ -330,6 +330,16 @@ export const serializeEditableDrawingDocument = (document: DrawingDocument) =>
 		)
 	);
 
+/** The document with one more finished stroke at the end of its tail. */
+export const appendCommittedStroke = (
+	document: DrawingDocumentV2,
+	stroke: DrawingStroke
+): DrawingDocumentV2 => {
+	const nextDocument = cloneDrawingDocumentV2(document);
+	nextDocument.tail.push(cloneDrawingStroke(stroke));
+	return nextDocument;
+};
+
 export const countDrawingPoints = (document: DrawingDocument) =>
 	getRenderableDrawingStrokes(document).reduce((total, stroke) => total + stroke.points.length, 0);
 

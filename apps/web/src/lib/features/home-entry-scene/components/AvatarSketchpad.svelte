@@ -14,25 +14,10 @@
 		getRenderableDrawingStrokes,
 		serializeDrawingDocument,
 		type DrawingDocumentV2,
-		type DrawingPoint,
 		type DrawingStroke
 	} from '#lib/features/stroke-json/document.js';
 	import { renderDrawingStroke } from '#lib/features/stroke-json/canvas.js';
-	import {
-		appendBufferedStrokePoint,
-		appendCommittedStroke,
-		createBufferedStroke,
-		shouldUseResponsiveDrawing
-	} from '#lib/features/stroke-json/responsive-editing.js';
-	import {
-		attachPointerReleaseSafetyNet,
-		ensureCommittedCacheCanvas,
-		getCanvasDrawingPoint,
-		hasLostPrimaryButton,
-		isSameDrawingRenderSignature,
-		readDrawingRenderSignature,
-		type DrawingRenderSignature
-	} from '#lib/features/studio-drawing/pointer-drawing.js';
+	import DrawingCanvas from '#lib/features/studio-drawing/components/DrawingCanvas.svelte';
 	import { drawingPalette } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
 	import type { AvatarUploadResult } from '#lib/client/avatar-upload.js';
@@ -100,7 +85,6 @@
 		submitLabel?: string;
 	} = $props();
 
-	let canvasElement = $state<HTMLCanvasElement | null>(null);
 	let activeColor = $state(DEFAULT_AVATAR_COLOR);
 	let baselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
 	let brushStep = $state(Math.floor((BRUSH_SIZES.length - 1) / 2));
@@ -108,18 +92,9 @@
 	// Strokes wait for the local draft: restoring it replaces the document, and a
 	// stroke drawn while it loads would vanish under it. The studio gates the same way.
 	let draftReady = $state(false);
-	let activeStroke = $state<DrawingStroke | null>(null);
-	let activePointerId = $state<number | null>(null);
-	let isDrawing = $state(false);
 	let isSaving = $state(false);
 	let draftStatusMessage = $state('');
 	let saveError = $state('');
-	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
-	let committedCacheCanvas: HTMLCanvasElement | null = null;
-	let committedCacheDirty = true;
-	let renderedSignature: DrawingRenderSignature | null = null;
-	let renderedSealSignature: DrawingRenderSignature | null = null;
-	let renderedSealTarget: HTMLCanvasElement | null = null;
 	let sealCanvasElement = $state<HTMLCanvasElement | null>(null);
 	let sealBlobElement = $state<HTMLDivElement | null>(null);
 
@@ -255,33 +230,6 @@
 		ctx.restore();
 	};
 
-	const renderCommittedDocument = (
-		context: CanvasRenderingContext2D,
-		documentState: DrawingDocumentV2
-	) => {
-		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
-		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-		drawGhostSilhouette(context);
-
-		for (const stroke of getRenderableDrawingStrokes(documentState)) {
-			renderDrawingStroke(context, stroke);
-		}
-	};
-
-	const renderCommittedCache = () => {
-		committedCacheCanvas = ensureCommittedCacheCanvas(
-			committedCacheCanvas,
-			CANVAS_WIDTH,
-			CANVAS_HEIGHT
-		);
-
-		const context = committedCacheCanvas.getContext('2d');
-		if (!context) return;
-
-		renderCommittedDocument(context, drawingDocument);
-		committedCacheDirty = false;
-	};
-
 	// Live wax-seal preview: the drawing (sans ghost guides) scaled into the
 	// seal well, so artists see exactly what gets pressed into their seal.
 	const updateSealPreview = () => {
@@ -295,9 +243,6 @@
 		context.scale(seal.width / CANVAS_WIDTH, seal.height / CANVAS_HEIGHT);
 		for (const stroke of getRenderableDrawingStrokes(drawingDocument)) {
 			renderDrawingStroke(context, stroke);
-		}
-		if (activeStroke) {
-			renderDrawingStroke(context, activeStroke);
 		}
 		context.restore();
 	};
@@ -315,176 +260,12 @@
 		});
 	};
 
-	const markDocumentRendered = () => {
-		renderedSignature = readDrawingRenderSignature({
-			activeStroke,
-			document: drawingDocument,
-			responsive: responsiveDrawing,
-			target: canvasElement
-		});
-	};
-
-	const renderCurrentDocument = () => {
-		if (!canvasElement) return;
-		const context = canvasElement.getContext('2d');
-		if (!context) return;
-
-		if (!responsiveDrawing) {
-			renderCommittedDocument(context, drawingDocument);
-			markDocumentRendered();
-			return;
-		}
-
-		if (committedCacheDirty || !committedCacheCanvas) {
-			renderCommittedCache();
-		}
-
-		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
-		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-		if (committedCacheCanvas) {
-			context.drawImage(committedCacheCanvas, 0, 0);
-		}
-		if (activeStroke) {
-			renderDrawingStroke(context, activeStroke);
-		}
-
-		markDocumentRendered();
-	};
-
-	const getPoint = (event: PointerEvent): DrawingPoint | null =>
-		canvasElement ? getCanvasDrawingPoint(canvasElement, event, drawingDocument) : null;
-
-	const startStroke = (point: DrawingPoint) => {
-		if (responsiveDrawing) {
-			activeStroke = createBufferedStroke({
-				color: activeColor,
-				point,
-				size: brushSize
-			});
-			renderCurrentDocument();
-			return;
-		}
-
-		drawingDocument.tail.push({
-			color: activeColor,
-			points: [point],
-			size: brushSize
-		});
-		committedCacheDirty = true;
-		renderCurrentDocument();
-	};
-
-	const appendPoint = (point: DrawingPoint) => {
-		if (responsiveDrawing) {
-			if (!activeStroke) return;
-			if (!appendBufferedStrokePoint(activeStroke, point)) return;
-			renderCurrentDocument();
-			return;
-		}
-
-		const stroke = drawingDocument.tail.at(-1);
-		if (!stroke) return;
-
-		const lastPoint = stroke.points.at(-1);
-		if (lastPoint && point[0] === lastPoint[0] && point[1] === lastPoint[1]) {
-			return;
-		}
-
-		stroke.points.push(point);
-		committedCacheDirty = true;
-		renderCurrentDocument();
-	};
-
-	const commitActiveStroke = () => {
-		if (!activeStroke) return;
-
-		const previousDocument = cloneDrawingDocumentV2(drawingDocument);
-		const committedStroke = {
-			color: activeStroke.color,
-			points: activeStroke.points.map((point) => [point[0], point[1]] as [number, number]),
-			size: activeStroke.size
-		};
-
-		drawingDocument = appendCommittedStroke(previousDocument, committedStroke);
-		void persistCommittedStroke(previousDocument, committedStroke);
-		activeStroke = null;
-		committedCacheDirty = true;
-		renderCurrentDocument();
-	};
-
-	const startDrawing = (event: PointerEvent) => {
-		if (!canvasElement || !draftReady) return;
-		if (!event.isPrimary) return;
-
-		event.preventDefault();
-
-		const point = getPoint(event);
-		if (!point) return;
-
-		canvasElement.setPointerCapture(event.pointerId);
-		activePointerId = event.pointerId;
-		startStroke(point);
-		isDrawing = true;
-	};
-
-	const draw = (event: PointerEvent) => {
-		if (!isDrawing || !canvasElement) return;
-		if (!event.isPrimary) return;
-		if (activePointerId !== event.pointerId) return;
-
-		event.preventDefault();
-
-		// A mouse released outside the window delivers no pointerup here. Commit the
-		// stroke rather than dropping it, and only for mice: a stylus can report
-		// `buttons: 0` mid-stroke and would otherwise truncate the line.
-		if (hasLostPrimaryButton(event)) {
-			finishDrawing(event);
-			return;
-		}
-
-		const point = getPoint(event);
-		if (!point) return;
-
-		appendPoint(point);
-	};
-
-	const stopDrawing = () => {
-		activeStroke = null;
-		isDrawing = false;
-		activePointerId = null;
-	};
-
-	const finishDrawing = (event?: PointerEvent) => {
-		if (
-			canvasElement &&
-			event &&
-			activePointerId === event.pointerId &&
-			canvasElement.hasPointerCapture(event.pointerId)
-		) {
-			canvasElement.releasePointerCapture(event.pointerId);
-		}
-
-		if (responsiveDrawing) {
-			commitActiveStroke();
-		} else if (isDrawing) {
-			const previousDocument = cloneDrawingDocumentV2(drawingDocument);
-			const committedStroke = previousDocument.tail.pop();
-			if (committedStroke) {
-				void persistCommittedStroke(previousDocument, committedStroke);
-			}
-		}
-
-		stopDrawing();
+	const handleStrokeCommitted = (input: {
+		previousDocument: DrawingDocumentV2;
+		stroke: DrawingStroke;
+	}) => {
+		void persistCommittedStroke(input.previousDocument, input.stroke);
 		pressSealAnimation();
-	};
-
-	const cancelDrawing = (event: PointerEvent) => {
-		event.preventDefault();
-		finishDrawing(event);
-	};
-
-	const preventCanvasDrag = (event: DragEvent) => {
-		event.preventDefault();
 	};
 
 	const handleEnterGallery = async () => {
@@ -544,7 +325,6 @@
 
 					drawingDocument =
 						draft?.kind === 'avatar' ? draft : cloneDrawingDocumentV2(baselineDocument);
-					committedCacheDirty = true;
 					draftReady = true;
 					clearUnsavedDraftWarning();
 				})
@@ -552,52 +332,23 @@
 					if (draftLoadCancelled) return;
 
 					drawingDocument = cloneDrawingDocumentV2(baselineDocument);
-					committedCacheDirty = true;
 					draftReady = true;
 					markUnsavedDraftWarning();
 				});
 		} else {
 			drawingDocument = cloneDrawingDocumentV2(baselineDocument);
-			committedCacheDirty = true;
 			draftReady = true;
 		}
 
-		const detachPointerReleaseSafetyNet = attachPointerReleaseSafetyNet(finishDrawing);
-
-		renderCurrentDocument();
-
 		return () => {
 			draftLoadCancelled = true;
-			detachPointerReleaseSafetyNet();
 		};
 	});
 
-	// The pointer handlers already paint the pad synchronously, so this effect only
-	// covers the repaints nothing else does (mount, draft hydration, a cleared pad)
-	// and skips the duplicate paint of the very same frame. The seal preview is
-	// driven from here alone, so it keeps refreshing on every change.
+	// The seal follows every committed change to the drawing.
 	$effect(() => {
-		const nextSignature = readDrawingRenderSignature({
-			activeStroke,
-			document: drawingDocument,
-			responsive: responsiveDrawing,
-			target: canvasElement
-		});
-		const nextSealTarget = sealCanvasElement;
-
-		if (!isSameDrawingRenderSignature(renderedSignature, nextSignature)) {
-			renderCurrentDocument();
-		}
-
-		if (
-			isSameDrawingRenderSignature(renderedSealSignature, nextSignature) &&
-			renderedSealTarget === nextSealTarget
-		) {
-			return;
-		}
-
-		renderedSealSignature = nextSignature;
-		renderedSealTarget = nextSealTarget;
+		void drawingDocument;
+		void sealCanvasElement;
 		updateSealPreview();
 	});
 </script>
@@ -678,20 +429,18 @@
 			<div class="canvas-mat aspect-square" data-testid="avatar-sketchpad-frame">
 				<span class="canvas-tape canvas-tape-left" aria-hidden="true"></span>
 				<span class="canvas-tape canvas-tape-right" aria-hidden="true"></span>
-				<canvas
-					bind:this={canvasElement}
-					width={CANVAS_WIDTH}
-					height={CANVAS_HEIGHT}
-					class="sketch-canvas"
-					aria-disabled={!draftReady}
-					data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
-					draggable="false"
-					ondragstart={preventCanvasDrag}
-					onpointerdown={startDrawing}
-					onpointermove={draw}
-					onpointerup={finishDrawing}
-					onpointercancel={cancelDrawing}
-				></canvas>
+				<div class="sketch-canvas">
+					<DrawingCanvas
+						bind:drawingDocument
+						decorate={drawGhostSilhouette}
+						interactive={draftReady}
+						label="Avatar drawing canvas"
+						onStrokeCommitted={handleStrokeCommitted}
+						paper={AVATAR_CANVAS_BACKGROUND}
+						strokeColor={activeColor}
+						strokeSize={brushSize}
+					/>
+				</div>
 			</div>
 			<div class="seal-station" aria-hidden="true">
 				<div class="seal-blob" bind:this={sealBlobElement}>
@@ -714,10 +463,8 @@
 			size="sm"
 			onclick={() => {
 				saveError = '';
-				activeStroke = null;
 				drawingDocument = cloneDrawingDocumentV2(clearDocument);
 				void resetDraftSession(clearDocument);
-				committedCacheDirty = true;
 				pressSealAnimation();
 			}}
 			disabled={isSaving}
@@ -1040,17 +787,12 @@
 	}
 
 	.sketch-canvas {
-		display: block;
+		position: relative;
 		width: 100%;
 		/* Sized by its own ratio, never by the mat's height: Safari cannot
-		 * resolve a percentage height against an aspect-ratio-derived box and
-		 * falls back to the canvas's intrinsic 340px, overflowing the mat. */
+		 * resolve a percentage height against an aspect-ratio-derived box. */
 		height: auto;
 		aspect-ratio: 1;
-		cursor: crosshair;
-		touch-action: none;
-		background: #ffffff;
-		border: 1px solid #e7dfd2;
 	}
 
 	.easel-note {

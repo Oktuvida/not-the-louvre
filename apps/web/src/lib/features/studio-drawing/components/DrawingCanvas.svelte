@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { on } from 'svelte/events';
 	import {
 		DEFAULT_DRAWING_DOCUMENT_LIMITS,
+		appendCommittedStroke,
 		clampDrawingPoint,
 		cloneDrawingDocumentV2,
 		createEmptyDrawingDocumentV2,
@@ -11,7 +12,6 @@
 		type DrawingPoint,
 		type DrawingStroke
 	} from '#lib/features/stroke-json/document.js';
-	import { appendCommittedStroke } from '#lib/features/stroke-json/responsive-editing.js';
 	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
 	import {
 		attachPointerReleaseSafetyNet,
@@ -19,7 +19,11 @@
 		getDrawingPointInRect,
 		hasLostPrimaryButton
 	} from '#lib/features/studio-drawing/pointer-drawing.js';
-	import { createInkSurface, type InkSurface } from '#lib/features/studio-drawing/ink-surface.js';
+	import {
+		createInkSurface,
+		type InkSurface,
+		type InkSurfaceOptions
+	} from '#lib/features/studio-drawing/ink-surface.js';
 	import { drawingTools } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 	import {
 		SECOND_FINGER_WINDOW_MS,
@@ -40,23 +44,31 @@
 		canvasRef = $bindable<HTMLCanvasElement | null>(null),
 		drawingDocument = $bindable<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork')),
 		clearVersion = 0,
+		decorate,
 		initialDrawingDocument = null,
 		inkLimits = {},
 		interactive = true,
+		label = 'Drawing canvas',
 		onDocumentChange,
 		onHistoryChange,
 		onOutOfInk,
 		onStrokeCommitted,
+		paper,
 		statusMessage = '',
-		statusTone = 'idle'
+		statusTone = 'idle',
+		strokeColor,
+		strokeSize
 	}: {
 		canvasRef?: HTMLCanvasElement | null;
 		drawingDocument?: DrawingDocumentV2;
 		clearVersion?: number;
+		decorate?: InkSurfaceOptions['decorate'];
 		initialDrawingDocument?: DrawingDocumentV2 | null;
 		/** The server's limits; the defaults unless a spec wants a small budget. */
 		inkLimits?: InkLimits;
 		interactive?: boolean;
+		/** The canvas's accessible name. */
+		label?: string;
 		/**
 		 * Observation channel only. The studio page reads the document through
 		 * `bind:drawingDocument`; this reports each committed document to the
@@ -72,8 +84,13 @@
 			previousDocument: DrawingDocumentV2;
 			stroke: DrawingStroke;
 		}) => void | Promise<void>;
+		/** The paper on screen, when it is not the document's background (the avatar pad). */
+		paper?: string;
 		statusMessage?: string;
 		statusTone?: 'error' | 'success' | 'idle';
+		/** A brush of the host's own; the studio's shared tools otherwise. */
+		strokeColor?: string;
+		strokeSize?: number;
 	} = $props();
 
 	let overlayRef = $state<HTMLCanvasElement | null>(null);
@@ -214,8 +231,10 @@
 	};
 
 	// The eraser lays down paper: the published image is painted the same way.
-	const strokeColor = () =>
-		drawingTools.tool === 'eraser' ? drawingDocument.background : drawingTools.activeColor;
+	const inkColor = () =>
+		strokeColor ??
+		(drawingTools.tool === 'eraser' ? drawingDocument.background : drawingTools.activeColor);
+	const inkSize = () => strokeSize ?? drawingTools.brushSize;
 
 	const showCursor = (event: PointerEvent) => {
 		if (!canvasRef || !interactive) return;
@@ -224,7 +243,7 @@
 			event,
 			drawingDocument
 		);
-		surface?.cursor(point, strokeColor(), drawingTools.brushSize, drawingTools.tool === 'eraser');
+		surface?.cursor(point, inkColor(), inkSize(), !strokeColor && drawingTools.tool === 'eraser');
 	};
 
 	const hideCursor = () => surface?.cursor(null, '', 0, false);
@@ -253,7 +272,7 @@
 		activePointerId = event.pointerId;
 		strokePointerType = event.pointerType;
 		strokeStartedAt = event.timeStamp;
-		wetStroke = { color: strokeColor(), points: [point], size: drawingTools.brushSize };
+		wetStroke = { color: inkColor(), points: [point], size: inkSize() };
 		surface?.wet(wetStroke);
 	}
 
@@ -432,7 +451,7 @@
 
 		baselineDocument = initialDrawingDocument
 			? cloneDrawingDocumentV2(initialDrawingDocument)
-			: createEmptyDrawingDocumentV2('artwork');
+			: createEmptyDrawingDocumentV2(untrack(() => drawingDocument.kind));
 		commitDrawingDocument(cloneDrawingDocumentV2(baselineDocument));
 	});
 
@@ -466,7 +485,7 @@
 		if (!canvasRef || !overlayRef) return;
 
 		const canvas = canvasRef;
-		const inkSurface = createInkSurface(canvas, overlayRef);
+		const inkSurface = createInkSurface(canvas, overlayRef, { decorate, paper });
 		/*
 		 * As many pixels as the canvas covers on screen, and never fewer than its
 		 * layout. The sketchbook scales the page with transforms (down while it
@@ -527,10 +546,15 @@
 </script>
 
 <!-- Sized inline as well as by class: a canvas sized from its own pixel count
-     would grow with every resize to the screen's density. -->
+     would grow with every resize to the screen's density. The ratio is the
+     fallback for a parent whose height comes from an aspect-ratio of its own,
+     which Safari cannot resolve a percentage height against. -->
 <div
 	class="relative h-full w-full items-center justify-center"
-	style="position: relative; width: 100%; height: 100%;"
+	style:position="relative"
+	style:width="100%"
+	style:height="100%"
+	style:aspect-ratio={`${drawingDocument.width} / ${drawingDocument.height}`}
 >
 	<!-- The frame stays put and clips; the view inside it zooms and pans. -->
 	<div bind:this={frameRef} data-canvas-frame class="canvas-frame" onwheel={handleWheel}>
@@ -541,8 +565,9 @@
 			<canvas
 				bind:this={canvasRef}
 				class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
-				style="width: 100%; height: 100%; background: var(--color-paper-bright); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;"
-				aria-label="Drawing canvas"
+				style="width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;"
+				style:background={paper ?? 'var(--color-paper-bright)'}
+				aria-label={label}
 				aria-disabled={!interactive}
 				draggable="false"
 				ondragstart={(event) => event.preventDefault()}

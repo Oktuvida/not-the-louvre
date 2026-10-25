@@ -50,7 +50,9 @@ const renderCanvas = async (
 		...props
 	});
 
-	const canvas = page.getByLabelText('Drawing canvas').element() as HTMLCanvasElement;
+	const canvas = page
+		.getByLabelText(typeof props.label === 'string' ? props.label : 'Drawing canvas')
+		.element() as HTMLCanvasElement;
 
 	/** Client coordinates for a point in document pixels (the canvas is 768 wide). */
 	const at = (x: number, y: number) => {
@@ -670,6 +672,31 @@ describe('DrawingCanvas', () => {
 					[200, 100]
 				]
 			]);
+		});
+	});
+
+	describe('on another surface', () => {
+		it('draws with the colour and size it is handed instead of the studio’s', async () => {
+			const { committed, draw } = await renderCanvas({ strokeColor: '#6b8e7f', strokeSize: 14 });
+
+			draw([100, 300], [600, 300]);
+
+			expect(committed[0]).toMatchObject({ color: '#6b8e7f', size: 14 });
+		});
+
+		it('shows its own paper and guides that never become part of the drawing', async () => {
+			const { colourAt, documents } = await renderCanvas({
+				decorate: (context: CanvasRenderingContext2D) => {
+					context.fillStyle = '#ff0000';
+					context.fillRect(0, 0, 100, 100);
+				},
+				label: 'Avatar drawing canvas',
+				paper: '#ffffff'
+			});
+
+			await vi.waitFor(() => expect(colourAt(50, 50)).toEqual([255, 0, 0]));
+			expect(colourAt(400, 400)).toEqual([255, 255, 255]);
+			expect(documents.at(-1)?.tail ?? []).toHaveLength(0);
 		});
 	});
 });
