@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Eraser, ImageUp, Palette, Redo2, Trash2, Undo2 } from 'lucide-svelte';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import { INK_WARNING_LEVEL } from '#lib/features/stroke-json/ink.js';
 	import {
 		brushSizeSteps,
 		drawingPalette,
@@ -10,6 +11,7 @@
 	let {
 		canRedo = false,
 		canUndo = false,
+		inkUsed = 0,
 		isPublishing = false,
 		mobile = false,
 		onPublish,
@@ -19,6 +21,8 @@
 	}: {
 		canRedo?: boolean;
 		canUndo?: boolean;
+		/** How much of what the server accepts the drawing has used, 0 to 1. */
+		inkUsed?: number;
 		isPublishing?: boolean;
 		mobile?: boolean;
 		onPublish?: () => void;
@@ -35,6 +39,8 @@
 		'#DCC9A3',
 		'#E5DECA'
 	]);
+
+	const inkLeft = $derived(Math.max(0, Math.round((1 - inkUsed) * 100)));
 
 	const selectColor = (color: string) => {
 		drawingTools.activeColor = color;
@@ -160,6 +166,29 @@
 		</button>
 	</div>
 
+	<!-- The ink is the drawing's budget: it runs out where the server would say no. -->
+	<div class="ink">
+		<div
+			class="ink-meter"
+			role="meter"
+			aria-label="Ink left"
+			aria-valuemin="0"
+			aria-valuemax="100"
+			aria-valuenow={inkLeft}
+		>
+			<span
+				class="ink-level"
+				class:ink-level-low={inkUsed >= INK_WARNING_LEVEL}
+				style:width={`${inkLeft}%`}
+			></span>
+		</div>
+		{#if inkUsed >= 1}
+			<p class="ink-note ink-note-out">Out of ink</p>
+		{:else if inkUsed >= INK_WARNING_LEVEL}
+			<p class="ink-note">Running low on ink</p>
+		{/if}
+	</div>
+
 	<div class="tray-sep" aria-hidden="true"></div>
 
 	<!-- Action buttons -->
@@ -193,6 +222,40 @@
 </div>
 
 <style>
+	.ink {
+		margin-top: 12px;
+	}
+
+	.ink-meter {
+		height: 8px;
+		overflow: hidden;
+		border: 1px solid rgba(45, 36, 32, 0.3);
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.5);
+	}
+
+	.ink-level {
+		display: block;
+		height: 100%;
+		background: var(--color-ink-warm, #2d2420);
+		transition: width 200ms ease-out;
+	}
+
+	.ink-level-low {
+		background: var(--color-danger-bright, #c0392b);
+	}
+
+	.ink-note {
+		margin-top: 4px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-ink-warm, #2d2420);
+	}
+
+	.ink-note-out {
+		color: var(--color-danger-bright, #c0392b);
+	}
+
 	.tray-tools {
 		display: flex;
 		gap: 8px;

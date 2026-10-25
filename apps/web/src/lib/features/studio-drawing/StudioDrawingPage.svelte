@@ -36,6 +36,7 @@
 	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
 	import DrawingCanvas from '#lib/features/studio-drawing/components/DrawingCanvas.svelte';
 	import DrawingToolTray from '#lib/features/studio-drawing/tools/DrawingToolTray.svelte';
+	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
 
 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
@@ -166,11 +167,14 @@
 			goto(resolve('draw'), { shallow: true, replace: true, state: window.history.state });
 		},
 		draftStore,
+		inkLimits = {},
 		user
 	}: {
 		checkTextContent?: TextContentChecker;
 		createArtworkPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		draftStore?: IndexedDbDrawingDraftStore;
+		/** The server's drawing limits; specs pass a small budget. */
+		inkLimits?: InkLimits;
 		forkParent?: DrawForkParent | null;
 		initialIsMobile?: boolean;
 		openingDurationMs?: number;
@@ -495,6 +499,13 @@
 		writeDraft((session) => session.appendCommittedStroke(input.previousDocument, input.stroke));
 	};
 
+	const ink = $derived(measureInk(drawingDocument, inkLimits));
+
+	const handleOutOfInk = () => {
+		statusMessage = 'Out of ink. Undo a line to free some up, or publish.';
+		statusTone = 'error';
+	};
+
 	const handleHistoryChange = (document: DrawingDocumentV2) => {
 		writeDraft((session) => session.compact(document));
 	};
@@ -682,7 +693,9 @@
 							{clearVersion}
 							{initialDrawingDocument}
 							interactive={studioUnlocked}
+							{inkLimits}
 							onHistoryChange={handleHistoryChange}
+							onOutOfInk={handleOutOfInk}
 							onStrokeCommitted={handleStrokeCommitted}
 							{statusMessage}
 							{statusTone}
@@ -762,6 +775,7 @@
 						mobile
 						{canRedo}
 						{canUndo}
+						inkUsed={ink.used}
 						{isPublishing}
 						onPublish={publishArtwork}
 						onClear={clearCanvas}
@@ -871,7 +885,9 @@
 								{clearVersion}
 								{initialDrawingDocument}
 								interactive={studioUnlocked}
+								{inkLimits}
 								onHistoryChange={handleHistoryChange}
+								onOutOfInk={handleOutOfInk}
 								onStrokeCommitted={handleStrokeCommitted}
 								{statusMessage}
 								{statusTone}
@@ -888,6 +904,7 @@
 					<DrawingToolTray
 						{canRedo}
 						{canUndo}
+						inkUsed={ink.used}
 						{isPublishing}
 						onPublish={publishArtwork}
 						onClear={clearCanvas}
