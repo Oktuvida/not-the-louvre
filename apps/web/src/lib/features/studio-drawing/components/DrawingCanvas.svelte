@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { on } from 'svelte/events';
 	import {
+		DEFAULT_DRAWING_DOCUMENT_LIMITS,
 		clampDrawingPoint,
 		cloneDrawingDocumentV2,
 		createEmptyDrawingDocumentV2,
@@ -11,6 +12,7 @@
 		type DrawingStroke
 	} from '#lib/features/stroke-json/document.js';
 	import { appendCommittedStroke } from '#lib/features/stroke-json/responsive-editing.js';
+	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
 	import {
 		attachPointerReleaseSafetyNet,
 		getCanvasContentRect,
@@ -39,9 +41,11 @@
 		drawingDocument = $bindable<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork')),
 		clearVersion = 0,
 		initialDrawingDocument = null,
+		inkLimits = {},
 		interactive = true,
 		onDocumentChange,
 		onHistoryChange,
+		onOutOfInk,
 		onStrokeCommitted,
 		statusMessage = '',
 		statusTone = 'idle'
@@ -50,6 +54,8 @@
 		drawingDocument?: DrawingDocumentV2;
 		clearVersion?: number;
 		initialDrawingDocument?: DrawingDocumentV2 | null;
+		/** The server's limits; the defaults unless a spec wants a small budget. */
+		inkLimits?: InkLimits;
 		interactive?: boolean;
 		/**
 		 * Observation channel only. The studio page reads the document through
@@ -59,6 +65,8 @@
 		onDocumentChange?: (document: DrawingDocumentV2) => void;
 		/** An undo or redo replaced the document (the draft has to follow it). */
 		onHistoryChange?: (document: DrawingDocumentV2) => void;
+		/** A line was refused or cut short because the drawing ran out of ink. */
+		onOutOfInk?: () => void;
 		onStrokeCommitted?: (input: {
 			nextDocument: DrawingDocumentV2;
 			previousDocument: DrawingDocumentV2;
@@ -92,6 +100,10 @@
 	let activePointerId: number | null = null;
 	let strokePointerType = '';
 	let strokeStartedAt = 0;
+	// What the line under the pen may still spend: points across the drawing,
+	// and new lines for carrying one past the most a single line may hold.
+	let pointsLeft = 0;
+	let strokesLeft = 0;
 
 	/*
 	 * Pen mode, as tldraw and Excalidraw do it: the first time a pen touches the
@@ -227,6 +239,15 @@
 			return;
 		}
 
+		const ink = measureInk(drawingDocument, inkLimits);
+		if (ink.remainingStrokes === 0 || ink.remainingPoints === 0) {
+			strokeRect = null;
+			onOutOfInk?.();
+			return;
+		}
+		pointsLeft = ink.remainingPoints - 1;
+		strokesLeft = ink.remainingStrokes - 1;
+
 		event.preventDefault();
 		canvasRef.setPointerCapture(event.pointerId);
 		activePointerId = event.pointerId;
@@ -257,7 +278,26 @@
 			if (!point || (lastPoint && point[0] === lastPoint[0] && point[1] === lastPoint[1])) {
 				continue;
 			}
+
+			// Past the most one line may hold, the line goes on as a new one from
+			// the same spot, so the visitor never sees the seam.
+			if (wetStroke.points.length >= maxPointsPerStroke() && strokesLeft > 0 && pointsLeft > 1) {
+				const carried: DrawingPoint = wetStroke.points.at(-1)!;
+				keepStroke(wetStroke);
+				wetStroke = { ...wetStroke, points: [carried] };
+				strokesLeft -= 1;
+				pointsLeft -= 1;
+			}
+
+			if (pointsLeft === 0 || wetStroke.points.length >= maxPointsPerStroke()) {
+				// Out of ink: keep what was drawn, take nothing more from this press.
+				finishDrawing();
+				onOutOfInk?.();
+				return;
+			}
+
 			wetStroke.points.push(point);
+			pointsLeft -= 1;
 		}
 
 		const predicted = (event.getPredictedEvents?.() ?? [])
@@ -278,8 +318,14 @@
 		activePointerId = null;
 		strokeRect = null;
 		surface?.wet(null);
-		if (!stroke) return;
+		if (stroke) keepStroke(stroke);
+	}
 
+	const maxPointsPerStroke = () =>
+		inkLimits.maxPointsPerStroke ?? DEFAULT_DRAWING_DOCUMENT_LIMITS.maxPointsPerStroke;
+
+	/** Adds a finished line to the document, the dry layer and the draft. */
+	function keepStroke(stroke: DrawingStroke) {
 		const previousDocument = drawingDocument;
 		const nextDocument = appendCommittedStroke(previousDocument, stroke);
 		redoStack = [];
