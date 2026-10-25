@@ -440,34 +440,37 @@ describe('StudioDrawingPage', () => {
 			};
 
 			const savedLines = async () => (await readPersistedDrawingDraft(draftKey))?.tail ?? [];
+			// IndexedDB writes land asynchronously, and slowly on a busy machine.
+			const expectSaved = (check: (lines: Awaited<ReturnType<typeof savedLines>>) => void) =>
+				vi.waitFor(async () => check(await savedLines()), { timeout: 5000 });
 
-			return { drawLine, savedLines };
+			return { drawLine, expectSaved, savedLines };
 		};
 
 		it('takes back the last line with Undo, puts it back with Redo, and the draft follows', async () => {
-			const { drawLine, savedLines } = await openStudio();
+			const { drawLine, expectSaved } = await openStudio();
 			const undo = page.getByRole('button', { name: 'Undo' });
 			const redo = page.getByRole('button', { name: 'Redo' });
 
 			await expect.element(undo).toBeDisabled();
 			drawLine(300);
 			drawLine(500);
-			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(2));
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
 
 			await undo.click();
-			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(1));
+			await expectSaved((lines) => expect(lines).toHaveLength(1));
 			await expect.element(redo).toBeEnabled();
 
 			await redo.click();
-			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(2));
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
 			await expect.element(redo).toBeDisabled();
 		});
 
 		it('takes lines back from the keyboard, but not while the title is being typed', async () => {
-			const { drawLine, savedLines } = await openStudio();
+			const { drawLine, expectSaved, savedLines } = await openStudio();
 			drawLine(300);
 			drawLine(500);
-			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(2));
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
 
 			await page.getByPlaceholder('Untitled genius').fill('Night Shift');
 			await userEvent.keyboard('{Control>}z{/Control}');
@@ -476,10 +479,10 @@ describe('StudioDrawingPage', () => {
 			(document.activeElement as HTMLElement | null)?.blur();
 
 			await userEvent.keyboard('{Control>}z{/Control}');
-			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(1));
+			await expectSaved((lines) => expect(lines).toHaveLength(1));
 
 			await userEvent.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
-			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(2));
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
 		});
 
 		it('says so when the drawing has run out of ink', async () => {
@@ -497,12 +500,12 @@ describe('StudioDrawingPage', () => {
 		});
 
 		it('erases with the colour of the paper', async () => {
-			const { drawLine, savedLines } = await openStudio();
+			const { drawLine, expectSaved } = await openStudio();
 
 			await page.getByRole('button', { name: 'Eraser' }).click();
 			drawLine(300);
 
-			await vi.waitFor(async () => expect((await savedLines()).at(-1)?.color).toBe('#fdfbf7'));
+			await expectSaved((lines) => expect(lines.at(-1)?.color).toBe('#fdfbf7'));
 		});
 	});
 

@@ -1,10 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
 	getRenderableDrawingStrokes,
-	createEmptyDrawingDocumentV2,
-	parseVersionedDrawingDocument,
-	serializeDrawingDocument,
-	type DrawingDocumentV2
+	parseVersionedDrawingDocument
 } from '../lib/features/stroke-json/document';
 import {
 	deterministicAuthUser,
@@ -206,92 +203,6 @@ const readDrawingDraftEntries = async (
 		}
 	}, surface);
 
-const writeIndexedDbDrawingDraftEntry = async (
-	page: import('@playwright/test').Page,
-	input: { key: string; value: string }
-) =>
-	page.evaluate(async ({ key, value }) => {
-		const openDatabase = () =>
-			new Promise<IDBDatabase>((resolve, reject) => {
-				const request = indexedDB.open('drawing-drafts');
-				request.onsuccess = () => resolve(request.result);
-				request.onerror = () =>
-					reject(request.error ?? new Error('Failed to open drawing drafts database'));
-			});
-
-		const waitForRequest = <T>(request: IDBRequest<T>) =>
-			new Promise<T>((resolve, reject) => {
-				request.onsuccess = () => resolve(request.result);
-				request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
-			});
-
-		const waitForTransaction = (transaction: IDBTransaction) =>
-			new Promise<void>((resolve, reject) => {
-				transaction.oncomplete = () => resolve();
-				transaction.onabort = () =>
-					reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
-				transaction.onerror = () =>
-					reject(transaction.error ?? new Error('IndexedDB transaction failed'));
-			});
-
-		const database = await openDatabase();
-
-		try {
-			const parsedDocument = JSON.parse(value) as DrawingDocumentV2;
-			const transaction = database.transaction(['snapshots', 'journal'], 'readwrite');
-			transaction.objectStore('snapshots').put({
-				draftKey: key,
-				document: parsedDocument,
-				updatedAt: Date.now()
-			});
-
-			const journalStore = transaction.objectStore('journal');
-			const journalIndex = journalStore.index('by-draft-sequence');
-			const range = IDBKeyRange.bound([key, 0], [key, Number.MAX_SAFE_INTEGER]);
-			const journalRecords = (await waitForRequest(journalIndex.getAll(range))) as Array<{
-				entryId?: number;
-			}>;
-			for (const journalRecord of journalRecords) {
-				if (typeof journalRecord.entryId === 'number') {
-					journalStore.delete(journalRecord.entryId);
-				}
-			}
-
-			await waitForTransaction(transaction);
-		} finally {
-			database.close();
-		}
-	}, input);
-
-const beginDenseStroke = async (
-	page: import('@playwright/test').Page,
-	canvas: import('@playwright/test').Locator,
-	pointCount = 12
-) => {
-	const box = await canvas.boundingBox();
-	if (!box) {
-		throw new Error('Expected the drawing canvas to expose a bounding box');
-	}
-
-	const points = Array.from({ length: pointCount }, (_, index) => ({
-		x: box.x + 120 + index * 3,
-		y: box.y + 160 + index * 3
-	}));
-	const [startPoint, ...remainingPoints] = points;
-	if (!startPoint) {
-		throw new Error('Expected a non-empty dense stroke path');
-	}
-
-	await page.mouse.move(startPoint.x, startPoint.y);
-	await page.mouse.down();
-
-	for (const point of remainingPoints) {
-		await page.mouse.move(point.x, point.y);
-	}
-
-	return points.length;
-};
-
 const buildDenseStrokePath = (box: { height: number; width: number; x: number; y: number }) => {
 	const verticalPattern = [0.24, 0.68, 0.34, 0.76, 0.44, 0.62];
 	const vertexCount = 30;
@@ -328,30 +239,6 @@ const drawRepeatedDenseStroke = async (
 
 		await page.mouse.up();
 	}
-};
-
-const createCompactionCandidateDraft = (
-	surface: 'artwork' | 'avatar',
-	strokeCount = 45,
-	pointsPerStroke = 30
-): DrawingDocumentV2 => {
-	const document = createEmptyDrawingDocumentV2(surface);
-	const verticalPattern = [0.24, 0.68, 0.34, 0.76, 0.44, 0.62];
-	const points = Array.from({ length: pointsPerStroke }, (_, index) => {
-		return [
-			Math.round(document.width * (0.12 + (0.76 * index) / (pointsPerStroke - 1))),
-			Math.round(document.height * verticalPattern[index % verticalPattern.length]!)
-		] as [number, number];
-	});
-
-	return {
-		...document,
-		tail: Array.from({ length: strokeCount }, () => ({
-			color: surface === 'avatar' ? '#6b8e7f' : '#2d2420',
-			points,
-			size: surface === 'avatar' ? 6 : 8
-		}))
-	};
 };
 
 test.describe('Not the Louvre frontend port', () => {
@@ -502,7 +389,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByText('I Stored It').click();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 
-		const avatarCanvas = page.locator('canvas[width="340"][height="340"]').first();
+		const avatarCanvas = page.getByLabel('Avatar drawing canvas');
 		// The pad takes strokes once the local draft has loaded.
 		await expect(avatarCanvas).toHaveAttribute('aria-disabled', 'false');
 		await drawRepeatedDenseStroke(page, avatarCanvas, 3);
@@ -554,84 +441,6 @@ test.describe('Not the Louvre frontend port', () => {
 		const published = parseVersionedDrawingDocument(request?.drawingDocument ?? '');
 		expect(published.kind).toBe('artwork');
 		expect(getRenderableDrawingStrokes(published)).toHaveLength(3);
-	});
-
-	// Quarantined 2026-10-23: the responsive canvas and draft buffering it pins drifted
-	// in the audit waves; the studio input pipeline is rebuilt in phase 4.
-	test.fixme('avatar onboarding buffers dense drawing over a large hydrated draft until stroke commit', async ({
-		page
-	}) => {
-		const strokeCount = 45;
-		const seededAvatarDraft = createCompactionCandidateDraft('avatar', strokeCount);
-		const seededAvatarDraftRaw = serializeDrawingDocument(seededAvatarDraft);
-
-		await enableReducedMotion(page);
-		await installAvatarExportHarness(page);
-
-		await openHomeAuthOverlay(page);
-		await page.getByRole('button', { name: 'Sign up' }).click();
-		await page.getByPlaceholder('artist_123').fill(deterministicAuthUser.nickname);
-		await page.getByPlaceholder('Enter your password').fill(deterministicAuthUser.password);
-		await page.getByRole('button', { name: 'Start account' }).click();
-		await page.getByText('I Stored It').click();
-		await expect(page.getByText('Finish your avatar')).toBeVisible();
-
-		await expect
-			.poll(
-				async () => {
-					const entries = await readDrawingDraftEntries(page, 'avatar');
-					return entries.length === 1 ? entries : null;
-				},
-				{ timeout: 10000 }
-			)
-			.not.toBeNull();
-
-		const avatarDraftKey = (await readDrawingDraftEntries(page, 'avatar'))[0]?.key;
-		if (!avatarDraftKey) {
-			throw new Error('Expected the avatar flow to persist a draft key');
-		}
-
-		await writeIndexedDbDrawingDraftEntry(page, {
-			key: avatarDraftKey,
-			value: seededAvatarDraftRaw
-		});
-		await page.reload();
-		await expect(page.getByText('Finish your avatar')).toBeVisible();
-
-		const avatarCanvas = page
-			.locator('canvas[width="340"][height="340"][data-responsive-mode="active"]')
-			.first();
-		await expect(avatarCanvas).toBeVisible();
-		await expect
-			.poll(async () => (await readDrawingDraftEntries(page, 'avatar'))[0]?.value ?? null)
-			.toBe(seededAvatarDraftRaw);
-
-		await beginDenseStroke(page, avatarCanvas, 12);
-		expect((await readDrawingDraftEntries(page, 'avatar'))[0]?.value).toBe(seededAvatarDraftRaw);
-
-		await page.mouse.up();
-
-		await expect
-			.poll(
-				async () => {
-					const rawDraft = (await readDrawingDraftEntries(page, 'avatar'))[0]?.value;
-					if (!rawDraft || rawDraft === seededAvatarDraftRaw) {
-						return null;
-					}
-
-					const parsedDraft = parseVersionedDrawingDocument(rawDraft);
-					if (parsedDraft.version !== 2) {
-						return null;
-					}
-
-					return {
-						lastStrokePointCount: parsedDraft.tail.at(-1)?.points.length ?? null,
-						strokeCount: parsedDraft.tail.length
-					};
-				},
-				{ timeout: 10000 }
-			)
-			.toEqual({ lastStrokePointCount: 12, strokeCount: strokeCount + 1 });
 	});
 
 	test('avatar save failure stays in onboarding and retry can complete the flow', async ({

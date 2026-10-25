@@ -15,7 +15,7 @@ import {
 	serializeDrawingDocument,
 	type DrawingStroke
 } from './document';
-import { appendCommittedStroke as appendCommittedStrokeToEditable } from './responsive-editing';
+import { appendCommittedStroke as appendCommittedStrokeToEditable } from './document';
 
 const TEST_DATABASE_NAME = 'stroke-json-drafts-spec';
 const SNAPSHOT_STORE = 'snapshots';

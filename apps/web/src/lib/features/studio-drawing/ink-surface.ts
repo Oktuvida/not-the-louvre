@@ -58,9 +58,17 @@ export type InkSurface = {
 
 type Cursor = { color: string; point: DrawingPoint; ring: boolean; size: number };
 
+export type InkSurfaceOptions = {
+	/** The paper shown under the strokes, if not the document's background. */
+	paper?: string;
+	/** Paints guides over the paper, in document pixels; never part of the drawing. */
+	decorate?: (context: CanvasRenderingContext2D) => void;
+};
+
 export const createInkSurface = (
 	canvas: HTMLCanvasElement,
-	overlay: HTMLCanvasElement
+	overlay: HTMLCanvasElement,
+	options: InkSurfaceOptions = {}
 ): InkSurface => {
 	const dry = document.createElement('canvas');
 	const checkpoint = document.createElement('canvas');
@@ -107,8 +115,14 @@ export const createInkSurface = (
 		const strokes = getRenderableDrawingStrokes(shown);
 		checkpointCount = Math.max(0, strokes.length - CHEAP_UNDO_DEPTH);
 		context.setTransform(1, 0, 0, 1, 0, 0);
-		context.fillStyle = shown.background;
+		context.fillStyle = options.paper ?? shown.background;
 		context.fillRect(0, 0, checkpoint.width, checkpoint.height);
+		if (options.decorate) {
+			useDocumentSpace(context, checkpoint);
+			context.save();
+			options.decorate(context);
+			context.restore();
+		}
 		drawStrokes(checkpoint, strokes.slice(0, checkpointCount));
 		paintDryFromCheckpoint();
 	};

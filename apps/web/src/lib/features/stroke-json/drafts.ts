@@ -5,7 +5,7 @@ import {
 	type DrawingDocumentV2,
 	type DrawingStroke
 } from './document';
-import { appendCommittedStroke as appendCommittedStrokeToDocument } from './responsive-editing';
+import { appendCommittedStroke as appendCommittedStrokeToDocument } from './document';
 
 type DraftKeyInput = {
 	schemaVersion: number;
