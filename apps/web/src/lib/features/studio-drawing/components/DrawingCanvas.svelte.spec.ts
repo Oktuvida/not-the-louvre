@@ -33,8 +33,12 @@ const renderCanvas = async (
 ) => {
 	const committed: DrawingStroke[] = [];
 	const documents: DrawingDocumentV2[] = [];
+	let controls: { redo(): boolean; undo(): boolean } | undefined;
 
 	await render(DrawingCanvasHarness, {
+		onControls: (handle: NonNullable<typeof controls>) => {
+			controls = handle;
+		},
 		onDocumentChange: (document: DrawingDocumentV2) => {
 			documents.push(document);
 		},
@@ -100,7 +104,12 @@ const renderCanvas = async (
 		return [data[0], data[1], data[2]];
 	};
 
-	return { at, canvas, colourAt, committed, documents, draw, pointer };
+	const history = {
+		redo: () => controls!.redo(),
+		undo: () => controls!.undo()
+	};
+
+	return { at, canvas, colourAt, committed, documents, draw, history, pointer };
 };
 
 describe('DrawingCanvas', () => {
@@ -309,5 +318,60 @@ describe('DrawingCanvas', () => {
 			[24, 24],
 			[80, 80]
 		]);
+	});
+
+	it('takes the last line off the canvas and puts it back', async () => {
+		const { colourAt, documents, draw, history } = await renderCanvas();
+		draw([100, 300], [600, 300]);
+		draw([100, 500], [600, 500]);
+		await vi.waitFor(() => expect(colourAt(350, 500)).toEqual(INK));
+
+		expect(history.undo()).toBe(true);
+		await vi.waitFor(() => expect(colourAt(350, 500)).toEqual(BACKGROUND));
+		expect(colourAt(350, 300)).toEqual(INK);
+		expect(documents.at(-1)?.tail).toHaveLength(1);
+
+		expect(history.redo()).toBe(true);
+		await vi.waitFor(() => expect(colourAt(350, 500)).toEqual(INK));
+		expect(documents.at(-1)?.tail).toHaveLength(2);
+		expect(history.redo()).toBe(false);
+	});
+
+	it('undoes far back through a long drawing and paints what is left exactly', async () => {
+		const { colourAt, documents, draw, history } = await renderCanvas();
+		for (let line = 0; line < 45; line += 1) {
+			draw([20, 20 + line * 16], [740, 20 + line * 16]);
+		}
+
+		for (let step = 0; step < 40; step += 1) history.undo();
+
+		await vi.waitFor(() => expect(colourAt(380, 20 + 5 * 16)).toEqual(BACKGROUND));
+		expect(colourAt(380, 20 + 4 * 16)).toEqual(INK);
+		expect(documents.at(-1)?.tail).toHaveLength(5);
+	});
+
+	it('forgets what could be redone once a new line is drawn', async () => {
+		const { documents, draw, history } = await renderCanvas();
+		draw([100, 300], [600, 300]);
+		history.undo();
+
+		draw([100, 500], [600, 500]);
+
+		expect(history.redo()).toBe(false);
+		expect(documents.at(-1)?.tail).toHaveLength(1);
+	});
+
+	it('never undoes the drawing it was opened with', async () => {
+		const { documents, draw, history } = await renderCanvas({
+			initialDrawingDocument: seededDocument([
+				[24, 24],
+				[200, 200]
+			])
+		});
+		draw([100, 300], [600, 300]);
+
+		expect(history.undo()).toBe(true);
+		expect(history.undo()).toBe(false);
+		expect(documents.at(-1)?.tail).toHaveLength(1);
 	});
 });

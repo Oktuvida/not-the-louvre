@@ -1,4 +1,4 @@
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { PAGE_FADE_DURATION_MS } from '#lib/features/shared-ui/page-fade.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
@@ -19,6 +19,7 @@ import {
 	buildDrawingDraftKey,
 	createIndexedDbDrawingDraftStore
 } from '#lib/features/stroke-json/drafts.js';
+import { drawingTools } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 import StudioDrawingPage from './StudioDrawingPage.svelte';
 
 const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
@@ -158,6 +159,8 @@ describe('StudioDrawingPage', () => {
 		);
 		window.localStorage.clear();
 		await resetDrawingDraftDatabase();
+		// The brush and eraser are shared studio state; every test starts with the brush.
+		drawingTools.tool = 'brush';
 	});
 
 	it('preloads the studio background image', async () => {
@@ -398,6 +401,94 @@ describe('StudioDrawingPage', () => {
 			title: 'My First Piece'
 		});
 		expect(replaceStudioUrl).not.toHaveBeenCalled();
+	});
+
+	describe('taking lines back', () => {
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: DRAWING_DOCUMENT_V2_VERSION,
+			scope: 'new',
+			surface: 'artwork',
+			userKey: 'journey_artist'
+		});
+
+		const openStudio = async () => {
+			await render(StudioDrawingPage, {
+				openingDurationMs: 1,
+				user: { nickname: 'journey_artist' }
+			});
+			await openSketchbook();
+			// The canvas takes strokes once the local draft has loaded.
+			await expect
+				.element(page.getByLabelText('Drawing canvas'))
+				.toHaveAttribute('aria-disabled', 'false');
+
+			const canvas = page.getByLabelText('Drawing canvas').element() as HTMLCanvasElement;
+			vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+			vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+			vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+
+			const drawLine = (y: number) => {
+				const rect = canvas.getBoundingClientRect();
+				const at = (x: number) => ({
+					clientX: rect.left + (x / 768) * rect.width,
+					clientY: rect.top + (y / 768) * rect.height
+				});
+				canvas.dispatchEvent(createPointerEvent('pointerdown', at(100)));
+				canvas.dispatchEvent(createPointerEvent('pointermove', at(600)));
+				canvas.dispatchEvent(createPointerEvent('pointerup', { ...at(600), buttons: 0 }));
+			};
+
+			const savedLines = async () => (await readPersistedDrawingDraft(draftKey))?.tail ?? [];
+
+			return { drawLine, savedLines };
+		};
+
+		it('takes back the last line with Undo, puts it back with Redo, and the draft follows', async () => {
+			const { drawLine, savedLines } = await openStudio();
+			const undo = page.getByRole('button', { name: 'Undo' });
+			const redo = page.getByRole('button', { name: 'Redo' });
+
+			await expect.element(undo).toBeDisabled();
+			drawLine(300);
+			drawLine(500);
+			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(2));
+
+			await undo.click();
+			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(1));
+			await expect.element(redo).toBeEnabled();
+
+			await redo.click();
+			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(2));
+			await expect.element(redo).toBeDisabled();
+		});
+
+		it('takes lines back from the keyboard, but not while the title is being typed', async () => {
+			const { drawLine, savedLines } = await openStudio();
+			drawLine(300);
+			drawLine(500);
+			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(2));
+
+			await page.getByPlaceholder('Untitled genius').fill('Night Shift');
+			await userEvent.keyboard('{Control>}z{/Control}');
+			expect(page.getByRole('button', { name: 'Redo' }).element()).toBeDisabled();
+			expect(await savedLines()).toHaveLength(2);
+			(document.activeElement as HTMLElement | null)?.blur();
+
+			await userEvent.keyboard('{Control>}z{/Control}');
+			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(1));
+
+			await userEvent.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(2));
+		});
+
+		it('erases with the colour of the paper', async () => {
+			const { drawLine, savedLines } = await openStudio();
+
+			await page.getByRole('button', { name: 'Eraser' }).click();
+			drawLine(300);
+
+			await vi.waitFor(async () => expect((await savedLines()).at(-1)?.color).toBe('#fdfbf7'));
+		});
 	});
 
 	it('shows a retryable publish error without leaving the draw route', async () => {

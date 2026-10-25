@@ -26,6 +26,7 @@
 		initialDrawingDocument = null,
 		interactive = true,
 		onDocumentChange,
+		onHistoryChange,
 		onStrokeCommitted,
 		statusMessage = '',
 		statusTone = 'idle'
@@ -41,6 +42,8 @@
 		 * spec and to anything else that only needs to watch.
 		 */
 		onDocumentChange?: (document: DrawingDocumentV2) => void;
+		/** An undo or redo replaced the document (the draft has to follow it). */
+		onHistoryChange?: (document: DrawingDocumentV2) => void;
 		onStrokeCommitted?: (input: {
 			nextDocument: DrawingDocumentV2;
 			previousDocument: DrawingDocumentV2;
@@ -53,6 +56,10 @@
 	let overlayRef = $state<HTMLCanvasElement | null>(null);
 	let surface: InkSurface | null = null;
 	let baselineDocument = createEmptyDrawingDocumentV2('artwork');
+	// Mirrors of what the history functions below report, kept as state so a
+	// parent reading them re-renders when they change.
+	let baselineStrokeCount = $state(0);
+	let redoCount = $state(0);
 	let lastAppliedClearVersion: number | null = null;
 	let lastHydratedInitialDocumentSeed: string | null | undefined = undefined;
 	// The document the dry layer is showing. Anything else arriving through the
@@ -65,6 +72,8 @@
 	 * pen lifts.
 	 */
 	let wetStroke: DrawingStroke | null = null;
+	// Lines taken back, latest last. A new line forgets them.
+	let redoStack: DrawingStroke[] = [];
 	let activePointerId: number | null = null;
 	// Laid out once per stroke: reading the box on every sample forces layout.
 	let strokeRect: ReturnType<typeof getCanvasContentRect> | null = null;
@@ -75,10 +84,58 @@
 		size: stroke.size
 	});
 
+	const syncHistory = () => {
+		baselineStrokeCount = baselineDocument.tail.length;
+		redoCount = redoStack.length;
+	};
+
+	/** Whether there is a line to take back (never the drawing it opened with). */
+	export const canUndo = () => drawingDocument.tail.length > baselineStrokeCount;
+
+	/** Whether there is a taken-back line to put back. */
+	export const canRedo = () => redoCount > 0;
+
 	const commitDrawingDocument = (nextDocument: DrawingDocumentV2) => {
 		drawingDocument = nextDocument;
 		onDocumentChange?.(cloneDrawingDocumentV2(nextDocument));
 	};
+
+	/** Commits a document this canvas painted itself, so it is not painted again. */
+	const commitShownDocument = (nextDocument: DrawingDocumentV2) => {
+		commitDrawingDocument(nextDocument);
+		// Read back rather than kept: a bound document comes back as the
+		// parent's state proxy, which is never `===` the object assigned.
+		shownDocument = drawingDocument;
+		syncHistory();
+	};
+
+	/*
+	 * Undo takes back the latest line this session drew, never the drawing the
+	 * canvas was opened with (a fork's parent, a restored draft's start). It
+	 * does nothing mid-stroke.
+	 */
+	export function undo() {
+		if (wetStroke || drawingDocument.tail.length <= baselineDocument.tail.length) return false;
+
+		const nextDocument = cloneDrawingDocumentV2(drawingDocument);
+		const stroke = nextDocument.tail.pop()!;
+		redoStack.push(stroke);
+		surface?.rewind(nextDocument);
+		commitShownDocument(nextDocument);
+		onHistoryChange?.(cloneDrawingDocumentV2(nextDocument));
+		return true;
+	}
+
+	export function redo() {
+		const stroke = wetStroke ? undefined : redoStack.pop();
+		if (!stroke) return false;
+
+		const nextDocument = appendCommittedStroke(drawingDocument, stroke);
+		surface?.append(nextDocument, stroke);
+		commitShownDocument(nextDocument);
+		onHistoryChange?.(cloneDrawingDocumentV2(nextDocument));
+		return true;
+	}
 
 	const toDocumentPoint = (position: { clientX: number; clientY: number }) =>
 		strokeRect ? getDrawingPointInRect(strokeRect, position, drawingDocument) : null;
@@ -92,6 +149,10 @@
 		return point ? clampDrawingPoint(point, drawingDocument) : null;
 	};
 
+	// The eraser lays down paper: the published image is painted the same way.
+	const strokeColor = () =>
+		drawingTools.tool === 'eraser' ? drawingDocument.background : drawingTools.activeColor;
+
 	const showCursor = (event: PointerEvent) => {
 		if (!canvasRef || !interactive) return;
 		const point = getDrawingPointInRect(
@@ -99,10 +160,10 @@
 			event,
 			drawingDocument
 		);
-		surface?.cursor(point, drawingTools.activeColor, drawingTools.brushSize);
+		surface?.cursor(point, strokeColor(), drawingTools.brushSize, drawingTools.tool === 'eraser');
 	};
 
-	const hideCursor = () => surface?.cursor(null, '', 0);
+	const hideCursor = () => surface?.cursor(null, '', 0, false);
 
 	function startDrawing(event: PointerEvent) {
 		if (!interactive || !canvasRef || !event.isPrimary || activePointerId !== null) return;
@@ -117,7 +178,7 @@
 		event.preventDefault();
 		canvasRef.setPointerCapture(event.pointerId);
 		activePointerId = event.pointerId;
-		wetStroke = { color: drawingTools.activeColor, points: [point], size: drawingTools.brushSize };
+		wetStroke = { color: strokeColor(), points: [point], size: drawingTools.brushSize };
 		surface?.wet(wetStroke);
 	}
 
@@ -167,11 +228,9 @@
 
 		const previousDocument = drawingDocument;
 		const nextDocument = appendCommittedStroke(previousDocument, stroke);
-		surface?.dryStroke(stroke);
-		commitDrawingDocument(nextDocument);
-		// Read back rather than kept: a bound document comes back as the
-		// parent's state proxy, which is never `===` the object assigned.
-		shownDocument = drawingDocument;
+		redoStack = [];
+		surface?.append(nextDocument, stroke);
+		commitShownDocument(nextDocument);
 		void onStrokeCommitted?.({
 			nextDocument: cloneDrawingDocumentV2(nextDocument),
 			previousDocument: cloneDrawingDocumentV2(previousDocument),
@@ -219,7 +278,9 @@
 		if (!surface || next === shownDocument) return;
 
 		shownDocument = next;
+		redoStack = [];
 		surface.showDocument(next);
+		syncHistory();
 	});
 
 	onMount(() => {

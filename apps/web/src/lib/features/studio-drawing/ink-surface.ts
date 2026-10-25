@@ -18,11 +18,17 @@ import {
  *   matter how big the drawing is.
  * - The overlay carries what is not ink: where the pen is predicted to go
  *   next, and the brush cursor. It is cleared every frame.
+ * - The checkpoint is the dry layer as it was some strokes back. Undoing
+ *   repaints from it rather than from the first stroke, so taking back a line
+ *   costs the same in a five-line sketch and in a hundred-thousand-point one.
  *
  * Every layer is backed at the screen's own pixel density (capped), and
  * strokes are drawn in document pixels through a transform, so the same
  * drawing is sharp on a phone and identical in what it records.
  */
+
+/** How many of the latest strokes can be undone without painting the whole drawing. */
+export const CHEAP_UNDO_DEPTH = 30;
 
 /** A 2048² backing store is 16 MiB; past that, memory costs more than sharpness buys. */
 export const MAX_BACKING_STORE_PIXELS = 2048;
@@ -36,23 +42,31 @@ export type InkSurface = {
 	resize(cssWidth: number, cssHeight: number, devicePixelRatio: number): void;
 	/** Paints the dry layer from a whole document. */
 	showDocument(document: DrawingDocumentV2): void;
-	/** Lays a finished stroke onto the dry layer, on top of the rest. */
-	dryStroke(stroke: DrawingStroke): void;
+	/** `document` is the one shown plus `stroke` at the end: lays only that stroke. */
+	append(document: DrawingDocumentV2, stroke: DrawingStroke): void;
+	/**
+	 * `document` is the one shown with strokes taken off its end (an undo):
+	 * repaints from the checkpoint instead of from the first stroke.
+	 */
+	rewind(document: DrawingDocumentV2): void;
 	/** The stroke under the pen, and the points it is predicted to reach next. */
 	wet(stroke: DrawingStroke | null, predicted?: DrawingPoint[]): void;
-	/** The brush cursor at a document point, or none. */
-	cursor(point: DrawingPoint | null, color: string, size: number): void;
+	/** The brush cursor at a document point, or none; the eraser's is a ring. */
+	cursor(point: DrawingPoint | null, color: string, size: number, ring: boolean): void;
 	destroy(): void;
 };
 
-type Cursor = { color: string; point: DrawingPoint; size: number };
+type Cursor = { color: string; point: DrawingPoint; ring: boolean; size: number };
 
 export const createInkSurface = (
 	canvas: HTMLCanvasElement,
 	overlay: HTMLCanvasElement
 ): InkSurface => {
 	const dry = document.createElement('canvas');
+	const checkpoint = document.createElement('canvas');
 	let shown: DrawingDocumentV2 | null = null;
+	// How many of the shown document's strokes the checkpoint holds.
+	let checkpointCount = 0;
 	let wetStroke: DrawingStroke | null = null;
 	let predicted: DrawingPoint[] = [];
 	let cursor: Cursor | null = null;
@@ -67,17 +81,36 @@ export const createInkSurface = (
 		context.setTransform(target.width / width, 0, 0, target.height / height, 0, 0);
 	};
 
-	const paintDry = () => {
+	const drawStrokes = (target: HTMLCanvasElement, strokes: DrawingStroke[]) => {
+		const context = contextOf(target);
+		if (!context) return;
+
+		useDocumentSpace(context, target);
+		for (const stroke of strokes) renderDrawingStroke(context, stroke);
+	};
+
+	/** The dry layer is the checkpoint plus every stroke drawn since it. */
+	const paintDryFromCheckpoint = () => {
 		const context = contextOf(dry);
 		if (!context || !shown) return;
 
 		context.setTransform(1, 0, 0, 1, 0, 0);
+		context.drawImage(checkpoint, 0, 0);
+		drawStrokes(dry, getRenderableDrawingStrokes(shown).slice(checkpointCount));
+	};
+
+	/** Paints the whole drawing, leaving the checkpoint the cheap undos behind. */
+	const paintDry = () => {
+		const context = contextOf(checkpoint);
+		if (!context || !shown) return;
+
+		const strokes = getRenderableDrawingStrokes(shown);
+		checkpointCount = Math.max(0, strokes.length - CHEAP_UNDO_DEPTH);
+		context.setTransform(1, 0, 0, 1, 0, 0);
 		context.fillStyle = shown.background;
-		context.fillRect(0, 0, dry.width, dry.height);
-		useDocumentSpace(context, dry);
-		for (const stroke of getRenderableDrawingStrokes(shown)) {
-			renderDrawingStroke(context, stroke);
-		}
+		context.fillRect(0, 0, checkpoint.width, checkpoint.height);
+		drawStrokes(checkpoint, strokes.slice(0, checkpointCount));
+		paintDryFromCheckpoint();
 	};
 
 	const paint = () => {
@@ -107,10 +140,17 @@ export const createInkSurface = (
 
 		if (cursor) {
 			overlayContext.globalAlpha = 0.6;
-			overlayContext.fillStyle = cursor.color;
 			overlayContext.beginPath();
 			overlayContext.arc(cursor.point[0], cursor.point[1], cursor.size / 2, 0, Math.PI * 2);
-			overlayContext.fill();
+			if (cursor.ring) {
+				// Paper on paper is invisible: the eraser shows where it will rub.
+				overlayContext.strokeStyle = '#2d2420';
+				overlayContext.lineWidth = 1.5;
+				overlayContext.stroke();
+			} else {
+				overlayContext.fillStyle = cursor.color;
+				overlayContext.fill();
+			}
 			overlayContext.globalAlpha = 1;
 		}
 	};
@@ -126,7 +166,7 @@ export const createInkSurface = (
 			const height = backingStoreSize(cssHeight, devicePixelRatio);
 			if (canvas.width === width && canvas.height === height && dry.width === width) return;
 
-			for (const target of [canvas, overlay, dry]) {
+			for (const target of [canvas, overlay, dry, checkpoint]) {
 				target.width = width;
 				target.height = height;
 			}
@@ -138,12 +178,24 @@ export const createInkSurface = (
 			paintDry();
 			schedule();
 		},
-		dryStroke(stroke) {
-			const context = contextOf(dry);
-			if (!context) return;
+		append(next, stroke) {
+			shown = next;
+			drawStrokes(dry, [stroke]);
 
-			useDocumentSpace(context, dry);
-			renderDrawingStroke(context, stroke);
+			// Keep the checkpoint close behind: once the strokes past it are twice
+			// the cheap depth, bake all but the latest ones into it.
+			const strokes = getRenderableDrawingStrokes(next);
+			if (strokes.length - checkpointCount > CHEAP_UNDO_DEPTH * 2) {
+				const nextCount = strokes.length - CHEAP_UNDO_DEPTH;
+				drawStrokes(checkpoint, strokes.slice(checkpointCount, nextCount));
+				checkpointCount = nextCount;
+			}
+			schedule();
+		},
+		rewind(next) {
+			shown = next;
+			if (getRenderableDrawingStrokes(next).length < checkpointCount) paintDry();
+			else paintDryFromCheckpoint();
 			schedule();
 		},
 		wet(stroke, nextPredicted = []) {
@@ -151,8 +203,8 @@ export const createInkSurface = (
 			predicted = nextPredicted;
 			schedule();
 		},
-		cursor(point, color, size) {
-			cursor = point ? { color, point, size } : null;
+		cursor(point, color, size, ring) {
+			cursor = point ? { color, point, ring, size } : null;
 			schedule();
 		},
 		destroy() {

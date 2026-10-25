@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ImageUp, Palette, Trash2 } from 'lucide-svelte';
+	import { Eraser, ImageUp, Palette, Redo2, Trash2, Undo2 } from 'lucide-svelte';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import {
 		brushSizeSteps,
@@ -8,15 +8,23 @@
 	} from '#lib/features/studio-drawing/state/drawing.svelte.js';
 
 	let {
+		canRedo = false,
+		canUndo = false,
 		isPublishing = false,
 		mobile = false,
 		onPublish,
-		onClear
+		onClear,
+		onRedo,
+		onUndo
 	}: {
+		canRedo?: boolean;
+		canUndo?: boolean;
 		isPublishing?: boolean;
 		mobile?: boolean;
 		onPublish?: () => void;
 		onClear?: () => void;
+		onRedo?: () => void;
+		onUndo?: () => void;
 	} = $props();
 
 	const LIGHT_SWATCH_COLORS = new Set([
@@ -120,6 +128,38 @@
 		</div>
 	</div>
 
+	<!-- Eraser, and taking lines back -->
+	<div class="tray-tools">
+		<button
+			type="button"
+			class="tray-tool focus-ring"
+			class:tray-tool-active={drawingTools.tool === 'eraser'}
+			aria-pressed={drawingTools.tool === 'eraser'}
+			onclick={() => (drawingTools.tool = drawingTools.tool === 'eraser' ? 'brush' : 'eraser')}
+		>
+			<Eraser size={18} aria-hidden="true" />
+			<span>Eraser</span>
+		</button>
+		<button
+			type="button"
+			class="tray-tool focus-ring"
+			aria-label="Undo"
+			disabled={!canUndo}
+			onclick={onUndo}
+		>
+			<Undo2 size={18} aria-hidden="true" />
+		</button>
+		<button
+			type="button"
+			class="tray-tool focus-ring"
+			aria-label="Redo"
+			disabled={!canRedo}
+			onclick={onRedo}
+		>
+			<Redo2 size={18} aria-hidden="true" />
+		</button>
+	</div>
+
 	<div class="tray-sep" aria-hidden="true"></div>
 
 	<!-- Action buttons -->
@@ -153,6 +193,46 @@
 </div>
 
 <style>
+	.tray-tools {
+		display: flex;
+		gap: 8px;
+		margin-top: 14px;
+	}
+
+	.tray-tool {
+		display: inline-flex;
+		flex: 0 0 auto;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		min-width: 44px;
+		min-height: 44px;
+		padding: 0 12px;
+		border: 2px solid rgba(45, 36, 32, 0.35);
+		border-radius: 12px;
+		background: rgba(255, 255, 255, 0.55);
+		color: var(--color-ink-warm, #2d2420);
+		font-family: var(--font-display, inherit);
+		font-size: 0.85rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.tray-tool:first-child {
+		flex: 1 1 auto;
+	}
+
+	.tray-tool-active {
+		border-color: var(--color-ink-warm, #2d2420);
+		background: var(--color-ink-warm, #2d2420);
+		color: var(--color-paper-bright, #fdfbf7);
+	}
+
+	.tray-tool:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
+	}
+
 	/*
 	 * A scrap of studio paper: the paper itself is `.paper-sheet` +
 	 * `.paper-grain`, and how it is torn off and pinned down is here. The tray

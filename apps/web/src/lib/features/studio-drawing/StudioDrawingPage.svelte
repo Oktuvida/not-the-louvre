@@ -10,6 +10,7 @@
 	import {
 		buildDrawingDraftKey,
 		createDrawingDraftSession,
+		type DrawingDraftSession,
 		type IndexedDbDrawingDraftStore
 	} from '#lib/features/stroke-json/drafts.js';
 	import {
@@ -182,6 +183,14 @@
 	} = $props();
 
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
+	let canvasHistory = $state<{
+		canRedo(): boolean;
+		canUndo(): boolean;
+		redo(): boolean;
+		undo(): boolean;
+	}>();
+	const canRedo = $derived(canvasHistory?.canRedo() ?? false);
+	const canUndo = $derived(canvasHistory?.canUndo() ?? false);
 	let clearVersion = $state(0);
 	let currentForkParent = $state<DrawForkParent | null>(null);
 	let draftHydrated = $state(false);
@@ -457,21 +466,61 @@
 		fadeAndExitHome();
 	};
 
-	const handleStrokeCommitted = async (input: {
+	/*
+	 * Draft writes go out one at a time. A stroke's journal entry still being
+	 * written when an undo rewrites the snapshot would land after it, and the
+	 * undone line would come back on the next reload.
+	 */
+	let draftWrites = Promise.resolve();
+
+	const writeDraft = (write: (session: DrawingDraftSession) => Promise<unknown>) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) return;
+
+		draftWrites = draftWrites.then(async () => {
+			try {
+				await write(draftSession);
+				clearUnsavedDraftWarning();
+			} catch {
+				markUnsavedDraftWarning();
+			}
+		});
+	};
+
+	const handleStrokeCommitted = (input: {
 		nextDocument: DrawingDocumentV2;
 		previousDocument: DrawingDocumentV2;
 		stroke: DrawingStroke;
 	}) => {
-		const draftSession = createDraftSession(draftKey, legacyDraftKey);
-		if (!draftSession) {
-			return;
-		}
+		writeDraft((session) => session.appendCommittedStroke(input.previousDocument, input.stroke));
+	};
 
-		try {
-			await draftSession.appendCommittedStroke(input.previousDocument, input.stroke);
-			clearUnsavedDraftWarning();
-		} catch {
-			markUnsavedDraftWarning();
+	const handleHistoryChange = (document: DrawingDocumentV2) => {
+		writeDraft((session) => session.compact(document));
+	};
+
+	const undo = () => {
+		if (studioUnlocked) canvasHistory?.undo();
+	};
+
+	const redo = () => {
+		if (studioUnlocked) canvasHistory?.redo();
+	};
+
+	// Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (or Ctrl+Y), except while typing: the
+	// title field keeps its own undo.
+	const handleHistoryShortcut = (event: KeyboardEvent) => {
+		if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+		const key = event.key.toLowerCase();
+		if (key === 'z' && !event.shiftKey) {
+			event.preventDefault();
+			undo();
+		} else if ((key === 'z' && event.shiftKey) || key === 'y') {
+			event.preventDefault();
+			redo();
 		}
 	};
 
@@ -572,6 +621,8 @@
 	};
 </script>
 
+<svelte:window onkeydown={handleHistoryShortcut} />
+
 <svelte:head>
 	<!-- No title element here on purpose: the route contributes `meta.title`
 	from its load and the root layout renders the document's only one. -->
@@ -625,11 +676,13 @@
 				<div class="studio-mobile-canvas-shell">
 					<div class="studio-mobile-canvas-card" data-testid="studio-mobile-canvas-card">
 						<DrawingCanvas
+							bind:this={canvasHistory}
 							bind:canvasRef
 							bind:drawingDocument
 							{clearVersion}
 							{initialDrawingDocument}
 							interactive={studioUnlocked}
+							onHistoryChange={handleHistoryChange}
 							onStrokeCommitted={handleStrokeCommitted}
 							{statusMessage}
 							{statusTone}
@@ -705,7 +758,16 @@
 				</div>
 
 				<div class="studio-mobile-tools">
-					<DrawingToolTray mobile {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
+					<DrawingToolTray
+						mobile
+						{canRedo}
+						{canUndo}
+						{isPublishing}
+						onPublish={publishArtwork}
+						onClear={clearCanvas}
+						onRedo={redo}
+						onUndo={undo}
+					/>
 				</div>
 
 				{#if publishedArtwork}
@@ -803,11 +865,13 @@
 								</div>
 							{/snippet}
 							<DrawingCanvas
+								bind:this={canvasHistory}
 								bind:canvasRef
 								bind:drawingDocument
 								{clearVersion}
 								{initialDrawingDocument}
 								interactive={studioUnlocked}
+								onHistoryChange={handleHistoryChange}
 								onStrokeCommitted={handleStrokeCommitted}
 								{statusMessage}
 								{statusTone}
@@ -821,7 +885,15 @@
 					aria-hidden={!studioUnlocked}
 					inert={!studioUnlocked}
 				>
-					<DrawingToolTray {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
+					<DrawingToolTray
+						{canRedo}
+						{canUndo}
+						{isPublishing}
+						onPublish={publishArtwork}
+						onClear={clearCanvas}
+						onRedo={redo}
+						onUndo={undo}
+					/>
 
 					{#if publishedArtwork}
 						<div class="publish-postit">

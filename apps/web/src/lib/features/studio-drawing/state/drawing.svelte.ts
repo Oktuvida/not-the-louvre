@@ -32,16 +32,28 @@ export const brushSizeSteps = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 38, 45, 54
 
 export const drawingTools = createDrawingTools();
 
+export type DrawingTool = 'brush' | 'eraser';
+
 function createDrawingTools() {
 	let activeColor = $state(drawingPalette[3]);
 	let brushSizeIndex = $state(3);
+	let tool = $state<DrawingTool>('brush');
 
 	return {
 		get activeColor() {
 			return activeColor;
 		},
+		/** Picking a paint picks the brush up again. */
 		set activeColor(value: string) {
 			activeColor = value;
+			tool = 'brush';
+		},
+		/** The eraser paints with the paper's own colour, so it needs no colour of its own. */
+		get tool() {
+			return tool;
+		},
+		set tool(value: DrawingTool) {
+			tool = value;
 		},
 		get brushSize() {
 			return brushSizeSteps[brushSizeIndex];

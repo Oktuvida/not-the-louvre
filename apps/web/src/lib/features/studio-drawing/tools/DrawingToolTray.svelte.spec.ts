@@ -1,7 +1,7 @@
 import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { drawingPalette } from '#lib/features/studio-drawing/state/drawing.svelte.js';
+import { drawingPalette, drawingTools } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 // The paper is a global utility, which the browser project does not load for a
 // component under test; the tray's own sheet is what this spec is checking.
 import '../../../../routes/layout.css';
@@ -25,6 +25,36 @@ describe('DrawingToolTray', () => {
 
 		expect(onClear).toHaveBeenCalled();
 		expect(onPublish).toHaveBeenCalled();
+	});
+
+	it('offers undo and redo only when there is a line to take back or put back', async () => {
+		const onRedo = vi.fn();
+		const onUndo = vi.fn();
+		const tray = await render(DrawingToolTray, { canRedo: false, canUndo: false, onRedo, onUndo });
+
+		await expect.element(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+		await expect.element(page.getByRole('button', { name: 'Redo' })).toBeDisabled();
+
+		await tray.rerender({ canRedo: true, canUndo: true, onRedo, onUndo });
+		await page.getByRole('button', { name: 'Undo' }).click();
+		await page.getByRole('button', { name: 'Redo' }).click();
+
+		expect(onUndo).toHaveBeenCalledOnce();
+		expect(onRedo).toHaveBeenCalledOnce();
+	});
+
+	it('picks up the eraser, and a paint puts the brush back in hand', async () => {
+		await render(DrawingToolTray, {});
+		const eraser = page.getByRole('button', { name: 'Eraser' });
+
+		await expect.element(eraser).toHaveAttribute('aria-pressed', 'false');
+		await eraser.click();
+		await expect.element(eraser).toHaveAttribute('aria-pressed', 'true');
+		expect(drawingTools.tool).toBe('eraser');
+
+		await page.getByRole('button', { name: `Select color ${drawingPalette[4]}` }).click();
+		await expect.element(eraser).toHaveAttribute('aria-pressed', 'false');
+		expect(drawingTools.tool).toBe('brush');
 	});
 
 	it('disables publish while a publish request is in flight', async () => {
