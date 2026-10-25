@@ -98,9 +98,12 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 
 ### 4. Estudio v3 y timelapse
 
-- [ ] Entrada con eventos coalescidos y predichos, presión real solo de lápiz, modo lápiz y gestos de Procreate.
-- [ ] Capas seca y húmeda, lienzo según el DPR, zoom y pan, deshacer y borrador.
-- [ ] Barra de tinta, filtro de captura de ¼ px y forks por referencia a la imagen del padre.
+- [x] Entrada con eventos coalescidos y predichos, modo lápiz y gestos de Procreate: el trazo recoge todas las muestras que entrega el navegador y dibuja por delante con las predichas (sin guardarlas); el primer toque de un lápiz activa el modo lápiz (los dedos dejan de pintar, así que la palma no marca; un botón "Pen only" lo apaga); dos dedos deshacen, tres rehacen, y un segundo dedo inmediato cancela el trazo del primero. En iPad, un `touchstart` no pasivo apaga la lupa y el menú de pulsación larga. La presión real del lápiz llega con el formato v3.
+- [ ] Presión real solo de lápiz (con el formato v3).
+- [x] Capas seca y húmeda, lienzo según el DPR, zoom y pan, deshacer y borrador: un bitmap seco con los trazos terminados y el trazo húmedo encima, un solo pintado por frame y el documento solo cambia al levantar el lápiz. El lienzo pinta a la densidad de la pantalla (hasta 2048 px) y se vuelve a medir cuando el cuaderno termina sus transformaciones. Deshacer repinta desde un punto de control tomado 30 trazos atrás, así que cuesta lo mismo en un dibujo enorme; nunca deshace el dibujo con el que se abrió (el padre de un fork). La goma pinta con el color del papel, que el render del servidor dibuja igual sin cambiar el formato. Zoom con pellizco o trackpad, desplazamiento y "Fit canvas". El editor de avatar usa el mismo lienzo.
+- [x] Barra de tinta: el estudio mide lo que el servidor acepta (puntos, trazos, puntos por trazo y tamaño del JSON), avisa al 80 %, deja de aceptar trazos al 100 % y conserva el trazo que se queda sin tinta a medias; un trazo muy largo sigue como uno nuevo sin que se note.
+- [ ] Filtro de captura de ¼ px (con el formato v3) y forks por referencia a la imagen del padre (pendiente de la decisión abierta).
+- [x] Fuera de producción los ganchos de prueba de la exportación (`__drawingExportMode`, `__avatarExportMode`, `__ntlBypassClientContentFilters`) y fuera las dos e2e en cuarentena: las e2e dibujan trazos reales, los fallos de publicación se simulan interceptando la red, y el filtro de texto del cliente corre de verdad.
 - [ ] Escritor v3 (JSON columnar con deltas), pinceles versionados y golden images entre cliente y servidor.
 - [ ] Reproductor de timelapse y exportación a vídeo. Pruebas en iPad y Galaxy reales.
 
