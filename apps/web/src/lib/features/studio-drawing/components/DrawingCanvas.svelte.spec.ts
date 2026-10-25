@@ -501,4 +501,120 @@ describe('DrawingCanvas', () => {
 			expect(touchstart.defaultPrevented).toBe(true);
 		});
 	});
+
+	describe('zooming and panning', () => {
+		/** Client coordinates relative to the canvas frame, which does not zoom. */
+		const frame = (canvas: HTMLCanvasElement) =>
+			canvas.closest('[data-canvas-frame]')!.getBoundingClientRect();
+
+		const pinch = (
+			canvas: HTMLCanvasElement,
+			from: { centre: [number, number]; spread: number },
+			to: { centre: [number, number]; spread: number }
+		) => {
+			const box = frame(canvas);
+			const fingerAt = (centre: [number, number], spread: number, side: -1 | 1) => ({
+				clientX: box.left + centre[0] + (side * spread) / 2,
+				clientY: box.top + centre[1]
+			});
+			const event = (type: string, id: number, point: { clientX: number; clientY: number }) =>
+				new PointerEvent(type, {
+					bubbles: true,
+					buttons: type === 'pointerup' ? 0 : 1,
+					isPrimary: id === 21,
+					pointerId: id,
+					pointerType: 'touch',
+					...point
+				});
+
+			canvas.dispatchEvent(event('pointerdown', 21, fingerAt(from.centre, from.spread, -1)));
+			canvas.dispatchEvent(event('pointerdown', 22, fingerAt(from.centre, from.spread, 1)));
+			for (const step of [0.5, 1]) {
+				const centre: [number, number] = [
+					from.centre[0] + (to.centre[0] - from.centre[0]) * step,
+					from.centre[1] + (to.centre[1] - from.centre[1]) * step
+				];
+				const spread = from.spread + (to.spread - from.spread) * step;
+				canvas.dispatchEvent(event('pointermove', 21, fingerAt(centre, spread, -1)));
+				canvas.dispatchEvent(event('pointermove', 22, fingerAt(centre, spread, 1)));
+			}
+			canvas.dispatchEvent(event('pointerup', 21, fingerAt(to.centre, to.spread, -1)));
+			canvas.dispatchEvent(event('pointerup', 22, fingerAt(to.centre, to.spread, 1)));
+		};
+
+		it('zooms in around two fingers spreading apart', async () => {
+			const { canvas } = await renderCanvas();
+			const before = canvas.getBoundingClientRect();
+			// The document point under the fingers before the pinch.
+			const box = frame(canvas);
+			const underFingers = (rect: DOMRect) => (box.left + 192 - rect.left) / rect.width;
+			const pointBefore = underFingers(before);
+
+			pinch(canvas, { centre: [192, 192], spread: 100 }, { centre: [192, 192], spread: 200 });
+
+			await vi.waitFor(() =>
+				expect(canvas.getBoundingClientRect().width).toBeCloseTo(before.width * 2, 0)
+			);
+			expect(underFingers(canvas.getBoundingClientRect())).toBeCloseTo(pointBefore, 2);
+		});
+
+		it('lands a line drawn while zoomed in exactly where the pen is', async () => {
+			const { canvas, committed, draw } = await renderCanvas();
+			pinch(canvas, { centre: [192, 192], spread: 100 }, { centre: [192, 192], spread: 300 });
+			await vi.waitFor(() => expect(canvas.getBoundingClientRect().width).toBeGreaterThan(384 * 2));
+
+			draw([380, 380], [400, 390]);
+
+			expect(committed.at(-1)?.points).toEqual([
+				[380, 380],
+				[400, 390]
+			]);
+		});
+
+		it('fills the frame again when pinched in past the fit, or with Fit canvas', async () => {
+			const { canvas } = await renderCanvas();
+			pinch(canvas, { centre: [192, 192], spread: 100 }, { centre: [192, 192], spread: 250 });
+			await expect.element(page.getByRole('button', { name: 'Fit canvas' })).toBeVisible();
+
+			pinch(canvas, { centre: [192, 192], spread: 250 }, { centre: [192, 192], spread: 40 });
+			await vi.waitFor(() => expect(canvas.getBoundingClientRect().width).toBeCloseTo(384, 0));
+
+			pinch(canvas, { centre: [100, 100], spread: 100 }, { centre: [100, 100], spread: 250 });
+			await page.getByRole('button', { name: 'Fit canvas' }).click();
+			await vi.waitFor(() => expect(canvas.getBoundingClientRect().width).toBeCloseTo(384, 0));
+			await expect
+				.element(page.getByRole('button', { name: 'Fit canvas' }))
+				.not.toBeInTheDocument();
+		});
+
+		it('paints the extra pixels a zoomed-in canvas covers', async () => {
+			const { canvas } = await renderCanvas();
+			await vi.waitFor(() => expect(canvas.width).toBe(384));
+
+			pinch(canvas, { centre: [192, 192], spread: 100 }, { centre: [192, 192], spread: 300 });
+
+			await vi.waitFor(() => expect(canvas.width).toBe(1152));
+		});
+
+		it('zooms with a trackpad pinch', async () => {
+			const { canvas } = await renderCanvas();
+			const box = frame(canvas);
+
+			const wheel = new WheelEvent('wheel', {
+				bubbles: true,
+				cancelable: true,
+				clientX: box.left + 192,
+				clientY: box.top + 192,
+				ctrlKey: true,
+				deltaY: -50
+			});
+			canvas.dispatchEvent(wheel);
+
+			// The browser must not zoom the whole page as well.
+			expect(wheel.defaultPrevented).toBe(true);
+			await vi.waitFor(() =>
+				expect(canvas.getBoundingClientRect().width).toBeGreaterThan(384 * 1.2)
+			);
+		});
+	});
 });

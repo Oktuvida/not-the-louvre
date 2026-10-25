@@ -21,23 +21,29 @@ export type TouchGestureTracker = {
 	up(id: number, time: number): TouchGesture | null;
 	/** A finger the browser took over (a system gesture): the gesture is off. */
 	cancel(id: number): void;
+	/** Where every finger is now, in the order they landed. */
+	positions(): { x: number; y: number }[];
 };
 
 export const createTouchGestureTracker = (): TouchGestureTracker => {
-	const fingers = new Map<number, { x: number; y: number }>();
+	const fingers = new Map<number, { startX: number; startY: number; x: number; y: number }>();
 	let gesture: { fingers: number; moved: boolean; startedAt: number } | null = null;
 
 	return {
 		down(id, x, y, time) {
-			fingers.set(id, { x, y });
+			fingers.set(id, { startX: x, startY: y, x, y });
 			gesture ??= { fingers: 0, moved: false, startedAt: time };
 			gesture.fingers = Math.max(gesture.fingers, fingers.size);
 			return fingers.size;
 		},
 		move(id, x, y) {
-			const start = fingers.get(id);
-			if (!start || !gesture) return;
-			if (Math.hypot(x - start.x, y - start.y) > TAP_MAX_TRAVEL_PX) gesture.moved = true;
+			const finger = fingers.get(id);
+			if (!finger || !gesture) return;
+			finger.x = x;
+			finger.y = y;
+			if (Math.hypot(x - finger.startX, y - finger.startY) > TAP_MAX_TRAVEL_PX) {
+				gesture.moved = true;
+			}
 		},
 		up(id, time) {
 			if (!fingers.delete(id) || fingers.size > 0 || !gesture) return null;
@@ -46,6 +52,9 @@ export const createTouchGestureTracker = (): TouchGestureTracker => {
 			gesture = null;
 			if (moved || time - startedAt > TAP_MAX_MS) return null;
 			return count === 2 ? 'undo' : count === 3 ? 'redo' : null;
+		},
+		positions() {
+			return [...fingers.values()].map(({ x, y }) => ({ x, y }));
 		},
 		cancel(id) {
 			fingers.delete(id);

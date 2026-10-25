@@ -23,6 +23,16 @@
 		SECOND_FINGER_WINDOW_MS,
 		createTouchGestureTracker
 	} from '#lib/features/studio-drawing/touch-gestures.js';
+	import {
+		FIT_VIEW,
+		clampView,
+		pinchView,
+		settleView,
+		startPinch,
+		zoomAround,
+		type CanvasView,
+		type PinchStart
+	} from '#lib/features/studio-drawing/canvas-view.js';
 
 	let {
 		canvasRef = $bindable<HTMLCanvasElement | null>(null),
@@ -93,6 +103,30 @@
 	let penOnly = $state(false);
 	let penOnlyDismissed = false;
 	const fingers = createTouchGestureTracker();
+
+	let frameRef = $state<HTMLDivElement | null>(null);
+	let view = $state<CanvasView>(FIT_VIEW);
+	let pinch: PinchStart | null = null;
+	// Repaints at the zoomed size once the zoom stops (set in onMount).
+	let refitSoon = () => {};
+
+	const frameBox = () => {
+		const rect = frameRef?.getBoundingClientRect();
+		return rect
+			? { height: rect.height, left: rect.left, top: rect.top, width: rect.width }
+			: { height: 1, left: 0, top: 0, width: 1 };
+	};
+
+	/** Finger positions in frame coordinates. */
+	const fingersInFrame = () => {
+		const box = frameBox();
+		return fingers.positions().map(({ x, y }) => ({ x: x - box.left, y: y - box.top }));
+	};
+
+	const fitCanvas = () => {
+		view = FIT_VIEW;
+		refitSoon();
+	};
 	// Laid out once per stroke: reading the box on every sample forces layout.
 	let strokeRect: ReturnType<typeof getCanvasContentRect> | null = null;
 
@@ -292,6 +326,8 @@
 				) {
 					discardStroke();
 				}
+				// Two fingers and no line under way: pinch to zoom, drag to pan.
+				if (count === 2 && !wetStroke) pinch = startPinch(fingersInFrame(), view);
 				return;
 			}
 			if (penOnly) return;
@@ -306,8 +342,33 @@
 		if (event.pointerType !== 'touch') return;
 
 		const gesture = fingers.up(event.pointerId, event.timeStamp);
+		if (pinch && fingers.positions().length < 2) {
+			pinch = null;
+			view = settleView(view);
+			refitSoon();
+		}
 		if (gesture === 'undo') undo();
 		if (gesture === 'redo') redo();
+	}
+
+	/*
+	 * A trackpad pinch arrives as a wheel with Ctrl held (also on macOS); it
+	 * zooms around the pointer. Scrolling pans a zoomed-in canvas and is left to
+	 * the page otherwise.
+	 */
+	function handleWheel(event: WheelEvent) {
+		const box = frameBox();
+		if (event.ctrlKey || event.metaKey) {
+			event.preventDefault();
+			const anchor = { x: event.clientX - box.left, y: event.clientY - box.top };
+			view = settleView(zoomAround(view, anchor, view.scale * Math.exp(-event.deltaY * 0.01), box));
+			refitSoon();
+			return;
+		}
+		if (view.scale === 1) return;
+
+		event.preventDefault();
+		view = clampView({ ...view, x: view.x - event.deltaX, y: view.y - event.deltaY }, box);
 	}
 
 	const togglePenOnly = () => {
@@ -378,6 +439,11 @@
 		};
 
 		fitToBox();
+		let refitTimer: ReturnType<typeof setTimeout> | undefined;
+		refitSoon = () => {
+			clearTimeout(refitTimer);
+			refitTimer = setTimeout(fitToBox, 120);
+		};
 		shownDocument = drawingDocument;
 		inkSurface.showDocument(drawingDocument);
 		surface = inkSurface;
@@ -407,6 +473,7 @@
 			detachPointerReleaseSafetyNet();
 			detachTouchStart();
 			detachGestureStart();
+			clearTimeout(refitTimer);
 			inkSurface.destroy();
 			surface = null;
 		};
@@ -419,39 +486,55 @@
 	class="relative h-full w-full items-center justify-center"
 	style="position: relative; width: 100%; height: 100%;"
 >
-	<canvas
-		bind:this={canvasRef}
-		class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
-		style="width: 100%; height: 100%; background: var(--color-paper-bright); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;"
-		aria-label="Drawing canvas"
-		aria-disabled={!interactive}
-		draggable="false"
-		ondragstart={(event) => event.preventDefault()}
-		onpointerdown={handlePointerDown}
-		onpointermove={(event) => {
-			if (event.pointerType === 'touch') {
-				fingers.move(event.pointerId, event.clientX, event.clientY);
-			}
-			// Ink first: the brush cursor is cosmetic and must never hold up drawing.
-			draw(event);
-			showCursor(event);
-		}}
-		onpointerup={handlePointerUp}
-		onpointercancel={cancelDrawing}
-		onpointerleave={hideCursor}
-	></canvas>
+	<!-- The frame stays put and clips; the view inside it zooms and pans. -->
+	<div bind:this={frameRef} data-canvas-frame class="canvas-frame" onwheel={handleWheel}>
+		<div
+			class="canvas-view"
+			style:transform={`translate(${view.x}px, ${view.y}px) scale(${view.scale})`}
+		>
+			<canvas
+				bind:this={canvasRef}
+				class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
+				style="width: 100%; height: 100%; background: var(--color-paper-bright); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;"
+				aria-label="Drawing canvas"
+				aria-disabled={!interactive}
+				draggable="false"
+				ondragstart={(event) => event.preventDefault()}
+				onpointerdown={handlePointerDown}
+				onpointermove={(event) => {
+					if (event.pointerType === 'touch') {
+						fingers.move(event.pointerId, event.clientX, event.clientY);
+						const positions = fingersInFrame();
+						if (pinch && positions.length >= 2) view = pinchView(pinch, positions, frameBox());
+					}
+					// Ink first: the brush cursor is cosmetic and must never hold up drawing.
+					draw(event);
+					showCursor(event);
+				}}
+				onpointerup={handlePointerUp}
+				onpointercancel={cancelDrawing}
+				onpointerleave={hideCursor}
+			></canvas>
 
-	<canvas
-		bind:this={overlayRef}
-		class="pointer-events-none block h-full w-full rounded-lg"
-		style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
-	></canvas>
+			<canvas
+				bind:this={overlayRef}
+				class="pointer-events-none block h-full w-full rounded-lg"
+				style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+			></canvas>
+		</div>
+	</div>
+
+	{#if view.scale !== 1}
+		<button type="button" class="canvas-chip canvas-fit focus-ring" onclick={fitCanvas}>
+			Fit canvas
+		</button>
+	{/if}
 
 	{#if penSeen}
 		<button
 			type="button"
-			class="pen-only-toggle focus-ring"
-			class:pen-only-toggle-on={penOnly}
+			class="canvas-chip pen-only-toggle focus-ring"
+			class:canvas-chip-on={penOnly}
 			aria-pressed={penOnly}
 			onclick={togglePenOnly}
 		>
@@ -473,10 +556,31 @@
 </div>
 
 <style>
+	.canvas-frame {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+		border-radius: 0.5rem;
+	}
+
+	.canvas-view {
+		position: relative;
+		width: 100%;
+		height: 100%;
+		transform-origin: 0 0;
+	}
+
+	.canvas-fit {
+		right: 8px;
+	}
+
 	.pen-only-toggle {
+		left: 8px;
+	}
+
+	.canvas-chip {
 		position: absolute;
 		top: 8px;
-		left: 8px;
 		min-height: 36px;
 		padding: 0 12px;
 		border: 2px solid rgba(45, 36, 32, 0.35);
@@ -488,7 +592,7 @@
 		cursor: pointer;
 	}
 
-	.pen-only-toggle-on {
+	.canvas-chip-on {
 		border-color: #2d2420;
 		background: #2d2420;
 		color: #fdfbf7;
