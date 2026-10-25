@@ -214,6 +214,23 @@ const drawLineThroughCentre = async (page: import('@playwright/test').Page) => {
 	const canvas = page.getByLabel('Drawing canvas');
 	// The canvas takes strokes once the local draft has loaded.
 	await expect(canvas).toHaveAttribute('aria-disabled', 'false');
+	// The sketchbook can still be scaling into place; a line drawn on a moving
+	// canvas lands somewhere else. Draw once its box holds still for a frame.
+	await expect
+		.poll(() =>
+			canvas.evaluate(
+				(node) =>
+					new Promise<boolean>((resolve) => {
+						const before = JSON.stringify(node.getBoundingClientRect());
+						requestAnimationFrame(() =>
+							requestAnimationFrame(() =>
+								resolve(JSON.stringify(node.getBoundingClientRect()) === before)
+							)
+						);
+					})
+			)
+		)
+		.toBe(true);
 	const box = await canvas.boundingBox();
 	if (!box) throw new Error('Expected the drawing canvas to expose a bounding box');
 
@@ -221,6 +238,7 @@ const drawLineThroughCentre = async (page: import('@playwright/test').Page) => {
 	await page.mouse.down();
 	await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2, { steps: 8 });
 	await page.mouse.up();
+	await expect.poll(() => readDrawingCanvasCenterPixel(page)).not.toEqual([253, 251, 247, 255]);
 };
 
 const drawRepeatedDenseStroke = async (
