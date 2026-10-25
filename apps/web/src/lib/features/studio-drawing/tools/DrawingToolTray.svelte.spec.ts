@@ -57,14 +57,14 @@ describe('DrawingToolTray', () => {
 		expect(drawingTools.tool).toBe('brush');
 	});
 
-	it('shows the ink left, and warns as it runs low and out', async () => {
-		const tray = await render(DrawingToolTray, { inkUsed: 0.3 });
+	it('keeps the ink out of sight until it runs low, then warns and says when it is out', async () => {
+		const tray = await render(DrawingToolTray, { inkUsed: 0.6 });
 		const meter = page.getByRole('meter', { name: 'Ink left' });
 
-		await expect.element(meter).toHaveAttribute('aria-valuenow', '70');
-		await expect.element(page.getByText('Running low on ink')).not.toBeInTheDocument();
+		await expect.element(meter).not.toBeInTheDocument();
 
 		await tray.rerender({ inkUsed: 0.85 });
+		await expect.element(meter).toHaveAttribute('aria-valuenow', '15');
 		await expect.element(page.getByText('Running low on ink')).toBeVisible();
 
 		await tray.rerender({ inkUsed: 1 });

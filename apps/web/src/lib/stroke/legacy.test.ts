@@ -3,7 +3,9 @@ import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import fixtures from './fixtures/legacy-rust-parity.json';
 import {
+	RUST_RUNTIME_LIMITS,
 	decodeLegacyPayload,
+	encodeLegacyPayload,
 	legacyDocumentMetadata,
 	parseLegacyDocument,
 	StrokeDocumentError,
@@ -121,9 +123,11 @@ describe('legacy drawing documents read exactly as the Rust runtime read them', 
 		const digest = fixture.json === undefined;
 
 		it(fixture.name, async () => {
-			const validate = await capture(() => legacyDocumentMetadata(parseLegacyDocument(json)));
-			const editable = await capture(() => toEditableV2(parseLegacyDocument(json)));
-			const canonical = await capture(() => toCanonicalV2(parseLegacyDocument(json)));
+			// Held to the runtime's own limits: the product has since raised them.
+			const parse = () => parseLegacyDocument(json, RUST_RUNTIME_LIMITS);
+			const validate = await capture(() => legacyDocumentMetadata(parse()));
+			const editable = await capture(() => toEditableV2(parse()));
+			const canonical = await capture(() => toCanonicalV2(parse()));
 
 			const divergence = ACCEPTED_DIVERGENCES[fixture.name];
 			if (divergence) {
@@ -145,12 +149,13 @@ describe('stored payloads decompress exactly as the Rust runtime decompressed th
 				: buildGeneratedPayload(fixture.generated as string);
 
 		it(fixture.name, async () => {
-			const editable = await capture(async () =>
-				toEditableV2(parseLegacyDocument(await decodeLegacyPayload(bytes)))
-			);
-			const canonical = await capture(async () =>
-				toCanonicalV2(parseLegacyDocument(await decodeLegacyPayload(bytes)))
-			);
+			const read = async () =>
+				parseLegacyDocument(
+					await decodeLegacyPayload(bytes, RUST_RUNTIME_LIMITS),
+					RUST_RUNTIME_LIMITS
+				);
+			const editable = await capture(async () => toEditableV2(await read()));
+			const canonical = await capture(async () => toCanonicalV2(await read()));
 
 			const divergence = ACCEPTED_DIVERGENCES[fixture.name];
 			if (divergence) {
@@ -161,4 +166,28 @@ describe('stored payloads decompress exactly as the Rust runtime decompressed th
 			expectSameOutcome(canonical, fixture.canonical as Outcome, false);
 		});
 	}
+});
+
+describe('the limits a drawing is held to now', () => {
+	// Three times what the old runtime allowed, so a pen at full speed for most
+	// of an hour still fits; only a document built to break the system does not.
+	const large = buildGeneratedDocument({ kind: 'artwork', pointsPerStroke: 5000, strokes: 60 });
+
+	it('reads and stores a drawing three times the size the old runtime allowed', async () => {
+		const document = toCanonicalV2(parseLegacyDocument(large));
+
+		expect(legacyDocumentMetadata(document).totalPoints).toBe(300_000);
+		const stored = await encodeLegacyPayload(JSON.stringify(document));
+		await expect(decodeLegacyPayload(stored)).resolves.toBe(JSON.stringify(document));
+	});
+
+	it('still refuses one point past it', () => {
+		const overLimit = buildGeneratedDocument({
+			kind: 'artwork',
+			pointsPerStroke: 5000,
+			strokes: 61
+		});
+
+		expect(() => parseLegacyDocument(overLimit)).toThrow(/max total points of 300000/);
+	});
 });

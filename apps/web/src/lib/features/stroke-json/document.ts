@@ -1,4 +1,6 @@
 import { z } from 'zod';
+// Relative, not `#lib`: the Playwright suites import this module directly.
+import { DRAWING_LIMITS } from '../../shared/artwork/drawing-limits';
 
 export const ARTWORK_DRAWING_DIMENSIONS = {
 	background: '#fdfbf7',
@@ -149,13 +151,7 @@ export type DrawingDocumentLimits = {
 
 export const DEFAULT_DRAWING_DOCUMENT_LIMITS: Required<
 	Omit<DrawingDocumentLimits, 'compressedBytes'>
-> = {
-	maxCompressedBytes: 256 * 1024,
-	maxDecompressedBytes: 1024 * 1024,
-	maxPointsPerStroke: 5000,
-	maxStrokes: 5000,
-	maxTotalPoints: 100_000
-};
+> = DRAWING_LIMITS;
 
 const getDimensionsForKind = (kind: DrawingKind) =>
 	kind === 'artwork' ? ARTWORK_DRAWING_DIMENSIONS : AVATAR_DRAWING_DIMENSIONS;

@@ -1,14 +1,17 @@
 /*
  * Reader for the drawing documents the Rust/WASM runtime stored (versions 1 and
- * 2), with the same rules, the same limits and the same check order, so every
- * stored drawing reads back exactly as it did before. legacy.test.ts holds the
- * reader to answers recorded from the Rust runtime itself.
+ * 2), with the same rules and the same check order, so every stored drawing
+ * reads back exactly as it did before. legacy.test.ts holds the reader to
+ * answers recorded from the Rust runtime itself, under the runtime's own
+ * limits; the product now allows more (see drawing-limits.ts).
  *
  * The order mirrors serde: the JSON must parse and carry an unsigned integer
  * `version` (else INVALID_JSON); then every field must have its exact type, with
  * unknown fields rejected; then dimensions, colors, sizes and points are
  * checked; then the complexity limits.
  */
+
+import { DRAWING_LIMITS, type DrawingLimits } from '#lib/shared/artwork/drawing-limits.js';
 
 export type StrokeDocumentErrorCode =
 	| 'INVALID_JSON'
@@ -36,13 +39,14 @@ export type LegacyDocumentV2 = { version: 2 } & Header & {
 	};
 export type LegacyDocument = LegacyDocumentV1 | LegacyDocumentV2;
 
-export const LEGACY_LIMITS = {
+/** The Rust runtime's limits, which its recorded answers were given under. */
+export const RUST_RUNTIME_LIMITS: DrawingLimits = {
 	maxCompressedBytes: 256 * 1024,
 	maxDecompressedBytes: 1024 * 1024,
 	maxPointsPerStroke: 5_000,
 	maxStrokes: 5_000,
 	maxTotalPoints: 100_000
-} as const;
+};
 
 const CANVAS: Record<DrawingKind, { width: number; height: number; background: string }> = {
 	artwork: { width: 768, height: 768, background: '#fdfbf7' },
@@ -145,21 +149,24 @@ const validateShape = (header: Header, collections: [string, LegacyStroke[]][]) 
 const renderableStrokes = (document: LegacyDocument) =>
 	document.version === 1 ? document.strokes : [...document.base, ...document.tail];
 
-const assertWithinComplexityLimits = (document: LegacyDocument) => {
+const assertWithinComplexityLimits = (document: LegacyDocument, limits: DrawingLimits) => {
 	const strokes = renderableStrokes(document);
-	if (strokes.length > LEGACY_LIMITS.maxStrokes) {
-		throw limitExceeded(`max strokes of ${LEGACY_LIMITS.maxStrokes}`);
+	if (strokes.length > limits.maxStrokes) {
+		throw limitExceeded(`max strokes of ${limits.maxStrokes}`);
 	}
 	const totalPoints = strokes.reduce((total, stroke) => total + stroke.points.length, 0);
-	if (totalPoints > LEGACY_LIMITS.maxTotalPoints) {
-		throw limitExceeded(`max total points of ${LEGACY_LIMITS.maxTotalPoints}`);
+	if (totalPoints > limits.maxTotalPoints) {
+		throw limitExceeded(`max total points of ${limits.maxTotalPoints}`);
 	}
-	if (strokes.some((stroke) => stroke.points.length > LEGACY_LIMITS.maxPointsPerStroke)) {
-		throw limitExceeded(`max points per stroke of ${LEGACY_LIMITS.maxPointsPerStroke}`);
+	if (strokes.some((stroke) => stroke.points.length > limits.maxPointsPerStroke)) {
+		throw limitExceeded(`max points per stroke of ${limits.maxPointsPerStroke}`);
 	}
 };
 
-export const parseLegacyDocument = (json: string): LegacyDocument => {
+export const parseLegacyDocument = (
+	json: string,
+	limits: DrawingLimits = DRAWING_LIMITS
+): LegacyDocument => {
 	let value: unknown;
 	try {
 		value = JSON.parse(json);
@@ -202,7 +209,7 @@ export const parseLegacyDocument = (json: string): LegacyDocument => {
 		);
 	}
 
-	assertWithinComplexityLimits(document);
+	assertWithinComplexityLimits(document, limits);
 	return document;
 };
 
@@ -267,11 +274,14 @@ const singleChunkStream = (bytes: Uint8Array<ArrayBuffer>) =>
 	});
 
 // Gzips a canonical document for storage with the platform's CompressionStream,
-// under the byte limits the Rust writer enforced.
-export const encodeLegacyPayload = async (json: string): Promise<Uint8Array<ArrayBuffer>> => {
+// under the drawing's byte limits.
+export const encodeLegacyPayload = async (
+	json: string,
+	limits: DrawingLimits = DRAWING_LIMITS
+): Promise<Uint8Array<ArrayBuffer>> => {
 	const bytes = new TextEncoder().encode(json);
-	if (bytes.byteLength > LEGACY_LIMITS.maxDecompressedBytes) {
-		throw limitExceeded(`max decompressed bytes of ${LEGACY_LIMITS.maxDecompressedBytes}`);
+	if (bytes.byteLength > limits.maxDecompressedBytes) {
+		throw limitExceeded(`max decompressed bytes of ${limits.maxDecompressedBytes}`);
 	}
 
 	const compressed = new Uint8Array(
@@ -279,8 +289,8 @@ export const encodeLegacyPayload = async (json: string): Promise<Uint8Array<Arra
 			singleChunkStream(bytes).pipeThrough(new CompressionStream('gzip'))
 		).arrayBuffer()
 	);
-	if (compressed.byteLength > LEGACY_LIMITS.maxCompressedBytes) {
-		throw limitExceeded(`max compressed bytes of ${LEGACY_LIMITS.maxCompressedBytes}`);
+	if (compressed.byteLength > limits.maxCompressedBytes) {
+		throw limitExceeded(`max compressed bytes of ${limits.maxCompressedBytes}`);
 	}
 	return compressed;
 };
@@ -288,9 +298,12 @@ export const encodeLegacyPayload = async (json: string): Promise<Uint8Array<Arra
 // Gunzips a stored payload with the platform's DecompressionStream, refusing
 // oversized input and stopping as soon as the output passes the limit, so a
 // zip bomb never inflates in memory.
-export const decodeLegacyPayload = async (payload: Uint8Array<ArrayBuffer>): Promise<string> => {
-	if (payload.byteLength > LEGACY_LIMITS.maxCompressedBytes) {
-		throw limitExceeded(`max compressed bytes of ${LEGACY_LIMITS.maxCompressedBytes}`);
+export const decodeLegacyPayload = async (
+	payload: Uint8Array<ArrayBuffer>,
+	limits: DrawingLimits = DRAWING_LIMITS
+): Promise<string> => {
+	if (payload.byteLength > limits.maxCompressedBytes) {
+		throw limitExceeded(`max compressed bytes of ${limits.maxCompressedBytes}`);
 	}
 
 	const reader = singleChunkStream(payload)
@@ -304,9 +317,9 @@ export const decodeLegacyPayload = async (payload: Uint8Array<ArrayBuffer>): Pro
 			const { done, value } = await reader.read();
 			if (done) break;
 			total += value.byteLength;
-			if (total > LEGACY_LIMITS.maxDecompressedBytes) {
+			if (total > limits.maxDecompressedBytes) {
 				await reader.cancel();
-				throw limitExceeded(`max output bytes of ${LEGACY_LIMITS.maxDecompressedBytes}`);
+				throw limitExceeded(`max output bytes of ${limits.maxDecompressedBytes}`);
 			}
 			chunks.push(value);
 		}

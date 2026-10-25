@@ -12,6 +12,9 @@ import {
  * at publish. The tightest limit is the ink left.
  */
 
+/** Below this the meter stays out of sight: nobody drawing normally ever sees it. */
+export const INK_SHOWN_LEVEL = 0.75;
+
 /** From here the meter warns that the ink is running low. */
 export const INK_WARNING_LEVEL = 0.8;
 
