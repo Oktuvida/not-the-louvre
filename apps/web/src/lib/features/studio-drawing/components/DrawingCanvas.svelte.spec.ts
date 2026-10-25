@@ -617,4 +617,59 @@ describe('DrawingCanvas', () => {
 			);
 		});
 	});
+
+	describe('ink', () => {
+		it('takes no new line once the ink is gone, and says so', async () => {
+			const onOutOfInk = vi.fn();
+			const { committed, draw } = await renderCanvas({ inkLimits: { maxStrokes: 1 }, onOutOfInk });
+
+			draw([100, 300], [600, 300]);
+			draw([100, 500], [600, 500]);
+
+			expect(committed).toHaveLength(1);
+			expect(onOutOfInk).toHaveBeenCalledOnce();
+		});
+
+		it('keeps a line that runs dry part way, up to the last drop', async () => {
+			const onOutOfInk = vi.fn();
+			const { committed, draw } = await renderCanvas({
+				inkLimits: { maxTotalPoints: 4 },
+				onOutOfInk
+			});
+
+			draw([100, 100], [120, 100], [140, 100], [160, 100], [180, 100], [200, 100]);
+
+			expect(committed).toHaveLength(1);
+			expect(committed[0]?.points).toEqual([
+				[100, 100],
+				[120, 100],
+				[140, 100],
+				[160, 100]
+			]);
+			expect(onOutOfInk).toHaveBeenCalledOnce();
+		});
+
+		it('carries a very long line on as a new one past the most a line may hold', async () => {
+			const { committed, draw } = await renderCanvas({ inkLimits: { maxPointsPerStroke: 3 } });
+
+			draw([100, 100], [120, 100], [140, 100], [160, 100], [180, 100], [200, 100]);
+
+			expect(committed.map((stroke) => stroke.points)).toEqual([
+				[
+					[100, 100],
+					[120, 100],
+					[140, 100]
+				],
+				[
+					[140, 100],
+					[160, 100],
+					[180, 100]
+				],
+				[
+					[180, 100],
+					[200, 100]
+				]
+			]);
+		});
+	});
 });
