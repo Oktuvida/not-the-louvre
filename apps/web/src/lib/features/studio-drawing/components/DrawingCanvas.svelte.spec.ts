@@ -390,4 +390,115 @@ describe('DrawingCanvas', () => {
 		expect(history.undo()).toBe(false);
 		expect(documents.at(-1)?.tail).toHaveLength(1);
 	});
+
+	describe('pens and fingers', () => {
+		const touch = (type: string, id: number, point: [number, number]) => ({
+			buttons: type === 'pointerup' ? 0 : 1,
+			isPrimary: id === 11,
+			pointerId: id,
+			pointerType: 'touch',
+			type,
+			point
+		});
+
+		const fire = (
+			canvas: HTMLCanvasElement,
+			pointer: (type: string, point: [number, number], init?: PointerEventInit) => PointerEvent,
+			...events: ReturnType<typeof touch>[]
+		) => {
+			for (const { point, type, ...init } of events)
+				canvas.dispatchEvent(pointer(type, point, init));
+		};
+
+		it('stops fingers drawing once a pen has touched the canvas, so a resting palm leaves no mark', async () => {
+			const { canvas, committed, pointer } = await renderCanvas();
+
+			canvas.dispatchEvent(pointer('pointerdown', [100, 100], { pointerType: 'pen' }));
+			canvas.dispatchEvent(pointer('pointermove', [200, 200], { pointerType: 'pen' }));
+			canvas.dispatchEvent(pointer('pointerup', [200, 200], { pointerType: 'pen' }));
+			fire(
+				canvas,
+				pointer,
+				touch('pointerdown', 11, [300, 600]),
+				touch('pointermove', 11, [500, 650]),
+				touch('pointerup', 11, [500, 650])
+			);
+
+			expect(committed).toHaveLength(1);
+			await expect
+				.element(page.getByRole('button', { name: 'Pen only' }))
+				.toHaveAttribute('aria-pressed', 'true');
+		});
+
+		it('lets fingers draw again when pen-only is switched off', async () => {
+			const { canvas, committed, pointer } = await renderCanvas();
+			canvas.dispatchEvent(pointer('pointerdown', [100, 100], { pointerType: 'pen' }));
+			canvas.dispatchEvent(pointer('pointerup', [100, 100], { pointerType: 'pen' }));
+
+			await page.getByRole('button', { name: 'Pen only' }).click();
+			fire(
+				canvas,
+				pointer,
+				touch('pointerdown', 11, [300, 600]),
+				touch('pointermove', 11, [500, 650]),
+				touch('pointerup', 11, [500, 650])
+			);
+
+			expect(committed).toHaveLength(2);
+		});
+
+		it('takes back the last line with a two-finger tap and puts it back with three', async () => {
+			const { canvas, documents, draw, pointer } = await renderCanvas();
+			draw([100, 300], [600, 300]);
+
+			fire(
+				canvas,
+				pointer,
+				touch('pointerdown', 11, [300, 400]),
+				touch('pointerdown', 12, [400, 400]),
+				touch('pointerup', 11, [300, 400]),
+				touch('pointerup', 12, [400, 400])
+			);
+			expect(documents.at(-1)?.tail).toHaveLength(0);
+
+			fire(
+				canvas,
+				pointer,
+				touch('pointerdown', 11, [300, 400]),
+				touch('pointerdown', 12, [400, 400]),
+				touch('pointerdown', 13, [500, 400]),
+				touch('pointerup', 11, [300, 400]),
+				touch('pointerup', 12, [400, 400]),
+				touch('pointerup', 13, [500, 400])
+			);
+			expect(documents.at(-1)?.tail).toHaveLength(1);
+		});
+
+		it('drops the line a finger started when a second finger joins it straight away', async () => {
+			const { canvas, committed, pointer } = await renderCanvas();
+
+			fire(
+				canvas,
+				pointer,
+				touch('pointerdown', 11, [300, 400]),
+				touch('pointermove', 11, [320, 420]),
+				touch('pointerdown', 12, [500, 400]),
+				touch('pointermove', 11, [360, 480]),
+				touch('pointermove', 12, [560, 480]),
+				touch('pointerup', 11, [360, 480]),
+				touch('pointerup', 12, [560, 480])
+			);
+
+			expect(committed).toHaveLength(0);
+		});
+
+		it('keeps the long press and the magnifier off the canvas', async () => {
+			const { canvas } = await renderCanvas();
+			const touchstart = new Event('touchstart', { bubbles: true, cancelable: true });
+
+			canvas.dispatchEvent(touchstart);
+
+			expect(touchstart.defaultPrevented).toBe(true);
+		});
+	});
 });

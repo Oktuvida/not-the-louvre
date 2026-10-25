@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { on } from 'svelte/events';
 	import {
 		clampDrawingPoint,
 		cloneDrawingDocumentV2,
@@ -18,6 +19,10 @@
 	} from '#lib/features/studio-drawing/pointer-drawing.js';
 	import { createInkSurface, type InkSurface } from '#lib/features/studio-drawing/ink-surface.js';
 	import { drawingTools } from '#lib/features/studio-drawing/state/drawing.svelte.js';
+	import {
+		SECOND_FINGER_WINDOW_MS,
+		createTouchGestureTracker
+	} from '#lib/features/studio-drawing/touch-gestures.js';
 
 	let {
 		canvasRef = $bindable<HTMLCanvasElement | null>(null),
@@ -75,6 +80,19 @@
 	// Lines taken back, latest last. A new line forgets them.
 	let redoStack: DrawingStroke[] = [];
 	let activePointerId: number | null = null;
+	let strokePointerType = '';
+	let strokeStartedAt = 0;
+
+	/*
+	 * Pen mode, as tldraw and Excalidraw do it: the first time a pen touches the
+	 * canvas, fingers stop drawing and only make gestures, so the palm resting
+	 * on the glass leaves nothing behind. The visitor can switch it off, and a
+	 * pen does not switch it back on behind their back.
+	 */
+	let penSeen = $state(false);
+	let penOnly = $state(false);
+	let penOnlyDismissed = false;
+	const fingers = createTouchGestureTracker();
 	// Laid out once per stroke: reading the box on every sample forces layout.
 	let strokeRect: ReturnType<typeof getCanvasContentRect> | null = null;
 
@@ -178,6 +196,8 @@
 		event.preventDefault();
 		canvasRef.setPointerCapture(event.pointerId);
 		activePointerId = event.pointerId;
+		strokePointerType = event.pointerType;
+		strokeStartedAt = event.timeStamp;
 		wetStroke = { color: strokeColor(), points: [point], size: drawingTools.brushSize };
 		surface?.wet(wetStroke);
 	}
@@ -240,8 +260,60 @@
 
 	function cancelDrawing(event: PointerEvent) {
 		event.preventDefault();
+		if (event.pointerType === 'touch') fingers.cancel(event.pointerId);
 		finishDrawing(event);
 	}
+
+	/** Drops the line under the pen without keeping any of it. */
+	function discardStroke() {
+		if (canvasRef && activePointerId !== null && canvasRef.hasPointerCapture(activePointerId)) {
+			canvasRef.releasePointerCapture(activePointerId);
+		}
+		wetStroke = null;
+		activePointerId = null;
+		strokeRect = null;
+		surface?.wet(null);
+	}
+
+	function handlePointerDown(event: PointerEvent) {
+		if (event.pointerType === 'pen' && !penSeen) {
+			penSeen = true;
+			penOnly = !penOnlyDismissed;
+		}
+
+		if (event.pointerType === 'touch') {
+			const count = fingers.down(event.pointerId, event.clientX, event.clientY, event.timeStamp);
+			if (count > 1) {
+				// Two fingers landing together are a gesture, not a line and a stray.
+				if (
+					wetStroke &&
+					strokePointerType === 'touch' &&
+					event.timeStamp - strokeStartedAt <= SECOND_FINGER_WINDOW_MS
+				) {
+					discardStroke();
+				}
+				return;
+			}
+			if (penOnly) return;
+		}
+
+		startDrawing(event);
+	}
+
+	function handlePointerUp(event: PointerEvent) {
+		finishDrawing(event);
+		hideCursor();
+		if (event.pointerType !== 'touch') return;
+
+		const gesture = fingers.up(event.pointerId, event.timeStamp);
+		if (gesture === 'undo') undo();
+		if (gesture === 'redo') redo();
+	}
+
+	const togglePenOnly = () => {
+		penOnly = !penOnly;
+		penOnlyDismissed = !penOnly;
+	};
 
 	$effect(() => {
 		const nextSeed = initialDrawingDocument
@@ -318,6 +390,13 @@
 		document.addEventListener('animationend', fitToBox);
 		canvas.addEventListener('pointerenter', fitToBox);
 		const detachPointerReleaseSafetyNet = attachPointerReleaseSafetyNet(finishDrawing);
+		// iPad keeps its magnifier, long-press menu and Scribble running through a
+		// cancelled pointer; only a non-passive touchstart that is prevented stops
+		// them, and Svelte registers `ontouchstart` as passive.
+		const detachTouchStart = on(canvas, 'touchstart', (event) => event.preventDefault(), {
+			passive: false
+		});
+		const detachGestureStart = on(canvas, 'gesturestart', (event) => event.preventDefault());
 
 		return () => {
 			resizeObserver.disconnect();
@@ -326,6 +405,8 @@
 			document.removeEventListener('animationend', fitToBox);
 			canvas.removeEventListener('pointerenter', fitToBox);
 			detachPointerReleaseSafetyNet();
+			detachTouchStart();
+			detachGestureStart();
 			inkSurface.destroy();
 			surface = null;
 		};
@@ -334,25 +415,28 @@
 
 <!-- Sized inline as well as by class: a canvas sized from its own pixel count
      would grow with every resize to the screen's density. -->
-<div class="relative h-full w-full items-center justify-center" style="width: 100%; height: 100%;">
+<div
+	class="relative h-full w-full items-center justify-center"
+	style="position: relative; width: 100%; height: 100%;"
+>
 	<canvas
 		bind:this={canvasRef}
 		class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
-		style="width: 100%; height: 100%; background: var(--color-paper-bright); touch-action: none;"
+		style="width: 100%; height: 100%; background: var(--color-paper-bright); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;"
 		aria-label="Drawing canvas"
 		aria-disabled={!interactive}
 		draggable="false"
 		ondragstart={(event) => event.preventDefault()}
-		onpointerdown={startDrawing}
+		onpointerdown={handlePointerDown}
 		onpointermove={(event) => {
+			if (event.pointerType === 'touch') {
+				fingers.move(event.pointerId, event.clientX, event.clientY);
+			}
 			// Ink first: the brush cursor is cosmetic and must never hold up drawing.
 			draw(event);
 			showCursor(event);
 		}}
-		onpointerup={(event) => {
-			finishDrawing(event);
-			hideCursor();
-		}}
+		onpointerup={handlePointerUp}
 		onpointercancel={cancelDrawing}
 		onpointerleave={hideCursor}
 	></canvas>
@@ -362,6 +446,18 @@
 		class="pointer-events-none block h-full w-full rounded-lg"
 		style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
 	></canvas>
+
+	{#if penSeen}
+		<button
+			type="button"
+			class="pen-only-toggle focus-ring"
+			class:pen-only-toggle-on={penOnly}
+			aria-pressed={penOnly}
+			onclick={togglePenOnly}
+		>
+			Pen only
+		</button>
+	{/if}
 
 	{#if statusMessage}
 		<div
@@ -375,3 +471,26 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.pen-only-toggle {
+		position: absolute;
+		top: 8px;
+		left: 8px;
+		min-height: 36px;
+		padding: 0 12px;
+		border: 2px solid rgba(45, 36, 32, 0.35);
+		border-radius: 999px;
+		background: rgba(253, 251, 247, 0.92);
+		color: #2d2420;
+		font-size: 0.8rem;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.pen-only-toggle-on {
+		border-color: #2d2420;
+		background: #2d2420;
+		color: #fdfbf7;
+	}
+</style>
