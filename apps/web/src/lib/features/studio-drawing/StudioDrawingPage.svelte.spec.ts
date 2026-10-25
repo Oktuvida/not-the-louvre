@@ -411,10 +411,11 @@ describe('StudioDrawingPage', () => {
 			userKey: 'journey_artist'
 		});
 
-		const openStudio = async () => {
+		const openStudio = async (props: Record<string, unknown> = {}) => {
 			await render(StudioDrawingPage, {
 				openingDurationMs: 1,
-				user: { nickname: 'journey_artist' }
+				user: { nickname: 'journey_artist' },
+				...props
 			});
 			await openSketchbook();
 			// The canvas takes strokes once the local draft has loaded.
@@ -479,6 +480,20 @@ describe('StudioDrawingPage', () => {
 
 			await userEvent.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
 			await vi.waitFor(async () => expect(await savedLines()).toHaveLength(2));
+		});
+
+		it('says so when the drawing has run out of ink', async () => {
+			const { drawLine } = await openStudio({ inkLimits: { maxStrokes: 1 } });
+
+			drawLine(300);
+			drawLine(500);
+
+			await expect
+				.element(page.getByText('Out of ink. Undo a line to free some up, or publish.'))
+				.toBeVisible();
+			await expect
+				.element(page.getByRole('meter', { name: 'Ink left' }))
+				.toHaveAttribute('aria-valuenow', '0');
 		});
 
 		it('erases with the colour of the paper', async () => {
