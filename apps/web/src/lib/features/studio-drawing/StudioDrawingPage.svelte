@@ -16,9 +16,7 @@
 	import {
 		DRAWING_DOCUMENT_VERSION,
 		cloneDrawingDocumentV2,
-		createEmptyDrawingDocument,
 		createEmptyDrawingDocumentV2,
-		getRenderableDrawingStrokes,
 		serializeDrawingDocument,
 		type DrawingDocumentV2,
 		type DrawingStroke
@@ -96,40 +94,8 @@
 
 	let {
 		checkTextContent = defaultCheckTextContent,
-		createArtworkPayload = async (documentState: DrawingDocumentV2) => {
-			const mode =
-				typeof window === 'undefined'
-					? 'good'
-					: ((window as Window & { __drawingExportMode?: 'bad' | 'unsupported' | 'webp' })
-							.__drawingExportMode ?? 'good');
-
-			if (mode === 'unsupported') {
-				return null;
-			}
-
-			if (mode === 'bad') {
-				return JSON.stringify(createEmptyDrawingDocument('avatar'));
-			}
-
-			if (mode === 'webp' && getRenderableDrawingStrokes(documentState).length === 0) {
-				return JSON.stringify({
-					...createEmptyDrawingDocument('artwork'),
-					strokes: [
-						{
-							color: '#2d2420',
-							points: [
-								[128, 128] as [number, number],
-								[384, 384] as [number, number],
-								[640, 640] as [number, number]
-							],
-							size: 48
-						}
-					]
-				});
-			}
-
-			return serializeDrawingDocument(documentState);
-		},
+		createArtworkPayload = async (documentState: DrawingDocumentV2) =>
+			serializeDrawingDocument(documentState),
 		forkParent = null,
 		// Seeded from the request's client hints so a phone is not served the
 		// desktop book stage and then swapped whole after mount; the matchMedia

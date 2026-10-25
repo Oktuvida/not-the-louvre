@@ -36,9 +36,6 @@ const getBaselineMatcher = () => {
 	return baselineMatcherPromise;
 };
 
-const shouldBypassClientContentFilters = () =>
-	typeof window !== 'undefined' && Boolean(window.__ntlBypassClientContentFilters);
-
 const createMatchers = async (): Promise<MatcherMap> => {
 	const { buildPhraseMatcher } = await getTextPolicyModule();
 
@@ -75,10 +72,6 @@ const getMatchers = async () => {
 };
 
 export const checkTextContent: TextContentChecker = async (value, context) => {
-	if (shouldBypassClientContentFilters()) {
-		return { status: 'allowed' };
-	}
-
 	try {
 		const baselineMatcher = await getBaselineMatcher();
 
