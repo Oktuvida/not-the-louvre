@@ -1,11 +1,10 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { toApiErrorResponse } from '$lib/server/http/errors';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
 import {
 	getViewerContentPreferences,
 	setViewerAdultContentEnabled,
 	setViewerAmbientAudioEnabled
-} from '$lib/server/moderation/service';
+} from '#lib/server/moderation/service.js';
 
 const PREFERENCE_READ_ERROR = {
 	fallbackCode: 'PREFERENCE_READ_FAILED',
@@ -21,7 +20,7 @@ const PREFERENCE_UPDATE_ERROR = {
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		return json(await getViewerContentPreferences({ user: event.locals.user ?? null }));
+		return Response.json(await getViewerContentPreferences({ user: event.locals.user ?? null }));
 	} catch (error) {
 		return toApiErrorResponse(error, PREFERENCE_READ_ERROR);
 	}
@@ -35,7 +34,7 @@ export const PATCH: RequestHandler = async (event) => {
 		};
 
 		if (typeof body.ambientAudioEnabled === 'boolean') {
-			return json(
+			return Response.json(
 				await setViewerAmbientAudioEnabled(
 					{ enabled: body.ambientAudioEnabled },
 					{ user: event.locals.user ?? null }
@@ -43,7 +42,7 @@ export const PATCH: RequestHandler = async (event) => {
 			);
 		}
 
-		return json(
+		return Response.json(
 			await setViewerAdultContentEnabled(
 				{ enabled: Boolean(body.adultContentEnabled) },
 				{ user: event.locals.user ?? null }

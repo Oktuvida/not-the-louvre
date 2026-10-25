@@ -1,6 +1,7 @@
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-import type { GalleryPageInfo } from '$lib/features/gallery-exploration/model/discovery';
-import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+import type { GalleryPageInfo } from '#lib/features/gallery-exploration/model/discovery.js';
+import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
+import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
 
 /*
  * Per-room feed memory.
@@ -19,6 +20,8 @@ import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/room
 
 export type RoomFeedSnapshot = {
 	artworks: Artwork[];
+	/** The grid's measured rows, so the saved scroll lands on the same card. */
+	layout?: GridLayoutSnapshot | null;
 	pageInfo: GalleryPageInfo;
 	scrollY: number;
 };
@@ -77,6 +80,7 @@ export const writeRoomFeedSnapshot = (roomId: GalleryRoomId, snapshot: RoomFeedS
 	snapshots.delete(roomId);
 	snapshots.set(roomId, {
 		artworks: [...snapshot.artworks],
+		layout: snapshot.layout ?? null,
 		pageInfo: { ...snapshot.pageInfo },
 		scrollY: Math.max(0, snapshot.scrollY)
 	});
@@ -85,6 +89,26 @@ export const writeRoomFeedSnapshot = (roomId: GalleryRoomId, snapshot: RoomFeedS
 		const oldest = snapshots.keys().next();
 		if (oldest.done) break;
 		snapshots.delete(oldest.value);
+	}
+};
+
+/*
+ * A room left behind keeps the artworks as they were when the visitor walked
+ * out. Its first page is replaced by the server's when it comes back, but the
+ * pages below are not, so a vote cast or a comment left in another room since
+ * would show up stale there. Every change goes into the cached copies too.
+ */
+export const patchCachedArtwork = (artworkId: string, patch: Partial<Artwork>): void => {
+	for (const [roomId, snapshot] of snapshots) {
+		if (!snapshot.artworks.some((artwork) => artwork.id === artworkId)) continue;
+
+		// Setting an existing key keeps its place in the eviction order.
+		snapshots.set(roomId, {
+			...snapshot,
+			artworks: snapshot.artworks.map((artwork) =>
+				artwork.id === artworkId ? { ...artwork, ...patch } : artwork
+			)
+		});
 	}
 };
 

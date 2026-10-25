@@ -1,19 +1,19 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Actions } from './$types';
-import { AuthFlowError } from '$lib/server/auth/errors';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { AuthFlowError } from '#lib/server/auth/errors.js';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import {
 	createEmptyDrawingDocument,
 	serializeDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 
 type HomeActionEvent = Parameters<Actions['signUp']>[0];
 
 const mocked = vi.hoisted(() => ({
-	decodeCompressedDrawingDocumentToEditableDocument: vi.fn(),
+	openStoredDrawingDocument: vi.fn(),
 	findUserById: vi.fn(),
-	getIp: vi.fn(() => '127.0.0.1'),
+	getIP: vi.fn(() => '127.0.0.1'),
 	getViewerContentPreferences: vi.fn(),
 	getNicknameAvailability: vi.fn(),
 	listArtworkDiscovery: vi.fn(),
@@ -24,7 +24,7 @@ const mocked = vi.hoisted(() => ({
 	signUpWithNickname: vi.fn()
 }));
 
-vi.mock('$lib/server/auth/service', () => ({
+vi.mock('#lib/server/auth/service.js', () => ({
 	getNicknameAvailability: mocked.getNicknameAvailability,
 	recoverAccount: mocked.recoverAccount,
 	signInWithNickname: mocked.signInWithNickname,
@@ -32,39 +32,38 @@ vi.mock('$lib/server/auth/service', () => ({
 	signUpWithNickname: mocked.signUpWithNickname
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		options: {}
 	}
 }));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	listArtworkDiscovery: mocked.listArtworkDiscovery
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	getViewerContentPreferences: mocked.getViewerContentPreferences
 }));
 
-vi.mock('$lib/server/user/repository', () => ({
+vi.mock('#lib/server/user/repository.js', () => ({
 	userRepository: {
 		findUserById: mocked.findUserById
 	}
 }));
 
-vi.mock('$lib/server/user/avatar.service', () => ({
+vi.mock('#lib/server/user/avatar.service.js', () => ({
 	avatarService: {
 		uploadAvatar: mocked.uploadAvatar
 	}
 }));
 
-vi.mock('$lib/features/stroke-json/runtime.server', () => ({
-	decodeCompressedDrawingDocumentToEditableDocument:
-		mocked.decodeCompressedDrawingDocumentToEditableDocument
+vi.mock('#lib/server/drawing-document/document-store.js', () => ({
+	openStoredDrawingDocument: mocked.openStoredDrawingDocument
 }));
 
 vi.mock('better-auth/api', () => ({
-	getIp: mocked.getIp
+	getIP: mocked.getIP
 }));
 
 const createEvent = (
@@ -101,11 +100,11 @@ const createEvent = (
 describe('home route auth contract', () => {
 	beforeEach(() => {
 		vi.resetModules();
-		mocked.getIp.mockClear();
+		mocked.getIP.mockClear();
 		mocked.getViewerContentPreferences.mockReset();
 		mocked.getNicknameAvailability.mockReset();
 		mocked.listArtworkDiscovery.mockReset();
-		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockReset();
+		mocked.openStoredDrawingDocument.mockReset();
 		mocked.findUserById.mockReset();
 		mocked.recoverAccount.mockReset();
 		mocked.uploadAvatar.mockReset();
@@ -118,7 +117,7 @@ describe('home route auth contract', () => {
 			adultContentRevokedAt: null,
 			ambientAudioEnabled: null
 		});
-		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockResolvedValue({
+		mocked.openStoredDrawingDocument.mockResolvedValue({
 			background: '#f5f0e1',
 			base: [],
 			height: 340,
@@ -243,54 +242,11 @@ describe('home route auth contract', () => {
 				}
 			}
 		});
-		expect(mocked.decodeCompressedDrawingDocumentToEditableDocument).toHaveBeenCalledWith(
-			'persisted-avatar-payload'
-		);
-	});
-
-	it('treats an avatar document without a version as absent', async () => {
-		mocked.findUserById.mockResolvedValueOnce({
-			avatarDocument: 'half-written-avatar-payload',
-			avatarDocumentVersion: null,
-			avatarIsHidden: false,
-			avatarIsNsfw: false,
-			avatarOnboardingCompletedAt: new Date('2026-03-28T10:00:00.000Z'),
-			avatarUrl: 'avatars/product-user-1.avif',
-			banReason: null,
-			bannedAt: null,
-			createdAt: new Date('2026-03-28T09:00:00.000Z'),
-			id: 'product-user-1',
-			isBanned: false,
-			nickname: 'artist_1',
-			role: 'user',
-			updatedAt: new Date('2026-03-28T10:00:00.000Z')
+		expect(mocked.openStoredDrawingDocument).toHaveBeenCalledWith({
+			key: null,
+			legacyBase64: 'persisted-avatar-payload',
+			version: 2
 		});
-		const { load } = await import('./+page.server');
-
-		await expect(
-			load({
-				locals: {
-					user: {
-						id: 'product-user-1',
-						authUserId: 'auth-user-1',
-						avatarOnboardingCompletedAt: new Date('2026-03-28T10:00:00.000Z'),
-						nickname: 'artist_1',
-						role: 'user',
-						email: 'artist_1@not-the-louvre.local'
-					}
-				},
-				parent: async () => ({ adultContentEnabled: false }),
-				url: new URL('http://localhost/')
-			} as never)
-		).resolves.toMatchObject({
-			auth: {
-				status: 'authenticated',
-				user: {
-					avatarDrawingDocument: null
-				}
-			}
-		});
-		expect(mocked.decodeCompressedDrawingDocumentToEditableDocument).not.toHaveBeenCalled();
 	});
 
 	it('asks the studio feed for exactly the artworks the scene has frames for', async () => {
@@ -457,7 +413,7 @@ describe('home route auth contract', () => {
 	it('saves an avatar through the home route action and marks onboarding complete', async () => {
 		mocked.uploadAvatar.mockResolvedValue({
 			avatarOnboardingCompletedAt: new Date('2026-03-28T12:00:00.000Z'),
-			avatarUrl: 'avatars/product-user-1.avif',
+			avatarUrl: 'avatars/product-user-1/0123456789abcdef.webp',
 			createdAt: new Date('2026-03-28T10:00:00.000Z'),
 			id: 'product-user-1',
 			nickname: 'fresh_artist',
@@ -497,11 +453,11 @@ describe('home route auth contract', () => {
 		expect(mocked.uploadAvatar).toHaveBeenCalledWith(localUser, avatarDocument);
 		expect(event.locals.user).toMatchObject({
 			avatarOnboardingCompletedAt: new Date('2026-03-28T12:00:00.000Z'),
-			avatarUrl: 'avatars/product-user-1.avif'
+			avatarUrl: 'avatars/product-user-1/0123456789abcdef.webp'
 		});
 		expect(result).toEqual({
 			action: 'saveAvatar',
-			avatarUrl: '/api/users/product-user-1/avatar?v=1774699200000',
+			avatarUrl: '/api/users/product-user-1/avatar?v=0123456789abcdef',
 			onboarding: 'complete',
 			success: true
 		});

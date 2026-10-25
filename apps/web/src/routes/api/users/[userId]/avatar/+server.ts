@@ -1,16 +1,31 @@
-import { json } from '@sveltejs/kit';
 import type { RequestEvent, RequestHandler } from './$types';
-import { etagMatches, notModified } from '$lib/server/http/conditional';
-import { toApiErrorResponse } from '$lib/server/http/errors';
-import { avatarService } from '$lib/server/user/avatar.service';
-import { userRepository } from '$lib/server/user/repository';
-import { streamAvatarStorageObject } from '$lib/server/user/storage';
-import { resolveUserAvatarPath, resolveUserAvatarUrl } from '$lib/user/avatar-url';
+import { etagMatches, notModified } from '#lib/server/http/conditional.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
+import { avatarService } from '#lib/server/user/avatar.service.js';
+import { userRepository } from '#lib/server/user/repository.js';
+import { streamAvatarStorageObject } from '#lib/server/user/storage.js';
+import {
+	avatarVersionFromStorageKey,
+	resolveUserAvatarPath,
+	resolveUserAvatarUrl
+} from '#lib/user/avatar-url.js';
+import { edgeCache, runAfterResponse } from '#lib/server/platform.js';
 
-// Browser TTL stays at the pre-cache 5 minutes so avatar changes keep
-// propagating as fast as before; the edge copy lives longer because uploads
-// purge the uploader's own datacenter below (remote colos wait out the TTL).
-const CACHE_CONTROL = 'public, max-age=300, s-maxage=3600';
+// The URLs the app hands out name the avatar's version, and a version never
+// changes its bytes, so browsers may keep it forever. The edge copy stays
+// short-lived: cache.delete only reaches the local datacenter, so hiding an
+// avatar can only wait out this TTL elsewhere.
+const VERSIONED_CACHE_CONTROL = 'public, max-age=31536000, immutable, s-maxage=3600';
+
+// An address without the current version (the bare path, an old version, a
+// legacy avatar) gets whatever the avatar is now, so browsers recheck it within
+// minutes; the edge copy lasts longer because uploads purge the uploader's own
+// datacenter below.
+const UNVERSIONED_CACHE_CONTROL = 'public, max-age=300, s-maxage=3600';
+
+// Avatars saved before lossless WebP are still AVIF under their legacy key.
+const contentTypeForStorageKey = (storageKey: string) =>
+	storageKey.endsWith('.webp') ? 'image/webp' : 'image/avif';
 
 const AVATAR_READ_ERROR = {
 	fallbackCode: 'AVATAR_READ_FAILED',
@@ -33,21 +48,21 @@ const AVATAR_DELETE_ERROR = {
 // cache.delete only reaches the local datacenter, which is exactly where the
 // uploader's next requests land — they see their change immediately.
 const purgeAvatarEdgeCache = (event: RequestEvent, userId: string) => {
-	const edgeCache = event.platform?.caches?.default;
-	if (!edgeCache) return;
+	const cache = edgeCache();
+	if (!cache) return;
 
 	const purge = Promise.all([
-		edgeCache.delete(new URL(resolveUserAvatarPath(userId), event.url.origin).href),
-		edgeCache.delete(new URL(`/api/users/${userId}/favicon`, event.url.origin).href)
+		cache.delete(new URL(resolveUserAvatarPath(userId), event.url.origin).href),
+		cache.delete(new URL(`/api/users/${userId}/favicon`, event.url.origin).href)
 	]).catch(() => {});
-	event.platform?.context?.waitUntil(purge);
+	runAfterResponse(purge);
 };
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const edgeCache = event.platform?.caches?.default;
+		const cache = edgeCache();
 
-		const cachedResponse = await edgeCache?.match(event.request.url);
+		const cachedResponse = await cache?.match(event.request.url);
 		if (cachedResponse) {
 			const cachedEtag = cachedResponse.headers.get('etag');
 			if (cachedEtag && etagMatches(event.request, cachedEtag)) {
@@ -62,14 +77,21 @@ export const GET: RequestHandler = async (event) => {
 		const user = await userRepository.findUserAvatarRefById(event.params.userId);
 
 		if (!user || !user.avatarUrl || user.avatarIsHidden) {
-			return json({ code: 'NOT_FOUND', message: 'Avatar not found' }, { status: 404 });
+			return Response.json({ code: 'NOT_FOUND', message: 'Avatar not found' }, { status: 404 });
 		}
 
 		const etag = `"${user.avatarUrl}:${user.updatedAt.getTime()}"`;
 
+		const version = avatarVersionFromStorageKey(user.avatarUrl);
+		const isCurrentVersion =
+			version !== null && new URL(event.request.url).searchParams.get('v') === version;
+
 		const headers = new Headers();
-		headers.set('content-type', 'image/avif');
-		headers.set('cache-control', CACHE_CONTROL);
+		headers.set('content-type', contentTypeForStorageKey(user.avatarUrl));
+		headers.set(
+			'cache-control',
+			isCurrentVersion ? VERSIONED_CACHE_CONTROL : UNVERSIONED_CACHE_CONTROL
+		);
 		headers.set('etag', etag);
 
 		if (etagMatches(event.request, etag)) {
@@ -84,9 +106,9 @@ export const GET: RequestHandler = async (event) => {
 
 		const response = new Response(upstream.body, { headers, status: 200 });
 
-		if (edgeCache) {
-			const cachePut = edgeCache.put(event.request.url, response.clone()).catch(() => {});
-			event.platform?.context?.waitUntil(cachePut);
+		if (cache) {
+			const cachePut = cache.put(event.request.url, response.clone()).catch(() => {});
+			runAfterResponse(cachePut);
 		}
 
 		return response;
@@ -101,7 +123,7 @@ export const PUT: RequestHandler = async (event) => {
 		const drawingDocument = formData.get('drawingDocument')?.toString() ?? '';
 
 		if (!drawingDocument.trim()) {
-			return json(
+			return Response.json(
 				{ code: 'INVALID_MEDIA_FORMAT', message: 'Avatar drawing document must be provided' },
 				{ status: 400 }
 			);
@@ -110,8 +132,8 @@ export const PUT: RequestHandler = async (event) => {
 		const updated = await avatarService.uploadAvatar(event.locals.user ?? null, drawingDocument);
 		purgeAvatarEdgeCache(event, updated.id);
 
-		return json({
-			avatarUrl: resolveUserAvatarUrl(updated.id, updated.avatarUrl, updated.updatedAt.getTime())
+		return Response.json({
+			avatarUrl: resolveUserAvatarUrl(updated.id, updated.avatarUrl)
 		});
 	} catch (error) {
 		return toApiErrorResponse(error, AVATAR_UPLOAD_ERROR);
@@ -123,7 +145,7 @@ export const DELETE: RequestHandler = async (event) => {
 		const updated = await avatarService.deleteAvatar(event.locals.user ?? null);
 		purgeAvatarEdgeCache(event, updated.id);
 
-		return json({ avatarUrl: updated.avatarUrl });
+		return Response.json({ avatarUrl: updated.avatarUrl });
 	} catch (error) {
 		return toApiErrorResponse(error, AVATAR_DELETE_ERROR);
 	}

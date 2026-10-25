@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
+	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
 
 	// A 950ms 3D cover flip is the biggest motion on /draw. Under reduced motion it
 	// becomes an instant cut: the same duration feeds `--book-open-duration` and the

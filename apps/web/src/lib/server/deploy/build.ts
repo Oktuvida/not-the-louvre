@@ -1,24 +1,9 @@
-import { access, copyFile, cp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
-import { dirname, join, relative, resolve } from 'node:path';
+import { access, cp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
+import { join, relative, resolve } from 'node:path';
 
 const DEFAULT_CLOUDFLARE_BUILD_DIR = join('.svelte-kit', 'cloudflare');
 const DEFAULT_CLOUDFLARE_MANIFEST_PATH = join('.svelte-kit', 'cloudflare-tmp', 'manifest.js');
-export const SERVER_WASM_IMPORT_SPECIFIER = '@not-the-louvre/stroke-json-runtime/server.wasm';
-const GENERATED_SERVER_WASM_RELATIVE_PATH = join(
-	'generated',
-	'wasm',
-	'server',
-	'stroke_json_wasm_bg.wasm'
-);
 const DEFAULT_SVELTEKIT_OUTPUT_DIR = join('.svelte-kit', 'output');
-// The generated wasm lives in the workspace package, two levels above apps/web.
-const WORKSPACE_GENERATED_SERVER_WASM_PATH = join(
-	'..',
-	'..',
-	'packages',
-	'stroke-json-runtime',
-	GENERATED_SERVER_WASM_RELATIVE_PATH
-);
 
 const collectJavaScriptFiles = async (directory: string): Promise<string[]> => {
 	const entries = await readdir(directory, { withFileTypes: true });
@@ -74,65 +59,6 @@ export const ensureWorkerBuildOutput = async (cloudflareBuildDirectory: string) 
 	return workerEntryPoint;
 };
 
-// The Workers runtime forbids compiling WASM from bytes, so the SSR output must
-// keep the stroke-json wasm as an external module import for wrangler to bundle.
-export const ensureServerWasmModuleExternalized = async (buildDirectory: string) => {
-	const serverDirectory = join(buildDirectory, 'server');
-	const serverFiles = await collectJavaScriptFiles(serverDirectory);
-
-	for (const serverFile of serverFiles) {
-		const contents = await readFile(serverFile, 'utf8');
-
-		if (contents.includes(SERVER_WASM_IMPORT_SPECIFIER)) {
-			return serverFile;
-		}
-	}
-
-	throw new Error(
-		`Expected SSR build to keep an external import of ${SERVER_WASM_IMPORT_SPECIFIER} under ${serverDirectory}`
-	);
-};
-
-export const ensureServerWasmAsset = async (buildDirectory: string) => {
-	const wasmAssetPath = join(buildDirectory, 'server', GENERATED_SERVER_WASM_RELATIVE_PATH);
-
-	try {
-		await access(wasmAssetPath);
-	} catch {
-		throw new Error(`Expected built server runtime wasm asset at ${wasmAssetPath}`);
-	}
-
-	return wasmAssetPath;
-};
-
-export const ensureServerWasmReferenced = async (buildDirectory: string) => {
-	const serverDirectory = join(buildDirectory, 'server');
-	const serverFiles = await collectJavaScriptFiles(serverDirectory);
-
-	for (const serverFile of serverFiles) {
-		const contents = await readFile(serverFile, 'utf8');
-
-		if (contents.includes('stroke_json_wasm_bg.wasm')) {
-			return serverFile;
-		}
-	}
-
-	throw new Error(
-		`Expected SSR build to reference stroke_json_wasm_bg.wasm from emitted server output under ${serverDirectory}`
-	);
-};
-
-export const syncGeneratedServerWasmAsset = async (
-	buildDirectory: string,
-	generatedServerWasmPath: string
-) => {
-	const targetWasmPath = join(buildDirectory, 'server', GENERATED_SERVER_WASM_RELATIVE_PATH);
-	await mkdir(dirname(targetWasmPath), { recursive: true });
-	await copyFile(generatedServerWasmPath, targetWasmPath);
-
-	return targetWasmPath;
-};
-
 const ensureManifestFileExcludesRoutePrefix = async (manifestPath: string, routePrefix: string) => {
 	const manifestContents = await readFile(manifestPath, 'utf8');
 	const escapedRoutePrefix = routePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -179,14 +105,10 @@ export const syncProductionRoutes = async (
 };
 
 type ValidateCloudflareBuildOptions = {
-	/** Path to the workspace-generated server wasm copied into the SSR output. */
-	generatedServerWasmPath?: string;
 	/** Assert the production manifest no longer carries the `/demo` routes. */
 	requireDemoExclusion?: boolean;
 	/** Assert gsap is bundled rather than imported at runtime by the SSR output. */
 	requireGsapBundled?: boolean;
-	/** Assert the stroke-json wasm stayed an external module import for wrangler. */
-	requireWasmExternalized?: boolean;
 	/** Assert the adapter-cloudflare worker entrypoint exists. */
 	requireWorkerOutput?: boolean;
 };
@@ -201,10 +123,8 @@ type ValidateCloudflareBuildOptions = {
 export const validateCloudflareBuild = async (
 	projectRoot: string,
 	{
-		generatedServerWasmPath = resolve(projectRoot, WORKSPACE_GENERATED_SERVER_WASM_PATH),
 		requireDemoExclusion = true,
 		requireGsapBundled = true,
-		requireWasmExternalized = true,
 		requireWorkerOutput = true
 	}: ValidateCloudflareBuildOptions = {}
 ) => {
@@ -220,24 +140,9 @@ export const validateCloudflareBuild = async (
 		await ensureServerDependencyBundled(svelteKitOutputDirectory, 'gsap');
 	}
 
-	await ensureServerDependencyBundled(
-		svelteKitOutputDirectory,
-		'@not-the-louvre/stroke-json-runtime/server'
-	);
-
 	if (requireDemoExclusion) {
 		await ensureManifestFileExcludesRoutePrefix(cloudflareManifestPath, '/demo');
 	}
-
-	if (requireWasmExternalized) {
-		await ensureServerWasmModuleExternalized(svelteKitOutputDirectory);
-	}
-
-	// `vite preview` still serves the SSR output with Node, which loads the wasm
-	// from disk relative to the emitted chunks.
-	await syncGeneratedServerWasmAsset(svelteKitOutputDirectory, generatedServerWasmPath);
-	await ensureServerWasmAsset(svelteKitOutputDirectory);
-	await ensureServerWasmReferenced(svelteKitOutputDirectory);
 
 	return cloudflareBuildDirectory;
 };

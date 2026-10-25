@@ -1,20 +1,20 @@
 <script lang="ts">
 	import { type Snippet } from 'svelte';
 	import { ArrowLeft, Brush, Paintbrush, RefreshCw } from 'lucide-svelte';
-	import ArtworkDetailPanel from '$lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte';
-	import GalleryRoomNav from '$lib/features/gallery-exploration/components/GalleryRoomNav.svelte';
-	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
+	import ArtworkDetailPanel from '#lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte';
+	import GalleryRoomNav from '#lib/features/gallery-exploration/components/GalleryRoomNav.svelte';
+	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
 	import {
 		createGalleryLayoutContext,
 		setGalleryLayoutContext,
 		type GalleryLayoutContext
-	} from '$lib/features/gallery-exploration/gallery-layout-context';
-	import { museumWallPatternAssetUrl } from '$lib/features/shared-ui/generated-art';
-	import { warmStudioBackground } from '$lib/features/shared-ui/studio-background-warmup';
-	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
-	import type { Viewer } from '$lib/shared/viewer';
+	} from '#lib/features/gallery-exploration/gallery-layout-context.js';
+	import { museumWallPatternAssetUrl } from '#lib/features/shared-ui/generated-art.js';
+	import { warmStudioBackground } from '#lib/features/shared-ui/studio-background-warmup.js';
+	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
+	import type { Viewer } from '#lib/shared/viewer.js';
 
 	let {
 		children,
@@ -22,8 +22,9 @@
 		viewer,
 		context
 	}: {
-		children: Snippet;
-		roomId: GalleryRoomId;
+		children?: Snippet;
+		/** `null` on a page that is not a room, such as an artwork's permalink. */
+		roomId: GalleryRoomId | null;
 		viewer: Viewer | null;
 		context?: GalleryLayoutContext;
 	} = $props();
@@ -144,7 +145,7 @@
 		</div>
 	</div>
 
-	{@render children()}
+	{@render children?.()}
 
 	{#if $panelBindings}
 		<ArtworkDetailPanel

@@ -11,7 +11,7 @@ const tape = () => document.querySelector<HTMLButtonElement>('.washi-tape');
 
 describe('WashiTape', () => {
 	it('is one strip of tape, torn ends included', async () => {
-		render(WashiTape, { children: tapeLabel('Close') });
+		await render(WashiTape, { children: tapeLabel('Close') });
 
 		const control = page.getByRole('button', { name: 'Close' });
 		await expect.element(control).toBeVisible();
@@ -28,7 +28,7 @@ describe('WashiTape', () => {
 	});
 
 	it('is stuck on crooked, at the angle the call site asks for', async () => {
-		const { rerender } = render(WashiTape, { children: tapeLabel('Close') });
+		const { rerender } = await render(WashiTape, { children: tapeLabel('Close') });
 
 		// Both close buttons share the default; the detail panel's chips are
 		// stuck on at other angles, so it is a prop rather than a second rule.
@@ -41,7 +41,7 @@ describe('WashiTape', () => {
 	it('behaves like the button it is', async () => {
 		const onclick = vi.fn();
 
-		render(WashiTape, { children: tapeLabel('Close'), class: 'ml-2', onclick });
+		await render(WashiTape, { children: tapeLabel('Close'), class: 'ml-2', onclick });
 
 		await page.getByRole('button', { name: 'Close' }).click();
 

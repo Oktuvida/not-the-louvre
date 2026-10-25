@@ -1,10 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import type { UserRecord } from '$lib/server/user/types';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import type { UserRecord } from '#lib/server/user/types.js';
 import {
 	createEmptyDrawingDocument,
 	serializeDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
+
+// Handlers reach the Cloudflare runtime through #lib/server/platform.js; each
+// test registers the cache and waitUntil it would have found there.
+type FakePlatform = {
+	caches?: { default?: unknown };
+	context?: { waitUntil?: (promise: Promise<unknown>) => void };
+};
+const fakePlatform = vi.hoisted(() => ({ current: undefined as FakePlatform | undefined }));
+vi.mock('#lib/server/platform.js', () => ({
+	edgeCache: () => fakePlatform.current?.caches?.default,
+	hyperdriveConnectionString: () => undefined,
+	runAfterResponse: (promise: Promise<unknown>) =>
+		fakePlatform.current?.context?.waitUntil?.(promise)
+}));
+const usePlatform = (platform: FakePlatform) => {
+	fakePlatform.current = platform;
+	return platform;
+};
+beforeEach(() => {
+	fakePlatform.current = undefined;
+});
 
 const mocked = vi.hoisted(() => ({
 	avatarService: {
@@ -15,20 +36,23 @@ const mocked = vi.hoisted(() => ({
 	streamAvatarStorageObject: vi.fn()
 }));
 
-vi.mock('$lib/server/user/avatar.service', () => ({
+vi.mock('#lib/server/user/avatar.service.js', () => ({
 	avatarService: mocked.avatarService
 }));
 
-vi.mock('$lib/server/user/repository', () => ({
+vi.mock('#lib/server/user/repository.js', () => ({
 	userRepository: {
 		findUserAvatarRefById: mocked.findUserAvatarRefById,
 		updateUserAvatarUrl: vi.fn()
 	}
 }));
 
-vi.mock('$lib/server/user/storage', () => ({
+vi.mock('#lib/server/user/storage.js', () => ({
 	streamAvatarStorageObject: mocked.streamAvatarStorageObject
 }));
+
+const AVATAR_VERSION = '0123456789abcdef';
+const VERSIONED_AVATAR_KEY = `avatars/user-1/${AVATAR_VERSION}.webp`;
 
 const makeUserRecord = (overrides: Partial<UserRecord> = {}): UserRecord => ({
 	avatarIsHidden: false,
@@ -87,6 +111,52 @@ describe('GET /api/users/[userId]/avatar', () => {
 		expect(response.headers.get('content-type')).toBe('image/avif');
 		expect(response.headers.get('cache-control')).toMatch(/public/);
 		expect(mocked.streamAvatarStorageObject).toHaveBeenCalledWith('avatars/user-1.avif');
+	});
+
+	it('lets every cache keep an avatar asked for by its current version forever', async () => {
+		mocked.findUserAvatarRefById.mockResolvedValue(
+			makeUserRecord({ avatarUrl: VERSIONED_AVATAR_KEY })
+		);
+		mocked.streamAvatarStorageObject.mockResolvedValue(
+			new Response(new Uint8Array([1, 2, 3]), { status: 200 })
+		);
+
+		const { GET } = await import('./+server');
+		const response = await GET({
+			locals: {},
+			params: { userId: 'user-1' },
+			request: new Request(`https://gallery.test/api/users/user-1/avatar?v=${AVATAR_VERSION}`)
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get('content-type')).toBe('image/webp');
+		expect(response.headers.get('cache-control')).toBe(
+			'public, max-age=31536000, immutable, s-maxage=3600'
+		);
+	});
+
+	it('keeps short caching for an address that does not name the current version', async () => {
+		mocked.findUserAvatarRefById.mockResolvedValue(
+			makeUserRecord({ avatarUrl: VERSIONED_AVATAR_KEY })
+		);
+
+		const { GET } = await import('./+server');
+		for (const url of [
+			'https://gallery.test/api/users/user-1/avatar',
+			'https://gallery.test/api/users/user-1/avatar?v=0000000000000000'
+		]) {
+			mocked.streamAvatarStorageObject.mockResolvedValue(
+				new Response(new Uint8Array([1, 2, 3]), { status: 200 })
+			);
+			const response = await GET({
+				locals: {},
+				params: { userId: 'user-1' },
+				request: new Request(url)
+			} as never);
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get('cache-control')).toBe('public, max-age=300, s-maxage=3600');
+		}
 	});
 
 	it('returns 404 for a user without an avatar', async () => {
@@ -185,7 +255,7 @@ describe('GET /api/users/[userId]/avatar', () => {
 		const response = await GET({
 			locals: {},
 			params: { userId: 'user-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil: vi.fn() } }),
 			request: new Request('https://gallery.test/api/users/user-1/avatar')
 		} as never);
 
@@ -199,8 +269,8 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		mocked.avatarService.uploadAvatar.mockReset();
 	});
 
-	it('uploads and returns the updated profile', async () => {
-		const updated = makeUserRecord({ avatarUrl: 'avatars/user-1.avif' });
+	it('uploads and returns the address of the new avatar version', async () => {
+		const updated = makeUserRecord({ avatarUrl: VERSIONED_AVATAR_KEY });
 		mocked.avatarService.uploadAvatar.mockResolvedValue(updated);
 
 		const formData = new FormData();
@@ -216,7 +286,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 
 		expect(response.status).toBe(200);
 		const json = await response.json();
-		expect(json.avatarUrl).toBe(`/api/users/${updated.id}/avatar?v=${updated.updatedAt.getTime()}`);
+		expect(json.avatarUrl).toBe(`/api/users/user-1/avatar?v=${AVATAR_VERSION}`);
 	});
 
 	it('purges the local edge cache entries after an upload', async () => {
@@ -239,7 +309,7 @@ describe('PUT /api/users/[userId]/avatar', () => {
 		const response = await PUT({
 			locals: { user: makeLocalUser() },
 			params: { userId: 'user-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil } }),
 			request: new Request('http://localhost', { method: 'PUT', body: formData }),
 			url: new URL('http://localhost/api/users/user-1/avatar')
 		} as never);

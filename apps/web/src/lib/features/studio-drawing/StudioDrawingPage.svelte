@@ -1,41 +1,40 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import { goto } from '$app/navigation';
-	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount, untrack } from 'svelte';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
-	} from '$lib/client/content-filter';
+	} from '#lib/client/content-filter/index.js';
 	import {
 		buildDrawingDraftKey,
 		createDrawingDraftSession,
+		type DrawingDraftSession,
 		type IndexedDbDrawingDraftStore
-	} from '$lib/features/stroke-json/drafts';
+	} from '#lib/features/stroke-json/drafts.js';
 	import {
 		DRAWING_DOCUMENT_VERSION,
 		cloneDrawingDocumentV2,
-		createEmptyDrawingDocument,
 		createEmptyDrawingDocumentV2,
-		getRenderableDrawingStrokes,
+		serializeDrawingDocument,
 		type DrawingDocumentV2,
 		type DrawingStroke
-	} from '$lib/features/stroke-json/document';
-	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/runtime.browser';
+	} from '#lib/features/stroke-json/document.js';
 	import type {
 		DrawForkParent,
 		DrawPageUser,
 		DrawPublishActionData,
 		DrawPublishedArtwork
-	} from '$lib/features/studio-drawing/publish-contract';
-	import DrawingBookStage from '$lib/features/studio-drawing/components/DrawingBookStage.svelte';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
-	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
-	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
-	import DrawingCanvas from '$lib/features/studio-drawing/components/DrawingCanvas.svelte';
-	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
+	} from '#lib/features/studio-drawing/publish-contract.js';
+	import DrawingBookStage from '#lib/features/studio-drawing/components/DrawingBookStage.svelte';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
+	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
+	import DrawingCanvas from '#lib/features/studio-drawing/components/DrawingCanvas.svelte';
+	import DrawingToolTray from '#lib/features/studio-drawing/tools/DrawingToolTray.svelte';
+	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
 
 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
@@ -95,43 +94,8 @@
 
 	let {
 		checkTextContent = defaultCheckTextContent,
-		createArtworkPayload = async (documentState: DrawingDocumentV2) => {
-			const mode =
-				typeof window === 'undefined'
-					? 'good'
-					: ((
-							window as Window & {
-								__drawingExportMode?: 'bad' | 'unsupported' | 'webp';
-							}
-						).__drawingExportMode ?? 'good');
-
-			if (mode === 'unsupported') {
-				return null;
-			}
-
-			if (mode === 'bad') {
-				return JSON.stringify(createEmptyDrawingDocument('avatar'));
-			}
-
-			if (mode === 'webp' && getRenderableDrawingStrokes(documentState).length === 0) {
-				return JSON.stringify({
-					...createEmptyDrawingDocument('artwork'),
-					strokes: [
-						{
-							color: '#2d2420',
-							points: [
-								[128, 128] as [number, number],
-								[384, 384] as [number, number],
-								[640, 640] as [number, number]
-							],
-							size: 48
-						}
-					]
-				});
-			}
-
-			return prepareDrawingDocumentForPublish(documentState);
-		},
+		createArtworkPayload = async (documentState: DrawingDocumentV2) =>
+			serializeDrawingDocument(documentState),
 		forkParent = null,
 		// Seeded from the request's client hints so a phone is not served the
 		// desktop book stage and then swapped whole after mount; the matchMedia
@@ -166,14 +130,17 @@
 			return { message: 'Artwork publish failed' };
 		},
 		replaceStudioUrl = () => {
-			replaceState(resolve('/draw'), window.history.state);
+			goto(resolve('draw'), { shallow: true, replace: true, state: window.history.state });
 		},
 		draftStore,
+		inkLimits = {},
 		user
 	}: {
 		checkTextContent?: TextContentChecker;
 		createArtworkPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		draftStore?: IndexedDbDrawingDraftStore;
+		/** The server's drawing limits; specs pass a small budget. */
+		inkLimits?: InkLimits;
 		forkParent?: DrawForkParent | null;
 		initialIsMobile?: boolean;
 		openingDurationMs?: number;
@@ -186,6 +153,14 @@
 	} = $props();
 
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
+	let canvasHistory = $state<{
+		canRedo(): boolean;
+		canUndo(): boolean;
+		redo(): boolean;
+		undo(): boolean;
+	}>();
+	const canRedo = $derived(canvasHistory?.canRedo() ?? false);
+	const canUndo = $derived(canvasHistory?.canUndo() ?? false);
 	let clearVersion = $state(0);
 	let currentForkParent = $state<DrawForkParent | null>(null);
 	let draftHydrated = $state(false);
@@ -461,21 +436,68 @@
 		fadeAndExitHome();
 	};
 
-	const handleStrokeCommitted = async (input: {
+	/*
+	 * Draft writes go out one at a time. A stroke's journal entry still being
+	 * written when an undo rewrites the snapshot would land after it, and the
+	 * undone line would come back on the next reload.
+	 */
+	let draftWrites = Promise.resolve();
+
+	const writeDraft = (write: (session: DrawingDraftSession) => Promise<unknown>) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) return;
+
+		draftWrites = draftWrites.then(async () => {
+			try {
+				await write(draftSession);
+				clearUnsavedDraftWarning();
+			} catch {
+				markUnsavedDraftWarning();
+			}
+		});
+	};
+
+	const handleStrokeCommitted = (input: {
 		nextDocument: DrawingDocumentV2;
 		previousDocument: DrawingDocumentV2;
 		stroke: DrawingStroke;
 	}) => {
-		const draftSession = createDraftSession(draftKey, legacyDraftKey);
-		if (!draftSession) {
-			return;
-		}
+		writeDraft((session) => session.appendCommittedStroke(input.previousDocument, input.stroke));
+	};
 
-		try {
-			await draftSession.appendCommittedStroke(input.previousDocument, input.stroke);
-			clearUnsavedDraftWarning();
-		} catch {
-			markUnsavedDraftWarning();
+	const ink = $derived(measureInk(drawingDocument, inkLimits));
+
+	const handleOutOfInk = () => {
+		statusMessage = 'Out of ink. Undo a line to free some up, or publish.';
+		statusTone = 'error';
+	};
+
+	const handleHistoryChange = (document: DrawingDocumentV2) => {
+		writeDraft((session) => session.compact(document));
+	};
+
+	const undo = () => {
+		if (studioUnlocked) canvasHistory?.undo();
+	};
+
+	const redo = () => {
+		if (studioUnlocked) canvasHistory?.redo();
+	};
+
+	// Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (or Ctrl+Y), except while typing: the
+	// title field keeps its own undo.
+	const handleHistoryShortcut = (event: KeyboardEvent) => {
+		if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+		const key = event.key.toLowerCase();
+		if (key === 'z' && !event.shiftKey) {
+			event.preventDefault();
+			undo();
+		} else if ((key === 'z' && event.shiftKey) || key === 'y') {
+			event.preventDefault();
+			redo();
 		}
 	};
 
@@ -488,7 +510,7 @@
 	// studio is unmounted mid-fade — a stale callback would still pull a visitor
 	// who has already gone somewhere else back to the home page.
 	const completeExitToHome = () => {
-		void goto(resolve('/?from=studio'));
+		void goto(resolve('?from=studio'));
 	};
 
 	const publishArtwork = async () => {
@@ -576,6 +598,8 @@
 	};
 </script>
 
+<svelte:window onkeydown={handleHistoryShortcut} />
+
 <svelte:head>
 	<!-- No title element here on purpose: the route contributes `meta.title`
 	from its load and the root layout renders the document's only one. -->
@@ -610,8 +634,12 @@
 					stroke="currentColor"
 					stroke-width="2"
 					stroke-linecap="round"
-					stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg
+					stroke-linejoin="round"
 				>
+					<path d="m12 19-7-7 7-7"></path>
+					<path d="M19 12H5"></path>
+				</svg>
+
 				<span>Exit Studio</span>
 			</GameLink>
 		</div>
@@ -625,11 +653,15 @@
 				<div class="studio-mobile-canvas-shell">
 					<div class="studio-mobile-canvas-card" data-testid="studio-mobile-canvas-card">
 						<DrawingCanvas
+							bind:this={canvasHistory}
 							bind:canvasRef
 							bind:drawingDocument
 							{clearVersion}
 							{initialDrawingDocument}
 							interactive={studioUnlocked}
+							{inkLimits}
+							onHistoryChange={handleHistoryChange}
+							onOutOfInk={handleOutOfInk}
 							onStrokeCommitted={handleStrokeCommitted}
 							{statusMessage}
 							{statusTone}
@@ -705,7 +737,17 @@
 				</div>
 
 				<div class="studio-mobile-tools">
-					<DrawingToolTray mobile {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
+					<DrawingToolTray
+						mobile
+						{canRedo}
+						{canUndo}
+						inkUsed={ink.used}
+						{isPublishing}
+						onPublish={publishArtwork}
+						onClear={clearCanvas}
+						onRedo={redo}
+						onUndo={undo}
+					/>
 				</div>
 
 				{#if publishedArtwork}
@@ -803,11 +845,15 @@
 								</div>
 							{/snippet}
 							<DrawingCanvas
+								bind:this={canvasHistory}
 								bind:canvasRef
 								bind:drawingDocument
 								{clearVersion}
 								{initialDrawingDocument}
 								interactive={studioUnlocked}
+								{inkLimits}
+								onHistoryChange={handleHistoryChange}
+								onOutOfInk={handleOutOfInk}
 								onStrokeCommitted={handleStrokeCommitted}
 								{statusMessage}
 								{statusTone}
@@ -821,7 +867,16 @@
 					aria-hidden={!studioUnlocked}
 					inert={!studioUnlocked}
 				>
-					<DrawingToolTray {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
+					<DrawingToolTray
+						{canRedo}
+						{canUndo}
+						inkUsed={ink.used}
+						{isPublishing}
+						onPublish={publishArtwork}
+						onClear={clearCanvas}
+						onRedo={redo}
+						onUndo={undo}
+					/>
 
 					{#if publishedArtwork}
 						<div class="publish-postit">

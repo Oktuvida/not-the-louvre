@@ -1,17 +1,16 @@
 import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { createFieldAttribute } from 'better-auth/db';
 import { username } from 'better-auth/plugins/username';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
-import { env } from '$env/dynamic/private';
+import { ORIGIN, BETTER_AUTH_SECRET } from '$app/env/private';
 import { getRequestEvent } from '$app/server';
-import { db } from '$lib/server/db';
-import * as schema from '$lib/server/db/schema';
+import { db } from '#lib/server/db/index.js';
+import * as schema from '#lib/server/db/schema.js';
 import { NICKNAME_PATTERN } from './auth/config';
 
 export const auth = betterAuth({
-	baseURL: env.ORIGIN,
-	secret: env.BETTER_AUTH_SECRET,
+	baseURL: ORIGIN,
+	secret: BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, {
 		provider: 'pg',
 		schema: {
@@ -23,7 +22,18 @@ export const auth = betterAuth({
 		}
 	}),
 	logger: {
-		disabled: __PLAYWRIGHT__
+		// Vite defines __PLAYWRIGHT__; the Better Auth CLI loads this file without
+		// Vite (`bun run auth:schema`), where the name is undeclared.
+		disabled: typeof __PLAYWRIGHT__ !== 'undefined' && __PLAYWRIGHT__
+	},
+	advanced: {
+		ipAddress: {
+			// Every rate limit and session keys on this address. Cloudflare sets
+			// CF-Connecting-IP itself, while X-Forwarded-For, the default, keeps
+			// whatever the client sent: a fresh forged value per request would buy a
+			// fresh allowance of guesses.
+			ipAddressHeaders: ['cf-connecting-ip']
+		}
 	},
 	emailAndPassword: {
 		enabled: true,
@@ -43,10 +53,11 @@ export const auth = betterAuth({
 	},
 	user: {
 		additionalFields: {
-			nickname: createFieldAttribute('string', {
+			nickname: {
+				type: 'string',
 				required: false,
 				returned: false
-			})
+			}
 		}
 	},
 	plugins: [

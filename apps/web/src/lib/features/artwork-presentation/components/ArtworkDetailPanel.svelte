@@ -3,21 +3,21 @@
 	import { fade, scale } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { Download, GitFork } from 'lucide-svelte';
-	import { ApiError, requestJson } from '$lib/client/api';
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import ArtworkSafetyActions from '$lib/features/artwork-presentation/components/ArtworkSafetyActions.svelte';
+	import { ApiError, requestJson } from '#lib/client/api.js';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import ArtworkSafetyActions from '#lib/features/artwork-presentation/components/ArtworkSafetyActions.svelte';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
-	} from '$lib/client/content-filter';
+	} from '#lib/client/content-filter/index.js';
 	import { resolve } from '$app/paths';
-	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
-	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
-	import type { ArtworkVoteValue } from '$lib/shared/content/votes';
-	import type { Viewer } from '$lib/shared/viewer';
+	import NsfwImage from '#lib/features/gallery-exploration/components/NsfwImage.svelte';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
+	import type { Viewer } from '#lib/shared/viewer.js';
 
 	/* The visitor never reads a stack trace. Codes whose server message is
 	 * already written for them (moderation reasons, rate-limit countdowns) pass
@@ -66,6 +66,13 @@
 		onClose,
 		onNotify,
 		revealedArtworkIds
+
+		/**
+		 * Hands every transient outcome to the host page instead of the panel's
+		 * own notice. The gallery owns a status region that outlives the dialog,
+		 * so a failure raised on the last click is still readable after the panel
+		 * closes; without this the panel keeps saying it itself.
+		 */
 	}: {
 		artwork: Artwork | null;
 		adultContentEnabled?: boolean;
@@ -79,12 +86,6 @@
 			patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>
 		) => void;
 		onClose?: () => void;
-		/**
-		 * Hands every transient outcome to the host page instead of the panel's
-		 * own notice. The gallery owns a status region that outlives the dialog,
-		 * so a failure raised on the last click is still readable after the panel
-		 * closes; without this the panel keeps saying it itself.
-		 */
 		onNotify?: (message: string | null) => void;
 		revealedArtworkIds?: import('svelte/store').Writable<Set<string>>;
 	} = $props();
@@ -393,7 +394,7 @@
 		notify(null);
 		if (!requireViewer()) return;
 
-		await goto(resolve(`/draw?fork=${artwork.id}`));
+		await goto(resolve(`draw?fork=${artwork.id}`));
 	};
 
 	const downloadExtensions: Record<string, string> = {
@@ -513,21 +514,24 @@
 				};
 			}>(`/api/artworks/${artwork.id}/comments`, { json: { body }, method: 'POST' });
 
-			syncArtwork({
-				...artwork,
-				commentCount: (artwork.commentCount ?? artwork.comments.length) + 1,
-				comments: [
-					...artwork.comments,
-					{
-						author: payload.comment.author.nickname,
-						id: payload.comment.id,
-						text: payload.comment.body,
-						timestamp: payload.comment.createdAt
-							? Date.parse(payload.comment.createdAt)
-							: Date.now()
-					}
-				]
-			});
+			// The live copy of this comment can land before this answer does.
+			if (!artwork.comments.some((comment) => comment.id === payload.comment.id)) {
+				syncArtwork({
+					...artwork,
+					commentCount: (artwork.commentCount ?? artwork.comments.length) + 1,
+					comments: [
+						...artwork.comments,
+						{
+							author: payload.comment.author.nickname,
+							id: payload.comment.id,
+							text: payload.comment.body,
+							timestamp: payload.comment.createdAt
+								? Date.parse(payload.comment.createdAt)
+								: Date.now()
+						}
+					]
+				});
+			}
 			commentBody = '';
 			commentInput?.focus();
 		} catch (error) {
@@ -629,7 +633,6 @@
 										className="postcard-photo-layer"
 										src={artwork.imageUrl}
 										alt={artwork.title}
-										placeholder={artwork.imagePlaceholder ?? null}
 										blurred={isSensitiveBlurred}
 										showScrim={false}
 										loading="eager"
@@ -776,8 +779,8 @@
 										stroke-linejoin="round"
 										aria-hidden="true"
 									>
-										<path d="M2 15 Q 14 2 28 8" />
-										<path d="M22 4.5 28 8l-6.5 4" />
+										<path d="M2 15 Q 14 2 28 8"></path>
+										<path d="M22 4.5 28 8l-6.5 4"></path>
 									</svg>
 								</button>
 							</div>
@@ -879,28 +882,21 @@
 										<!-- Postmark + cancellation lines, franked below the stamp -->
 										<svg class="postcard-postmark" viewBox="0 0 220 96" aria-hidden="true">
 											<defs>
-												<path id="postmark-arc-top" d="M 16 48 A 32 32 0 1 1 80 48" />
-												<path id="postmark-arc-bottom" d="M 19 48 A 29 29 0 1 0 77 48" />
+												<path id="postmark-arc-top" d="M 16 48 A 32 32 0 1 1 80 48"></path>
+
+												<path id="postmark-arc-bottom" d="M 19 48 A 29 29 0 1 0 77 48"></path>
 											</defs>
 											<g stroke="currentColor" fill="none" opacity="0.62">
-												<circle cx="48" cy="48" r="40" stroke-width="2" />
-												<circle cx="48" cy="48" r="22" stroke-width="1.2" />
-												<path
-													d="M86 30 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
-													stroke-width="2.4"
-												/>
-												<path
-													d="M86 44 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
-													stroke-width="2.4"
-												/>
-												<path
-													d="M86 58 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
-													stroke-width="2.4"
-												/>
-												<path
-													d="M86 72 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
-													stroke-width="2.4"
-												/>
+												<circle cx="48" cy="48" r="40" stroke-width="2"></circle>
+												<circle cx="48" cy="48" r="22" stroke-width="1.2"></circle>
+												<path d="M86 30 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0" stroke-width="2.4"
+												></path>
+												<path d="M86 44 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0" stroke-width="2.4"
+												></path>
+												<path d="M86 58 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0" stroke-width="2.4"
+												></path>
+												<path d="M86 72 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0" stroke-width="2.4"
+												></path>
 											</g>
 											<g fill="currentColor" opacity="0.68">
 												<text class="postmark-text">
@@ -931,7 +927,8 @@
 											<span class="postcard-address-field">From:</span>
 											{artwork.artist}
 										</p>
-										<p class="postcard-address-line postcard-address-blank">&nbsp;</p>
+
+										<p class="postcard-address-line postcard-address-blank"></p>
 									</div>
 
 									<div class="postcard-ink-stamps">
@@ -958,8 +955,8 @@
 												stroke-linejoin="round"
 												aria-hidden="true"
 											>
-												<path d="M2 15 Q 14 2 28 8" />
-												<path d="M22 4.5 28 8l-6.5 4" />
+												<path d="M2 15 Q 14 2 28 8"></path>
+												<path d="M22 4.5 28 8l-6.5 4"></path>
 											</svg>
 											🖼 the artwork
 										</button>

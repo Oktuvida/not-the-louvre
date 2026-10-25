@@ -25,11 +25,14 @@ export type RateLimitColumns = {
 	windowStartedAt: PgColumn;
 };
 
-// A bare column name in `do update set` is the row already in the table;
+// In `do update set`, `<table>.<column>` is the row already in the table and
 // `excluded.<column>` is the row this insert proposed (so `excluded.
-// last_attempt_at` is the caller's `now`). Names go through sql.identifier and
-// the windows travel as bound parameters — nothing is spliced in as raw SQL.
-const stored = (column: PgColumn) => sql`${sql.identifier(column.name)}`;
+// last_attempt_at` is the caller's `now`). A bare column name matches both, and
+// Postgres rejects the whole statement as ambiguous (42702) before it runs, so
+// stored columns are embedded as drizzle columns, which render qualified with
+// their schema and table. Names go through drizzle's escaping and the windows
+// travel as bound parameters — nothing is spliced in as raw SQL.
+const stored = (column: PgColumn) => sql`${column}`;
 
 const proposed = (column: PgColumn) => sql`excluded.${sql.identifier(column.name)}`;
 

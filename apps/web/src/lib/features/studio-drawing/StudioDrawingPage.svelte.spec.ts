@@ -1,27 +1,25 @@
-import { page } from 'vitest/browser';
-import { PAGE_FADE_DURATION_MS } from '$lib/features/shared-ui/page-fade';
+import { page, userEvent } from 'vitest/browser';
+import { PAGE_FADE_DURATION_MS } from '#lib/features/shared-ui/page-fade.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
 	DRAWING_DOCUMENT_V2_VERSION,
 	createEmptyDrawingDocument,
 	normalizeDrawingDocumentToEditableV2
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 
 const { goto } = vi.hoisted(() => ({ goto: vi.fn() }));
 
-vi.mock('$app/navigation', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$app/navigation')>();
-	return {
-		...actual,
-		goto
-	};
-});
+vi.mock('$app/navigation', async () => ({
+	...(await import('#lib/testing/fake-navigation.js')).fakeNavigation,
+	goto
+}));
 
 import {
 	buildDrawingDraftKey,
 	createIndexedDbDrawingDraftStore
-} from '$lib/features/stroke-json/drafts';
+} from '#lib/features/stroke-json/drafts.js';
+import { drawingTools } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 import StudioDrawingPage from './StudioDrawingPage.svelte';
 
 const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
@@ -161,10 +159,12 @@ describe('StudioDrawingPage', () => {
 		);
 		window.localStorage.clear();
 		await resetDrawingDraftDatabase();
+		// The brush and eraser are shared studio state; every test starts with the brush.
+		drawingTools.tool = 'brush';
 	});
 
-	it('preloads the studio background image', () => {
-		render(StudioDrawingPage, { openingDurationMs: 1 });
+	it('preloads the studio background image', async () => {
+		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		const preloadLink = document.head.querySelector('link[rel="preload"][href="/table.avif"]');
 
@@ -181,7 +181,7 @@ describe('StudioDrawingPage', () => {
 		// assignment that races the layout's — so the page must not declare one.
 		const titleBeforeRender = document.title;
 
-		render(StudioDrawingPage, { openingDurationMs: 1 });
+		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await vi.waitFor(() => {
 			expect(document.head.querySelector('link[rel="preload"][href="/table.avif"]')).not.toBeNull();
@@ -190,7 +190,7 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('starts with a closed sketchbook and hides active studio controls', async () => {
-		render(StudioDrawingPage, { openingDurationMs: 1 });
+		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Open sketchbook' })).toBeVisible();
@@ -199,7 +199,7 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('reveals the drawing controls after the sketchbook opens', async () => {
-		render(StudioDrawingPage, { openingDurationMs: 1 });
+		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await openSketchbook();
 
@@ -223,7 +223,7 @@ describe('StudioDrawingPage', () => {
 			}))
 		);
 
-		render(StudioDrawingPage, { openingDurationMs: 1 });
+		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		const mobileCanvasCard = document.querySelector('[data-testid="studio-mobile-canvas-card"]');
 		expect(mobileCanvasCard).not.toBeNull();
@@ -236,7 +236,7 @@ describe('StudioDrawingPage', () => {
 			vi.fn((query: string) => createMediaQueryListWithMotion(query, true))
 		);
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 300
 		});
 
@@ -255,7 +255,7 @@ describe('StudioDrawingPage', () => {
 			vi.fn((query: string) => createMediaQueryListWithMotion(query, false))
 		);
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 300
 		});
 
@@ -273,7 +273,7 @@ describe('StudioDrawingPage', () => {
 	it('closes the sketchbook before starting the exit fade', async () => {
 		goto.mockReset();
 
-		render(StudioDrawingPage, { openingDurationMs: 120 });
+		await render(StudioDrawingPage, { openingDurationMs: 120 });
 
 		await openSketchbook();
 		await page.getByRole('link', { name: 'Exit Studio' }).click();
@@ -293,7 +293,7 @@ describe('StudioDrawingPage', () => {
 	it('does not reopen or drop fork context while exiting a forked artwork', async () => {
 		goto.mockReset();
 
-		const { unmount } = render(StudioDrawingPage, {
+		const { unmount } = await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: normalizeDrawingDocumentToEditableV2(
 					createEmptyDrawingDocument('artwork')
@@ -328,7 +328,7 @@ describe('StudioDrawingPage', () => {
 					button.closest('[aria-hidden="true"], [inert]') === null
 			)
 		).toBe(false);
-		expect(document.body).toHaveTextContent('Forking Parent Artwork');
+		expect(document.body).toMatchTextContent('Forking Parent Artwork');
 		if (performance.now() - exitStartedAt < PAGE_FADE_DURATION_MS - 60) {
 			expect(goto).not.toHaveBeenCalled();
 		}
@@ -342,7 +342,7 @@ describe('StudioDrawingPage', () => {
 
 		unmount();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			user: { nickname: 'journey_artist' }
 		});
@@ -367,7 +367,7 @@ describe('StudioDrawingPage', () => {
 			success: true as const
 		}));
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload,
@@ -403,6 +403,112 @@ describe('StudioDrawingPage', () => {
 		expect(replaceStudioUrl).not.toHaveBeenCalled();
 	});
 
+	describe('taking lines back', () => {
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: DRAWING_DOCUMENT_V2_VERSION,
+			scope: 'new',
+			surface: 'artwork',
+			userKey: 'journey_artist'
+		});
+
+		const openStudio = async (props: Record<string, unknown> = {}) => {
+			await render(StudioDrawingPage, {
+				openingDurationMs: 1,
+				user: { nickname: 'journey_artist' },
+				...props
+			});
+			await openSketchbook();
+			// The canvas takes strokes once the local draft has loaded.
+			await expect
+				.element(page.getByLabelText('Drawing canvas'))
+				.toHaveAttribute('aria-disabled', 'false');
+
+			const canvas = page.getByLabelText('Drawing canvas').element() as HTMLCanvasElement;
+			vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+			vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+			vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+
+			const drawLine = (y: number) => {
+				const rect = canvas.getBoundingClientRect();
+				const at = (x: number) => ({
+					clientX: rect.left + (x / 768) * rect.width,
+					clientY: rect.top + (y / 768) * rect.height
+				});
+				canvas.dispatchEvent(createPointerEvent('pointerdown', at(100)));
+				canvas.dispatchEvent(createPointerEvent('pointermove', at(600)));
+				canvas.dispatchEvent(createPointerEvent('pointerup', { ...at(600), buttons: 0 }));
+			};
+
+			const savedLines = async () => (await readPersistedDrawingDraft(draftKey))?.tail ?? [];
+			// IndexedDB writes land asynchronously, and slowly on a busy machine.
+			const expectSaved = (check: (lines: Awaited<ReturnType<typeof savedLines>>) => void) =>
+				vi.waitFor(async () => check(await savedLines()), { timeout: 5000 });
+
+			return { drawLine, expectSaved, savedLines };
+		};
+
+		it('takes back the last line with Undo, puts it back with Redo, and the draft follows', async () => {
+			const { drawLine, expectSaved } = await openStudio();
+			const undo = page.getByRole('button', { name: 'Undo' });
+			const redo = page.getByRole('button', { name: 'Redo' });
+
+			await expect.element(undo).toBeDisabled();
+			drawLine(300);
+			drawLine(500);
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
+
+			await undo.click();
+			await expectSaved((lines) => expect(lines).toHaveLength(1));
+			await expect.element(redo).toBeEnabled();
+
+			await redo.click();
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
+			await expect.element(redo).toBeDisabled();
+		});
+
+		it('takes lines back from the keyboard, but not while the title is being typed', async () => {
+			const { drawLine, expectSaved, savedLines } = await openStudio();
+			drawLine(300);
+			drawLine(500);
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
+
+			await page.getByPlaceholder('Untitled genius').fill('Night Shift');
+			await userEvent.keyboard('{Control>}z{/Control}');
+			expect(page.getByRole('button', { name: 'Redo' }).element()).toBeDisabled();
+			expect(await savedLines()).toHaveLength(2);
+			(document.activeElement as HTMLElement | null)?.blur();
+
+			await userEvent.keyboard('{Control>}z{/Control}');
+			await expectSaved((lines) => expect(lines).toHaveLength(1));
+
+			await userEvent.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
+		});
+
+		it('says so when the drawing has run out of ink', async () => {
+			const { drawLine } = await openStudio({ inkLimits: { maxStrokes: 1 } });
+
+			drawLine(300);
+			drawLine(500);
+
+			await expect
+				.element(page.getByText('Out of ink. Undo a line to free some up, or publish.'))
+				.toBeVisible();
+			await expect
+				.element(page.getByRole('meter', { name: 'Ink left' }))
+				.toHaveAttribute('aria-valuenow', '0');
+		});
+
+		it('erases with the colour of the paper', async () => {
+			const { drawLine, expectSaved } = await openStudio();
+
+			await page.getByRole('button', { name: 'Eraser' }).click();
+			drawLine(300);
+
+			await expectSaved((lines) => expect(lines.at(-1)?.color).toBe('#fdfbf7'));
+		});
+	});
+
 	it('shows a retryable publish error without leaving the draw route', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const publishDrawing = vi.fn(async () => ({
@@ -411,7 +517,7 @@ describe('StudioDrawingPage', () => {
 			success: false as const
 		}));
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -431,7 +537,7 @@ describe('StudioDrawingPage', () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const publishDrawing = vi.fn();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => null,
@@ -454,7 +560,7 @@ describe('StudioDrawingPage', () => {
 		const checkTextContent = vi.fn();
 		const publishDrawing = vi.fn();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -484,7 +590,7 @@ describe('StudioDrawingPage', () => {
 			success: true as const
 		}));
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -540,7 +646,7 @@ describe('StudioDrawingPage', () => {
 			]
 		});
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			createArtworkPayload,
 			forkParent: {
 				drawingDocument: forkParentDocument,
@@ -609,7 +715,7 @@ describe('StudioDrawingPage', () => {
 	it('does not rewrite the draft until a large responsive stroke is committed', async () => {
 		const forkParentDocument = createLargeEditableArtworkDocument();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: forkParentDocument,
 				id: 'artwork-parent',
@@ -686,7 +792,7 @@ describe('StudioDrawingPage', () => {
 	it('appends exactly one journal entry when a large responsive artwork stroke is committed', async () => {
 		const forkParentDocument = createLargeEditableArtworkDocument();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: forkParentDocument,
 				id: 'artwork-parent',
@@ -769,7 +875,7 @@ describe('StudioDrawingPage', () => {
 		const publishDrawing = vi.fn(async () => ({ message: 'Retry later', success: false as const }));
 		const forkParentDocument = createLargeEditableArtworkDocument();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			checkTextContent,
 			createArtworkPayload,
 			draftStore: failingStore,
@@ -869,7 +975,7 @@ describe('StudioDrawingPage', () => {
 		});
 		window.localStorage.setItem(draftKey, JSON.stringify(forkDraftDocument));
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: forkParentDocument,
 				id: 'artwork-parent',
@@ -941,7 +1047,7 @@ describe('StudioDrawingPage', () => {
 			})
 		);
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			user: { nickname: 'journey_artist' }
 		});
@@ -959,7 +1065,7 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('stores only lightweight fork resume metadata in localStorage', async () => {
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: normalizeDrawingDocumentToEditableV2(
 					createEmptyDrawingDocument('artwork')
@@ -1012,7 +1118,7 @@ describe('StudioDrawingPage', () => {
 		}));
 		const replaceStudioUrl = vi.fn();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -1059,7 +1165,7 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('lets the closed sketchbook paint before auto-opening it for a fork', async () => {
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: normalizeDrawingDocumentToEditableV2(
 					createEmptyDrawingDocument('artwork')
@@ -1085,7 +1191,7 @@ describe('StudioDrawingPage', () => {
 	it('drops the exit fade tween when the studio unmounts mid-fade', async () => {
 		goto.mockReset();
 
-		const { unmount } = render(StudioDrawingPage, { openingDurationMs: 1 });
+		const { unmount } = await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await openSketchbook();
 		await page.getByRole('link', { name: 'Exit Studio' }).click();
@@ -1098,7 +1204,7 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('auto-opens the sketchbook for a fork once the parent artwork preload is ready', async () => {
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: normalizeDrawingDocumentToEditableV2(
 					createEmptyDrawingDocument('artwork')
@@ -1122,7 +1228,7 @@ describe('StudioDrawingPage', () => {
 		}));
 		const publishDrawing = vi.fn();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -1145,7 +1251,7 @@ describe('StudioDrawingPage', () => {
 		}));
 		const publishDrawing = vi.fn();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -1178,7 +1284,7 @@ describe('StudioDrawingPage', () => {
 			success: true as const
 		}));
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),

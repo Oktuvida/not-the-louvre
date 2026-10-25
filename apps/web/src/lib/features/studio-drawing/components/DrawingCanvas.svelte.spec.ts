@@ -1,72 +1,136 @@
 import { page } from 'vitest/browser';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
 	createEmptyDrawingDocument,
 	normalizeDrawingDocumentToEditableV2,
 	type DrawingDocumentV2,
 	type DrawingStroke
-} from '$lib/features/stroke-json/document';
-import DrawingCanvas from './DrawingCanvas.svelte';
+} from '#lib/features/stroke-json/document.js';
+import DrawingCanvasHarness from './DrawingCanvasHarness.svelte';
 
-const createLargeEditableArtworkDocument = () =>
+/*
+ * The studio canvas, judged by what a visitor gets: the stroke that is kept
+ * when they lift the pen, and the ink they can see on the canvas while they
+ * draw. Synthetic pointers cannot hold a pointer capture, so capture is the
+ * one browser call stood in for.
+ */
+
+const BACKGROUND = [253, 251, 247];
+// The studio's default colour (#1a1a1a) and the seeded strokes' (#2d2420).
+const INK = [26, 26, 26];
+const SEED_INK = [45, 36, 32];
+
+const seededDocument = (points: [number, number][]) =>
 	normalizeDrawingDocumentToEditableV2({
 		...createEmptyDrawingDocument('artwork'),
-		strokes: Array.from({ length: 72 }, (_, strokeIndex) => ({
-			color: '#2d2420',
-			points: Array.from(
-				{ length: 24 },
-				(_, pointIndex) =>
-					[48 + pointIndex * 8, 80 + (((strokeIndex % 6) * 44 + pointIndex * 3) % 520)] as [
-						number,
-						number
-					]
-			),
-			size: 8
-		}))
+		strokes: [{ color: '#2d2420', points, size: 8 }]
 	});
 
-const createMockContext = () =>
-	({
-		arc: vi.fn(),
-		beginPath: vi.fn(),
-		clearRect: vi.fn(),
-		drawImage: vi.fn(),
-		ellipse: vi.fn(),
-		fill: vi.fn(),
-		fillRect: vi.fn(),
-		fillStyle: '#fdfbf7',
-		lineCap: 'round',
-		lineJoin: 'round',
-		lineTo: vi.fn(),
-		lineWidth: 1,
-		moveTo: vi.fn(),
-		stroke: vi.fn(),
-		strokeStyle: '#000000'
-	}) as unknown as CanvasRenderingContext2D;
+const renderCanvas = async (
+	props: Record<string, unknown> = {},
+	options: { scale?: number; size?: number } = {}
+) => {
+	const committed: DrawingStroke[] = [];
+	const documents: DrawingDocumentV2[] = [];
+	let controls: { redo(): boolean; undo(): boolean } | undefined;
 
-const createPointerEvent = (
-	type: string,
-	init: Partial<PointerEventInit> & { clientX?: number; clientY?: number; pointerId?: number }
-) =>
-	new PointerEvent(type, {
-		bubbles: true,
-		buttons: 1,
-		clientX: init.clientX ?? 0,
-		clientY: init.clientY ?? 0,
-		isPrimary: true,
-		pointerId: init.pointerId ?? 1,
-		pointerType: 'mouse',
-		...init
+	const rendered = await render(DrawingCanvasHarness, {
+		onControls: (handle: NonNullable<typeof controls>) => {
+			controls = handle;
+		},
+		onDocumentChange: (document: DrawingDocumentV2) => {
+			documents.push(document);
+		},
+		onStrokeCommitted: ({ stroke }: { stroke: DrawingStroke }) => {
+			committed.push(stroke);
+		},
+		scale: options.scale ?? 1,
+		size: options.size ?? 384,
+		...props
 	});
+
+	const canvas = page
+		.getByLabelText(typeof props.label === 'string' ? props.label : 'Drawing canvas')
+		.element() as HTMLCanvasElement;
+
+	/** Client coordinates for a point in document pixels (the canvas is 768 wide). */
+	const at = (x: number, y: number) => {
+		const rect = canvas.getBoundingClientRect();
+		const width = rect.width - (canvas.offsetWidth - canvas.clientWidth);
+		const height = rect.height - (canvas.offsetHeight - canvas.clientHeight);
+		return {
+			clientX: rect.left + canvas.clientLeft + (x * width) / 768,
+			clientY: rect.top + canvas.clientTop + (y * height) / 768
+		};
+	};
+
+	const pointer = (
+		type: string,
+		point: [number, number],
+		init: PointerEventInit & { coalesced?: [number, number][]; predicted?: [number, number][] } = {}
+	) => {
+		const { coalesced, predicted, ...rest } = init;
+		const base = {
+			bubbles: true,
+			buttons: type === 'pointerup' ? 0 : 1,
+			isPrimary: true,
+			pointerId: 1,
+			pointerType: 'mouse',
+			...rest
+		};
+		const sample = ([x, y]: [number, number]) => new PointerEvent(type, { ...base, ...at(x, y) });
+		return new PointerEvent(type, {
+			...base,
+			...at(...point),
+			coalescedEvents: coalesced?.map(sample),
+			predictedEvents: predicted?.map(sample)
+		});
+	};
+
+	const draw = (...points: [number, number][]) => {
+		const [first, ...rest] = points;
+		canvas.dispatchEvent(pointer('pointerdown', first!));
+		for (const point of rest) canvas.dispatchEvent(pointer('pointermove', point));
+		canvas.dispatchEvent(pointer('pointerup', points.at(-1)!));
+	};
+
+	/** The colour on screen at a point in document pixels. */
+	const colourAt = (x: number, y: number) => {
+		const context = canvas.getContext('2d')!;
+		const data = context.getImageData(
+			Math.floor((x * canvas.width) / 768),
+			Math.floor((y * canvas.height) / 768),
+			1,
+			1
+		).data;
+		return [data[0], data[1], data[2]];
+	};
+
+	const history = {
+		redo: () => controls!.redo(),
+		undo: () => controls!.undo()
+	};
+
+	const rerender = (next: Record<string, unknown>) => rendered.rerender(next);
+
+	return { at, canvas, colourAt, committed, documents, draw, history, pointer, rerender };
+};
 
 describe('DrawingCanvas', () => {
 	beforeEach(() => {
-		vi.unstubAllGlobals();
+		vi.spyOn(HTMLCanvasElement.prototype, 'setPointerCapture').mockImplementation(() => {});
+		vi.spyOn(HTMLCanvasElement.prototype, 'releasePointerCapture').mockImplementation(() => {});
+		vi.spyOn(HTMLCanvasElement.prototype, 'hasPointerCapture').mockReturnValue(true);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		Reflect.deleteProperty(window, 'devicePixelRatio');
 	});
 
 	it('renders product-facing status messaging below the canvas', async () => {
-		render(DrawingCanvas, {
+		await renderCanvas({
 			statusMessage: 'Artwork published as Untitled #0001',
 			statusTone: 'success'
 		});
@@ -74,468 +138,565 @@ describe('DrawingCanvas', () => {
 		await expect.element(page.getByText('Artwork published as Untitled #0001')).toBeVisible();
 	});
 
+	it('keeps the line a visitor draws once they lift the pointer, and only then', async () => {
+		const { canvas, committed, documents, pointer } = await renderCanvas();
+
+		canvas.dispatchEvent(pointer('pointerdown', [100, 100]));
+		canvas.dispatchEvent(pointer('pointermove', [160, 140]));
+		canvas.dispatchEvent(pointer('pointermove', [220, 200]));
+		const strokesWhileDrawing = documents.at(-1)?.tail.length ?? 0;
+		canvas.dispatchEvent(pointer('pointerup', [220, 200]));
+
+		expect(strokesWhileDrawing).toBe(0);
+		expect(committed).toHaveLength(1);
+		expect(committed[0]?.points).toEqual([
+			[100, 100],
+			[160, 140],
+			[220, 200]
+		]);
+		expect(documents.at(-1)?.tail).toEqual([committed[0]]);
+	});
+
+	it('shows the ink under the pointer while the line is still being drawn', async () => {
+		const { canvas, colourAt, pointer } = await renderCanvas();
+
+		canvas.dispatchEvent(pointer('pointerdown', [100, 400]));
+		canvas.dispatchEvent(pointer('pointermove', [600, 400]));
+
+		await vi.waitFor(() => expect(colourAt(350, 400)).toEqual(INK));
+		expect(colourAt(350, 600)).toEqual(BACKGROUND);
+	});
+
+	it('draws at the screen’s own pixel density, up to a cap', async () => {
+		Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2 });
+		const { canvas, colourAt, draw } = await renderCanvas({}, { size: 300 });
+
+		await vi.waitFor(() => expect(canvas.width).toBe(600));
+		draw([100, 400], [600, 400]);
+		await vi.waitFor(() => expect(colourAt(350, 400)).toEqual(INK));
+		expect(colourAt(350, 420)).toEqual(BACKGROUND);
+	});
+
+	it('stays sharp through the sketchbook scaling it on its way open', async () => {
+		Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2 });
+		const { canvas, rerender } = await renderCanvas({}, { scale: 0.5, size: 300 });
+
+		// Shown smaller than its layout: never fewer pixels than the layout.
+		await vi.waitFor(() => expect(canvas.width).toBe(600));
+
+		// The book settles larger than its layout once its transition ends.
+		await rerender({ scale: 1.5 });
+		canvas.dispatchEvent(new Event('transitionend', { bubbles: true }));
+		await vi.waitFor(() => expect(canvas.width).toBe(900));
+	});
+
+	it('never grows the canvas past 2048 pixels a side', async () => {
+		Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 3 });
+		const { canvas } = await renderCanvas({}, { size: 900 });
+
+		await vi.waitFor(() => expect(canvas.width).toBe(2048));
+		expect(canvas.height).toBe(2048);
+	});
+
+	it('keeps every sample the browser coalesced into one move', async () => {
+		const { canvas, committed, pointer } = await renderCanvas();
+
+		canvas.dispatchEvent(pointer('pointerdown', [100, 100]));
+		canvas.dispatchEvent(
+			pointer('pointermove', [130, 118], {
+				coalesced: [
+					[110, 104],
+					[120, 110],
+					[130, 118]
+				]
+			})
+		);
+		canvas.dispatchEvent(pointer('pointerup', [130, 118]));
+
+		expect(committed[0]?.points).toEqual([
+			[100, 100],
+			[110, 104],
+			[120, 110],
+			[130, 118]
+		]);
+	});
+
+	it('draws ahead of the pen with predicted samples but never keeps them', async () => {
+		const { canvas, committed, pointer } = await renderCanvas();
+
+		canvas.dispatchEvent(pointer('pointerdown', [100, 100]));
+		canvas.dispatchEvent(pointer('pointermove', [140, 140], { predicted: [[200, 200]] }));
+		canvas.dispatchEvent(pointer('pointerup', [140, 140]));
+
+		expect(committed[0]?.points).toEqual([
+			[100, 100],
+			[140, 140]
+		]);
+	});
+
 	it('ignores drawing input while interaction is disabled', async () => {
-		const ctx = createMockContext();
-		const getContextSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'getContext')
-			.mockImplementation(((contextId: string) =>
-				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
+		const { colourAt, committed, draw } = await renderCanvas({ interactive: false });
 
-		render(DrawingCanvas, { interactive: false });
+		draw([100, 400], [600, 400]);
 
-		const canvas = document.querySelector('canvas');
-		if (!canvas) {
-			throw new Error('Expected drawing canvas to render');
-		}
-
-		vi.clearAllMocks();
-		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-			bottom: 600,
-			height: 600,
-			left: 0,
-			right: 800,
-			top: 0,
-			width: 800,
-			x: 0,
-			y: 0,
-			toJSON: () => ({})
-		} as DOMRect);
-
-		canvas.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 24, clientY: 24 }));
-		canvas.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 80, clientY: 80 }));
-
-		expect(ctx.beginPath).not.toHaveBeenCalled();
-		expect(ctx.lineTo).not.toHaveBeenCalled();
-		getContextSpy.mockRestore();
+		expect(committed).toHaveLength(0);
+		await vi.waitFor(() => expect(colourAt(350, 600)).toEqual(BACKGROUND));
+		expect(colourAt(350, 400)).toEqual(BACKGROUND);
 	});
 
-	it('accepts drawing input once interaction is enabled', async () => {
-		const ctx = createMockContext();
-		const getContextSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'getContext')
-			.mockImplementation(((contextId: string) =>
-				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
+	it('keeps drawing when the pointer leaves and comes back with the button held', async () => {
+		const { canvas, committed, pointer } = await renderCanvas();
 
-		render(DrawingCanvas, { interactive: true });
+		canvas.dispatchEvent(pointer('pointerdown', [24, 24]));
+		canvas.dispatchEvent(pointer('pointermove', [80, 80]));
+		canvas.dispatchEvent(pointer('pointermove', [900, 900]));
+		canvas.dispatchEvent(pointer('pointermove', [120, 120]));
+		canvas.dispatchEvent(pointer('pointerup', [120, 120]));
 
-		const canvas = document.querySelector('canvas');
-		if (!canvas) {
-			throw new Error('Expected drawing canvas to render');
-		}
-		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
-
-		vi.clearAllMocks();
-		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-			bottom: 600,
-			height: 600,
-			left: 0,
-			right: 800,
-			top: 0,
-			width: 800,
-			x: 0,
-			y: 0,
-			toJSON: () => ({})
-		} as DOMRect);
-
-		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 24, clientY: 24 }));
-		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 80, clientY: 80 }));
-		canvas.dispatchEvent(createPointerEvent('pointerup', { buttons: 0, clientX: 80, clientY: 80 }));
-
-		expect(ctx.beginPath).toHaveBeenCalled();
-		expect(ctx.moveTo).toHaveBeenCalled();
-		expect(ctx.lineTo).toHaveBeenCalled();
-		expect(ctx.stroke).toHaveBeenCalled();
-		getContextSpy.mockRestore();
+		expect(committed[0]?.points).toEqual([
+			[24, 24],
+			[80, 80],
+			[120, 120]
+		]);
 	});
 
-	it('keeps drawing when the pointer leaves and re-enters with the mouse still pressed', async () => {
-		const ctx = createMockContext();
-		const getContextSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'getContext')
-			.mockImplementation(((contextId: string) =>
-				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
+	it('ends the line when the mouse is released outside the canvas', async () => {
+		const { canvas, committed, pointer } = await renderCanvas();
 
-		render(DrawingCanvas, { interactive: true });
+		canvas.dispatchEvent(pointer('pointerdown', [24, 24]));
+		canvas.dispatchEvent(pointer('pointermove', [80, 80]));
+		window.dispatchEvent(pointer('pointerup', [80, 80]));
+		canvas.dispatchEvent(pointer('pointermove', [120, 120], { buttons: 0 }));
 
-		const canvas = document.querySelector('canvas');
-		if (!canvas) {
-			throw new Error('Expected drawing canvas to render');
-		}
-		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
-
-		vi.clearAllMocks();
-		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-			bottom: 600,
-			height: 600,
-			left: 0,
-			right: 800,
-			top: 0,
-			width: 800,
-			x: 0,
-			y: 0,
-			toJSON: () => ({})
-		} as DOMRect);
-
-		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 24, clientY: 24 }));
-		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 80, clientY: 80 }));
-		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 900, clientY: 900 }));
-		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 120, clientY: 120 }));
-
-		expect(ctx.lineTo).toHaveBeenCalledTimes(3);
-		getContextSpy.mockRestore();
-	});
-
-	it('stops drawing after the mouse is released outside the canvas', async () => {
-		const ctx = createMockContext();
-		const getContextSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'getContext')
-			.mockImplementation(((contextId: string) =>
-				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
-
-		render(DrawingCanvas, { interactive: true });
-
-		const canvas = document.querySelector('canvas');
-		if (!canvas) {
-			throw new Error('Expected drawing canvas to render');
-		}
-		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
-
-		vi.clearAllMocks();
-		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-			bottom: 600,
-			height: 600,
-			left: 0,
-			right: 800,
-			top: 0,
-			width: 800,
-			x: 0,
-			y: 0,
-			toJSON: () => ({})
-		} as DOMRect);
-
-		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 24, clientY: 24 }));
-		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 80, clientY: 80 }));
-		window.dispatchEvent(createPointerEvent('pointerup', { buttons: 0, clientX: 80, clientY: 80 }));
-		canvas.dispatchEvent(
-			createPointerEvent('pointermove', { buttons: 0, clientX: 120, clientY: 120 })
-		);
-
-		expect(ctx.lineTo).toHaveBeenCalledTimes(1);
-		getContextSpy.mockRestore();
-	});
-
-	it('commits the stroke when a move arrives with the mouse button already released', async () => {
-		const ctx = createMockContext();
-		const getContextSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'getContext')
-			.mockImplementation(((contextId: string) =>
-				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
-		const committedStrokes: { stroke: DrawingStroke }[] = [];
-
-		render(DrawingCanvas, {
-			interactive: true,
-			onStrokeCommitted: (input: { stroke: DrawingStroke }) => {
-				committedStrokes.push(input);
-			}
-		});
-
-		const canvas = document.querySelector('canvas');
-		if (!canvas) {
-			throw new Error('Expected drawing canvas to render');
-		}
-		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
-		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-			bottom: 768,
-			height: 768,
-			left: 0,
-			right: 768,
-			top: 0,
-			width: 768,
-			x: 0,
-			y: 0,
-			toJSON: () => ({})
-		} as DOMRect);
-
-		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 24, clientY: 24 }));
-		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 80, clientY: 80 }));
-		// A mouse released outside the window never delivers a pointerup here.
-		canvas.dispatchEvent(
-			createPointerEvent('pointermove', { buttons: 0, clientX: 120, clientY: 120 })
-		);
-
-		expect(committedStrokes).toHaveLength(1);
-		expect(committedStrokes[0]?.stroke.points).toEqual([
+		expect(committed).toHaveLength(1);
+		expect(committed[0]?.points).toEqual([
 			[24, 24],
 			[80, 80]
 		]);
-
-		vi.clearAllMocks();
-		canvas.dispatchEvent(
-			createPointerEvent('pointermove', { buttons: 0, clientX: 160, clientY: 160 })
-		);
-		expect(ctx.lineTo).not.toHaveBeenCalled();
-
-		getContextSpy.mockRestore();
 	});
 
-	it('hydrates the canvas with an initial drawing document when provided', async () => {
-		const ctx = {
-			...createMockContext(),
-			imageSmoothingEnabled: false,
-			imageSmoothingQuality: 'low'
-		} as unknown as CanvasRenderingContext2D;
-		const getContextSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'getContext')
-			.mockImplementation(((contextId: string) =>
-				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
+	it('keeps the line when a move arrives with the mouse button already released', async () => {
+		const { canvas, committed, pointer } = await renderCanvas();
 
-		render(DrawingCanvas, {
-			initialDrawingDocument: normalizeDrawingDocumentToEditableV2({
-				...createEmptyDrawingDocument('artwork'),
-				strokes: [
-					{
-						color: '#2d2420',
-						points: [[24, 24] as [number, number], [200, 200] as [number, number]],
-						size: 8
-					}
-				]
-			})
-		});
+		canvas.dispatchEvent(pointer('pointerdown', [24, 24]));
+		canvas.dispatchEvent(pointer('pointermove', [80, 80]));
+		// A mouse released outside the window never delivers a pointerup here.
+		canvas.dispatchEvent(pointer('pointermove', [120, 120], { buttons: 0 }));
+		canvas.dispatchEvent(pointer('pointermove', [160, 160], { buttons: 0 }));
 
-		const canvas = document.querySelector('canvas');
-		if (!canvas) {
-			throw new Error('Expected drawing canvas to render');
-		}
-
-		expect(canvas.width).toBe(768);
-		expect(canvas.height).toBe(768);
-
-		await vi.waitFor(() => {
-			expect(ctx.moveTo).toHaveBeenCalled();
-			expect(ctx.lineTo).toHaveBeenCalled();
-			expect(ctx.stroke).toHaveBeenCalled();
-		});
-
-		getContextSpy.mockRestore();
+		expect(committed).toHaveLength(1);
+		expect(committed[0]?.points).toEqual([
+			[24, 24],
+			[80, 80]
+		]);
 	});
 
-	it('preserves dense user stroke samples while drawing over a fork seed', async () => {
-		const ctx = createMockContext();
-		const getContextSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'getContext')
-			.mockImplementation(((contextId: string) =>
-				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
-		const committedDocuments: DrawingDocumentV2[] = [];
-
-		render(DrawingCanvas, {
-			initialDrawingDocument: normalizeDrawingDocumentToEditableV2({
-				...createEmptyDrawingDocument('artwork'),
-				strokes: [
-					{
-						color: '#2d2420',
-						points: [[24, 24] as [number, number], [200, 200] as [number, number]],
-						size: 8
-					}
-				]
-			}),
-			onDocumentChange: (document: DrawingDocumentV2) => {
-				committedDocuments.push(document);
-			}
+	it('paints the drawing it was opened with', async () => {
+		const { colourAt, documents } = await renderCanvas({
+			initialDrawingDocument: seededDocument([
+				[100, 300],
+				[600, 300]
+			])
 		});
 
-		const canvas = document.querySelector('canvas');
-		if (!(canvas instanceof HTMLCanvasElement)) {
-			throw new Error('Expected drawing canvas to render');
-		}
+		await vi.waitFor(() => expect(colourAt(350, 300)).toEqual(SEED_INK));
+		expect(documents.at(-1)?.tail).toHaveLength(1);
+	});
 
-		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
-		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-			bottom: 768,
-			height: 768,
-			left: 0,
-			right: 768,
-			top: 0,
-			width: 768,
-			x: 0,
-			y: 0,
-			toJSON: () => ({})
-		} as DOMRect);
+	it('adds a new line on top of a fork seed with every sample it was drawn with', async () => {
+		const { committed, documents, draw } = await renderCanvas({
+			initialDrawingDocument: seededDocument([
+				[24, 24],
+				[200, 200]
+			])
+		});
 
-		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 100, clientY: 100 }));
-		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 101, clientY: 101 }));
-		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 102, clientY: 102 }));
-		canvas.dispatchEvent(
-			createPointerEvent('pointerup', { buttons: 0, clientX: 102, clientY: 102 })
-		);
+		draw([100, 100], [101, 101], [102, 102]);
 
-		const latestDocument = committedDocuments.at(-1);
-		expect(latestDocument?.tail).toHaveLength(2);
-		expect(latestDocument?.tail[1]?.points).toEqual([
+		expect(committed[0]?.points).toEqual([
 			[100, 100],
 			[101, 101],
 			[102, 102]
 		]);
-
-		getContextSpy.mockRestore();
+		expect(documents.at(-1)?.tail).toHaveLength(2);
 	});
 
-	it('buffers dense points and emits one canonical append when responsive editing is active', async () => {
-		const ctx = createMockContext();
-		const getContextSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'getContext')
-			.mockImplementation(((contextId: string) =>
-				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
-		const committedDocuments: DrawingDocumentV2[] = [];
+	it('ignores a press that starts outside the drawing and draws the next one cleanly', async () => {
+		const { canvas, committed, pointer } = await renderCanvas();
 
-		render(DrawingCanvas, {
-			initialDrawingDocument: createLargeEditableArtworkDocument(),
-			onDocumentChange: (document: DrawingDocumentV2) => {
-				committedDocuments.push(document);
-			}
+		canvas.dispatchEvent(pointer('pointerdown', [-10, 24]));
+		canvas.dispatchEvent(pointer('pointerup', [-10, 24]));
+		canvas.dispatchEvent(pointer('pointerdown', [24, 24]));
+		canvas.dispatchEvent(pointer('pointermove', [80, 80]));
+		canvas.dispatchEvent(pointer('pointerup', [80, 80]));
+
+		expect(HTMLCanvasElement.prototype.setPointerCapture).toHaveBeenCalledTimes(1);
+		expect(committed).toHaveLength(1);
+		expect(committed[0]?.points).toEqual([
+			[24, 24],
+			[80, 80]
+		]);
+	});
+
+	it('takes the last line off the canvas and puts it back', async () => {
+		const { colourAt, documents, draw, history } = await renderCanvas();
+		draw([100, 300], [600, 300]);
+		draw([100, 500], [600, 500]);
+		await vi.waitFor(() => expect(colourAt(350, 500)).toEqual(INK));
+
+		expect(history.undo()).toBe(true);
+		await vi.waitFor(() => expect(colourAt(350, 500)).toEqual(BACKGROUND));
+		expect(colourAt(350, 300)).toEqual(INK);
+		expect(documents.at(-1)?.tail).toHaveLength(1);
+
+		expect(history.redo()).toBe(true);
+		await vi.waitFor(() => expect(colourAt(350, 500)).toEqual(INK));
+		expect(documents.at(-1)?.tail).toHaveLength(2);
+		expect(history.redo()).toBe(false);
+	});
+
+	it('undoes far back through a long drawing and paints what is left exactly', async () => {
+		const { colourAt, documents, draw, history } = await renderCanvas();
+		for (let line = 0; line < 45; line += 1) {
+			draw([20, 20 + line * 16], [740, 20 + line * 16]);
+		}
+
+		for (let step = 0; step < 40; step += 1) history.undo();
+
+		await vi.waitFor(() => expect(colourAt(380, 20 + 5 * 16)).toEqual(BACKGROUND));
+		expect(colourAt(380, 20 + 4 * 16)).toEqual(INK);
+		expect(documents.at(-1)?.tail).toHaveLength(5);
+	});
+
+	it('forgets what could be redone once a new line is drawn', async () => {
+		const { documents, draw, history } = await renderCanvas();
+		draw([100, 300], [600, 300]);
+		history.undo();
+
+		draw([100, 500], [600, 500]);
+
+		expect(history.redo()).toBe(false);
+		expect(documents.at(-1)?.tail).toHaveLength(1);
+	});
+
+	it('never undoes the drawing it was opened with', async () => {
+		const { documents, draw, history } = await renderCanvas({
+			initialDrawingDocument: seededDocument([
+				[24, 24],
+				[200, 200]
+			])
+		});
+		draw([100, 300], [600, 300]);
+
+		expect(history.undo()).toBe(true);
+		expect(history.undo()).toBe(false);
+		expect(documents.at(-1)?.tail).toHaveLength(1);
+	});
+
+	describe('pens and fingers', () => {
+		const touch = (type: string, id: number, point: [number, number]) => ({
+			buttons: type === 'pointerup' ? 0 : 1,
+			isPrimary: id === 11,
+			pointerId: id,
+			pointerType: 'touch',
+			type,
+			point
 		});
 
-		const canvas = document.querySelector('canvas');
-		if (!(canvas instanceof HTMLCanvasElement)) {
-			throw new Error('Expected drawing canvas to render');
-		}
+		const fire = (
+			canvas: HTMLCanvasElement,
+			pointer: (type: string, point: [number, number], init?: PointerEventInit) => PointerEvent,
+			...events: ReturnType<typeof touch>[]
+		) => {
+			for (const { point, type, ...init } of events)
+				canvas.dispatchEvent(pointer(type, point, init));
+		};
 
-		vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
-		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-			bottom: 768,
-			height: 768,
-			left: 0,
-			right: 768,
-			top: 0,
-			width: 768,
-			x: 0,
-			y: 0,
-			toJSON: () => ({})
-		} as DOMRect);
+		it('stops fingers drawing once a pen has touched the canvas, so a resting palm leaves no mark', async () => {
+			const { canvas, committed, pointer } = await renderCanvas();
 
-		committedDocuments.length = 0;
+			canvas.dispatchEvent(pointer('pointerdown', [100, 100], { pointerType: 'pen' }));
+			canvas.dispatchEvent(pointer('pointermove', [200, 200], { pointerType: 'pen' }));
+			canvas.dispatchEvent(pointer('pointerup', [200, 200], { pointerType: 'pen' }));
+			fire(
+				canvas,
+				pointer,
+				touch('pointerdown', 11, [300, 600]),
+				touch('pointermove', 11, [500, 650]),
+				touch('pointerup', 11, [500, 650])
+			);
 
-		canvas.dispatchEvent(createPointerEvent('pointerdown', { clientX: 180, clientY: 220 }));
-		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 181, clientY: 221 }));
-		canvas.dispatchEvent(createPointerEvent('pointermove', { clientX: 182, clientY: 222 }));
+			expect(committed).toHaveLength(1);
+			await expect
+				.element(page.getByRole('button', { name: 'Pen only' }))
+				.toHaveAttribute('aria-pressed', 'true');
+		});
 
-		expect(committedDocuments).toHaveLength(0);
+		it('lets fingers draw again when pen-only is switched off', async () => {
+			const { canvas, committed, pointer } = await renderCanvas();
+			canvas.dispatchEvent(pointer('pointerdown', [100, 100], { pointerType: 'pen' }));
+			canvas.dispatchEvent(pointer('pointerup', [100, 100], { pointerType: 'pen' }));
 
-		canvas.dispatchEvent(
-			createPointerEvent('pointerup', { buttons: 0, clientX: 182, clientY: 222 })
-		);
+			await page.getByRole('button', { name: 'Pen only' }).click();
+			fire(
+				canvas,
+				pointer,
+				touch('pointerdown', 11, [300, 600]),
+				touch('pointermove', 11, [500, 650]),
+				touch('pointerup', 11, [500, 650])
+			);
 
-		expect(committedDocuments).toHaveLength(1);
-		expect(committedDocuments[0]?.tail.at(-1)?.points).toEqual([
-			[180, 220],
-			[181, 221],
-			[182, 222]
-		]);
+			expect(committed).toHaveLength(2);
+		});
 
-		getContextSpy.mockRestore();
+		it('takes back the last line with a two-finger tap and puts it back with three', async () => {
+			const { canvas, documents, draw, pointer } = await renderCanvas();
+			draw([100, 300], [600, 300]);
+
+			fire(
+				canvas,
+				pointer,
+				touch('pointerdown', 11, [300, 400]),
+				touch('pointerdown', 12, [400, 400]),
+				touch('pointerup', 11, [300, 400]),
+				touch('pointerup', 12, [400, 400])
+			);
+			expect(documents.at(-1)?.tail).toHaveLength(0);
+
+			fire(
+				canvas,
+				pointer,
+				touch('pointerdown', 11, [300, 400]),
+				touch('pointerdown', 12, [400, 400]),
+				touch('pointerdown', 13, [500, 400]),
+				touch('pointerup', 11, [300, 400]),
+				touch('pointerup', 12, [400, 400]),
+				touch('pointerup', 13, [500, 400])
+			);
+			expect(documents.at(-1)?.tail).toHaveLength(1);
+		});
+
+		it('drops the line a finger started when a second finger joins it straight away', async () => {
+			const { canvas, committed, pointer } = await renderCanvas();
+
+			fire(
+				canvas,
+				pointer,
+				touch('pointerdown', 11, [300, 400]),
+				touch('pointermove', 11, [320, 420]),
+				touch('pointerdown', 12, [500, 400]),
+				touch('pointermove', 11, [360, 480]),
+				touch('pointermove', 12, [560, 480]),
+				touch('pointerup', 11, [360, 480]),
+				touch('pointerup', 12, [560, 480])
+			);
+
+			expect(committed).toHaveLength(0);
+		});
+
+		it('keeps the long press and the magnifier off the canvas', async () => {
+			const { canvas } = await renderCanvas();
+			const touchstart = new Event('touchstart', { bubbles: true, cancelable: true });
+
+			canvas.dispatchEvent(touchstart);
+
+			expect(touchstart.defaultPrevented).toBe(true);
+		});
 	});
 
-	it('ignores invalid pointer starts without capturing the pointer or corrupting the next stroke', async () => {
-		const ctx = createMockContext();
-		const getContextSpy = vi
-			.spyOn(HTMLCanvasElement.prototype, 'getContext')
-			.mockImplementation(((contextId: string) =>
-				contextId === '2d' ? ctx : null) as HTMLCanvasElement['getContext']);
+	describe('zooming and panning', () => {
+		/** Client coordinates relative to the canvas frame, which does not zoom. */
+		const frame = (canvas: HTMLCanvasElement) =>
+			canvas.closest('[data-canvas-frame]')!.getBoundingClientRect();
 
-		render(DrawingCanvas, { interactive: true });
+		const pinch = (
+			canvas: HTMLCanvasElement,
+			from: { centre: [number, number]; spread: number },
+			to: { centre: [number, number]; spread: number }
+		) => {
+			const box = frame(canvas);
+			const fingerAt = (centre: [number, number], spread: number, side: -1 | 1) => ({
+				clientX: box.left + centre[0] + (side * spread) / 2,
+				clientY: box.top + centre[1]
+			});
+			const event = (type: string, id: number, point: { clientX: number; clientY: number }) =>
+				new PointerEvent(type, {
+					bubbles: true,
+					buttons: type === 'pointerup' ? 0 : 1,
+					isPrimary: id === 21,
+					pointerId: id,
+					pointerType: 'touch',
+					...point
+				});
 
-		const canvas = document.querySelector('canvas');
-		if (!canvas) {
-			throw new Error('Expected drawing canvas to render');
-		}
+			canvas.dispatchEvent(event('pointerdown', 21, fingerAt(from.centre, from.spread, -1)));
+			canvas.dispatchEvent(event('pointerdown', 22, fingerAt(from.centre, from.spread, 1)));
+			for (const step of [0.5, 1]) {
+				const centre: [number, number] = [
+					from.centre[0] + (to.centre[0] - from.centre[0]) * step,
+					from.centre[1] + (to.centre[1] - from.centre[1]) * step
+				];
+				const spread = from.spread + (to.spread - from.spread) * step;
+				canvas.dispatchEvent(event('pointermove', 21, fingerAt(centre, spread, -1)));
+				canvas.dispatchEvent(event('pointermove', 22, fingerAt(centre, spread, 1)));
+			}
+			canvas.dispatchEvent(event('pointerup', 21, fingerAt(to.centre, to.spread, -1)));
+			canvas.dispatchEvent(event('pointerup', 22, fingerAt(to.centre, to.spread, 1)));
+		};
 
-		const setPointerCaptureSpy = vi
-			.spyOn(canvas, 'setPointerCapture')
-			.mockImplementation(() => undefined);
-		const releasePointerCaptureSpy = vi
-			.spyOn(canvas, 'releasePointerCapture')
-			.mockImplementation(() => undefined);
-		vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+		it('zooms in around two fingers spreading apart', async () => {
+			const { canvas } = await renderCanvas();
+			const before = canvas.getBoundingClientRect();
+			// The document point under the fingers before the pinch.
+			const box = frame(canvas);
+			const underFingers = (rect: DOMRect) => (box.left + 192 - rect.left) / rect.width;
+			const pointBefore = underFingers(before);
 
-		vi.clearAllMocks();
-		vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-			bottom: 600,
-			height: 600,
-			left: 0,
-			right: 800,
-			top: 0,
-			width: 800,
-			x: 0,
-			y: 0,
-			toJSON: () => ({})
-		} as DOMRect);
+			pinch(canvas, { centre: [192, 192], spread: 100 }, { centre: [192, 192], spread: 200 });
 
-		canvas.dispatchEvent(
-			new PointerEvent('pointerdown', {
+			await vi.waitFor(() =>
+				expect(canvas.getBoundingClientRect().width).toBeCloseTo(before.width * 2, 0)
+			);
+			expect(underFingers(canvas.getBoundingClientRect())).toBeCloseTo(pointBefore, 2);
+		});
+
+		it('lands a line drawn while zoomed in exactly where the pen is', async () => {
+			const { canvas, committed, draw } = await renderCanvas();
+			pinch(canvas, { centre: [192, 192], spread: 100 }, { centre: [192, 192], spread: 300 });
+			await vi.waitFor(() => expect(canvas.getBoundingClientRect().width).toBeGreaterThan(384 * 2));
+
+			draw([380, 380], [400, 390]);
+
+			expect(committed.at(-1)?.points).toEqual([
+				[380, 380],
+				[400, 390]
+			]);
+		});
+
+		it('fills the frame again when pinched in past the fit, or with Fit canvas', async () => {
+			const { canvas } = await renderCanvas();
+			pinch(canvas, { centre: [192, 192], spread: 100 }, { centre: [192, 192], spread: 250 });
+			await expect.element(page.getByRole('button', { name: 'Fit canvas' })).toBeVisible();
+
+			pinch(canvas, { centre: [192, 192], spread: 250 }, { centre: [192, 192], spread: 40 });
+			await vi.waitFor(() => expect(canvas.getBoundingClientRect().width).toBeCloseTo(384, 0));
+
+			pinch(canvas, { centre: [100, 100], spread: 100 }, { centre: [100, 100], spread: 250 });
+			await page.getByRole('button', { name: 'Fit canvas' }).click();
+			await vi.waitFor(() => expect(canvas.getBoundingClientRect().width).toBeCloseTo(384, 0));
+			await expect
+				.element(page.getByRole('button', { name: 'Fit canvas' }))
+				.not.toBeInTheDocument();
+		});
+
+		it('paints the extra pixels a zoomed-in canvas covers', async () => {
+			const { canvas } = await renderCanvas();
+			await vi.waitFor(() => expect(canvas.width).toBe(384));
+
+			pinch(canvas, { centre: [192, 192], spread: 100 }, { centre: [192, 192], spread: 300 });
+
+			await vi.waitFor(() => expect(canvas.width).toBe(1152));
+		});
+
+		it('zooms with a trackpad pinch', async () => {
+			const { canvas } = await renderCanvas();
+			const box = frame(canvas);
+
+			const wheel = new WheelEvent('wheel', {
 				bubbles: true,
-				clientX: -1,
-				clientY: 24,
-				pointerId: 4,
-				pointerType: 'mouse',
-				isPrimary: true,
-				buttons: 1
-			})
-		);
+				cancelable: true,
+				clientX: box.left + 192,
+				clientY: box.top + 192,
+				ctrlKey: true,
+				deltaY: -50
+			});
+			canvas.dispatchEvent(wheel);
 
-		expect(setPointerCaptureSpy).not.toHaveBeenCalled();
-		expect(ctx.beginPath).not.toHaveBeenCalled();
+			// The browser must not zoom the whole page as well.
+			expect(wheel.defaultPrevented).toBe(true);
+			await vi.waitFor(() =>
+				expect(canvas.getBoundingClientRect().width).toBeGreaterThan(384 * 1.2)
+			);
+		});
+	});
 
-		canvas.dispatchEvent(
-			new PointerEvent('pointerdown', {
-				bubbles: true,
-				clientX: 24,
-				clientY: 24,
-				pointerId: 4,
-				pointerType: 'mouse',
-				isPrimary: true,
-				buttons: 1
-			})
-		);
-		canvas.dispatchEvent(
-			new PointerEvent('pointermove', {
-				bubbles: true,
-				clientX: 80,
-				clientY: 80,
-				pointerId: 4,
-				pointerType: 'mouse',
-				isPrimary: true,
-				buttons: 1
-			})
-		);
-		canvas.dispatchEvent(
-			new PointerEvent('pointerup', {
-				bubbles: true,
-				clientX: 80,
-				clientY: 80,
-				pointerId: 4,
-				pointerType: 'mouse',
-				isPrimary: true
-			})
-		);
+	describe('ink', () => {
+		it('takes no new line once the ink is gone, and says so', async () => {
+			const onOutOfInk = vi.fn();
+			const { committed, draw } = await renderCanvas({ inkLimits: { maxStrokes: 1 }, onOutOfInk });
 
-		expect(setPointerCaptureSpy).toHaveBeenCalledTimes(1);
-		expect(releasePointerCaptureSpy).toHaveBeenCalledTimes(1);
-		// Two inking renders plus one brush-preview circle from the pointermove.
-		expect(ctx.beginPath).toHaveBeenCalledTimes(3);
-		expect(ctx.ellipse).toHaveBeenCalledTimes(1);
-		expect(ctx.lineTo).toHaveBeenCalledTimes(1);
+			draw([100, 300], [600, 300]);
+			draw([100, 500], [600, 500]);
 
-		getContextSpy.mockRestore();
+			expect(committed).toHaveLength(1);
+			expect(onOutOfInk).toHaveBeenCalledOnce();
+		});
+
+		it('keeps a line that runs dry part way, up to the last drop', async () => {
+			const onOutOfInk = vi.fn();
+			const { committed, draw } = await renderCanvas({
+				inkLimits: { maxTotalPoints: 4 },
+				onOutOfInk
+			});
+
+			draw([100, 100], [120, 100], [140, 100], [160, 100], [180, 100], [200, 100]);
+
+			expect(committed).toHaveLength(1);
+			expect(committed[0]?.points).toEqual([
+				[100, 100],
+				[120, 100],
+				[140, 100],
+				[160, 100]
+			]);
+			expect(onOutOfInk).toHaveBeenCalledOnce();
+		});
+
+		it('carries a very long line on as a new one past the most a line may hold', async () => {
+			const { committed, draw } = await renderCanvas({ inkLimits: { maxPointsPerStroke: 3 } });
+
+			draw([100, 100], [120, 100], [140, 100], [160, 100], [180, 100], [200, 100]);
+
+			expect(committed.map((stroke) => stroke.points)).toEqual([
+				[
+					[100, 100],
+					[120, 100],
+					[140, 100]
+				],
+				[
+					[140, 100],
+					[160, 100],
+					[180, 100]
+				],
+				[
+					[180, 100],
+					[200, 100]
+				]
+			]);
+		});
+	});
+
+	describe('on another surface', () => {
+		it('draws with the colour and size it is handed instead of the studio’s', async () => {
+			const { committed, draw } = await renderCanvas({ strokeColor: '#6b8e7f', strokeSize: 14 });
+
+			draw([100, 300], [600, 300]);
+
+			expect(committed[0]).toMatchObject({ color: '#6b8e7f', size: 14 });
+		});
+
+		it('shows its own paper and guides that never become part of the drawing', async () => {
+			const { colourAt, documents } = await renderCanvas({
+				decorate: (context: CanvasRenderingContext2D) => {
+					context.fillStyle = '#ff0000';
+					context.fillRect(0, 0, 100, 100);
+				},
+				label: 'Avatar drawing canvas',
+				paper: '#ffffff'
+			});
+
+			await vi.waitFor(() => expect(colourAt(50, 50)).toEqual([255, 0, 0]));
+			expect(colourAt(400, 400)).toEqual([255, 255, 255]);
+			expect(documents.at(-1)?.tail ?? []).toHaveLength(0);
+		});
 	});
 });

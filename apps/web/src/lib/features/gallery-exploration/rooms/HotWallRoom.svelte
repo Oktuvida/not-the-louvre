@@ -1,16 +1,17 @@
 <script lang="ts">
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
-	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
-	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import NsfwImage from '#lib/features/gallery-exploration/components/NsfwImage.svelte';
+	import ScrollSentinel from '#lib/features/gallery-exploration/components/ScrollSentinel.svelte';
+	import VirtualizedGrid from '#lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
 	import type {
 		GalleryPageInfo,
 		LoadMoreArtworks
-	} from '$lib/features/gallery-exploration/model/discovery';
-	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
-	import { createSeededAccumulator } from '$lib/features/gallery-exploration/use-seeded-accumulator.svelte';
-	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
+	} from '#lib/features/gallery-exploration/model/discovery.js';
+	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import { createSeededAccumulator } from '#lib/features/gallery-exploration/use-seeded-accumulator.svelte.js';
+	import PolaroidCard from '#lib/features/shared-ui/components/PolaroidCard.svelte';
 	import { writable, type Writable } from 'svelte/store';
 
 	interface Props {
@@ -37,9 +38,14 @@
 		viewerId = null
 	}: Props = $props();
 
+	// The grid's measured rows travel with the feed, so coming back lands on
+	// the same card rather than on the same pixel of an estimated layout.
+	let grid = $state<{ snapshotLayout(): GridLayoutSnapshot | null }>();
+
 	const accumulator = createSeededAccumulator({
 		getFeedCacheKey: () => feedCacheKey,
 		getArtworks: () => artworks,
+		getLayout: () => grid?.snapshotLayout() ?? null,
 		getLoadMoreArtworks: () => loadMoreArtworks,
 		getPageInfo: () => pageInfo
 	});
@@ -116,7 +122,6 @@
 						<NsfwImage
 							src={leadArtwork.imageUrl}
 							alt={leadArtwork.title}
-							placeholder={leadArtwork.imagePlaceholder}
 							blurred={isLeadBlurred(leadArtwork)}
 							ariaLabel={viewerId ? 'Sensitive artwork, click to reveal' : 'Sensitive artwork'}
 							className="h-full w-full object-cover"
@@ -144,7 +149,11 @@
 		<!-- Supporting wall: remaining artworks in a virtualized grid -->
 		{#if supportingArtworks.length > 0}
 			<div class="w-full">
-				<VirtualizedGrid items={supportingArtworks}>
+				<VirtualizedGrid
+					bind:this={grid}
+					items={supportingArtworks}
+					restoredLayout={accumulator.restoredLayout}
+				>
 					{#snippet renderCard(artwork)}
 						<div data-testid={`hot-wall-card-${artwork.id}`}>
 							<PolaroidCard

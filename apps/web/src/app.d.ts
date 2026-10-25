@@ -1,5 +1,5 @@
 import type { Session, User } from 'better-auth';
-import type { AuthIntegrityFailure, CanonicalUser } from '$lib/server/auth/types';
+import type { AuthIntegrityFailure, CanonicalUser } from '#lib/server/auth/types.js';
 
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
@@ -8,10 +8,6 @@ declare global {
 	// Playwright e2e build, so the in-memory storage branches tree-shake away
 	// everywhere else.
 	const __PLAYWRIGHT__: boolean;
-
-	interface Window {
-		__ntlBypassClientContentFilters?: boolean;
-	}
 
 	namespace App {
 		interface Locals {
@@ -29,11 +25,6 @@ declare global {
 				roomId: string;
 				source: 'external' | 'local-room-selection';
 			};
-		}
-		interface Platform {
-			caches?: CacheStorage & { default: Cache };
-			context?: { waitUntil(promise: Promise<unknown>): void };
-			env?: { HYPERDRIVE?: { connectionString: string } };
 		}
 	}
 }

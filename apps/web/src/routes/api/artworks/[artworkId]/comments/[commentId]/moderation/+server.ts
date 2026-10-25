@@ -1,7 +1,6 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { moderateComment } from '$lib/server/artwork/service';
-import { toApiErrorResponse } from '$lib/server/http/errors';
+import { moderateComment } from '#lib/server/artwork/service.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
 
 const COMMENT_MODERATION_ERROR = {
 	fallbackCode: 'MODERATION_FAILED',
@@ -21,7 +20,7 @@ export const PATCH: RequestHandler = async (event) => {
 			{ user: event.locals.user }
 		);
 
-		return json({ comment });
+		return Response.json({ comment });
 	} catch (error) {
 		return toApiErrorResponse(error, COMMENT_MODERATION_ERROR);
 	}
@@ -38,7 +37,7 @@ export const DELETE: RequestHandler = async (event) => {
 			{ user: event.locals.user }
 		);
 
-		return json({ comment });
+		return Response.json({ comment });
 	} catch (error) {
 		return toApiErrorResponse(error, COMMENT_MODERATION_ERROR);
 	}

@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { apiErrorMessage, requestJson } from '$lib/client/api';
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import WashiTape from '$lib/features/shared-ui/components/WashiTape.svelte';
+	import { apiErrorMessage, requestJson } from '#lib/client/api.js';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import WashiTape from '#lib/features/shared-ui/components/WashiTape.svelte';
 	import {
 		ARTWORK_REPORT_REASONS,
 		ARTWORK_REPORT_REASON_LABELS,
 		type ArtworkReportReason
-	} from '$lib/shared/content/report-reasons';
-	import type { Viewer } from '$lib/shared/viewer';
+	} from '#lib/shared/content/report-reasons.js';
+	import type { Viewer } from '#lib/shared/viewer.js';
 
 	type ArtworkPatch = Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>;
 
@@ -152,11 +152,11 @@
 							<path
 								fill="currentColor"
 								d="M6 3a1 1 0 0 1 1 1v1h8.6l.2-.4A1.8 1.8 0 0 1 17.4 3H20a1 1 0 1 1 0 2h-2.6a.2.2 0 0 0-.18.11l-.48.95a1 1 0 0 1-.9.54H7v13a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1Z"
-							/>
+							></path>
 							<path
 								fill="currentColor"
 								d="M8 7h9.38a1.5 1.5 0 0 1 1.34.83l.94 1.87a1.5 1.5 0 0 1-.02 1.38l-.91 1.73a1.5 1.5 0 0 1-1.33.79H8z"
-							/>
+							></path>
 						</svg>
 					{:else}
 						Report
@@ -264,7 +264,7 @@
 					{/if}
 					<a
 						class="reason-button mod-ops-link focus-ring"
-						href={resolve('/admin')}
+						href={resolve('admin')}
 						onclick={(event) => event.stopPropagation()}
 					>
 						Open in Ops ↗

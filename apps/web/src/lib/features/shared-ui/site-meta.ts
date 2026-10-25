@@ -12,8 +12,17 @@
  * navigation.
  */
 
+/** A route's own link-preview image; `path` is site-relative. */
+export type RouteShareImage = {
+	alt: string;
+	height: number;
+	path: string;
+	width: number;
+};
+
 export type RouteMeta = {
 	description?: string;
+	image?: RouteShareImage;
 	title?: string;
 };
 
@@ -29,12 +38,28 @@ export const SHARE_IMAGE_PATH = '/og-cover.png';
 
 export const SHARE_IMAGE_ALT = 'Three hand-taped polaroids hanging on the museum wall';
 
+export const DEFAULT_SHARE_IMAGE: RouteShareImage = {
+	alt: SHARE_IMAGE_ALT,
+	height: 630,
+	path: SHARE_IMAGE_PATH,
+	width: 1200
+};
+
 /** `Hall of Fame · Not the Louvre`, or just the site name on the home page. */
 export const formatDocumentTitle = (title?: string) =>
 	title && title !== SITE_NAME ? `${title} · ${SITE_NAME}` : SITE_NAME;
 
 /** Crawlers do not resolve relative og:image/og:url, so these stay absolute. */
 export const absoluteSiteUrl = (path: string) => `${SITE_ORIGIN}${path}`;
+
+const isRouteShareImage = (value: unknown): value is RouteShareImage | undefined =>
+	value === undefined ||
+	(typeof value === 'object' &&
+		value !== null &&
+		typeof (value as RouteShareImage).alt === 'string' &&
+		typeof (value as RouteShareImage).height === 'number' &&
+		typeof (value as RouteShareImage).path === 'string' &&
+		typeof (value as RouteShareImage).width === 'number');
 
 const isRouteMeta = (value: unknown): value is RouteMeta =>
 	typeof value === 'object' &&
@@ -44,7 +69,8 @@ const isRouteMeta = (value: unknown): value is RouteMeta =>
 		(value as RouteMeta).title === undefined) &&
 	(!('description' in value) ||
 		typeof (value as RouteMeta).description === 'string' ||
-		(value as RouteMeta).description === undefined);
+		(value as RouteMeta).description === undefined) &&
+	(!('image' in value) || isRouteShareImage((value as RouteMeta).image));
 
 /**
  * Reads the `meta` a route's `load` contributed to `page.data`, tolerating

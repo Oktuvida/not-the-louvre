@@ -1,7 +1,6 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { toApiErrorResponse } from '$lib/server/http/errors';
-import { banUser, unbanUser } from '$lib/server/user/admin.service';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
+import { banUser, unbanUser } from '#lib/server/user/admin.service.js';
 
 const BAN_UPDATE_ERROR = {
 	fallbackCode: 'BAN_UPDATE_FAILED',
@@ -28,7 +27,10 @@ export const PATCH: RequestHandler = async (event) => {
 			);
 		}
 
-		return json({ code: 'INVALID_BAN_ACTION', message: 'Invalid ban action' }, { status: 400 });
+		return Response.json(
+			{ code: 'INVALID_BAN_ACTION', message: 'Invalid ban action' },
+			{ status: 400 }
+		);
 	} catch (error) {
 		return toApiErrorResponse(error, BAN_UPDATE_ERROR);
 	}

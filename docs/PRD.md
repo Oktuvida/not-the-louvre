@@ -1,5 +1,11 @@
 # Not The Louvre — Product Requirements Document
 
+> **Historical document.** This is the original hackathon PRD (March 2026). Its delivery
+> constraints no longer apply: the free-tier storage and egress budgets, the ~100 KB AVIF
+> ceiling and "self-hostable from day one". Parts of the architecture it describes have
+> changed. The current plan and decisions live in
+> [`docs/remaster/README.md`](./remaster/README.md).
+
 > A community-driven art party game where anyone can paint, publish, fork, and
 > vote on artwork — all from the browser.
 

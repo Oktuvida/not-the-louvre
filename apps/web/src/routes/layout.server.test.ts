@@ -4,7 +4,7 @@ const mocked = vi.hoisted(() => ({
 	getViewerContentPreferences: vi.fn()
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	getViewerContentPreferences: mocked.getViewerContentPreferences
 }));
 

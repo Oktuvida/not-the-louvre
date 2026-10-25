@@ -1,13 +1,13 @@
 import { and, eq } from 'drizzle-orm';
 import { generateId } from 'better-auth';
-import { db } from '$lib/server/db';
+import { db } from '#lib/server/db/index.js';
 import {
 	isRateLimitBlocked,
 	rateLimitAttemptSet,
 	rateLimitFirstAttemptBlockedUntil,
 	type RateLimitPolicy
-} from '$lib/server/db/rate-limit';
-import { authRateLimits } from '$lib/server/db/schema';
+} from '#lib/server/db/rate-limit.js';
+import { authRateLimits } from '#lib/server/db/schema.js';
 import { AUTH_RATE_LIMITS } from './config';
 
 type AttemptKind = keyof typeof AUTH_RATE_LIMITS;

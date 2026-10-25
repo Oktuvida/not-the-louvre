@@ -1,3 +1,5 @@
+# DEPRECATED: not maintained during the remaster. It still provisions and checks the
+# Rust toolchain the project no longer has. Use Bun and Docker directly (README.md).
 { pkgs, lib, config, ... }:
 
 let

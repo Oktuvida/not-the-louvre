@@ -1,4 +1,4 @@
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 
 /*
  * The one Artwork factory for the gallery specs.

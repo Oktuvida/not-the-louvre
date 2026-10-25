@@ -1,32 +1,48 @@
 import {
 	getDrawingPointWithinBounds,
 	type DrawingDocumentV2,
-	type DrawingPoint,
-	type DrawingStroke
-} from '$lib/features/stroke-json/document';
+	type DrawingPoint
+} from '#lib/features/stroke-json/document.js';
 
 /**
- * The pointer-drawing pieces the studio canvas and the avatar sketchpad share.
- * Both surfaces keep their own state machine — one owns a bindable document, the
- * other mutates a draft in place — but the geometry, the lost-button guard, the
- * committed-stroke cache and the window release net are the same code, and used
- * to drift between the two files.
+ * The pointer pieces of the drawing canvas the studio and the avatar pad
+ * share: where a pointer lands in the document, the lost-button guard and the
+ * window release net.
  */
 
-/** Canvas-space point for a pointer event, clamped to the document bounds. */
-export const getCanvasDrawingPoint = (
-	canvas: HTMLCanvasElement,
-	event: PointerEvent,
-	document: DrawingDocumentV2
-): DrawingPoint | null => {
-	const rect = canvas.getBoundingClientRect();
-	const scaleX = canvas.width / rect.width;
-	const scaleY = canvas.height / rect.height;
-
-	return getDrawingPointWithinBounds(
-		[(event.clientX - rect.left) * scaleX, (event.clientY - rect.top) * scaleY],
+/**
+ * Document point for a client position on a canvas laid out at `rect`, or null
+ * outside the document. The canvas's own pixel count plays no part: it follows
+ * the screen's density, while the document is always the same size.
+ */
+export const getDrawingPointInRect = (
+	rect: Pick<DOMRect, 'height' | 'left' | 'top' | 'width'>,
+	position: { clientX: number; clientY: number },
+	document: Pick<DrawingDocumentV2, 'height' | 'width'>
+): DrawingPoint | null =>
+	getDrawingPointWithinBounds(
+		[
+			((position.clientX - rect.left) * document.width) / rect.width,
+			((position.clientY - rect.top) * document.height) / rect.height
+		],
 		document
 	);
+
+/**
+ * The box a canvas paints into: its border box less the border, so a point on
+ * the drawing's edge is the document's edge, not a pixel short of it.
+ */
+export const getCanvasContentRect = (canvas: HTMLCanvasElement) => {
+	const rect = canvas.getBoundingClientRect();
+	const borderX = canvas.offsetWidth - canvas.clientWidth;
+	const borderY = canvas.offsetHeight - canvas.clientHeight;
+
+	return {
+		height: rect.height - borderY,
+		left: rect.left + canvas.clientLeft,
+		top: rect.top + canvas.clientTop,
+		width: rect.width - borderX
+	};
 };
 
 /**
@@ -38,22 +54,6 @@ export const getCanvasDrawingPoint = (
  */
 export const hasLostPrimaryButton = (event: PointerEvent) =>
 	event.pointerType === 'mouse' && (event.buttons & 1) === 0;
-
-/** Offscreen canvas holding the committed strokes, created and resized on demand. */
-export const ensureCommittedCacheCanvas = (
-	cache: HTMLCanvasElement | null,
-	width: number,
-	height: number
-) => {
-	const canvas = cache ?? window.document.createElement('canvas');
-
-	if (canvas.width !== width || canvas.height !== height) {
-		canvas.width = width;
-		canvas.height = height;
-	}
-
-	return canvas;
-};
 
 /**
  * Window-level net for the pointerup/pointercancel/blur a canvas never sees
@@ -78,47 +78,3 @@ export const attachPointerReleaseSafetyNet = (onRelease: (event?: PointerEvent) 
 		window.removeEventListener('blur', handleBlur);
 	};
 };
-
-/**
- * Everything a repaint depends on. Pointer handlers paint synchronously so the
- * ink lands in the same frame as the input; the reactive effect that also owns
- * repainting compares signatures and skips the duplicate paint instead of
- * drawing every point twice.
- */
-export type DrawingRenderSignature = {
-	activeStroke: DrawingStroke | null;
-	activeStrokePointCount: number;
-	document: DrawingDocumentV2;
-	lastStrokePointCount: number;
-	responsive: boolean;
-	strokeCount: number;
-	target: HTMLCanvasElement | null;
-};
-
-export const readDrawingRenderSignature = (input: {
-	activeStroke: DrawingStroke | null;
-	document: DrawingDocumentV2;
-	responsive: boolean;
-	target: HTMLCanvasElement | null;
-}): DrawingRenderSignature => ({
-	activeStroke: input.activeStroke,
-	activeStrokePointCount: input.activeStroke?.points.length ?? -1,
-	document: input.document,
-	lastStrokePointCount: input.document.tail.at(-1)?.points.length ?? -1,
-	responsive: input.responsive,
-	strokeCount: input.document.tail.length,
-	target: input.target
-});
-
-export const isSameDrawingRenderSignature = (
-	rendered: DrawingRenderSignature | null,
-	next: DrawingRenderSignature
-) =>
-	rendered !== null &&
-	rendered.target === next.target &&
-	rendered.document === next.document &&
-	rendered.activeStroke === next.activeStroke &&
-	rendered.activeStrokePointCount === next.activeStrokePointCount &&
-	rendered.lastStrokePointCount === next.lastStrokePointCount &&
-	rendered.responsive === next.responsive &&
-	rendered.strokeCount === next.strokeCount;

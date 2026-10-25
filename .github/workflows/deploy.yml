@@ -21,6 +21,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # SvelteKit 3 needs Node 22.17+, and vitest, vite and wrangler run on Node.
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -37,21 +43,19 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # The *root* lint/check scripts shell out to `cargo fmt`, `cargo clippy`
-      # and `cargo check`, and this runner has no Rust toolchain — so gate on the
-      # web workspace scripts, which need only Bun. Both of them run
-      # `svelte-kit sync` first, so `./$types` resolves on a clean checkout.
+      # Both web scripts run `svelte-kit sync` first, so `./$types` resolves on a
+      # clean checkout.
       - name: Lint
         run: bun run --filter @not-the-louvre/web lint
 
       - name: Typecheck
         run: bun run --filter @not-the-louvre/web check
 
+      - name: Typecheck the realtime Worker
+        run: bun run --filter @not-the-louvre/realtime check
+
       # Integration suites opt in through RUN_INTEGRATION=1 and are skipped
-      # here: they need the local Supabase stack, which this runner has no way
-      # to boot. They are a release step run by hand instead —
-      # `bun run --filter @not-the-louvre/web test:integration` against a local
-      # stack, documented in AGENTS.md's quality gate.
+      # here; they run against real Postgres in the `database` job below.
       - name: Server unit tests
         run: bun run --filter @not-the-louvre/web test:unit:server
 
@@ -76,17 +80,34 @@ jobs:
       - name: Client component tests
         run: bun run --filter @not-the-louvre/web test:unit:client
 
-  deploy:
-    name: Build and deploy worker
-    needs: [quality]
-    # Pull requests get the quality job only; they must never touch production.
-    if: github.event_name != 'pull_request'
+  database:
+    name: Integration and end-to-end tests
     runs-on: ubuntu-latest
-    # GitHub environment "production" can gate this with required reviewers and
-    # is where the Cloudflare credentials below are stored.
-    environment: production
+    # A plain Postgres stands in for Supabase's: `db:platform-objects` recreates
+    # the few Supabase-owned objects the migration history touches (see
+    # apps/web/scripts/db/supabase-platform-objects.sql) before migrating.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
+
+      # SvelteKit 3 needs Node 22.17+, and vitest, vite and wrangler run on Node.
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
@@ -104,10 +125,90 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # The Rust-built stroke-json WASM is committed under
-      # packages/stroke-json-runtime/generated, so no Rust toolchain is needed
-      # here. `bun run build` smoke-tests that artifact, then runs the SvelteKit
-      # adapter-cloudflare build into apps/web/.svelte-kit/cloudflare.
+      - name: Prepare the database
+        working-directory: apps/web
+        run: |
+          bun run db:platform-objects
+          bun run db:migrate
+
+      # Fork lineage, keyset paging, DB-owned counters, auto-hide and the
+      # rate-limit upsert executed for real instead of through fakes, plus the
+      # media and avatar round trips through wrangler's local R2.
+      - name: Integration suites
+        working-directory: apps/web
+        run: bun run test:integration
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Chromium for the end-to-end suite
+        working-directory: apps/web
+        run: bunx playwright install --with-deps chromium
+
+      # wrangler dev serves both Workers with a local R2 bucket and local
+      # Durable Objects, so Postgres is all the suite needs.
+      - name: End-to-end tests
+        working-directory: apps/web
+        run: bun run test:e2e
+
+      # The e2e suite just built the Worker; the codecs must have stayed in the
+      # renderer Worker rather than ride along with every web request.
+      - name: Web Worker bundle carries no WebAssembly
+        working-directory: apps/web
+        run: bun run check:bundle
+
+      # The trace of a failed test holds the DOM, console and network at every
+      # step, which is the only way to see a failure that does not reproduce
+      # on a laptop. Open it with `bunx playwright show-trace <zip>`.
+      - name: Keep the traces of failed end-to-end tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: apps/web/test-results
+          retention-days: 7
+
+  deploy:
+    name: Build and deploy worker
+    needs: [quality, database]
+    # Pull requests get the quality job only; they must never touch production.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # GitHub environment "production" can gate this with required reviewers and
+    # is where the Cloudflare credentials below are stored.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      # SvelteKit 3 needs Node 22.17+, and vitest, vite and wrangler run on Node.
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # `bun run build` runs the SvelteKit adapter-cloudflare build into
+      # apps/web/.svelte-kit/cloudflare.
       #
       # SvelteKit's postbuild `analyse` step imports the server modules, and
       # better-auth validates its secret when its instance is constructed at
@@ -120,6 +221,27 @@ jobs:
         env:
           BETTER_AUTH_SECRET: build-time-placeholder-not-used-at-runtime
           ORIGIN: https://build.invalid
+
+      # The web Worker binds to the realtime Worker's Durable Objects by script
+      # name, so the realtime Worker (and its Durable Object migrations) ships
+      # first.
+      - name: Deploy the realtime Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/realtime
+          command: deploy
+
+      # The web Worker calls the renderer through a service binding, so it ships
+      # first too.
+      - name: Deploy the renderer Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: deploy -c wrangler.renderer.jsonc
 
       - name: Deploy with Wrangler
         id: deploy

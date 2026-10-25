@@ -6,23 +6,6 @@
 			description: 'Nickname signup, login, logout, availability, and recovery journey.',
 			href: '/demo/better-auth',
 			name: 'Nickname auth demo'
-		},
-		{
-			description: 'Authenticated artwork publish flow with visible read-back results.',
-			href: '/demo/artwork-publish',
-			name: 'Artwork publish demo'
-		},
-		{
-			description:
-				'Publishes one artwork and watches live vote updates arrive in another browser context.',
-			href: '/demo/artwork-realtime-votes',
-			name: 'Artwork realtime vote demo'
-		},
-		{
-			description:
-				'Compares 20x bitmap reload degradation against replaying a compact stroke JSON document.',
-			href: '/demo/stroke-json',
-			name: 'Stroke JSON lab'
 		}
 	] as const;
 </script>

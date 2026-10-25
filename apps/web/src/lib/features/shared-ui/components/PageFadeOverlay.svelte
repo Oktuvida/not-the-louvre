@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { fade } from 'svelte/transition';
-	import { PAGE_FADE_DURATION_MS } from '$lib/features/shared-ui/page-fade';
+	import { PAGE_FADE_DURATION_MS } from '#lib/features/shared-ui/page-fade.js';
 
 	/*
 	 * The full-bleed grey veil that covers a page while the next one is fetched.

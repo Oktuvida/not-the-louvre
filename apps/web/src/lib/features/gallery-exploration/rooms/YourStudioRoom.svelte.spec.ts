@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
-vi.mock('$lib/features/home-entry-scene/canvas/museum-canvas', () => ({
+vi.mock('#lib/features/home-entry-scene/canvas/museum-canvas.js', () => ({
 	museumWindowOpening: { x: 0, y: 0, width: 100, height: 100 },
 	museumWindowAspectRatio: '16/9'
 }));
@@ -12,7 +12,7 @@ vi.mock('$app/environment', () => ({
 	browser: true
 }));
 
-import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
+import { makeArtwork } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import RoomHarness from './RoomHarness.svelte';
 import YourStudioRoom from './YourStudioRoom.svelte';
 
@@ -31,7 +31,7 @@ describe('YourStudioRoom', () => {
 	it('creates its own ArtworkAccumulator seeded with SSR artworks', async () => {
 		const artworks = [createArtwork('s1', 50), createArtwork('s2', 40), createArtwork('s3', 30)];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -49,7 +49,7 @@ describe('YourStudioRoom', () => {
 			createArtwork('s4', 20)
 		];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -73,7 +73,7 @@ describe('YourStudioRoom', () => {
 
 		const artworks = [createArtwork('s1', 50)];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
 			loadMoreArtworks
@@ -89,7 +89,7 @@ describe('YourStudioRoom', () => {
 	it('reseeds accumulator when artworks prop changes so refreshed data is shown', async () => {
 		const artworks = [createArtwork('s1', 50), createArtwork('s2', 40), createArtwork('s3', 30)];
 
-		const screen = renderRoom({
+		const screen = await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -122,7 +122,7 @@ describe('YourStudioRoom', () => {
 	it('releases state on unmount', async () => {
 		const artworks = [createArtwork('s1', 50)];
 
-		const { unmount } = renderRoom({
+		const { unmount } = await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});

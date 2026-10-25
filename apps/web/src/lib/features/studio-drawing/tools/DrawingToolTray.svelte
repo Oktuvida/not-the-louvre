@@ -1,22 +1,34 @@
 <script lang="ts">
-	import { ImageUp, Palette, Trash2 } from 'lucide-svelte';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	import { Eraser, ImageUp, Palette, Redo2, Trash2, Undo2 } from 'lucide-svelte';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import { INK_SHOWN_LEVEL, INK_WARNING_LEVEL } from '#lib/features/stroke-json/ink.js';
 	import {
 		brushSizeSteps,
 		drawingPalette,
 		drawingTools
-	} from '$lib/features/studio-drawing/state/drawing.svelte';
+	} from '#lib/features/studio-drawing/state/drawing.svelte.js';
 
 	let {
+		canRedo = false,
+		canUndo = false,
+		inkUsed = 0,
 		isPublishing = false,
 		mobile = false,
 		onPublish,
-		onClear
+		onClear,
+		onRedo,
+		onUndo
 	}: {
+		canRedo?: boolean;
+		canUndo?: boolean;
+		/** How much of what the server accepts the drawing has used, 0 to 1. */
+		inkUsed?: number;
 		isPublishing?: boolean;
 		mobile?: boolean;
 		onPublish?: () => void;
 		onClear?: () => void;
+		onRedo?: () => void;
+		onUndo?: () => void;
 	} = $props();
 
 	const LIGHT_SWATCH_COLORS = new Set([
@@ -27,6 +39,8 @@
 		'#DCC9A3',
 		'#E5DECA'
 	]);
+
+	const inkLeft = $derived(Math.max(0, Math.round((1 - inkUsed) * 100)));
 
 	const selectColor = (color: string) => {
 		drawingTools.activeColor = color;
@@ -120,6 +134,64 @@
 		</div>
 	</div>
 
+	<!-- Eraser, and taking lines back -->
+	<div class="tray-tools">
+		<button
+			type="button"
+			class="tray-tool focus-ring"
+			class:tray-tool-active={drawingTools.tool === 'eraser'}
+			aria-pressed={drawingTools.tool === 'eraser'}
+			onclick={() => (drawingTools.tool = drawingTools.tool === 'eraser' ? 'brush' : 'eraser')}
+		>
+			<Eraser size={18} aria-hidden="true" />
+			<span>Eraser</span>
+		</button>
+		<button
+			type="button"
+			class="tray-tool focus-ring"
+			aria-label="Undo"
+			disabled={!canUndo}
+			onclick={onUndo}
+		>
+			<Undo2 size={18} aria-hidden="true" />
+		</button>
+		<button
+			type="button"
+			class="tray-tool focus-ring"
+			aria-label="Redo"
+			disabled={!canRedo}
+			onclick={onRedo}
+		>
+			<Redo2 size={18} aria-hidden="true" />
+		</button>
+	</div>
+
+	<!-- The ink is the drawing's budget: it runs out where the server would say no.
+	     It only shows up when it is running low. -->
+	{#if inkUsed >= INK_SHOWN_LEVEL}
+		<div class="ink">
+			<div
+				class="ink-meter"
+				role="meter"
+				aria-label="Ink left"
+				aria-valuemin="0"
+				aria-valuemax="100"
+				aria-valuenow={inkLeft}
+			>
+				<span
+					class="ink-level"
+					class:ink-level-low={inkUsed >= INK_WARNING_LEVEL}
+					style:width={`${inkLeft}%`}
+				></span>
+			</div>
+			{#if inkUsed >= 1}
+				<p class="ink-note ink-note-out">Out of ink</p>
+			{:else if inkUsed >= INK_WARNING_LEVEL}
+				<p class="ink-note">Running low on ink</p>
+			{/if}
+		</div>
+	{/if}
+
 	<div class="tray-sep" aria-hidden="true"></div>
 
 	<!-- Action buttons -->
@@ -153,6 +225,80 @@
 </div>
 
 <style>
+	.ink {
+		margin-top: 12px;
+	}
+
+	.ink-meter {
+		height: 8px;
+		overflow: hidden;
+		border: 1px solid rgba(45, 36, 32, 0.3);
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.5);
+	}
+
+	.ink-level {
+		display: block;
+		height: 100%;
+		background: var(--color-ink-warm, #2d2420);
+		transition: width 200ms ease-out;
+	}
+
+	.ink-level-low {
+		background: var(--color-danger-bright, #c0392b);
+	}
+
+	.ink-note {
+		margin-top: 4px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-ink-warm, #2d2420);
+	}
+
+	.ink-note-out {
+		color: var(--color-danger-bright, #c0392b);
+	}
+
+	.tray-tools {
+		display: flex;
+		gap: 8px;
+		margin-top: 14px;
+	}
+
+	.tray-tool {
+		display: inline-flex;
+		flex: 0 0 auto;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		min-width: 44px;
+		min-height: 44px;
+		padding: 0 12px;
+		border: 2px solid rgba(45, 36, 32, 0.35);
+		border-radius: 12px;
+		background: rgba(255, 255, 255, 0.55);
+		color: var(--color-ink-warm, #2d2420);
+		font-family: var(--font-display, inherit);
+		font-size: 0.85rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.tray-tool:first-child {
+		flex: 1 1 auto;
+	}
+
+	.tray-tool-active {
+		border-color: var(--color-ink-warm, #2d2420);
+		background: var(--color-ink-warm, #2d2420);
+		color: var(--color-paper-bright, #fdfbf7);
+	}
+
+	.tray-tool:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
+	}
+
 	/*
 	 * A scrap of studio paper: the paper itself is `.paper-sheet` +
 	 * `.paper-grain`, and how it is torn off and pinned down is here. The tray

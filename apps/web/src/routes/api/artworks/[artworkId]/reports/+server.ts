@@ -1,9 +1,8 @@
-import { json } from '@sveltejs/kit';
-import { getIp } from 'better-auth/api';
+import { getIP } from 'better-auth/api';
 import type { RequestHandler } from './$types';
-import { auth } from '$lib/server/auth';
-import { submitContentReport } from '$lib/server/artwork/service';
-import { toApiErrorResponse } from '$lib/server/http/errors';
+import { auth } from '#lib/server/auth.js';
+import { submitContentReport } from '#lib/server/artwork/service.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
 
 const REPORT_ERROR = {
 	fallbackCode: 'REPORT_FAILED',
@@ -20,10 +19,10 @@ export const POST: RequestHandler = async (event) => {
 				details: body.details,
 				reason: body.reason ?? ''
 			},
-			{ ipAddress: getIp(event.request, auth.options), user: event.locals.user }
+			{ ipAddress: getIP(event.request, auth.options), user: event.locals.user }
 		);
 
-		return json({ report }, { status: 201 });
+		return Response.json({ report }, { status: 201 });
 	} catch (error) {
 		return toApiErrorResponse(error, REPORT_ERROR);
 	}

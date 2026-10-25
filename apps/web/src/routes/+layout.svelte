@@ -11,9 +11,9 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import AmbientAudioController from '$lib/features/ambient-audio/AmbientAudioController.svelte';
-	import SiteMeta from '$lib/features/shared-ui/components/SiteMeta.svelte';
-	import { readRouteMeta } from '$lib/features/shared-ui/site-meta';
+	import AmbientAudioController from '#lib/features/ambient-audio/AmbientAudioController.svelte';
+	import SiteMeta from '#lib/features/shared-ui/components/SiteMeta.svelte';
+	import { readRouteMeta } from '#lib/features/shared-ui/site-meta.js';
 	/*
 	 * Self-hosted fonts, latin + latin-ext subsets only.
 	 *
@@ -60,7 +60,7 @@
 	import balooBodyFontUrl from '@fontsource/baloo-2/files/baloo-2-latin-400-normal.woff2?url';
 	import fredokaDisplayFontUrl from '@fontsource/fredoka/files/fredoka-latin-700-normal.woff2?url';
 	import type { LayoutProps } from './$types';
-	import { faviconUpdateEventName } from '$lib/favicon';
+	import { faviconUpdateEventName } from '#lib/favicon.js';
 
 	let { children, data }: LayoutProps = $props();
 	let clientFaviconHref = $state<string | null>(null);
@@ -105,7 +105,9 @@
 
 <svelte:head>
 	<link rel="icon" href={faviconHref} sizes="any" />
+
 	<link rel="preload" as="font" type="font/woff2" href={balooBodyFontUrl} crossorigin="anonymous" />
+
 	<link
 		rel="preload"
 		as="font"
@@ -115,7 +117,12 @@
 	/>
 </svelte:head>
 
-<SiteMeta title={documentTitle} description={routeMeta.description} {pathname} />
+<SiteMeta
+	title={documentTitle}
+	description={routeMeta.description}
+	image={page.error ? undefined : routeMeta.image}
+	{pathname}
+/>
 
 {@render children()}
 
@@ -125,7 +132,7 @@
 />
 
 {#if data.viewer && !data.viewer.isBanned && data.viewer.role !== 'user'}
-	<a class="ops-link focus-ring" href={resolve('/admin')}>Ops</a>
+	<a class="ops-link focus-ring" href={resolve('admin')}>Ops</a>
 {/if}
 
 <style>

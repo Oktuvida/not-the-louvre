@@ -31,7 +31,7 @@ describe('AuthOverlay', () => {
 		vi.stubGlobal('fetch', fetchSpy);
 		vi.spyOn(HTMLFormElement.prototype, 'requestSubmit').mockImplementation(requestSubmit);
 
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			checkTextContent,
 			dispatch: vi.fn(),
 			entryState: 'auth-signup'
@@ -63,7 +63,7 @@ describe('AuthOverlay', () => {
 		vi.stubGlobal('fetch', fetchSpy);
 		vi.spyOn(HTMLFormElement.prototype, 'requestSubmit').mockImplementation(requestSubmit);
 
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			checkTextContent,
 			dispatch: vi.fn(),
 			entryState: 'auth-signup'
@@ -81,7 +81,7 @@ describe('AuthOverlay', () => {
 
 	it('starts on the sign-in view and validates fields before login submit', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			dispatch,
 			entryState: 'auth-login',
 			form: undefined
@@ -95,7 +95,7 @@ describe('AuthOverlay', () => {
 
 	it('shows backend-driven sign-in failures without leaving the login context', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			dispatch,
 			entryState: 'auth-login',
 			form: {
@@ -112,7 +112,7 @@ describe('AuthOverlay', () => {
 
 	it('shows duplicate nickname failures in the signup context', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			dispatch,
 			entryState: 'auth-signup',
 			form: {
@@ -126,8 +126,8 @@ describe('AuthOverlay', () => {
 		await expect.element(page.getByText('That nickname is already taken')).toBeVisible();
 	});
 
-	it('uses semantic autocomplete tokens for sign-in fields', () => {
-		render(AuthOverlay, {
+	it('uses semantic autocomplete tokens for sign-in fields', async () => {
+		await render(AuthOverlay, {
 			dispatch: vi.fn(),
 			entryState: 'auth-login',
 			form: undefined
@@ -141,8 +141,8 @@ describe('AuthOverlay', () => {
 		);
 	});
 
-	it('uses semantic autocomplete tokens for sign-up fields', () => {
-		render(AuthOverlay, {
+	it('uses semantic autocomplete tokens for sign-up fields', async () => {
+		await render(AuthOverlay, {
 			dispatch: vi.fn(),
 			entryState: 'auth-signup',
 			form: undefined
@@ -156,8 +156,8 @@ describe('AuthOverlay', () => {
 		);
 	});
 
-	it('uses semantic autocomplete tokens for recovery fields', () => {
-		render(AuthOverlay, {
+	it('uses semantic autocomplete tokens for recovery fields', async () => {
+		await render(AuthOverlay, {
 			dispatch: vi.fn(),
 			entryState: 'auth-recovery',
 			form: undefined
@@ -197,7 +197,7 @@ describe('AuthOverlay', () => {
 			}
 		}) as typeof window.addEventListener);
 
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			dispatch: vi.fn(),
 			entryState: 'auth-login',
 			form: undefined
@@ -253,7 +253,7 @@ describe('AuthOverlay', () => {
 			.spyOn(window, 'addEventListener')
 			.mockImplementation((() => {}) as typeof window.addEventListener);
 
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			dispatch: vi.fn(),
 			entryState: 'auth-login',
 			form: undefined
@@ -284,7 +284,7 @@ describe('AuthOverlay', () => {
 	});
 
 	it('exposes the live auth sheet as a modal dialog that keeps Tab inside it', async () => {
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			dispatch: vi.fn(),
 			entryState: 'auth-login',
 			form: undefined
@@ -316,7 +316,7 @@ describe('AuthOverlay', () => {
 		document.body.append(opener);
 		opener.focus();
 
-		const { rerender } = render(AuthOverlay, {
+		const { rerender } = await render(AuthOverlay, {
 			dispatch: vi.fn(),
 			entryState: 'auth-login',
 			form: undefined
@@ -350,7 +350,7 @@ describe('AuthOverlay', () => {
 	it('closes the live sheet on Escape, as its modal semantics promise', async () => {
 		const dispatch = vi.fn();
 
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			dispatch,
 			entryState: 'auth-login',
 			form: undefined
@@ -366,7 +366,7 @@ describe('AuthOverlay', () => {
 	});
 
 	it('drops the dialog semantics while the overlay is not the live auth surface', async () => {
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			dispatch: vi.fn(),
 			entryState: 'inside',
 			form: undefined
@@ -391,7 +391,7 @@ describe('AuthOverlay', () => {
 		vi.stubGlobal('fetch', fetchSpy);
 		vi.spyOn(HTMLFormElement.prototype, 'requestSubmit').mockImplementation(requestSubmit);
 
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			checkTextContent,
 			dispatch: vi.fn(),
 			entryState: 'auth-signup'
@@ -408,7 +408,7 @@ describe('AuthOverlay', () => {
 
 	it('shows the backend-issued signup recovery key and waits for acknowledgement', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			dispatch,
 			entryState: 'auth-signup',
 			form: {
@@ -426,7 +426,7 @@ describe('AuthOverlay', () => {
 
 	it('shows the rotated recovery key and returns to login after acknowledgement', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			dispatch,
 			entryState: 'auth-recovery',
 			form: {
@@ -447,7 +447,7 @@ describe('AuthOverlay', () => {
 
 	it('reopens directly on the avatar step for authenticated users with incomplete onboarding', async () => {
 		const dispatch = vi.fn();
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			authenticatedUser: {
 				authUserId: 'auth-user-1',
 				avatarOnboardingCompletedAt: null,
@@ -473,7 +473,7 @@ describe('AuthOverlay', () => {
 	// from: the tool tray a click later carried a shadow 12% lighter, and its own
 	// copy of the same grain tile. Both wear the shared utilities now.
 	it('is printed on the shared museum paper', async () => {
-		render(AuthOverlay, { dispatch: vi.fn(), entryState: 'auth-login' });
+		await render(AuthOverlay, { dispatch: vi.fn(), entryState: 'auth-login' });
 
 		const sheet = document.querySelector<HTMLElement>('.paper-sheet');
 		expect(sheet).not.toBeNull();
@@ -500,7 +500,7 @@ describe('AuthOverlay', () => {
 	it('notifies the controller when the avatar step is dismissed', async () => {
 		const dispatch = vi.fn();
 		const onAvatarDismiss = vi.fn();
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			authenticatedUser: {
 				authUserId: 'auth-user-1',
 				avatarOnboardingCompletedAt: null,
@@ -538,7 +538,7 @@ describe('AuthOverlay', () => {
 
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(AuthOverlay, {
+		await render(AuthOverlay, {
 			authenticatedUser: {
 				authUserId: 'auth-user-1',
 				avatarOnboardingCompletedAt: null,
