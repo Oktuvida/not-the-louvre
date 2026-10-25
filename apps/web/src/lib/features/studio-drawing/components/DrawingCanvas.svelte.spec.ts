@@ -29,13 +29,13 @@ const seededDocument = (points: [number, number][]) =>
 
 const renderCanvas = async (
 	props: Record<string, unknown> = {},
-	options: { size?: number } = {}
+	options: { scale?: number; size?: number } = {}
 ) => {
 	const committed: DrawingStroke[] = [];
 	const documents: DrawingDocumentV2[] = [];
 	let controls: { redo(): boolean; undo(): boolean } | undefined;
 
-	await render(DrawingCanvasHarness, {
+	const rendered = await render(DrawingCanvasHarness, {
 		onControls: (handle: NonNullable<typeof controls>) => {
 			controls = handle;
 		},
@@ -45,6 +45,7 @@ const renderCanvas = async (
 		onStrokeCommitted: ({ stroke }: { stroke: DrawingStroke }) => {
 			committed.push(stroke);
 		},
+		scale: options.scale ?? 1,
 		size: options.size ?? 384,
 		...props
 	});
@@ -109,7 +110,9 @@ const renderCanvas = async (
 		undo: () => controls!.undo()
 	};
 
-	return { at, canvas, colourAt, committed, documents, draw, history, pointer };
+	const rerender = (next: Record<string, unknown>) => rendered.rerender(next);
+
+	return { at, canvas, colourAt, committed, documents, draw, history, pointer, rerender };
 };
 
 describe('DrawingCanvas', () => {
@@ -170,6 +173,19 @@ describe('DrawingCanvas', () => {
 		draw([100, 400], [600, 400]);
 		await vi.waitFor(() => expect(colourAt(350, 400)).toEqual(INK));
 		expect(colourAt(350, 420)).toEqual(BACKGROUND);
+	});
+
+	it('stays sharp through the sketchbook scaling it on its way open', async () => {
+		Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2 });
+		const { canvas, rerender } = await renderCanvas({}, { scale: 0.5, size: 300 });
+
+		// Shown smaller than its layout: never fewer pixels than the layout.
+		await vi.waitFor(() => expect(canvas.width).toBe(600));
+
+		// The book settles larger than its layout once its transition ends.
+		await rerender({ scale: 1.5 });
+		canvas.dispatchEvent(new Event('transitionend', { bubbles: true }));
+		await vi.waitFor(() => expect(canvas.width).toBe(900));
 	});
 
 	it('never grows the canvas past 2048 pixels a side', async () => {

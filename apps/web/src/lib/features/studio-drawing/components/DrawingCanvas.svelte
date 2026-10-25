@@ -288,9 +288,21 @@
 
 		const canvas = canvasRef;
 		const inkSurface = createInkSurface(canvas, overlayRef);
+		/*
+		 * As many pixels as the canvas covers on screen, and never fewer than its
+		 * layout. The sketchbook scales the page with transforms (down while it
+		 * opens, up once it is open), which move no layout and fire no resize, so
+		 * the size is checked again whenever a transition or an animation ends
+		 * and whenever a pointer comes onto the canvas. Unchanged, it costs one
+		 * box read.
+		 */
 		const fitToBox = () => {
-			const rect = getCanvasContentRect(canvas);
-			inkSurface.resize(rect.width, rect.height, window.devicePixelRatio || 1);
+			const visible = getCanvasContentRect(canvas);
+			inkSurface.resize(
+				Math.max(canvas.clientWidth, visible.width),
+				Math.max(canvas.clientHeight, visible.height),
+				window.devicePixelRatio || 1
+			);
 		};
 
 		fitToBox();
@@ -302,11 +314,17 @@
 		resizeObserver.observe(canvas);
 		// A window dragged to a screen of another density keeps its CSS size.
 		window.addEventListener('resize', fitToBox);
+		document.addEventListener('transitionend', fitToBox);
+		document.addEventListener('animationend', fitToBox);
+		canvas.addEventListener('pointerenter', fitToBox);
 		const detachPointerReleaseSafetyNet = attachPointerReleaseSafetyNet(finishDrawing);
 
 		return () => {
 			resizeObserver.disconnect();
 			window.removeEventListener('resize', fitToBox);
+			document.removeEventListener('transitionend', fitToBox);
+			document.removeEventListener('animationend', fitToBox);
+			canvas.removeEventListener('pointerenter', fitToBox);
 			detachPointerReleaseSafetyNet();
 			inkSurface.destroy();
 			surface = null;
