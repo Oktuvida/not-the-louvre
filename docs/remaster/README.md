@@ -121,10 +121,14 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 
 ## Decisiones abiertas
 
-- **Imágenes muy pesadas.** Aceptarlas y medir (recomendado) o servir una versión casi sin pérdida en la rejilla. Se decide en la fase 3.
-- **Forks por referencia.** Cambian la regla del PRD de que un fork nunca depende de su padre. Se decide en la fase 4.
-- **Obras ocultas.** Desde `4bb1735` (30 de marzo), ni moderadores ni autores pueden abrir el detalle de una obra oculta. ¿Fue intencional? Mientras tanto, la suite de contrato describe el comportamiento actual.
-- **Producción.** Votar y comentar fallan en producción hasta que se publique `hotfix/rate-limit-upsert`.
+- **Imágenes muy pesadas.** Aceptarlas y medir (recomendado) o servir una versión casi sin pérdida en la rejilla. Se decide con la cifra real que da el informe del corte (`heavyImages`).
+
+## Decisiones tomadas en la fase 4 (2026-10-25)
+
+- **Forks por referencia, con copia de seguridad.** El fork guarda la referencia a su original y solo sus propios trazos (la tinta no se hereda). La imagen publicada de cada fork es la obra completa, así que la galería nunca depende del original. Al publicar, el servidor guarda además una copia completa del dibujo del fork (lo heredado más lo nuevo), solo como respaldo para reconstruirlo si al original le pasara algo; no cuenta para la tinta. Borrar una obra la quita de la galería, pero sus archivos se conservan mientras algún fork los use.
+- **Obras ocultas.** Su autor y los moderadores pueden abrirlas, con la marca "Oculta, pendiente de revisión".
+- **Producción.** El arreglo de votos y comentarios espera al remaster.
+- **Límite de tinta.** Tiene que ser lo bastante alto para que nadie que dibuje normalmente lo note: ×3 respecto al runtime de Rust (300 000 puntos, 15 000 trazos, 3 MiB), y el medidor solo aparece a partir del 75 %. Las guardas de tamaño de imagen (2,5 MiB obras, 512 KiB avatares) solo frenan lo que no es un dibujo.
 
 ## Prerrequisitos pendientes
 

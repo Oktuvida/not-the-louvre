@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Eraser, ImageUp, Palette, Redo2, Trash2, Undo2 } from 'lucide-svelte';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
-	import { INK_WARNING_LEVEL } from '#lib/features/stroke-json/ink.js';
+	import { INK_SHOWN_LEVEL, INK_WARNING_LEVEL } from '#lib/features/stroke-json/ink.js';
 	import {
 		brushSizeSteps,
 		drawingPalette,
@@ -166,28 +166,31 @@
 		</button>
 	</div>
 
-	<!-- The ink is the drawing's budget: it runs out where the server would say no. -->
-	<div class="ink">
-		<div
-			class="ink-meter"
-			role="meter"
-			aria-label="Ink left"
-			aria-valuemin="0"
-			aria-valuemax="100"
-			aria-valuenow={inkLeft}
-		>
-			<span
-				class="ink-level"
-				class:ink-level-low={inkUsed >= INK_WARNING_LEVEL}
-				style:width={`${inkLeft}%`}
-			></span>
+	<!-- The ink is the drawing's budget: it runs out where the server would say no.
+	     It only shows up when it is running low. -->
+	{#if inkUsed >= INK_SHOWN_LEVEL}
+		<div class="ink">
+			<div
+				class="ink-meter"
+				role="meter"
+				aria-label="Ink left"
+				aria-valuemin="0"
+				aria-valuemax="100"
+				aria-valuenow={inkLeft}
+			>
+				<span
+					class="ink-level"
+					class:ink-level-low={inkUsed >= INK_WARNING_LEVEL}
+					style:width={`${inkLeft}%`}
+				></span>
+			</div>
+			{#if inkUsed >= 1}
+				<p class="ink-note ink-note-out">Out of ink</p>
+			{:else if inkUsed >= INK_WARNING_LEVEL}
+				<p class="ink-note">Running low on ink</p>
+			{/if}
 		</div>
-		{#if inkUsed >= 1}
-			<p class="ink-note ink-note-out">Out of ink</p>
-		{:else if inkUsed >= INK_WARNING_LEVEL}
-			<p class="ink-note">Running low on ink</p>
-		{/if}
-	</div>
+	{/if}
 
 	<div class="tray-sep" aria-hidden="true"></div>
 

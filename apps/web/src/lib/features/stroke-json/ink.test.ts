@@ -19,7 +19,8 @@ const withTail = (...tail: DrawingStroke[]) => ({
 describe('the ink a drawing has used', () => {
 	it('is none for an empty page', () => {
 		expect(measureInk(createEmptyDrawingDocumentV2('artwork'))).toMatchObject({
-			remainingStrokes: 5000,
+			remainingPoints: 300_000,
+			remainingStrokes: 15_000,
 			used: 0
 		});
 	});

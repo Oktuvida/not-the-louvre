@@ -1,6 +1,7 @@
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { decodeDrawingDocument, prepareDrawingDocumentForStorage } from './storage';
+import { DRAWING_LIMITS } from '#lib/shared/artwork/drawing-limits.js';
 
 const artwork = { kind: 'artwork', width: 768, height: 768, background: '#fdfbf7' } as const;
 const stroke = (points: [number, number][], color = '#1d3557', size = 8) => ({
@@ -59,7 +60,14 @@ describe('drawing document storage', () => {
 		const overLimit = {
 			version: 1,
 			...artwork,
-			strokes: [stroke(Array.from({ length: 5001 }, (_, i) => [i % 769, 0] as [number, number]))]
+			strokes: [
+				stroke(
+					Array.from(
+						{ length: DRAWING_LIMITS.maxPointsPerStroke + 1 },
+						(_, i) => [i % 769, 0] as [number, number]
+					)
+				)
+			]
 		};
 
 		await expect(prepareDrawingDocumentForStorage(JSON.stringify(overLimit))).rejects.toMatchObject(
