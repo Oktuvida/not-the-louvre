@@ -30,7 +30,9 @@ export default defineConfig({
 		// The other configs are the realtime Worker, whose Durable Objects the web
 		// Worker binds to, and the renderer Worker it calls for images; one
 		// `wrangler dev` runs all three.
-		command: `bun run build:e2e && wrangler dev -c wrangler.jsonc -c ../realtime/wrangler.jsonc -c wrangler.renderer.jsonc --ip 127.0.0.1 --port 4173 ${Object.entries(
+		// Its own local state (R2, Durable Objects): every test resets the bucket,
+		// which must never be the one `bun run dev` and `db:seed` fill.
+		command: `bun run build:e2e && wrangler dev -c wrangler.jsonc -c ../realtime/wrangler.jsonc -c wrangler.renderer.jsonc --persist-to .wrangler/e2e-state --ip 127.0.0.1 --port 4173 ${Object.entries(
 			workerVariables
 		)
 			.map(([key, value]) => `--var ${key}:${JSON.stringify(value)}`)
