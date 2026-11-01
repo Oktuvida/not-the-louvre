@@ -184,12 +184,20 @@
 		const first = pressures[0] ?? 0;
 		const isPlaceholder =
 			pressures.every((pressure) => pressure === first) && PLACEHOLDER_PRESSURES.includes(first);
-		return stroke.pointer === 'pen' && !isPlaceholder ? { ...stroke, pressures } : stroke;
+		if (stroke.pointer === 'pen' && !isPlaceholder) return { ...stroke, pressures };
+		return stroke.brush === 'ink@1' ? { ...stroke, brush: 'round@1' } : stroke;
 	};
 
 	const startStroke = (point: DrawingPoint, at: number, pointer: PointerKind, pressure: number) => {
 		const stroke: WetStroke = {
-			brush: !strokeColor && drawingTools.tool === 'eraser' ? 'eraser@1' : 'round@1',
+			// A pen draws with the pressure brush from its first point; if its
+			// pressure turns out to be a placeholder the line is kept as a round one.
+			brush:
+				!strokeColor && drawingTools.tool === 'eraser'
+					? 'eraser@1'
+					: pointer === 'pen'
+						? 'ink@1'
+						: 'round@1',
 			color: inkColor(),
 			pointer,
 			points: [point],

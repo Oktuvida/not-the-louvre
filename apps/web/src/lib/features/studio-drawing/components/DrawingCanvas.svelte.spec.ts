@@ -739,6 +739,7 @@ describe('DrawingCanvas', () => {
 			// Kept in the ten bits the document stores.
 			const tenBits = (pressure: number) => Math.round(pressure * 1023) / 1023;
 			expect(committed[0]).toMatchObject({
+				brush: 'ink@1',
 				pointer: 'pen',
 				pressures: [tenBits(0.3), tenBits(0.6)]
 			});
@@ -754,6 +755,33 @@ describe('DrawingCanvas', () => {
 			canvas.dispatchEvent(pointer('pointerup', [140, 120], pen));
 
 			expect(committed[0]).not.toHaveProperty('pressures');
+			expect(committed[0]).toMatchObject({ brush: 'round@1' });
+		});
+
+		it('draws a pen line thin where it barely touches and thick where it presses', async () => {
+			const { canvas, colourAt, pointer } = await renderCanvas();
+			const xs = Array.from({ length: 41 }, (_, index) => 100 + index * 14);
+
+			xs.forEach((x, index) =>
+				canvas.dispatchEvent(
+					pointer(index === 0 ? 'pointerdown' : 'pointermove', [x, 400], {
+						pointerType: 'pen',
+						pressure: 0.05 + (index / 40) * 0.95
+					})
+				)
+			);
+			canvas.dispatchEvent(pointer('pointerup', [xs.at(-1)!, 400], { pointerType: 'pen' }));
+
+			// How far the ink reaches above the line, at the light and the heavy end.
+			const reach = (x: number) => {
+				let offset = 0;
+				while (offset < 40 && colourAt(x, 400 - offset).join() !== BACKGROUND.join()) offset += 1;
+				return offset;
+			};
+			// Painted (paper well away from the line) before anything is measured.
+			await vi.waitFor(() => expect(colourAt(350, 600)).toEqual(BACKGROUND));
+			expect(reach(600)).toBeGreaterThan(reach(160));
+			expect(reach(160)).toBeGreaterThan(0);
 		});
 
 		it('names the eraser as such', async () => {

@@ -1,6 +1,14 @@
+import { inkOutline, isInkStroke } from '../../stroke/brushes';
 import { getRenderableDrawingStrokes, type DrawingDocument, type DrawingStroke } from './document';
 
 export const renderDrawingStroke = (context: CanvasRenderingContext2D, stroke: DrawingStroke) => {
+	// The same outline the published image fills (stroke/brushes.ts).
+	if (isInkStroke(stroke)) {
+		context.fillStyle = stroke.color;
+		context.fill(new Path2D(inkOutline(stroke)));
+		return;
+	}
+
 	context.strokeStyle = stroke.color;
 	context.fillStyle = stroke.color;
 	context.lineWidth = stroke.size;
