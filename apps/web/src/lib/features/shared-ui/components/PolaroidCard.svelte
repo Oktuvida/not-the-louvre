@@ -151,6 +151,15 @@
 					Forked
 				</div>
 			{/if}
+			{#if artwork.isHidden}
+				<!-- Only its author (in their studio) and moderators ever see a
+				     hidden artwork: the label says why nobody else does. -->
+				<div
+					class="absolute bottom-3 left-3 z-10 rounded-full border-2 border-ink-warm bg-paper-bright px-3 py-1 text-[0.65rem] font-black tracking-[0.12em] text-ink-warm uppercase shadow-md"
+				>
+					Hidden · pending review
+				</div>
+			{/if}
 			<NsfwImage
 				src={artwork.imageUrl}
 				alt={artwork.title}

@@ -789,16 +789,11 @@ describeWithDatabase('artwork DB contract', () => {
 			status: 404
 		});
 
-		// Detail reads are public-only for every viewer since 4bb1735 ("restrict
-		// artwork reads to public items"): a moderator reaches hidden work through
-		// the moderation queue, not the detail view. Whether moderators and
-		// authors should open hidden detail again is an open remaster decision
-		// (docs/remaster/README.md); until then this pins the shipped behavior.
-		await expect(
-			getArtworkDetail('artwork-service', {
-				user: createCanonicalUser('moderator-1', 'moderator')
-			})
-		).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
+		// A moderator can still open it, to review it (remaster decision, 2026-10-25).
+		const moderatorDetail = await getArtworkDetail('artwork-service', {
+			user: createCanonicalUser('moderator-1', 'moderator')
+		});
+		expect(moderatorDetail.isHidden).toBe(true);
 
 		await moderateArtwork(
 			{ action: 'unhide', artworkId: 'artwork-service' },
@@ -807,6 +802,48 @@ describeWithDatabase('artwork DB contract', () => {
 
 		publicDetail = await getArtworkDetail('artwork-service');
 		expect(publicDetail.id).toBe('artwork-service');
+	});
+
+	it('opens a hidden artwork for its author and moderators, and for nobody else', async () => {
+		const { getArtworkDetail, getArtworkMedia, listArtworkDiscovery } =
+			await import('./read.service');
+		const author = { user: createCanonicalUser('author-1') };
+		const moderator = { user: createCanonicalUser('moderator-1', 'moderator') };
+		const stranger = { user: createCanonicalUser('viewer-1') };
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-hidden', isHidden: true });
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-shown' });
+
+		for (const context of [{}, stranger]) {
+			await expect(getArtworkDetail('artwork-hidden', context)).rejects.toMatchObject({
+				status: 404
+			});
+			await expect(getArtworkMedia('artwork-hidden', context)).rejects.toMatchObject({
+				status: 404
+			});
+		}
+		for (const context of [author, moderator]) {
+			expect(await getArtworkDetail('artwork-hidden', context)).toMatchObject({ isHidden: true });
+			expect(await getArtworkMedia('artwork-hidden', context)).toMatchObject({ isHidden: true });
+		}
+
+		// Only the author's own studio lists it, so the author can find it again.
+		const studio = (context: object) =>
+			listArtworkDiscovery(
+				{ authorId: 'author-1', cursor: null, limit: 20, sort: 'recent' },
+				context
+			);
+		// Same creation time: newest-first falls back to the id, descending.
+		expect((await studio(author)).items.map((item) => item.id)).toEqual([
+			'artwork-shown',
+			'artwork-hidden'
+		]);
+		expect((await studio(stranger)).items.map((item) => item.id)).toEqual(['artwork-shown']);
+		expect(
+			(
+				await listArtworkDiscovery({ cursor: null, limit: 20, sort: 'recent' }, moderator)
+			).items.map((item) => item.id)
+		).toEqual(['artwork-shown']);
 	});
 
 	it('resolves feed lineage in one statement without dropping forks of hidden parents', async () => {

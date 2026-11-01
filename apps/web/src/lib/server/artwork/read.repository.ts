@@ -213,6 +213,17 @@ type ArtworkReadRow = {
 
 const artworkVisibilityWhere = () => eq(artworks.isHidden, false);
 
+/**
+ * One artwork as a viewer may open it: a hidden one stays openable for its
+ * author (to see what happened to it) and for moderators (to review it).
+ */
+const artworkOpenableBy = (viewer: { isModerator: boolean; userId: string | null }) =>
+	viewer.isModerator
+		? undefined
+		: viewer.userId
+			? or(eq(artworks.isHidden, false), eq(artworks.authorId, viewer.userId))
+			: eq(artworks.isHidden, false);
+
 const commentVisibilityWhere = (
 	artworkId: string,
 	viewer: { isModerator: boolean; userId: string | null }
@@ -315,7 +326,8 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.leftJoin(parentAuthors, parentAuthorJoinCondition)
 			.where(
 				and(
-					artworkVisibilityWhere(),
+					// An author's own studio keeps their hidden work, so they can find it.
+					input.authorId && input.authorId === viewer.userId ? undefined : artworkVisibilityWhere(),
 					input.authorId ? eq(artworks.authorId, input.authorId) : undefined,
 					recentCursorWhere(input.cursor) ?? undefined
 				)
@@ -378,7 +390,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.select(buildDetailSelect(activeViewer, options))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(and(eq(artworks.id, id), artworkVisibilityWhere()))
+			.where(and(eq(artworks.id, id), artworkOpenableBy(activeViewer)))
 			.limit(1);
 
 		const record = row[0] ? mapRow(row[0]) : null;
@@ -424,15 +436,16 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			parentTitle: parent[0]?.title ?? null
 		};
 	},
-	async findArtworkMediaById(id) {
+	async findArtworkMediaById(id, viewer) {
 		const row = await db
 			.select({
 				id: artworks.id,
+				isHidden: artworks.isHidden,
 				mediaContentType: artworks.mediaContentType,
 				storageKey: artworks.storageKey
 			})
 			.from(artworks)
-			.where(and(eq(artworks.id, id), artworkVisibilityWhere()))
+			.where(and(eq(artworks.id, id), artworkOpenableBy(defaultViewer(viewer))))
 			.limit(1);
 
 		return row[0] ?? null;

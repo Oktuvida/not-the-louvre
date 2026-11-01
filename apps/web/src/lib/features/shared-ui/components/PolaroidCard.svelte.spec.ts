@@ -24,6 +24,15 @@ const artwork = {
 } satisfies Artwork;
 
 describe('PolaroidCard', () => {
+	it('tells its author when the artwork is hidden pending review', async () => {
+		const card = await render(PolaroidCard, { artwork });
+
+		await expect.element(page.getByText('Hidden · pending review')).not.toBeInTheDocument();
+
+		await card.rerender({ artwork: { ...artwork, isHidden: true } });
+		await expect.element(page.getByText('Hidden · pending review')).toBeVisible();
+	});
+
 	it('renders avatar, title-author column, and right-aligned metrics', async () => {
 		await render(PolaroidCard, {
 			artwork: {

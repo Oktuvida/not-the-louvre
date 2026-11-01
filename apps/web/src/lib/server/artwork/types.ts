@@ -42,6 +42,8 @@ export type ArtworkFeedCard = {
 	downvotes?: number;
 	forkCount: number;
 	id: string;
+	/** Only ever true for the author's own studio and for moderators. */
+	isHidden: boolean;
 	isNsfw: boolean;
 	lineage: ArtworkLineageSummary;
 	mediaUrl: string;
@@ -415,7 +417,7 @@ export type ArtworkReadRepository = {
 	findArtworkMediaById(
 		id: string,
 		viewer?: ArtworkVisibilityActor
-	): Promise<Pick<ArtworkRecord, 'id' | 'mediaContentType' | 'storageKey'> | null>;
+	): Promise<Pick<ArtworkRecord, 'id' | 'isHidden' | 'mediaContentType' | 'storageKey'> | null>;
 	findRandomArtwork(viewer?: ArtworkVisibilityActor): Promise<ArtworkReadRecord | null>;
 	listArtworkCommentsByArtworkId(
 		artworkId: string,

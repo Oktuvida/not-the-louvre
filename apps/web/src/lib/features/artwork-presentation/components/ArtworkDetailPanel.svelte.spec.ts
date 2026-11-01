@@ -47,6 +47,15 @@ describe('ArtworkDetailPanel', () => {
 		);
 	};
 
+	it('tells its author or a moderator when the artwork is hidden pending review', async () => {
+		await render(ArtworkDetailPanel, {
+			artwork: { ...artwork, isHidden: true },
+			viewer: { id: 'user-test', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Hidden · pending review')).toBeVisible();
+	});
+
 	it('links forking into the draw studio with the parent artwork id', async () => {
 		goto.mockReset();
 

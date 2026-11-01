@@ -9,6 +9,7 @@ const feedCard: ArtworkFeedCard = {
 	downvotes: 1,
 	forkCount: 2,
 	id: 'artwork-1',
+	isHidden: false,
 	isNsfw: false,
 	lineage: { isFork: false, parent: null, parentStatus: 'none' },
 	mediaUrl: '/api/artworks/artwork-1/media',

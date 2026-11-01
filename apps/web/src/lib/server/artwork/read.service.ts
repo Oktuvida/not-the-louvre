@@ -119,6 +119,7 @@ const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 	downvotes: record.downvotes ?? 0,
 	forkCount: record.forkCount,
 	id: record.id,
+	isHidden: record.isHidden ?? false,
 	isNsfw: record.isNsfw,
 	lineage: toLineage(record),
 	mediaUrl: resolveArtworkMediaUrl(record.id, record.mediaContentType),
