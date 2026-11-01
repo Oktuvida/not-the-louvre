@@ -31,6 +31,12 @@
 	// auto-fill CSS columns so the server-rendered layout stays correct.
 	const SSR_FALLBACK_CHUNK = 6;
 
+	// Rows are kept in the page a screen and a half past the window, above and
+	// below. A row's pictures start loading as it mounts, so this is how far
+	// ahead of the visitor the wall gets ready: enough that a fast fling over a
+	// slow connection still finds the artworks painted.
+	const bufferSize = typeof window === 'undefined' ? 600 : Math.round(window.innerHeight * 1.5);
+
 	let containerElement = $state<HTMLDivElement>();
 	let containerWidth = $state(0);
 
@@ -125,7 +131,7 @@
 			bind:this={virtualizer}
 			data={rows}
 			getKey={rowKey}
-			bufferSize={600}
+			{bufferSize}
 			cache={restoredCache}
 		>
 			{#snippet children(row)}

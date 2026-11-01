@@ -21,6 +21,23 @@ describe('VirtualizedGrid', () => {
 		expect(allCards.length).toBeGreaterThanOrEqual(6);
 	});
 
+	it('has the rows a screen and a half below the window already in the page', async () => {
+		// One column of many rows, far taller than the window.
+		await render(VirtualizedGridHarness, {
+			items: createArtworks(300, 'buffer'),
+			minColumnWidth: 10_000
+		});
+		await expect.element(page.getByTestId('grid-card-buffer1')).toBeVisible();
+
+		// Their pictures start loading as soon as their rows are in the page, so
+		// that is how far ahead of the visitor the wall gets ready.
+		await vi.waitFor(() => {
+			const rows = [...document.querySelectorAll('[data-testid="virtualized-row"]')];
+			const lowestRow = Math.max(...rows.map((row) => row.getBoundingClientRect().bottom));
+			expect(lowestRow).toBeGreaterThanOrEqual(window.innerHeight * 2.5);
+		});
+	});
+
 	it('row wrappers do not clip overflow so hover animations are visible', async () => {
 		await render(VirtualizedGridHarness, { items: createArtworks(4, 'b') });
 

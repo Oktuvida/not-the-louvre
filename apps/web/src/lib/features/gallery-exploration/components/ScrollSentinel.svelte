@@ -21,7 +21,9 @@
 		hasMore,
 		isLoading,
 		error,
-		rootMargin = '400px',
+		// Two screens ahead: the next page is on its way long before the visitor
+		// reaches the end of this one, even on a fast fling over a slow network.
+		rootMargin = '200% 0px',
 		skeletonCount = 3,
 		skeletonGridClassName = 'grid gap-6 py-6'
 	}: Props = $props();
@@ -53,7 +55,9 @@
 					onTrigger?.();
 				}
 			},
-			{ rootMargin }
+			// The document as root, not the implicit one: the implicit root drops
+			// the margin whenever the page is framed (an embed, a test runner).
+			{ root: document, rootMargin }
 		);
 
 		observer.observe(sentinelRef);

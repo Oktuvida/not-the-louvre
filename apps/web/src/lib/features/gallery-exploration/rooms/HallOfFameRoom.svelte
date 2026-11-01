@@ -258,7 +258,6 @@
 			error={accumulator.error}
 			hasMore={accumulator.hasMore}
 			isLoading={accumulator.isLoading}
-			rootMargin="500px"
 			onRetry={() => accumulator.retry()}
 			skeletonCount={3}
 			skeletonGridClassName="grid gap-12 py-6"
