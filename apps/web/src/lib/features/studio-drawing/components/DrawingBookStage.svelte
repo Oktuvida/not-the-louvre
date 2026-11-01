@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
 
 	// A 950ms 3D cover flip is the biggest motion on /draw. Under reduced motion it
@@ -11,8 +11,7 @@
 
 	let {
 		children,
-		coverBack,
-		coverFields,
+		coverShown = $bindable(true),
 		onClosed,
 		onOpened,
 		onOpenRequest,
@@ -20,14 +19,34 @@
 		stageState
 	}: {
 		children?: Snippet;
-		coverBack?: Snippet;
-		coverFields?: Snippet;
+		/**
+		 * Whether this screen's layout shows the cover at all. The studio layout
+		 * (studio-layout.css) drops it where there is no room for an open book,
+		 * and the page is then open from the start; this reads what the CSS
+		 * decided rather than repeating its media queries.
+		 */
+		coverShown?: boolean;
 		onClosed?: () => void;
 		onOpened?: () => void;
 		onOpenRequest?: () => void;
 		openingDurationMs?: number;
 		stageState: BookStageState;
 	} = $props();
+
+	let coverElement = $state<HTMLElement | null>(null);
+
+	$effect(() => {
+		const cover = coverElement;
+		if (!cover) return;
+
+		const readCover = () => {
+			const shown = getComputedStyle(cover).display !== 'none';
+			if (shown !== untrack(() => coverShown)) coverShown = shown;
+		};
+		readCover();
+		window.addEventListener('resize', readCover);
+		return () => window.removeEventListener('resize', readCover);
+	});
 
 	let effectiveOpeningDurationMs = $derived(
 		prefersReducedMotion() ? REDUCED_MOTION_OPENING_DURATION_MS : openingDurationMs
@@ -86,7 +105,6 @@
 							<div class="inside-cover-dot"></div>
 						</div>
 					</div>
-					{@render coverBack?.()}
 				</div>
 
 				<!-- Main page -->
@@ -104,7 +122,7 @@
 				</div>
 			</div>
 
-			<div class="book-cover">
+			<div class="book-cover" bind:this={coverElement}>
 				<button
 					type="button"
 					class="cover-front focus-ring-cover"
@@ -125,13 +143,9 @@
 					</div>
 					<span class="cover-invite">Tap the cover to begin</span>
 				</button>
-				<div class="cover-back-face">
-					{#if coverFields}
-						<div class="cover-fields-area">
-							{@render coverFields()}
-						</div>
-					{/if}
-				</div>
+				<!-- The drawing's notes lie on this side once it opens; they are the
+				     studio's own piece, placed over it by the layout. -->
+				<div class="cover-back-face"></div>
 			</div>
 		</div>
 	</div>
@@ -147,17 +161,14 @@
 		--book-linen: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
 
 		display: inline-flex;
-		height: 100%;
 	}
 
 	.book-perspective {
 		position: relative;
 		perspective: 2400px;
-		height: 100%;
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
-		padding: 0.75rem 0 1.5rem;
 	}
 
 	.book-floor-shadow {
@@ -173,12 +184,12 @@
 		filter: blur(12px);
 	}
 
+	/* Every measure below comes from studio-layout.css; the fallbacks only keep
+	 * the book in one piece if it is ever shown outside the studio. */
 	.book-block {
 		position: relative;
-		flex: 1;
-		min-height: 0;
 		width: fit-content;
-		padding: clamp(0.5rem, 1vw, 1rem);
+		padding: var(--studio-book-edge, 0.5rem);
 	}
 
 	/* --- Book spread (open state interior) --- */
@@ -187,8 +198,7 @@
 		position: relative;
 		display: flex;
 		width: fit-content;
-		height: 100%;
-		border: 3px solid #1a1611;
+		border: var(--studio-book-border, 3px) solid #1a1611;
 		border-radius: var(--radius-hairline);
 		background: var(--color-paper);
 		box-shadow:
@@ -200,8 +210,9 @@
 	/* --- Spine --- */
 
 	.book-spine {
+		display: var(--studio-spine-display, block);
 		flex-shrink: 0;
-		width: 14px;
+		width: var(--studio-spine, 14px);
 		background: linear-gradient(
 			90deg,
 			#1a1611 0%,
@@ -244,10 +255,10 @@
 	/* --- Inside cover decorative peek --- */
 
 	.inside-cover {
-		display: flex;
+		display: var(--studio-inside-cover-display, flex);
 		flex-direction: column;
 		flex-shrink: 0;
-		width: 72px;
+		width: var(--studio-inside-cover, 72px);
 		background: #1e1a14;
 		border-top: 2px solid #1a1611;
 		border-bottom: 2px solid #1a1611;
@@ -375,63 +386,37 @@
 	.canvas-page {
 		display: flex;
 		flex-shrink: 0;
-		min-width: 0;
 		flex-direction: column;
-		padding: clamp(0.75rem, 1.5vw, 1.125rem);
-		height: 100%;
-		aspect-ratio: 10 / 12;
-		/* Explicit width (frame height minus the vertical chrome, × 10/12):
-		 * WebKit resolves the aspect-ratio fallback above from the canvas's
-		 * intrinsic 768px width, stretching the closed book to landscape. */
-		width: calc((var(--book-frame-h, 40rem) - 4.5rem) * 10 / 12);
+		box-sizing: content-box;
+		width: var(--studio-canvas, 30rem);
+		padding: var(--studio-page-top, 1rem) var(--studio-page-pad, 1rem) 0;
 	}
 
 	.canvas-window {
 		position: relative;
 		z-index: 2;
 		display: flex;
-		flex: 1;
-		min-height: 0;
-		width: 100%;
-		align-self: center;
 		align-items: center;
 		justify-content: center;
-		max-height: 100%;
 	}
 
+	/* The drawing's own square: always as wide as it is tall. */
 	.canvas-square {
 		display: flex;
-		width: 100%;
-		height: auto;
-		max-width: 100%;
-		max-height: 100%;
-		aspect-ratio: 1 / 1;
+		width: var(--studio-canvas, 30rem);
+		height: var(--studio-canvas, 30rem);
 		align-items: stretch;
 		justify-content: center;
-		margin-block: auto;
-	}
-
-	/* --- Cover fields area (cover back post-its) --- */
-
-	.cover-fields-area {
-		position: relative;
-		z-index: 2;
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		justify-content: flex-start;
-		align-items: flex-end;
-		padding: 2rem;
-		padding-top: 7.1rem;
-		padding-bottom: 1.25rem;
-		gap: 1rem;
 	}
 
 	/* --- Tagline below canvas --- */
 
 	.page-tagline {
+		display: var(--studio-tagline-display, block);
 		position: relative;
 		z-index: 2;
+		box-sizing: border-box;
+		height: var(--studio-page-foot, 3rem);
 		margin-top: 0;
 		padding-top: 0.65rem;
 		text-align: center;
@@ -448,8 +433,9 @@
 	/* --- Book cover (3D flip) — cloth surface --- */
 
 	.book-cover {
+		display: var(--studio-cover-display, block);
 		position: absolute;
-		inset: clamp(0.5rem, 1vw, 1rem);
+		inset: var(--studio-book-edge, 0.5rem);
 		border-radius: 3px 6px 6px 3px;
 		background: linear-gradient(155deg, #e8e0d4 0%, #ddd5c8 30%, #d5cdc0 60%, #cec5b8 100%);
 		box-shadow:
@@ -688,53 +674,5 @@
 	.book-shell[data-state='opening'] .cover-front,
 	.book-shell[data-state='open'] .cover-front {
 		opacity: 0;
-	}
-
-	/* --- Responsive --- */
-
-	@media (max-width: 700px) {
-		.book-block {
-			padding: 0.4rem;
-		}
-
-		.book-spine {
-			width: 10px;
-		}
-
-		.inside-cover {
-			width: 48px;
-		}
-
-		.canvas-page {
-			padding: 1rem;
-		}
-
-		.cover-fields-area {
-			padding: 1rem;
-			padding-top: 4.35rem;
-			gap: 0.8rem;
-		}
-
-		.cover-invite {
-			font-size: 0.9rem;
-		}
-
-		.cover-title {
-			font-size: clamp(1.8rem, 9vw, 2.4rem);
-			letter-spacing: 4px;
-		}
-
-		.cover-label {
-			padding: 10px 20px 8px;
-		}
-
-		.cover-label-title {
-			font-size: 0.9rem;
-			letter-spacing: 2px;
-		}
-
-		.cover-label-sub {
-			font-size: 1rem;
-		}
 	}
 </style>

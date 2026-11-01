@@ -165,46 +165,6 @@ describe('draw route page', () => {
 		});
 	});
 
-	it('seeds the mobile studio layout from the client hint', async () => {
-		const { load } = await import('./+page.server');
-
-		// Without this the phone paints the desktop book stage and swaps the whole
-		// main region after mount.
-		await expect(
-			load(createLoadEvent('http://localhost/draw', { headers: { 'sec-ch-ua-mobile': '?1' } }))
-		).resolves.toMatchObject({ initialIsMobile: true });
-
-		await expect(
-			load(createLoadEvent('http://localhost/draw', { headers: { 'sec-ch-ua-mobile': '?0' } }))
-		).resolves.toMatchObject({ initialIsMobile: false });
-	});
-
-	it('falls back to the user agent when no client hint is sent', async () => {
-		const { load } = await import('./+page.server');
-
-		await expect(
-			load(
-				createLoadEvent('http://localhost/draw', {
-					headers: {
-						'user-agent':
-							'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
-					}
-				})
-			)
-		).resolves.toMatchObject({ initialIsMobile: true });
-
-		await expect(
-			load(
-				createLoadEvent('http://localhost/draw', {
-					headers: {
-						'user-agent':
-							'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
-					}
-				})
-			)
-		).resolves.toMatchObject({ initialIsMobile: false });
-	});
-
 	it('opens a fork on its parent’s image without loading the parent’s drawing', async () => {
 		mocked.getArtworkDetail.mockResolvedValueOnce({
 			author: { avatarUrl: null, id: 'user-9', nickname: 'parent_artist' },

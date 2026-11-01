@@ -145,6 +145,19 @@ const createPointerEvent = (
 		...init
 	});
 
+/*
+ * Which layout the studio gets is studio-layout.css's call, from the window's
+ * shape, and the spec iframe is phone-sized, which has no cover. These specs
+ * follow the sketchbook from closed to open, so they show the cover the way a
+ * laptop's layout does; the one spec about coverless screens leaves it alone.
+ */
+const showTheCover = () => {
+	const style = document.createElement('style');
+	style.dataset.spec = 'show-the-cover';
+	style.textContent = 'html .studio-page { --studio-cover-display: block; }';
+	document.head.append(style);
+};
+
 async function openSketchbook() {
 	await page.getByRole('button', { name: 'Open sketchbook' }).click();
 	await expect.element(page.getByPlaceholder('Untitled genius')).toBeVisible();
@@ -161,6 +174,10 @@ describe('StudioDrawingPage', () => {
 		await resetDrawingDraftDatabase();
 		// The brush and eraser are shared studio state; every test starts with the brush.
 		drawingTools.tool = 'brush';
+		document
+			.querySelectorAll('style[data-spec="show-the-cover"]')
+			.forEach((style) => style.remove());
+		showTheCover();
 	});
 
 	it('preloads the studio background image', async () => {
@@ -203,31 +220,23 @@ describe('StudioDrawingPage', () => {
 
 		await openSketchbook();
 
-		await expect.element(page.getByRole('button', { name: 'Clear' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Clear page' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 		await expect.element(page.getByPlaceholder('Untitled genius')).toBeVisible();
 	});
 
-	it('keeps the mobile studio canvas card square', async () => {
-		vi.stubGlobal(
-			'matchMedia',
-			vi.fn((query: string) => ({
-				addEventListener: vi.fn(),
-				addListener: vi.fn(),
-				dispatchEvent: vi.fn(),
-				matches: query === '(max-width: 700px)',
-				media: query,
-				onchange: null,
-				removeEventListener: vi.fn(),
-				removeListener: vi.fn()
-			}))
-		);
+	it('opens the page straight away on a screen with no room for the open book', async () => {
+		document
+			.querySelectorAll('style[data-spec="show-the-cover"]')
+			.forEach((style) => style.remove());
 
 		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
-		const mobileCanvasCard = document.querySelector('[data-testid="studio-mobile-canvas-card"]');
-		expect(mobileCanvasCard).not.toBeNull();
-		expect(mobileCanvasCard?.className).toContain('studio-mobile-canvas-card');
+		await expect.element(page.getByPlaceholder('Untitled genius')).toBeEnabled();
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Open sketchbook' }))
+			.not.toBeInTheDocument();
 	});
 
 	it('cuts the sketchbook open when reduced motion is requested', async () => {
@@ -1078,7 +1087,8 @@ describe('StudioDrawingPage', () => {
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 		await expect.element(page.getByPlaceholder('Untitled genius')).toBeEnabled();
 
-		await page.getByRole('button', { name: 'Clear' }).click();
+		await page.getByRole('button', { name: 'Clear page' }).click();
+		await page.getByRole('button', { name: 'Tap again to clear' }).click();
 
 		await vi.waitFor(async () => {
 			const persistedDraft = await readPersistedDrawingDraft(draftKey);

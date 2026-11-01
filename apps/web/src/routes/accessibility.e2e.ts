@@ -5,7 +5,6 @@ import { deterministicAuthUser, resetDemoState } from './demo/e2e-helpers';
 
 // Everyone can read the museum: every surface a visitor reaches meets WCAG 2.1
 // AA as axe measures it (contrast, names, labels), on a phone and a laptop.
-// The studio joins this list when it is redesigned.
 
 const SCREENS = [
 	{ height: 844, width: 390 },
@@ -92,6 +91,17 @@ const ARTIST: Surface[] = [
 		open: async (page) => {
 			await page.goto('/gallery/your-studio');
 			await page.getByText('You have not published any artworks yet.').waitFor();
+		}
+	},
+	{
+		name: 'the studio',
+		open: async (page) => {
+			await page.goto('/draw');
+			const cover = page.getByRole('button', { name: 'Open sketchbook' });
+			const title = page.getByPlaceholder('Untitled genius');
+			await cover.or(title).first().waitFor();
+			if (await cover.isVisible()) await cover.click();
+			await expect(title).toBeEnabled();
 		}
 	}
 ];

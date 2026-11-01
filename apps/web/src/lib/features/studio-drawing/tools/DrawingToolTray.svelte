@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { Eraser, ImageUp, Palette, Redo2, Trash2, Undo2 } from 'lucide-svelte';
-	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import { Eraser, Palette, Redo2, Undo2 } from 'lucide-svelte';
 	import { INK_SHOWN_LEVEL, INK_WARNING_LEVEL } from '#lib/features/stroke-json/ink.js';
 	import {
 		brushSizeSteps,
@@ -12,10 +11,6 @@
 		canRedo = false,
 		canUndo = false,
 		inkUsed = 0,
-		isPublishing = false,
-		mobile = false,
-		onPublish,
-		onClear,
 		onRedo,
 		onUndo
 	}: {
@@ -23,10 +18,6 @@
 		canUndo?: boolean;
 		/** How much of what the server accepts the drawing has used, 0 to 1. */
 		inkUsed?: number;
-		isPublishing?: boolean;
-		mobile?: boolean;
-		onPublish?: () => void;
-		onClear?: () => void;
 		onRedo?: () => void;
 		onUndo?: () => void;
 	} = $props();
@@ -47,65 +38,45 @@
 	};
 </script>
 
-<div class:tool-tray-mobile={mobile} class="tool-tray paper-sheet paper-grain">
+<!-- How the tray is laid out (a card beside the canvas, a band under it, a
+     strip on a phone) is the studio layout's call, through the --tray-* custom
+     properties it sets per screen in studio-layout.css. -->
+<div class="tool-tray paper-sheet paper-grain">
 	<span class="tray-tape tray-tape-left" aria-hidden="true"></span>
 	<span class="tray-tape tray-tape-right" aria-hidden="true"></span>
 	<span class="tray-stain tray-stain-a" aria-hidden="true"></span>
 	<span class="tray-stain tray-stain-b" aria-hidden="true"></span>
 
 	<!-- Palette section -->
-	<div class:tray-section-mobile-palette={mobile} class="tray-section">
-		<div class="tray-label">
+	<div class="tray-section tray-palette">
+		<div class="tray-label tray-palette-label">
 			<Palette size={12} />
 			<span>Paints</span>
 		</div>
 		<span class="paint-swipe tray-label-swipe" aria-hidden="true"></span>
-		{#if mobile}
-			<div class="palette-mobile-row">
-				<div class="palette-mobile-grid">
-					{#each drawingPalette as color (color)}
-						<button
-							type="button"
-							class="palette-swatch focus-ring"
-							class:active={drawingTools.activeColor === color}
-							style={`--swatch-color:${color}`}
-							onclick={() => selectColor(color)}
-							aria-label={`Select color ${color}`}
-						>
-							<span
-								class="swatch-paint"
-								class:swatch-paint-light={LIGHT_SWATCH_COLORS.has(color)}
-								aria-hidden="true"
-							></span>
-						</button>
-					{/each}
-				</div>
-			</div>
-		{:else}
-			<div class="palette-grid">
-				{#each drawingPalette as color (color)}
-					<button
-						type="button"
-						class="palette-swatch focus-ring"
-						class:active={drawingTools.activeColor === color}
-						style={`--swatch-color:${color}`}
-						onclick={() => selectColor(color)}
-						aria-label={`Select color ${color}`}
-					>
-						<span
-							class="swatch-paint"
-							class:swatch-paint-light={LIGHT_SWATCH_COLORS.has(color)}
-							aria-hidden="true"
-						></span>
-					</button>
-				{/each}
-			</div>
-		{/if}
+		<div class="palette-grid">
+			{#each drawingPalette as color (color)}
+				<button
+					type="button"
+					class="palette-swatch focus-ring"
+					class:active={drawingTools.activeColor === color}
+					style={`--swatch-color:${color}`}
+					onclick={() => selectColor(color)}
+					aria-label={`Select color ${color}`}
+				>
+					<span
+						class="swatch-paint"
+						class:swatch-paint-light={LIGHT_SWATCH_COLORS.has(color)}
+						aria-hidden="true"
+					></span>
+				</button>
+			{/each}
+		</div>
 	</div>
 
 	<!-- Brush size section -->
-	<div class="tray-section">
-		<div class="tray-label">
+	<div class="tray-section tray-brush">
+		<div class="tray-label tray-brush-label">
 			<span>Brush</span>
 		</div>
 		<div class="slider-wrapper">
@@ -144,7 +115,7 @@
 			onclick={() => (drawingTools.tool = drawingTools.tool === 'eraser' ? 'brush' : 'eraser')}
 		>
 			<Eraser size={18} aria-hidden="true" />
-			<span>Eraser</span>
+			<span class="tray-tool-text">Eraser</span>
 		</button>
 		<button
 			type="button"
@@ -192,40 +163,12 @@
 		</div>
 	{/if}
 
-	<div class="tray-sep" aria-hidden="true"></div>
-
-	<!-- Action buttons -->
-	<div class="tray-actions">
-		<GameButton
-			type="button"
-			variant="secondary"
-			size="sm"
-			className="w-full"
-			onclick={onPublish}
-			disabled={isPublishing}
-		>
-			<ImageUp size={20} />
-			<span>{isPublishing ? 'Publishing…' : 'Publish'}</span>
-		</GameButton>
-
-		<GameButton
-			type="button"
-			variant="danger"
-			size="sm"
-			className="w-full"
-			onclick={onClear}
-			disabled={isPublishing}
-		>
-			<Trash2 size={20} />
-			<span>Clear</span>
-		</GameButton>
-	</div>
-
-	<p class="tray-edge-print">Not the Louvre · Studio Supplies</p>
+	<p class="tray-edge-print" aria-hidden="true">Not the Louvre · Studio Supplies</p>
 </div>
 
 <style>
 	.ink {
+		grid-area: ink;
 		margin-top: 12px;
 	}
 
@@ -260,9 +203,11 @@
 	}
 
 	.tray-tools {
+		grid-area: tools;
 		display: flex;
+		align-self: var(--tray-tools-align, auto);
 		gap: 8px;
-		margin-top: 14px;
+		margin-top: var(--tray-tools-gap, 14px);
 	}
 
 	.tray-tool {
@@ -285,7 +230,17 @@
 	}
 
 	.tray-tool:first-child {
-		flex: 1 1 auto;
+		flex: var(--tray-eraser-flex, 1 1 auto);
+	}
+
+	/* Where the row is short (a phone) the layout keeps the word for screen
+	 * readers and shows only the eraser's picture. */
+	.tray-tool-text {
+		position: var(--tray-tool-text-position, static);
+		width: var(--tray-tool-text-size, auto);
+		height: var(--tray-tool-text-size, auto);
+		clip-path: var(--tray-tool-text-clip, none);
+		white-space: nowrap;
 	}
 
 	.tray-tool-active {
@@ -307,8 +262,25 @@
 	 * shared class settles.
 	 */
 	.tool-tray {
-		padding: 20px;
-		transform: rotate(1.2deg);
+		display: grid;
+		grid-template-areas: var(--tray-areas, 'palette' 'brush' 'tools' 'ink' 'print');
+		grid-template-columns: var(--tray-columns, minmax(0, 1fr));
+		column-gap: var(--tray-column-gap, 1.25rem);
+		align-items: var(--tray-align, stretch);
+		padding: var(--tray-padding, 20px);
+		transform: rotate(var(--tray-tilt, 1.2deg));
+	}
+
+	.tray-palette {
+		grid-area: palette;
+	}
+
+	.tray-brush {
+		grid-area: brush;
+		display: flex;
+		flex-direction: var(--tray-brush-direction, column);
+		align-items: var(--tray-brush-align, stretch);
+		gap: var(--tray-brush-gap, 0);
 	}
 
 	.tray-tape {
@@ -355,6 +327,7 @@
 
 	/* How long and how crooked this swipe is; the paint is `.paint-swipe`. */
 	.tray-label-swipe {
+		display: var(--tray-palette-label, block);
 		width: 86px;
 		height: 6px;
 		margin: -4px 0 12px;
@@ -362,23 +335,26 @@
 	}
 
 	.tray-section {
-		margin-bottom: 16px;
+		margin-bottom: var(--tray-section-gap, 16px);
 		position: relative;
 	}
 
-	.tray-section-mobile-palette {
-		z-index: 2;
+	.tray-palette-label {
+		display: var(--tray-palette-label, flex);
+	}
+
+	.tray-brush-label {
+		display: var(--tray-brush-label, flex);
 	}
 
 	.tray-label {
 		font-family: var(--font-display);
-		font-size: 0.62rem;
+		font-size: 0.75rem;
 		font-weight: 700;
 		letter-spacing: 0.22em;
 		text-transform: uppercase;
 		color: var(--color-muted-ink);
 		margin-bottom: 10px;
-		display: flex;
 		align-items: center;
 		gap: 5px;
 	}
@@ -393,26 +369,17 @@
 
 	.palette-grid {
 		display: grid;
-		grid-template-columns: repeat(6, 1fr);
-		gap: 9px 8px;
-	}
-
-	.palette-mobile-row {
-		position: relative;
-		display: flex;
-		flex-direction: column;
-		align-items: stretch;
-		gap: 0.7rem;
-		overflow: visible;
-		z-index: 6;
-	}
-
-	.palette-mobile-grid {
-		display: grid;
-		min-width: 0;
-		flex: 1;
-		grid-template-columns: repeat(6, minmax(0, 1fr));
-		gap: 0.5rem;
+		grid-template-columns: var(
+			--tray-palette-template,
+			repeat(var(--tray-palette-columns, 6), minmax(0, 1fr))
+		);
+		grid-auto-flow: var(--tray-palette-flow, row);
+		grid-auto-columns: var(--tray-palette-cell, auto);
+		gap: var(--tray-palette-gap, 9px 8px);
+		overflow-x: var(--tray-palette-overflow, visible);
+		/* Room for the pencil circle round the chosen paint inside a strip that clips. */
+		padding: var(--tray-palette-padding, 0);
+		scrollbar-width: none;
 	}
 
 	/* The button box stays still — the blob inside animates — so pointer
@@ -505,13 +472,32 @@
 
 	.slider-wrapper {
 		position: relative;
-		margin: 10px 0;
+		flex: 1;
+		margin: 2px 0;
 	}
 
+	/*
+	 * The input is as tall as a fingertip (44px) and paints nothing itself; the
+	 * pencil line is its track. It used to be the 7px line, so a finger or a
+	 * pen aimed at the stroke and missed.
+	 */
 	.brush-slider {
 		-webkit-appearance: none;
 		appearance: none;
+		display: block;
 		width: 100%;
+		height: 44px;
+		margin: 0;
+		background: transparent;
+		/* No `outline: none` here: a scoped, unlayered declaration beats every
+		   cascade layer regardless of specificity, so it would shadow the
+		   `focus-ring` utility (which lives in `@layer utilities`) and leave the
+		   control with no visible focus at all. An `appearance: none` range paints
+		   no UA outline of its own, so there is nothing to reset. */
+		cursor: pointer;
+	}
+
+	.brush-slider::-webkit-slider-runnable-track {
 		height: 7px;
 		rotate: -0.8deg;
 		/* a drying brushstroke: thick where it starts, thin where it lifts */
@@ -523,20 +509,26 @@
 			rgba(107, 74, 46, 0.18) var(--slider-pct, 30%),
 			rgba(107, 74, 46, 0.12) 100%
 		);
-		/* No `outline: none` here: a scoped, unlayered declaration beats every
-		   cascade layer regardless of specificity, so it would shadow the
-		   `focus-ring` utility (which lives in `@layer utilities`) and leave the
-		   control with no visible focus at all. An `appearance: none` range paints
-		   no UA outline of its own, so there is nothing to reset. */
-		cursor: pointer;
+	}
+
+	.brush-slider::-moz-range-track {
+		height: 7px;
+		border-radius: 4px 12px 10px 6px / 6px 8px 12px 4px;
+		background: linear-gradient(
+			90deg,
+			#d9a468 0%,
+			var(--color-primary) var(--slider-pct, 30%),
+			rgba(107, 74, 46, 0.18) var(--slider-pct, 30%),
+			rgba(107, 74, 46, 0.12) 100%
+		);
 	}
 
 	.brush-slider::-webkit-slider-thumb {
 		-webkit-appearance: none;
 		appearance: none;
-		margin-top: -1px;
-		width: 20px;
-		height: 20px;
+		margin-top: -8px;
+		width: 22px;
+		height: 22px;
 		border: 2px solid var(--color-paper-bright);
 		border-radius: 48% 52% 50% 50% / 52% 48% 54% 46%;
 		background: radial-gradient(circle at 32% 28%, #c96a5b, var(--color-danger-deep) 55%, #6e211c);
@@ -545,8 +537,8 @@
 	}
 
 	.brush-slider::-moz-range-thumb {
-		width: 20px;
-		height: 20px;
+		width: 22px;
+		height: 22px;
 		border: 2px solid var(--color-paper-bright);
 		border-radius: 50%;
 		background: radial-gradient(circle at 32% 28%, #c96a5b, var(--color-danger-deep) 55%, #6e211c);
@@ -561,10 +553,11 @@
 		align-items: center;
 		justify-content: center;
 		gap: 10px;
-		margin-top: 8px;
+		margin-top: var(--tray-brush-preview-gap, 4px);
 	}
 
 	.test-scrap {
+		display: var(--tray-brush-scrap, block);
 		position: relative;
 		padding: 3px;
 		background: var(--color-paper-bright);
@@ -611,46 +604,19 @@
 
 	/* --- Separator --- */
 
-	.tray-sep {
-		height: 1px;
-		background: linear-gradient(90deg, transparent, rgba(47, 36, 28, 0.14), transparent);
-		margin: 14px 0;
-	}
-
 	/* --- Action buttons --- */
 
-	.tray-actions {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-
+	/* Decoration, so hidden from screen readers; the studio layout drops it where room is short. */
 	.tray-edge-print {
+		grid-area: print;
+		display: var(--tray-print, block);
 		margin: 14px 0 -6px;
 		text-align: center;
 		font-family: var(--font-display);
-		font-size: 0.5rem;
+		font-size: 0.5625rem;
 		font-weight: 600;
 		letter-spacing: 0.26em;
 		text-transform: uppercase;
 		color: rgba(138, 108, 82, 0.55);
-	}
-
-	.tool-tray-mobile {
-		transform: rotate(0.8deg);
-	}
-
-	@media (max-width: 700px) {
-		.tool-tray-mobile {
-			padding: 18px 16px;
-		}
-
-		.palette-mobile-row {
-			gap: 0.65rem;
-		}
-
-		.palette-mobile-grid {
-			gap: 0.45rem;
-		}
 	}
 </style>
