@@ -1,8 +1,9 @@
 import type { DrawingDocumentV2 } from '#lib/features/stroke-json/document.js';
+import type { InkDocument } from '#lib/stroke/v3.js';
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 import { requireAppBucket } from '#lib/server/media/object-storage.js';
 import { drawingDocumentKey } from './document-key';
-import { decodeDrawingDocument } from './storage';
+import { decodeDrawingDocument, decodeInkDocument } from './storage';
 
 /*
  * Drawings live in the app's bucket as gzipped canonical JSON, named after
@@ -43,21 +44,39 @@ export type StoredDrawingDocumentRef = {
 	version: number | null;
 };
 
-/** The drawing a row names, ready to edit, or null when it has none. */
-export const openStoredDrawingDocument = async (
+/** The stored bytes of the drawing a row names, or null when it has none. */
+const readStoredDrawingDocument = async (
 	ref: StoredDrawingDocumentRef,
-	store: DrawingDocumentStore = drawingDocumentStore
-): Promise<DrawingDocumentV2 | null> => {
+	store: DrawingDocumentStore
+): Promise<Uint8Array<ArrayBuffer> | null> => {
 	if (ref.key) {
-		return decodeDrawingDocument(await store.read(ref.key));
+		return store.read(ref.key);
 	}
 
 	// Rows written before drawings moved to the bucket keep them inline until
 	// the migration copies them across. Their version was written last, so a
 	// drawing without one is a torn write and reads as no drawing.
 	if (ref.legacyBase64 && ref.version !== null) {
-		return decodeDrawingDocument(Uint8Array.from(Buffer.from(ref.legacyBase64, 'base64')));
+		return Uint8Array.from(Buffer.from(ref.legacyBase64, 'base64'));
 	}
 
 	return null;
+};
+
+/** The drawing a row names, ready to edit, or null when it has none. */
+export const openStoredDrawingDocument = async (
+	ref: StoredDrawingDocumentRef,
+	store: DrawingDocumentStore = drawingDocumentStore
+): Promise<DrawingDocumentV2 | null> => {
+	const compressed = await readStoredDrawingDocument(ref, store);
+	return compressed ? decodeDrawingDocument(compressed) : null;
+};
+
+/** The drawing a row names as it was drawn, timing included, or null. */
+export const openStoredInkDocument = async (
+	ref: StoredDrawingDocumentRef,
+	store: DrawingDocumentStore = drawingDocumentStore
+): Promise<InkDocument | null> => {
+	const compressed = await readStoredDrawingDocument(ref, store);
+	return compressed ? decodeInkDocument(compressed) : null;
 };

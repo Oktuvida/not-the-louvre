@@ -7,6 +7,7 @@ const { goto } = vi.hoisted(() => ({ goto: vi.fn() }));
 
 vi.mock('$app/navigation', () => ({ goto }));
 
+import { encodeDrawingV3 } from '#lib/stroke/v3.js';
 import ArtworkDetailPanel from './ArtworkDetailPanel.svelte';
 
 const artwork = {
@@ -622,5 +623,64 @@ describe('ArtworkDetailPanel', () => {
 		expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
 
 		anchorClick.mockRestore();
+	});
+
+	it('replays how the artwork was drawn in place of the picture, and goes back to it', async () => {
+		const fetchSpy = vi.fn(async () =>
+			Response.json({
+				backdropUrl: null,
+				drawing: encodeDrawingV3({
+					background: '#fdfbf7',
+					height: 768,
+					kind: 'artwork',
+					strokes: [
+						{
+							brush: 'round@1',
+							color: '#1d3557',
+							pointer: 'mouse',
+							points: [
+								[100, 100],
+								[600, 600]
+							],
+							size: 40,
+							start: 0,
+							times: [0, 50]
+						}
+					],
+					width: 768
+				})
+			})
+		);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		await render(ArtworkDetailPanel, { artwork });
+
+		await page.getByRole('button', { name: 'Watch it being drawn' }).click();
+
+		await expect.element(page.getByLabelText('Timelapse of Detail artwork')).toBeVisible();
+		expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/timelapse', expect.anything());
+
+		await page.getByRole('button', { name: 'Close timelapse' }).click();
+
+		await expect
+			.element(page.getByLabelText('Timelapse of Detail artwork'))
+			.not.toBeInTheDocument();
+		await expect.element(page.getByRole('img', { name: 'Detail artwork' })).toBeVisible();
+	});
+
+	it('keeps the picture and says so when the timelapse cannot be had', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () =>
+				Response.json({ code: 'NOT_FOUND', message: 'Drawing not found' }, { status: 404 })
+			)
+		);
+
+		await render(ArtworkDetailPanel, { artwork });
+
+		await page.getByRole('button', { name: 'Watch it being drawn' }).click();
+
+		await expect.element(page.getByText('This piece has left the wall.')).toBeVisible();
+		await expect.element(page.getByRole('img', { name: 'Detail artwork' })).toBeVisible();
 	});
 });

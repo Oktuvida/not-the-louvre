@@ -56,6 +56,17 @@ const readDrawingCanvasCenterPixel = async (page: import('@playwright/test').Pag
 		);
 	});
 
+const readCanvasCenterPixel = async (canvas: import('@playwright/test').Locator) =>
+	canvas.evaluate((node) => {
+		const element = node as HTMLCanvasElement;
+		const context = element.getContext('2d');
+		if (!context) throw new Error('Expected a 2D canvas');
+
+		return Array.from(
+			context.getImageData(Math.floor(element.width / 2), Math.floor(element.height / 2), 1, 1).data
+		);
+	});
+
 const installDrawingDocumentCaptureHarness = async (page: import('@playwright/test').Page) => {
 	await page.addInitScript(() => {
 		const originalFetch = window.fetch.bind(window);
@@ -888,6 +899,59 @@ test.describe('Not the Louvre frontend port', () => {
 		await openDrawSketchbook(page);
 		await expect(page.getByText('Forking Fork Reset Source')).not.toBeVisible();
 		await expect.poll(() => readDrawingCanvasCenterPixel(page)).toEqual([253, 251, 247, 255]);
+	});
+
+	test('a visitor watches an artwork being drawn, from blank paper to the finished piece', async ({
+		page
+	}) => {
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+		await openDrawSketchbook(page);
+		await drawLineThroughCentre(page);
+		await page.getByPlaceholder('Untitled genius').fill('Timelapse Source');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		await page.goto('/gallery/your-studio');
+		await page.getByRole('button', { name: /Timelapse Source/ }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Watch it being drawn' }).click();
+
+		const replay = page.getByLabel('Timelapse of Timelapse Source');
+		await expect(replay).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Replay' })).toBeVisible();
+		await expect.poll(() => readCanvasCenterPixel(replay)).not.toEqual([253, 251, 247, 255]);
+
+		// Back at the start, the paper is blank again.
+		await page.getByRole('slider', { name: 'Replay position' }).fill('0');
+		await expect.poll(() => readCanvasCenterPixel(replay)).toEqual([253, 251, 247, 255]);
+	});
+
+	test("a fork's timelapse replays over the picture it was forked from", async ({ page }) => {
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+		await openDrawSketchbook(page);
+		await drawLineThroughCentre(page);
+		await page.getByPlaceholder('Untitled genius').fill('Backdrop Source');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		await page.goto('/gallery/your-studio');
+		await page.getByRole('button', { name: /Backdrop Source/ }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Fork' }).click();
+		await expect(page.getByText('Forking Backdrop Source')).toBeVisible();
+		await page.getByPlaceholder('Untitled genius').fill('Backdrop Child');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		await page.goto('/gallery/your-studio');
+		await page.getByRole('button', { name: /Backdrop Child/ }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Watch it being drawn' }).click();
+
+		// The child drew nothing of its own: what shows is its parent's line.
+		const replay = page.getByLabel('Timelapse of Backdrop Child');
+		await expect.poll(() => readCanvasCenterPixel(replay)).not.toEqual([253, 251, 247, 255]);
 	});
 
 	test('gallery route exposes room navigation', async ({ page }) => {

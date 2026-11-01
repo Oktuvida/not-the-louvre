@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { fade, scale } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import { Download, GitFork } from 'lucide-svelte';
+	import { Clapperboard, Download, GitFork } from 'lucide-svelte';
 	import { ApiError, requestJson } from '#lib/client/api.js';
 	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 	import ArtworkSafetyActions from '#lib/features/artwork-presentation/components/ArtworkSafetyActions.svelte';
@@ -16,6 +16,8 @@
 	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import TimelapsePlayer from '#lib/features/timelapse/TimelapsePlayer.svelte';
+	import { decodeDrawingV3, type InkDocument } from '#lib/stroke/v3.js';
 	import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
 	import type { Viewer } from '#lib/shared/viewer.js';
 
@@ -35,6 +37,7 @@
 	const VOTE_FAILED_MESSAGE = 'That vote did not make it onto the ledger. Please try again.';
 	const COMMENT_FAILED_MESSAGE = "The visitor's book would not take that entry. Please try again.";
 	const DOWNLOAD_FAILED_MESSAGE = 'Artwork could not be downloaded.';
+	const TIMELAPSE_FAILED_MESSAGE = 'The timelapse would not play. Please try again.';
 	const ADULT_PREFERENCE_FAILED_MESSAGE = '18+ artwork preference could not be updated.';
 
 	/* Thrown with copy that is already safe to show; anything else that reaches
@@ -97,6 +100,13 @@
 	let isSubmittingComment = $state(false);
 	let isSubmittingVote = $state(false);
 	let isDownloading = $state(false);
+	// The replay shown in place of the photo, for the artwork it belongs to.
+	let timelapse = $state.raw<{
+		artworkId: string;
+		backdropUrl: string | null;
+		drawing: InkDocument;
+	} | null>(null);
+	let isLoadingTimelapse = $state(false);
 	let commentInput: HTMLInputElement | undefined = $state();
 	let dialogElement: HTMLDivElement | undefined = $state();
 	let avatarTriggerElement: HTMLButtonElement | undefined = $state();
@@ -438,6 +448,29 @@
 		}
 	};
 
+	const openTimelapse = async () => {
+		if (!artwork || isLoadingTimelapse) return;
+
+		const artworkId = artwork.id;
+		isLoadingTimelapse = true;
+		notify(null);
+
+		try {
+			const body = await requestJson<{ backdropUrl: string | null; drawing: unknown }>(
+				`/api/artworks/${artworkId}/timelapse`
+			);
+			timelapse = {
+				artworkId,
+				backdropUrl: body.backdropUrl,
+				drawing: decodeDrawingV3(body.drawing)
+			};
+		} catch (error) {
+			notify(toActionError(error, TIMELAPSE_FAILED_MESSAGE));
+		} finally {
+			isLoadingTimelapse = false;
+		}
+	};
+
 	const submitVote = async (value: ArtworkVoteValue) => {
 		if (!artwork || isSubmittingVote) return;
 
@@ -639,6 +672,16 @@
 										decoding="async"
 										fetchpriority="high"
 									/>
+									{#if timelapse && timelapse.artworkId === artwork.id && !isSensitiveBlurred}
+										<div class="postcard-photo-layer">
+											<TimelapsePlayer
+												backdropUrl={timelapse.backdropUrl}
+												drawing={timelapse.drawing}
+												label={`Timelapse of ${artwork.title}`}
+												onClose={() => (timelapse = null)}
+											/>
+										</div>
+									{/if}
 									{#if isSensitiveBlurred}
 										<div
 											class="postcard-photo-scrim absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-paper-bright"
@@ -753,6 +796,18 @@
 								{:else}
 									<p class="postcard-signin-note">Sign in to vote, fork, or leave a comment.</p>
 									<span class="postcard-actions-spacer"></span>
+								{/if}
+								{#if !isSensitiveBlurred}
+									<GameButton
+										variant="secondary"
+										size="sm"
+										className="postcard-timelapse"
+										disabled={isLoadingTimelapse}
+										onclick={openTimelapse}
+									>
+										<Clapperboard class="h-4 w-4" />
+										<span class="sr-only">Watch it being drawn</span>
+									</GameButton>
 								{/if}
 								<GameButton
 									variant="accent"
@@ -1316,7 +1371,8 @@
 		padding-inline: 2px;
 	}
 
-	.postcard-actions :global(.sticker-btn.postcard-download) {
+	.postcard-actions :global(.sticker-btn.postcard-download),
+	.postcard-actions :global(.sticker-btn.postcard-timelapse) {
 		width: 48px;
 		padding-inline: 0;
 	}
