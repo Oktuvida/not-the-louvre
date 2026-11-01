@@ -435,7 +435,7 @@ describe('AvatarSketchpad', () => {
 
 		await vi.waitFor(async () => {
 			expect(await readPersistedJournalEntries(draftKey)).toEqual([
-				{
+				expect.objectContaining({
 					color: drawingPalette[3] ?? '#1a1a1a',
 					points: [
 						[80, 96],
@@ -443,7 +443,7 @@ describe('AvatarSketchpad', () => {
 						[82, 98]
 					],
 					size: 10
-				}
+				})
 			]);
 		});
 	});
@@ -497,14 +497,14 @@ describe('AvatarSketchpad', () => {
 
 		await vi.waitFor(async () => {
 			expect(await readPersistedJournalEntries(draftKey)).toEqual([
-				{
+				expect.objectContaining({
 					color: drawingPalette[3] ?? '#1a1a1a',
 					points: [
 						[80, 96],
 						[81, 97]
 					],
 					size: 10
-				}
+				})
 			]);
 		});
 	});

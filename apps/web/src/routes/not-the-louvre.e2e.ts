@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test';
-import {
-	getRenderableDrawingStrokes,
-	parseVersionedDrawingDocument
-} from '../lib/features/stroke-json/document';
+import { getRenderableDrawingStrokes } from '../lib/features/stroke-json/document';
+import { parseEditableDrawing } from '../lib/features/stroke-json/ink-document';
 import {
 	deterministicAuthUser,
 	deterministicActorUser,
@@ -422,7 +420,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 
 		const [request] = await readCapturedDrawingRequests(page);
-		const published = parseVersionedDrawingDocument(request?.drawingDocument ?? '');
+		const published = parseEditableDrawing(request?.drawingDocument ?? '');
 		expect(published.kind).toBe('avatar');
 		expect(getRenderableDrawingStrokes(published)).toHaveLength(3);
 	});
@@ -448,9 +446,7 @@ test.describe('Not the Louvre frontend port', () => {
 				const draft = (await readDrawingDraftEntries(page, 'artwork')).find(
 					({ key }) => !key.startsWith('baseline:')
 				);
-				return draft
-					? getRenderableDrawingStrokes(parseVersionedDrawingDocument(draft.value)).length
-					: 0;
+				return draft ? getRenderableDrawingStrokes(parseEditableDrawing(draft.value)).length : 0;
 			})
 			.toBe(3);
 
@@ -461,7 +457,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText(/Artwork published as/)).toBeVisible();
 
 		const [request] = await readCapturedDrawingRequests(page);
-		const published = parseVersionedDrawingDocument(request?.drawingDocument ?? '');
+		const published = parseEditableDrawing(request?.drawingDocument ?? '');
 		expect(published.kind).toBe('artwork');
 		expect(getRenderableDrawingStrokes(published)).toHaveLength(3);
 	});

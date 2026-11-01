@@ -499,6 +499,28 @@ describe('StudioDrawingPage', () => {
 				.toHaveAttribute('aria-valuenow', '0');
 		});
 
+		it('publishes the drawing as a v3 document that knows when it was drawn', async () => {
+			const publishDrawing = vi.fn(async () => ({
+				action: 'publish' as const,
+				artwork: { id: 'artwork-1', mediaUrl: '/api/artworks/artwork-1/media', title: 'Timed' },
+				success: true as const
+			}));
+			const { drawLine, expectSaved } = await openStudio({ publishDrawing });
+			drawLine(300);
+			await expectSaved((lines) => expect(lines).toHaveLength(1));
+
+			await page.getByPlaceholder('Untitled genius').fill('Timed');
+			await page.getByRole('button', { name: 'Publish' }).click();
+
+			await vi.waitFor(() => expect(publishDrawing).toHaveBeenCalledOnce());
+			const [payload] = publishDrawing.mock.calls[0] as unknown[];
+			const published = JSON.parse(String(payload));
+			expect(published).toMatchObject({ version: 3, xyScale: 4 });
+			expect(published.strokes).toHaveLength(1);
+			expect(published.strokes[0]).toMatchObject({ pointer: 'mouse', start: 0 });
+			expect(published.strokes[0].t).toHaveLength(published.strokes[0].x.length);
+		});
+
 		it('erases with the colour of the paper', async () => {
 			const { drawLine, expectSaved } = await openStudio();
 
@@ -705,9 +727,10 @@ describe('StudioDrawingPage', () => {
 				throw new Error('Expected the responsive artwork draft to be persisted');
 			}
 			expect(persistedDraft.tail).toHaveLength(2);
+			// To the quarter pixel: an 800x600 box over the 768 px canvas.
 			expect(persistedDraft.tail[1]?.points).toEqual([
-				[192, 282],
-				[250, 358]
+				[192, 281.5],
+				[249.5, 358.5]
 			]);
 		});
 	});
@@ -782,9 +805,9 @@ describe('StudioDrawingPage', () => {
 				throw new Error('Expected the committed artwork draft to be persisted');
 			}
 			expect(persistedDraft.tail.at(-1)?.points).toEqual([
-				[192, 282],
-				[230, 333],
-				[269, 384]
+				[192, 281.5],
+				[230.5, 332.75],
+				[268.75, 384]
 			]);
 		});
 	});
@@ -849,15 +872,15 @@ describe('StudioDrawingPage', () => {
 
 		await vi.waitFor(async () => {
 			expect(await readPersistedJournalEntries(draftKey)).toEqual([
-				{
+				expect.objectContaining({
 					color: '#1A1A1A',
 					points: [
-						[192, 282],
-						[230, 333],
-						[269, 384]
+						[192, 281.5],
+						[230.5, 332.75],
+						[268.75, 384]
 					],
 					size: 6
-				}
+				})
 			]);
 		});
 	});

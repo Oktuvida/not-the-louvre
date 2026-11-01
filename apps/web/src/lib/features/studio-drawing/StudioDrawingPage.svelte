@@ -17,7 +17,6 @@
 		DRAWING_DOCUMENT_VERSION,
 		cloneDrawingDocumentV2,
 		createEmptyDrawingDocumentV2,
-		serializeDrawingDocument,
 		type DrawingDocumentV2,
 		type DrawingStroke
 	} from '#lib/features/stroke-json/document.js';
@@ -33,6 +32,8 @@
 	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
 	import DrawingCanvas from '#lib/features/studio-drawing/components/DrawingCanvas.svelte';
+	import { encodeDrawingV3 } from '#lib/stroke/v3.js';
+	import { toInkDocument } from '#lib/features/stroke-json/ink-document.js';
 	import DrawingToolTray from '#lib/features/studio-drawing/tools/DrawingToolTray.svelte';
 	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
 
@@ -95,7 +96,7 @@
 	let {
 		checkTextContent = defaultCheckTextContent,
 		createArtworkPayload = async (documentState: DrawingDocumentV2) =>
-			serializeDrawingDocument(documentState),
+			JSON.stringify(encodeDrawingV3(toInkDocument(documentState))),
 		forkParent = null,
 		// Seeded from the request's client hints so a phone is not served the
 		// desktop book stage and then swapped whole after mount; the matchMedia

@@ -234,6 +234,38 @@ describe('stroke-json drafts', () => {
 		expect(await session.hydrate()).toEqual(committedDocument);
 	});
 
+	it('keeps when and how each stroke was drawn across a reload', async () => {
+		const draftStore = createIndexedDbDrawingDraftStore({ databaseName: TEST_DATABASE_NAME });
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: 2,
+			scope: 'new',
+			surface: 'artwork',
+			userKey: 'artist_1'
+		});
+		const session = createDrawingDraftSession({ draftKey, store: draftStore });
+		const hydrated = await session.hydrate({
+			seedDocument: createEmptyDrawingDocumentV2('artwork')
+		});
+		const stroke: DrawingStroke = {
+			brush: 'round@1',
+			color: '#c84f4f',
+			pointer: 'pen',
+			points: [
+				[96.25, 120.5],
+				[128.75, 156]
+			],
+			pressures: [0.3, 0.6],
+			size: 8,
+			start: 420,
+			times: [0, 9]
+		};
+
+		const committed = await session.appendCommittedStroke(hydrated!, stroke);
+		await session.compact(committed);
+
+		expect((await session.hydrate())?.tail).toEqual([stroke]);
+	});
+
 	it('lazily imports a valid legacy V2 localStorage draft on the first IndexedDB miss', async () => {
 		const draftStore = createIndexedDbDrawingDraftStore({ databaseName: TEST_DATABASE_NAME });
 		const draftKey = buildDrawingDraftKey({

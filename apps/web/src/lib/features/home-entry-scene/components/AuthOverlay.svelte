@@ -7,7 +7,7 @@
 		type TextContentChecker
 	} from '#lib/client/content-filter/index.js';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
-	import { parseEditableDrawingDocumentV2 } from '#lib/features/stroke-json/document.js';
+	import { parseEditableDrawing } from '#lib/features/stroke-json/ink-document.js';
 	import {
 		NICKNAME_PATTERN,
 		PASSWORD_MAX_LENGTH,
@@ -424,7 +424,7 @@
 		if (result.success && userId) {
 			dispatchAvatarFaviconUpdate(userId);
 			onAvatarSaved?.({
-				avatarDrawingDocument: parseEditableDrawingDocumentV2(drawingDocument),
+				avatarDrawingDocument: parseEditableDrawing(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
 				avatarUrl: result.avatarUrl
 			});

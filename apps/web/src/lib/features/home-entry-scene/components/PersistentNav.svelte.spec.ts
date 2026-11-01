@@ -12,6 +12,8 @@ import {
 	createIndexedDbDrawingDraftStore
 } from '#lib/features/stroke-json/drafts.js';
 import PersistentNav from './PersistentNav.svelte';
+import { toInkDocument } from '#lib/features/stroke-json/ink-document.js';
+import { encodeDrawingV3 } from '#lib/stroke/v3.js';
 
 const DRAWING_DRAFTS_DB_NAME = 'drawing-drafts';
 const DRAWING_DRAFTS_JOURNAL_STORE = 'journal';
@@ -277,7 +279,7 @@ describe('PersistentNav', () => {
 		expect(request?.method).toBe('PUT');
 		expect(request?.body).toBeInstanceOf(FormData);
 		expect((request?.body as FormData).get('drawingDocument')).toBe(
-			serializeDrawingDocument(savedDocument)
+			JSON.stringify(encodeDrawingV3(toInkDocument(savedDocument)))
 		);
 
 		vi.unstubAllGlobals();
