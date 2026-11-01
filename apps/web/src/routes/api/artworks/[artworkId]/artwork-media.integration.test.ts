@@ -14,9 +14,9 @@ const describeWithDatabase = process.env.RUN_INTEGRATION === '1' ? describe : de
 
 // Vitest's workers never see the platform proxy Vite starts, so the suite runs
 // its own: the R2 bucket is wrangler's local emulation of the real one.
-const platform = vi.hoisted(() => ({ bucket: undefined as unknown }));
+const platform = vi.hoisted(() => ({ bucket: undefined as unknown, cache: undefined as unknown }));
 vi.mock('#lib/server/platform.js', () => ({
-	edgeCache: () => undefined,
+	edgeCache: () => platform.cache,
 	hyperdriveConnectionString: () => undefined,
 	appBucket: () => platform.bucket,
 	runAfterResponse: () => {}
@@ -137,6 +137,43 @@ describeWithDatabase('artwork media storage', () => {
 			expect(body.byteLength).toBe(artwork.mediaSizeBytes);
 			expect(new TextDecoder().decode(body.subarray(8, 12))).toBe('WEBP');
 		} finally {
+			await deleteUser(sql, userId);
+		}
+	});
+
+	it('shows a hidden artwork only to its author, privately, and never to the shared cache', async () => {
+		const userId = `hidden-user-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+		const put = vi.fn(async () => {});
+		platform.cache = { delete: vi.fn(), match: vi.fn(async () => undefined), put };
+
+		try {
+			await insertUser(sql, userId);
+			const { publishArtwork } = await import('#lib/server/artwork/service.js');
+			const artwork = await publishArtwork(
+				{ drawingDocument: ONE_STROKE_DRAWING, title: 'Under review' },
+				{ ipAddress: '127.0.0.1', user: createCanonicalUser(userId) }
+			);
+			await sql`update app.artworks set is_hidden = true, hidden_at = now() where id = ${artwork.id}`;
+
+			const { GET } = await import('./media/+server');
+			const request = () => new Request(`http://localhost/api/artworks/${artwork.id}/media?v=webp`);
+			const asAuthor = await GET({
+				locals: { user: createCanonicalUser(userId) },
+				params: { artworkId: artwork.id },
+				request: request()
+			} as never);
+			const asVisitor = await GET({
+				locals: {},
+				params: { artworkId: artwork.id },
+				request: request()
+			} as never);
+
+			expect(asAuthor.status).toBe(200);
+			expect(asAuthor.headers.get('cache-control')).toBe('private, no-store');
+			expect(put).not.toHaveBeenCalled();
+			expect(asVisitor.status).toBe(404);
+		} finally {
+			platform.cache = undefined;
 			await deleteUser(sql, userId);
 		}
 	});

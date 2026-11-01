@@ -698,6 +698,14 @@
 									{#if artworkDate}
 										<p class="postcard-meta">{artworkDate}</p>
 									{/if}
+									{#if artwork.isHidden}
+										<!-- Seen only by its author and moderators; nobody else can open it. -->
+										<p
+											class="truncate text-[0.62rem] font-black tracking-[0.12em] text-danger-bright uppercase"
+										>
+											Hidden · pending review
+										</p>
+									{/if}
 									{#if forkAttribution}
 										<p
 											class="truncate text-[0.62rem] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"

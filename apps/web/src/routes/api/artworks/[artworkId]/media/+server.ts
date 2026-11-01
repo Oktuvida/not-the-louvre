@@ -17,6 +17,10 @@ const VERSIONED_CACHE_CONTROL = `public, max-age=31536000, immutable, s-maxage=$
 // the image as it is now, rechecked within minutes.
 const UNVERSIONED_CACHE_CONTROL = `public, max-age=300, s-maxage=${EDGE_TTL_SECONDS}`;
 
+// A hidden artwork is only ever served to its author or a moderator, so its
+// image must stay out of every shared cache, or the next visitor would get it.
+const PRIVATE_CACHE_CONTROL = 'private, no-store';
+
 const toEtag = (storageKey: string) => `"${storageKey}"`;
 
 export const GET: RequestHandler = async (event) => {
@@ -41,9 +45,11 @@ export const GET: RequestHandler = async (event) => {
 		const requestedFormat = new URL(event.request.url).searchParams.get('v');
 		headers.set(
 			'cache-control',
-			requestedFormat === artworkMediaFormat(media.mediaContentType)
-				? VERSIONED_CACHE_CONTROL
-				: UNVERSIONED_CACHE_CONTROL
+			media.isHidden
+				? PRIVATE_CACHE_CONTROL
+				: requestedFormat === artworkMediaFormat(media.mediaContentType)
+					? VERSIONED_CACHE_CONTROL
+					: UNVERSIONED_CACHE_CONTROL
 		);
 		headers.set('etag', etag);
 
@@ -62,7 +68,7 @@ export const GET: RequestHandler = async (event) => {
 			status: 200
 		});
 
-		if (cache) {
+		if (cache && !media.isHidden) {
 			const cachePut = cache.put(event.request.url, response.clone()).catch(() => {});
 			runAfterResponse(cachePut);
 		}
