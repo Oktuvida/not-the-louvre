@@ -25,7 +25,7 @@
 		// reaches the end of this one, even on a fast fling over a slow network.
 		rootMargin = '200% 0px',
 		skeletonCount = 3,
-		skeletonGridClassName = 'grid gap-6 py-6'
+		skeletonGridClassName = 'py-6'
 	}: Props = $props();
 
 	let sentinelRef: HTMLDivElement | undefined = $state();

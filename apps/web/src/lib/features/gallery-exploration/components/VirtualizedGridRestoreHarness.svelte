@@ -21,7 +21,7 @@
 	const heightOf = (artwork: Artwork) => 120 + (items.indexOf(artwork) % 5) * 90;
 </script>
 
-<VirtualizedGrid bind:this={grid} {items} minColumnWidth={180} {restoredLayout}>
+<VirtualizedGrid bind:this={grid} {items} {restoredLayout}>
 	{#snippet renderCard(artwork)}
 		<div data-testid={`grid-card-${artwork.id}`} style:height={`${heightOf(artwork)}px`}>
 			{artwork.title}

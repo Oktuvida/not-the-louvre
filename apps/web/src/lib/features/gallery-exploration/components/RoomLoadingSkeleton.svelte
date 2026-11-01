@@ -30,11 +30,6 @@
 		{ frame: 'w-68 md:w-[19rem] h-68 md:h-[19rem]', medal: 'h-14 w-14' },
 		{ frame: 'w-60 md:w-[16rem] h-60 md:h-[16rem]', medal: 'h-12 w-12' }
 	];
-
-	// YourStudioRoom's grid runs at gap-15 (60px); the other grids at gap-12.
-	const gridClassName = $derived(
-		roomId === 'your-studio' ? 'grid gap-15 py-6' : 'grid gap-12 py-6'
-	);
 </script>
 
 <!--
@@ -63,11 +58,7 @@
 			</div>
 
 			<div class="w-full">
-				<PolaroidSkeletonGrid
-					count={cardCount}
-					{gridClassName}
-					testId="room-loading-skeleton-grid"
-				/>
+				<PolaroidSkeletonGrid count={cardCount} testId="room-loading-skeleton-grid" />
 			</div>
 		</div>
 	{:else if roomId === 'hot-wall'}
@@ -79,11 +70,7 @@
 			</div>
 
 			<div class="w-full">
-				<PolaroidSkeletonGrid
-					count={cardCount}
-					{gridClassName}
-					testId="room-loading-skeleton-grid"
-				/>
+				<PolaroidSkeletonGrid count={cardCount} testId="room-loading-skeleton-grid" />
 			</div>
 		</div>
 	{:else if roomId === 'mystery'}
@@ -99,8 +86,9 @@
 			></div>
 		</div>
 	{:else}
-		<div class="w-full">
-			<PolaroidSkeletonGrid count={cardCount} {gridClassName} testId="room-loading-skeleton-grid" />
+		<!-- Your Studio: its grid breathes a little wider, like the room. -->
+		<div class="gallery-grid-roomy w-full">
+			<PolaroidSkeletonGrid count={cardCount} testId="room-loading-skeleton-grid" />
 		</div>
 	{/if}
 </div>

@@ -7,7 +7,6 @@
 		GalleryPageInfo,
 		LoadMoreArtworks
 	} from '#lib/features/gallery-exploration/model/discovery.js';
-	import { GALLERY_GRID_GAP } from '#lib/features/gallery-exploration/model/grid.js';
 	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
 	import { createSeededAccumulator } from '#lib/features/gallery-exploration/use-seeded-accumulator.svelte.js';
 	import PolaroidCard from '#lib/features/shared-ui/components/PolaroidCard.svelte';
@@ -45,16 +44,13 @@
 		getLoadMoreArtworks: () => loadMoreArtworks,
 		getPageInfo: () => pageInfo
 	});
-
-	// The studio grid breathes a little wider than the other rooms.
-	const STUDIO_GRID_GAP = GALLERY_GRID_GAP + 12;
 </script>
 
-<div class="w-full">
+<!-- The studio grid breathes a little wider than the other rooms. -->
+<div class="gallery-grid-roomy w-full">
 	<VirtualizedGrid
 		bind:this={grid}
 		items={accumulator.allArtworks}
-		gap={STUDIO_GRID_GAP}
 		restoredLayout={accumulator.restoredLayout}
 	>
 		{#snippet renderCard(artwork)}
@@ -77,7 +73,6 @@
 		isLoading={accumulator.isLoading}
 		onRetry={() => accumulator.retry()}
 		skeletonCount={3}
-		skeletonGridClassName="grid gap-15 py-6"
 		onTrigger={() => accumulator.loadMore()}
 	/>
 </div>

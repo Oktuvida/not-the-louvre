@@ -22,11 +22,9 @@ describe('VirtualizedGrid', () => {
 	});
 
 	it('has the rows a screen and a half below the window already in the page', async () => {
-		// One column of many rows, far taller than the window.
-		await render(VirtualizedGridHarness, {
-			items: createArtworks(300, 'buffer'),
-			minColumnWidth: 10_000
-		});
+		// One column (the test window is phone-sized) of many rows, far taller
+		// than the window.
+		await render(VirtualizedGridHarness, { items: createArtworks(300, 'buffer') });
 		await expect.element(page.getByTestId('grid-card-buffer1')).toBeVisible();
 
 		// Their pictures start loading as soon as their rows are in the page, so
@@ -67,28 +65,35 @@ describe('VirtualizedGrid', () => {
 		expect(page.getByTestId('grid-card-c3').element().textContent).toContain('Artwork c3');
 	});
 
-	it('chunks rows to match the real column count for the measured width', async () => {
-		// Harness viewport defaults to the test browser width; force a narrow
-		// minColumnWidth so multiple columns fit deterministically.
-		await render(VirtualizedGridHarness, { items: createArtworks(24, 'd'), minColumnWidth: 100 });
-
-		await expect.element(page.getByTestId('grid-card-d1')).toBeVisible();
-
-		// Width measurement lands asynchronously via bind:clientWidth, so poll
-		// until the explicit column template replaces the auto-fill fallback.
-		await vi.waitFor(() => {
-			const firstRow = document.querySelector('[data-testid="virtualized-row"]') as HTMLElement;
-			// CSSOM serializes `minmax(0, 1fr)` back as `minmax(0px, 1fr)`
-			const match = /^repeat\((\d+), minmax\(0(?:px)?, 1fr\)\)$/.exec(
-				firstRow.style.gridTemplateColumns
+	it('on a screen three cards wide, rows of three; on a phone, one', async () => {
+		const items = createArtworks(24, 'd');
+		const cardsPerRow = () =>
+			[...document.querySelectorAll('[data-testid="virtualized-row"]')].map(
+				(row) => row.querySelectorAll('[data-testid^="grid-card-"]').length
 			);
-			expect(match).not.toBeNull();
 
-			const columnCount = Number(match![1]);
-			expect(columnCount).toBeGreaterThanOrEqual(1);
-			// Every full row must hold exactly columnCount cards
-			expect(firstRow.querySelectorAll('[data-testid^="grid-card-"]')).toHaveLength(columnCount);
-		});
+		const { innerHeight, innerWidth } = window;
+		try {
+			// 1000px holds three 17.5rem columns with their 3rem gaps, not four.
+			await page.viewport(1000, 800);
+			const wide = await render(VirtualizedGridHarness, { items });
+			await vi.waitFor(() => {
+				const rows = cardsPerRow();
+				expect(rows.length).toBeGreaterThan(1);
+				expect(rows.slice(0, -1).every((count) => count === 3)).toBe(true);
+			});
+			await wide.unmount();
+
+			await page.viewport(390, 844);
+			await render(VirtualizedGridHarness, { items });
+			await vi.waitFor(() => {
+				const rows = cardsPerRow();
+				expect(rows.length).toBeGreaterThan(1);
+				expect(rows.every((count) => count === 1)).toBe(true);
+			});
+		} finally {
+			await page.viewport(innerWidth, innerHeight);
+		}
 	});
 
 	it('mounted again with the layout it had, shows the same card in the same place', async () => {

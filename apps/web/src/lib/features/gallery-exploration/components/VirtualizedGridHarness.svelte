@@ -4,14 +4,13 @@
 
 	interface Props {
 		items: Artwork[];
-		minColumnWidth?: number;
 	}
 
-	let { items, minColumnWidth }: Props = $props();
+	let { items }: Props = $props();
 </script>
 
 <div role="list" style="height: 800px; overflow: auto;">
-	<VirtualizedGrid {items} {minColumnWidth}>
+	<VirtualizedGrid {items}>
 		{#snippet renderCard(artwork)}
 			<div role="listitem" data-testid={`grid-card-${artwork.id}`}>
 				{artwork.title}

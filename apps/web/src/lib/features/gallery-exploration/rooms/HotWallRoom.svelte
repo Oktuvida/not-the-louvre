@@ -181,7 +181,6 @@
 			isLoading={accumulator.isLoading}
 			onRetry={() => accumulator.retry()}
 			skeletonCount={3}
-			skeletonGridClassName="grid gap-12 py-6"
 			onTrigger={() => accumulator.loadMore()}
 		/>
 	</div>

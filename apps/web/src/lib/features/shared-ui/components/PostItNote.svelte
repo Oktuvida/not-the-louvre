@@ -42,32 +42,32 @@
 	style={`transform: rotate(${rotation}deg); z-index: 25;`}
 >
 	<div
-		class="relative w-[280px] px-4 pt-[1.2rem] pb-4 text-note-ink shadow-[2px_3px_8px_rgba(0,0,0,0.18)]"
+		class="relative w-[17.5rem] px-4 pt-[1.2rem] pb-4 text-note-ink shadow-[2px_3px_8px_rgba(0,0,0,0.18)]"
 		style={`background:${gradient};`}
 	>
 		{#if attachment === 'tape'}
 			<div
-				class={`pointer-events-none absolute z-3 h-[18px] w-[52px] border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)] ${tapeVariant === 0 ? 'top-[-8px] left-1/2 -translate-x-1/2 -rotate-2' : tapeVariant === 1 ? 'top-[-6px] left-[10px] rotate-[10deg]' : 'top-[-6px] right-[10px] -rotate-[6deg]'}`}
+				class={`pointer-events-none absolute z-3 h-[1.125rem] w-[3.25rem] border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)] ${tapeVariant === 0 ? 'top-[-0.5rem] left-1/2 -translate-x-1/2 -rotate-2' : tapeVariant === 1 ? 'top-[-0.375rem] left-[0.625rem] rotate-[10deg]' : 'top-[-0.375rem] right-[0.625rem] -rotate-[6deg]'}`}
 			></div>
 		{:else}
 			<div
-				class="pointer-events-none absolute top-[-5px] left-1/2 z-4 h-[14px] w-[14px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_4px_4px,var(--color-alert),#c0392b)] shadow-[0_2px_4px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)]"
+				class="pointer-events-none absolute top-[-0.3125rem] left-1/2 z-4 h-[0.875rem] w-[0.875rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_0.25rem_0.25rem,var(--color-alert),#c0392b)] shadow-[0_2px_4px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)]"
 			></div>
 		{/if}
 
 		{#if curlSide === 'right'}
 			<div
-				class="pointer-events-none absolute right-0 bottom-0 h-[22px] w-[22px] bg-[linear-gradient(225deg,#b8956e_0%,#b8956e_45%,transparent_46%)]"
+				class="pointer-events-none absolute right-0 bottom-0 h-[1.375rem] w-[1.375rem] bg-[linear-gradient(225deg,#b8956e_0%,#b8956e_45%,transparent_46%)]"
 			></div>
 			<div
-				class="pointer-events-none absolute right-[-2px] bottom-[-2px] h-6 w-6 bg-[linear-gradient(225deg,transparent_42%,rgba(0,0,0,0.08)_44%,#e8d86c_45%)]"
+				class="pointer-events-none absolute right-[-0.125rem] bottom-[-0.125rem] h-6 w-6 bg-[linear-gradient(225deg,transparent_42%,rgba(0,0,0,0.08)_44%,#e8d86c_45%)]"
 			></div>
 		{:else}
 			<div
-				class="pointer-events-none absolute bottom-0 left-0 h-[22px] w-[22px] bg-[linear-gradient(315deg,#b8956e_0%,#b8956e_45%,transparent_46%)]"
+				class="pointer-events-none absolute bottom-0 left-0 h-[1.375rem] w-[1.375rem] bg-[linear-gradient(315deg,#b8956e_0%,#b8956e_45%,transparent_46%)]"
 			></div>
 			<div
-				class="pointer-events-none absolute bottom-[-2px] left-[-2px] h-6 w-6 bg-[linear-gradient(315deg,transparent_42%,rgba(0,0,0,0.08)_44%,#e8d86c_45%)]"
+				class="pointer-events-none absolute bottom-[-0.125rem] left-[-0.125rem] h-6 w-6 bg-[linear-gradient(315deg,transparent_42%,rgba(0,0,0,0.08)_44%,#e8d86c_45%)]"
 			></div>
 		{/if}
 
