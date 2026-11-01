@@ -1,9 +1,14 @@
+import { inkOutline, isInkStroke } from '../../stroke/brushes';
 import { getRenderableDrawingStrokes, type DrawingDocument, type DrawingStroke } from './document';
 
 const polylinePoints = (stroke: DrawingStroke) =>
 	stroke.points.map(([x, y]) => `${x},${y}`).join(' ');
 
 const renderStrokeSvg = (stroke: DrawingStroke) => {
+	if (isInkStroke(stroke)) {
+		return `<path d="${inkOutline(stroke)}" fill="${stroke.color}" />`;
+	}
+
 	if (stroke.points.length === 1) {
 		const [x, y] = stroke.points[0];
 		return `<circle cx="${x}" cy="${y}" r="${Math.max(1, stroke.size / 2)}" fill="${stroke.color}" />`;
