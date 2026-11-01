@@ -55,7 +55,6 @@ describe('gallery route layout', () => {
 
 		await expect.element(page.getByTestId('gallery-layout-slot')).toBeVisible();
 		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
-		expect(document.querySelector('[data-testid="gallery-wall-bricks"]')).not.toBeNull();
 		await expect.element(page.getByTestId('gallery-room-shell')).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Your Studio' })).toBeVisible();
 	});

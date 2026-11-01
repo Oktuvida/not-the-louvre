@@ -30,6 +30,24 @@ describe('ScrollSentinel', () => {
 			});
 		});
 
+		it('asks for the next page while the visitor is still two screens away from it', async () => {
+			// The sentinel sits a screen and a half below the bottom of the window.
+			const spacer = document.createElement('div');
+			spacer.style.height = `${Math.round(window.innerHeight * 2.5)}px`;
+			document.body.prepend(spacer);
+			const onTrigger = vi.fn();
+
+			try {
+				await render(ScrollSentinel, { onTrigger, hasMore: true, isLoading: false, error: null });
+
+				await vi.waitFor(() => {
+					expect(onTrigger).toHaveBeenCalled();
+				});
+			} finally {
+				spacer.remove();
+			}
+		});
+
 		it('does NOT call onTrigger when disabled is true', async () => {
 			const onTrigger = vi.fn();
 

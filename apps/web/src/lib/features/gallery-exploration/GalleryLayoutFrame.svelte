@@ -38,21 +38,12 @@
 	const actionBindings = galleryLayout.actionBindings;
 
 	/*
-	 * Compositor-driven scrolling wall.
-	 *
-	 * Anything that positions the wall from JavaScript (scroll listeners,
-	 * recycled slabs) lags behind the compositor on fast flings and the wall
-	 * pops in late. Instead, a small viewport-fixed layer (rasterized once)
-	 * is bound to the scroll position with a CSS scroll-driven animation that
-	 * loops every 512px — the pattern's tile size — so it moves 1:1 with the
-	 * content entirely on the compositor. A fixed animation-range paired with
-	 * a matching iteration count makes that mapping independent of the
-	 * document height: virtualized rows mounting or re-measuring while
-	 * artworks load no longer nudge the wall (the previous JS-synced
-	 * iteration count raced those height changes by a frame and the wall
-	 * visibly bobbed a few pixels).
-	 *
-	 * Browsers without scroll-timeline support get a static fixed wall.
+	 * The wall is the shell's own background, so it scrolls with the artworks
+	 * the way any content does: on the compositor, in step with every frame, in
+	 * every browser. It used to be a viewport-fixed layer moved by a
+	 * scroll-driven animation, which Chrome rasterizes at a lower resolution
+	 * than the screen (the bricks came out about a sixth as sharp on a Retina
+	 * display) and which only moved where scroll timelines exist.
 	 */
 	const PATTERN_TILE = 512;
 </script>
@@ -60,15 +51,8 @@
 <div
 	class="relative min-h-screen"
 	data-testid="gallery-room-shell"
-	style="background-color: var(--color-wall);"
+	style={`background-color: var(--color-wall); background-image: url('${museumWallPatternUrl}'); background-size: ${PATTERN_TILE}px ${PATTERN_TILE}px; background-repeat: repeat;`}
 >
-	<!-- The wall: a single small fixed layer whose translateY is bound to the
-	     scroll position on the compositor (see script comment). -->
-	<div
-		class="wall-layer"
-		data-testid="gallery-wall-bricks"
-		style={`background-image: url('${museumWallPatternUrl}'); background-size: ${PATTERN_TILE}px ${PATTERN_TILE}px; background-repeat: repeat;`}
-	></div>
 	<!-- The room's light: one layer carrying all four gradients (see .gallery-atmosphere). -->
 	<div class="gallery-atmosphere" aria-hidden="true"></div>
 
@@ -172,22 +156,6 @@
 		background: var(--color-wall);
 	}
 
-	/* All wall geometry and behavior lives in component CSS on purpose:
-	 * it must hold even where utility classes are unavailable. */
-	.wall-layer {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		/* One pattern tile taller than the viewport so the looping shift never
-		 * exposes an edge; lvh ignores mobile browser chrome collapsing. */
-		height: calc(100vh + 512px);
-		height: calc(100lvh + 512px);
-		z-index: 0;
-		pointer-events: none;
-		background-color: var(--color-wall);
-	}
-
 	/* The room's light, in one element.
 	 *
 	 * These four gradients used to be four sibling `fixed inset-0` divs, identical
@@ -238,43 +206,5 @@
 				rgba(255, 241, 196, 0.06) 36%,
 				transparent 58%
 			);
-	}
-
-	@keyframes museum-wall-scroll {
-		from {
-			transform: translateY(0);
-		}
-		to {
-			transform: translateY(-512px);
-		}
-	}
-
-	@supports (animation-timeline: scroll()) and (animation-range: 0px 512px) {
-		.wall-layer {
-			animation: museum-wall-scroll 1s linear;
-			animation-timeline: scroll(root);
-			/* A fixed 1024-tile range with one iteration per tile resolves to
-			 * translateY(-(scrollY mod 512)) at every scroll position, for any
-			 * document height — no resync needed when content grows. 524288px
-			 * outlasts any realistic page. */
-			animation-range: 0px 524288px;
-			animation-iteration-count: 1024;
-			will-change: transform;
-		}
-
-		/* Scroll-driven animations are not covered by the global reduced-motion
-		 * reset in routes/layout.css in any useful way: their progress comes from
-		 * the scroll range, not from `animation-duration`, and forcing
-		 * `animation-iteration-count: 1` would stretch one 512px tile shift across
-		 * the whole 524288px range instead of stopping it. Cancel it outright
-		 * here, which lands exactly on the documented no-scroll-timeline fallback:
-		 * a static fixed wall. The compositor hint goes with it — there is nothing
-		 * left to composite. */
-		@media (prefers-reduced-motion: reduce) {
-			.wall-layer {
-				animation: none;
-				will-change: auto;
-			}
-		}
 	}
 </style>
