@@ -654,6 +654,7 @@
 				<div class="studio-mobile-canvas-shell">
 					<div class="studio-mobile-canvas-card" data-testid="studio-mobile-canvas-card">
 						<DrawingCanvas
+							backdrop={currentForkParent?.mediaUrl ?? null}
 							bind:this={canvasHistory}
 							bind:canvasRef
 							bind:drawingDocument
@@ -846,6 +847,7 @@
 								</div>
 							{/snippet}
 							<DrawingCanvas
+								backdrop={currentForkParent?.mediaUrl ?? null}
 								bind:this={canvasHistory}
 								bind:canvasRef
 								bind:drawingDocument

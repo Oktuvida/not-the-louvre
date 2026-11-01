@@ -133,6 +133,7 @@ const createRepository = (initial: UserRecord | null = null): UserRepository =>
 const VERSIONED_AVATAR_KEY = /^avatars\/user-1\/[0-9a-f]{16}\.webp$/;
 
 const createStorage = (): ArtworkStorage => ({
+	read: async () => new Uint8Array(),
 	upload: vi.fn(async () => {}),
 	delete: vi.fn(async () => {})
 });

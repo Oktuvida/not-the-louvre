@@ -17,10 +17,19 @@ const renderStrokeSvg = (stroke: DrawingStroke) => {
 	return `<polyline points="${polylinePoints(stroke)}" fill="none" stroke="${stroke.color}" stroke-width="${stroke.size}" stroke-linecap="round" stroke-linejoin="round" />`;
 };
 
-export const drawingDocumentToSvg = (document: DrawingDocument) =>
+/**
+ * The drawing as SVG. Without its paper (`paper: false`) the strokes stand on
+ * a transparent ground, to be laid over the image a fork was drawn on.
+ */
+export const drawingDocumentToSvg = (
+	document: DrawingDocument,
+	options: { paper?: boolean } = {}
+) =>
 	[
 		`<svg xmlns="http://www.w3.org/2000/svg" width="${document.width}" height="${document.height}" viewBox="0 0 ${document.width} ${document.height}">`,
-		`<rect width="100%" height="100%" fill="${document.background}" />`,
+		...(options.paper === false
+			? []
+			: [`<rect width="100%" height="100%" fill="${document.background}" />`]),
 		...getRenderableDrawingStrokes(document).map(renderStrokeSvg),
 		'</svg>'
 	].join('');

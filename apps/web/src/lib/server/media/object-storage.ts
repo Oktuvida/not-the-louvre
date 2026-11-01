@@ -28,6 +28,12 @@ export const createObjectStorage = (options: { notFoundMessage: string }) => {
 
 		async delete(key) {
 			await requireAppBucket().delete(key);
+		},
+
+		async read(key) {
+			const object = await requireAppBucket().get(key);
+			if (!object) throw new ArtworkFlowError(404, options.notFoundMessage, 'NOT_FOUND');
+			return new Uint8Array(await new Response(object.body).arrayBuffer());
 		}
 	};
 

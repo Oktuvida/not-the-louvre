@@ -2,7 +2,6 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { getIP } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '#lib/server/auth.js';
-import { openStoredDrawingDocument } from '#lib/server/drawing-document/document-store.js';
 import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
 import { getArtworkDetail } from '#lib/server/artwork/read.service.js';
 import { publishArtwork } from '#lib/server/artwork/service.js';
@@ -45,18 +44,11 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const forkArtworkId = event.url.searchParams.get('fork');
+	// A fork is drawn over the image of its parent, so the studio needs the
+	// image, not the parent's drawing (hundreds of KiB on a phone).
 	const forkParent = forkArtworkId
-		? await getArtworkDetail(forkArtworkId, {
-				user: event.locals.user,
-				// The studio is the only reader of the drawing document: every
-				// other detail read leaves its columns out.
-				withDrawingDocument: true
-			}).then(async (artwork) => ({
-				drawingDocument: await openStoredDrawingDocument({
-					key: artwork.drawingDocumentKey ?? null,
-					legacyBase64: artwork.drawingDocument ?? null,
-					version: artwork.drawingVersion ?? null
-				}),
+		? await getArtworkDetail(forkArtworkId, { user: event.locals.user }).then((artwork) => ({
+				drawingDocument: null,
 				id: artwork.id,
 				isNsfw: artwork.isNsfw,
 				mediaUrl: artwork.mediaUrl,

@@ -9,8 +9,8 @@ import { inProcessRenderer, type Renderer } from '#lib/server/render/renderer.js
  * every gallery request does not.
  */
 export default class RendererWorker extends WorkerEntrypoint implements Renderer {
-	renderArtwork(document: DrawingDocument) {
-		return inProcessRenderer.renderArtwork(document);
+	renderArtwork(document: DrawingDocument, backdrop?: Uint8Array) {
+		return inProcessRenderer.renderArtwork(document, backdrop);
 	}
 
 	renderAvatar(document: DrawingDocument) {

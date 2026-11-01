@@ -31,8 +31,8 @@ const toMedia = (outcome: RenderOutcome, fileName: string): SanitizedMedia => {
 	};
 };
 
-export const renderArtworkMedia = async (document: DrawingDocument) =>
-	toMedia(await (await resolveRenderer()).renderArtwork(document), 'artwork.webp');
+export const renderArtworkMedia = async (document: DrawingDocument, backdrop?: Uint8Array) =>
+	toMedia(await (await resolveRenderer()).renderArtwork(document, backdrop), 'artwork.webp');
 
 export const renderAvatarMedia = async (document: DrawingDocument) =>
 	toMedia(await (await resolveRenderer()).renderAvatar(document), 'avatar.webp');

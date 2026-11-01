@@ -44,9 +44,9 @@ export type InkStroke = {
 
 export type ParentReference = {
 	artwork: string;
-	/** Where the parent's drawing is stored. */
-	document: string;
-	/** Where the parent's published image is stored. */
+	/** Where the parent's drawing is stored; an old artwork may have none. */
+	document?: string;
+	/** Where the fork's own copy of the parent's image is stored. */
 	image: string;
 };
 
@@ -183,12 +183,16 @@ const readParent = (value: unknown): ParentReference | undefined => {
 	if (
 		!isRecord(value) ||
 		typeof value.artwork !== 'string' ||
-		typeof value.document !== 'string' ||
+		(value.document !== undefined && typeof value.document !== 'string') ||
 		typeof value.image !== 'string'
 	) {
-		throw invalid('parent must name an artwork, a document and an image');
+		throw invalid('parent must name an artwork and an image');
 	}
-	return { artwork: value.artwork, document: value.document, image: value.image };
+	return {
+		artwork: value.artwork,
+		...(typeof value.document === 'string' ? { document: value.document } : {}),
+		image: value.image
+	};
 };
 
 export const decodeDrawingV3 = (

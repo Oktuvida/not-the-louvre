@@ -27,7 +27,8 @@ export type RenderOutcome =
 	| { code: ArtworkFlowError['code']; message: string; ok: false; status: number };
 
 export type Renderer = {
-	renderArtwork(document: DrawingDocument): Promise<RenderOutcome>;
+	/** `backdrop`: the image a fork was drawn on, which its strokes go over. */
+	renderArtwork(document: DrawingDocument, backdrop?: Uint8Array): Promise<RenderOutcome>;
 	renderAvatar(document: DrawingDocument): Promise<RenderOutcome>;
 	renderFavicon(avatar: Uint8Array): Promise<Uint8Array>;
 };
@@ -54,7 +55,8 @@ const outcomeOf = async (render: () => Promise<SanitizedMedia>): Promise<RenderO
 };
 
 export const inProcessRenderer: Renderer = {
-	renderArtwork: (document) => outcomeOf(() => createArtworkDrawingDocumentMedia(document)),
+	renderArtwork: (document, backdrop) =>
+		outcomeOf(() => createArtworkDrawingDocumentMedia(document, { backdrop })),
 	renderAvatar: (document) => outcomeOf(() => createAvatarDrawingDocumentMedia(document)),
 	renderFavicon: async (avatar) => new Uint8Array(await renderAvatarFaviconPng(avatar))
 };

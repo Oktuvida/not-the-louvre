@@ -267,6 +267,7 @@ export type PublishRateLimitRecord = {
 
 export type ArtworkStorage = {
 	delete(key: string): Promise<void>;
+	read(key: string): Promise<Uint8Array>;
 	upload(key: string, file: File): Promise<void>;
 };
 

@@ -18,6 +18,59 @@ const countDifferentBytes = (left: Uint8ClampedArray, right: Uint8ClampedArray) 
 describe('drawing-document backend media', () => {
 	// The owner's rule: the gallery never shows a degraded drawing. The stored
 	// image is the canonical render of the strokes, every pixel of it.
+	it('paints a fork’s own strokes over the image it was drawn on', async () => {
+		const parent = {
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#2d2420',
+					points: [
+						[100, 100],
+						[668, 100]
+					],
+					size: 24
+				}
+			] satisfies DrawingStroke[]
+		};
+		const backdrop = new Uint8Array(
+			await (await createArtworkDrawingDocumentMedia(parent)).file.arrayBuffer()
+		);
+		const fork = {
+			...createEmptyDrawingDocument('artwork'),
+			strokes: [
+				{
+					color: '#c84f4f',
+					points: [
+						[384, 200],
+						[384, 700]
+					],
+					size: 24
+				},
+				// The eraser lays paper over the parent too.
+				{
+					color: '#fdfbf7',
+					points: [
+						[600, 70],
+						[600, 130]
+					],
+					size: 40
+				}
+			] satisfies DrawingStroke[]
+		};
+
+		const media = await createArtworkDrawingDocumentMedia(fork, { backdrop });
+
+		const image = await decodeImage(new Uint8Array(await media.file.arrayBuffer()), 'webp');
+		const at = (x: number, y: number) => {
+			const offset = (y * image.width + x) * 4;
+			return Array.from(image.data.slice(offset, offset + 3));
+		};
+		expect(at(200, 100)).toEqual([0x2d, 0x24, 0x20]);
+		expect(at(384, 400)).toEqual([0xc8, 0x4f, 0x4f]);
+		expect(at(600, 100)).toEqual([0xfd, 0xfb, 0xf7]);
+		expect(at(200, 600)).toEqual([0xfd, 0xfb, 0xf7]);
+	});
+
 	it('stores the artwork exactly as its strokes render', async () => {
 		const document = {
 			...createEmptyDrawingDocument('artwork'),

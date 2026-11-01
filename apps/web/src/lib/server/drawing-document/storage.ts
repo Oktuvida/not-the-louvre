@@ -8,7 +8,7 @@ import {
 	toCanonicalV2,
 	toEditableV2
 } from '#lib/stroke/legacy.js';
-import { decodeDrawingV3, encodeDrawingV3 } from '#lib/stroke/v3.js';
+import { decodeDrawingV3, encodeDrawingV3, type ParentReference } from '#lib/stroke/v3.js';
 import { fromInkDocument } from '#lib/features/stroke-json/ink-document.js';
 
 // Drawings are stored gzipped (document-store.ts keeps the bytes): a v3
@@ -40,11 +40,15 @@ export const toArtworkFlowError = (error: unknown) => {
 };
 
 export const prepareDrawingDocumentForStorage = async (
-	documentJson: string
+	documentJson: string,
+	options: { parent?: ParentReference } = {}
 ): Promise<PreparedDrawingDocument> => {
 	try {
 		if (isVersion3(documentJson)) {
-			const drawing = decodeDrawingV3(JSON.parse(documentJson));
+			// The parent is the server's to name: a client only says which artwork.
+			const decoded = decodeDrawingV3(JSON.parse(documentJson));
+			delete decoded.parent;
+			const drawing = options.parent ? { ...decoded, parent: options.parent } : decoded;
 			const compressed = await encodeLegacyPayload(JSON.stringify(encodeDrawingV3(drawing)));
 			return { compressed, document: fromInkDocument(drawing), version: 3 };
 		}
