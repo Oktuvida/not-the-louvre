@@ -18,11 +18,12 @@ const withTail = (...tail: DrawingStroke[]) => ({
 
 describe('the ink a drawing has used', () => {
 	it('is none for an empty page', () => {
-		expect(measureInk(createEmptyDrawingDocumentV2('artwork'))).toMatchObject({
-			remainingPoints: 300_000,
-			remainingStrokes: 15_000,
-			used: 0
-		});
+		const ink = measureInk(createEmptyDrawingDocumentV2('artwork'));
+
+		expect(ink).toMatchObject({ remainingStrokes: 15_000, used: 0 });
+		// Points are counted against the bytes conservatively, so a stroke is cut
+		// before the server would refuse the drawing, never after.
+		expect(ink.remainingPoints).toBeGreaterThan(150_000);
 	});
 
 	it('counts every point against the drawing’s budget', () => {

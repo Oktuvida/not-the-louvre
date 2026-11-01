@@ -11,7 +11,6 @@
 		cloneDrawingDocumentV2,
 		createEmptyDrawingDocumentV2,
 		getRenderableDrawingStrokes,
-		serializeDrawingDocument,
 		type DrawingDocumentV2,
 		type DrawingStroke
 	} from '#lib/features/stroke-json/document.js';
@@ -19,6 +18,8 @@
 	import DrawingCanvas from '#lib/features/studio-drawing/components/DrawingCanvas.svelte';
 	import { drawingPalette } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import { encodeDrawingV3 } from '#lib/stroke/v3.js';
+	import { toInkDocument } from '#lib/features/stroke-json/ink-document.js';
 	import type { AvatarUploadResult } from '#lib/client/avatar-upload.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 
@@ -43,7 +44,7 @@
 	let {
 		clearMode = 'initial',
 		createAvatarPayload = async (documentState: DrawingDocumentV2) =>
-			serializeDrawingDocument(documentState),
+			JSON.stringify(encodeDrawingV3(toInkDocument(documentState))),
 		draftUserKey = null,
 		draftStore,
 		initialDrawingDocument = null,

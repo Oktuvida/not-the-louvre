@@ -6,12 +6,14 @@
 		appendCommittedStroke,
 		clampDrawingPoint,
 		cloneDrawingDocumentV2,
+		cloneDrawingStroke,
 		createEmptyDrawingDocumentV2,
 		serializeEditableDrawingDocument,
 		type DrawingDocumentV2,
 		type DrawingPoint,
 		type DrawingStroke
 	} from '#lib/features/stroke-json/document.js';
+	import type { PointerKind } from '#lib/stroke/v3.js';
 	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
 	import {
 		attachPointerReleaseSafetyNet,
@@ -111,7 +113,10 @@
 	 * only the canvas needs to see it. The document takes it, once, when the
 	 * pen lifts.
 	 */
-	let wetStroke: DrawingStroke | null = null;
+	let wetStroke: WetStroke | null = null;
+	// When the previous stroke began, for the next one's `start` (the gap a
+	// timelapse replays); none yet in this session means it starts at once.
+	let lastStrokeStartedAt: number | null = null;
 	// Lines taken back, latest last. A new line forgets them.
 	let redoStack: DrawingStroke[] = [];
 	let activePointerId: number | null = null;
@@ -159,11 +164,44 @@
 	// Laid out once per stroke: reading the box on every sample forces layout.
 	let strokeRect: ReturnType<typeof getCanvasContentRect> | null = null;
 
-	const cloneStroke = (stroke: DrawingStroke): DrawingStroke => ({
-		color: stroke.color,
-		points: stroke.points.map((point) => [point[0], point[1]] as DrawingPoint),
-		size: stroke.size
-	});
+	/** The line under the pen, with the time and pressure of every point. */
+	type WetStroke = DrawingStroke & { pressures: number[]; times: number[] };
+
+	// Pressure is kept in the ten bits the v3 document stores.
+	const toTenBits = (pressure: number) =>
+		Math.round(Math.min(1, Math.max(0, pressure)) * 1023) / 1023;
+	const PLACEHOLDER_PRESSURES = [0, toTenBits(0.5), 1];
+
+	const pointerKind = (type: string): PointerKind =>
+		type === 'pen' || type === 'touch' ? type : 'mouse';
+
+	/*
+	 * Real pressure only from a pen that varies it: iOS reports 0 for fingers,
+	 * mice report 0.5 while a button is down, and a pen that never changes its
+	 * reading is reporting nothing either (tldraw's rule).
+	 */
+	const finishedStroke = ({ pressures, ...stroke }: WetStroke): DrawingStroke => {
+		const first = pressures[0] ?? 0;
+		const isPlaceholder =
+			pressures.every((pressure) => pressure === first) && PLACEHOLDER_PRESSURES.includes(first);
+		return stroke.pointer === 'pen' && !isPlaceholder ? { ...stroke, pressures } : stroke;
+	};
+
+	const startStroke = (point: DrawingPoint, at: number, pointer: PointerKind, pressure: number) => {
+		const stroke: WetStroke = {
+			brush: !strokeColor && drawingTools.tool === 'eraser' ? 'eraser@1' : 'round@1',
+			color: inkColor(),
+			pointer,
+			points: [point],
+			pressures: [pressure],
+			size: inkSize(),
+			start: lastStrokeStartedAt === null ? 0 : Math.max(0, Math.round(at - lastStrokeStartedAt)),
+			times: [0]
+		};
+		lastStrokeStartedAt = at;
+		strokeStartedAt = at;
+		return stroke;
+	};
 
 	const syncHistory = () => {
 		baselineStrokeCount = baselineDocument.tail.length;
@@ -271,8 +309,12 @@
 		canvasRef.setPointerCapture(event.pointerId);
 		activePointerId = event.pointerId;
 		strokePointerType = event.pointerType;
-		strokeStartedAt = event.timeStamp;
-		wetStroke = { color: inkColor(), points: [point], size: inkSize() };
+		wetStroke = startStroke(
+			point,
+			event.timeStamp,
+			pointerKind(event.pointerType),
+			toTenBits(event.pressure)
+		);
 		surface?.wet(wetStroke);
 	}
 
@@ -302,8 +344,11 @@
 			// the same spot, so the visitor never sees the seam.
 			if (wetStroke.points.length >= maxPointsPerStroke() && strokesLeft > 0 && pointsLeft > 1) {
 				const carried: DrawingPoint = wetStroke.points.at(-1)!;
-				keepStroke(wetStroke);
-				wetStroke = { ...wetStroke, points: [carried] };
+				const carriedAt = strokeStartedAt + wetStroke.times.at(-1)!;
+				const carriedPressure = wetStroke.pressures.at(-1)!;
+				const pointer = wetStroke.pointer ?? 'mouse';
+				keepStroke(finishedStroke(wetStroke));
+				wetStroke = startStroke(carried, carriedAt, pointer, carriedPressure);
 				strokesLeft -= 1;
 				pointsLeft -= 1;
 			}
@@ -316,6 +361,11 @@
 			}
 
 			wetStroke.points.push(point);
+			// Coalesced samples carry their own time; never let it run backwards.
+			wetStroke.times.push(
+				Math.max(wetStroke.times.at(-1)!, Math.round(sample.timeStamp - strokeStartedAt))
+			);
+			wetStroke.pressures.push(toTenBits(sample.pressure));
 			pointsLeft -= 1;
 		}
 
@@ -337,7 +387,7 @@
 		activePointerId = null;
 		strokeRect = null;
 		surface?.wet(null);
-		if (stroke) keepStroke(stroke);
+		if (stroke) keepStroke(finishedStroke(stroke));
 	}
 
 	const maxPointsPerStroke = () =>
@@ -353,7 +403,7 @@
 		void onStrokeCommitted?.({
 			nextDocument: cloneDrawingDocumentV2(nextDocument),
 			previousDocument: cloneDrawingDocumentV2(previousDocument),
-			stroke: cloneStroke(stroke)
+			stroke: cloneDrawingStroke(stroke)
 		});
 	}
 

@@ -15,9 +15,9 @@
 	import { buildDrawingDraftKey, clearDrawingDraft } from '#lib/features/stroke-json/drafts.js';
 	import {
 		DRAWING_DOCUMENT_VERSION,
-		createEmptyDrawingDocumentV2,
-		parseEditableDrawingDocumentV2
+		createEmptyDrawingDocumentV2
 	} from '#lib/features/stroke-json/document.js';
+	import { parseEditableDrawing } from '#lib/features/stroke-json/ink-document.js';
 	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
@@ -131,7 +131,7 @@
 		if (result.success && userId) {
 			dispatchAvatarFaviconUpdate(userId);
 			onAvatarSaved?.({
-				avatarDrawingDocument: parseEditableDrawingDocumentV2(drawingDocument),
+				avatarDrawingDocument: parseEditableDrawing(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
 				avatarUrl: result.avatarUrl
 			});

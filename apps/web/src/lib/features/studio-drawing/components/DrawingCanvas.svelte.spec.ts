@@ -7,6 +7,7 @@ import {
 	type DrawingDocumentV2,
 	type DrawingStroke
 } from '#lib/features/stroke-json/document.js';
+import { drawingTools } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 import DrawingCanvasHarness from './DrawingCanvasHarness.svelte';
 
 /*
@@ -697,6 +698,72 @@ describe('DrawingCanvas', () => {
 			await vi.waitFor(() => expect(colourAt(50, 50)).toEqual([255, 0, 0]));
 			expect(colourAt(400, 400)).toEqual([255, 255, 255]);
 			expect(documents.at(-1)?.tail ?? []).toHaveLength(0);
+		});
+	});
+
+	describe('what a stroke remembers', () => {
+		it('records when each point was drawn, with what, and to a quarter of a pixel', async () => {
+			const { canvas, committed, pointer } = await renderCanvas();
+
+			canvas.dispatchEvent(pointer('pointerdown', [100.25, 100.5]));
+			canvas.dispatchEvent(pointer('pointermove', [120.75, 110]));
+			canvas.dispatchEvent(pointer('pointerup', [120.75, 110]));
+			canvas.dispatchEvent(pointer('pointerdown', [300, 300]));
+			canvas.dispatchEvent(pointer('pointerup', [300, 300]));
+
+			const [first, second] = committed;
+			expect(first).toMatchObject({
+				brush: 'round@1',
+				pointer: 'mouse',
+				points: [
+					[100.25, 100.5],
+					[120.75, 110]
+				],
+				start: 0
+			});
+			expect(first?.times).toHaveLength(2);
+			expect(first?.times?.[0]).toBe(0);
+			expect(first!.times![1]).toBeGreaterThanOrEqual(0);
+			expect(first).not.toHaveProperty('pressures');
+			expect(second?.start).toBeGreaterThanOrEqual(0);
+		});
+
+		it('keeps a pen’s pressure when the pen really reports one', async () => {
+			const { canvas, committed, pointer } = await renderCanvas();
+			const pen = (pressure: number) => ({ pointerType: 'pen', pressure });
+
+			canvas.dispatchEvent(pointer('pointerdown', [100, 100], pen(0.3)));
+			canvas.dispatchEvent(pointer('pointermove', [140, 120], pen(0.6)));
+			canvas.dispatchEvent(pointer('pointerup', [140, 120], pen(0)));
+
+			// Kept in the ten bits the document stores.
+			const tenBits = (pressure: number) => Math.round(pressure * 1023) / 1023;
+			expect(committed[0]).toMatchObject({
+				pointer: 'pen',
+				pressures: [tenBits(0.3), tenBits(0.6)]
+			});
+		});
+
+		it('drops a pressure that is only a placeholder', async () => {
+			const { canvas, committed, pointer } = await renderCanvas();
+			// iOS fingers and many mice report a constant 0.5 or 0.
+			const pen = { pointerType: 'pen', pressure: 0.5 };
+
+			canvas.dispatchEvent(pointer('pointerdown', [100, 100], pen));
+			canvas.dispatchEvent(pointer('pointermove', [140, 120], pen));
+			canvas.dispatchEvent(pointer('pointerup', [140, 120], pen));
+
+			expect(committed[0]).not.toHaveProperty('pressures');
+		});
+
+		it('names the eraser as such', async () => {
+			drawingTools.tool = 'eraser';
+			const { committed, draw } = await renderCanvas();
+
+			draw([100, 300], [600, 300]);
+			drawingTools.tool = 'brush';
+
+			expect(committed[0]).toMatchObject({ brush: 'eraser@1', color: '#fdfbf7' });
 		});
 	});
 });

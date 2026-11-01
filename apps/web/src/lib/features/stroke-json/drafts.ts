@@ -3,7 +3,8 @@ import {
 	parseEditableDrawingDocumentV2,
 	serializeEditableDrawingDocument,
 	type DrawingDocumentV2,
-	type DrawingStroke
+	type DrawingStroke,
+	cloneDrawingStroke
 } from './document';
 import { appendCommittedStroke as appendCommittedStrokeToDocument } from './document';
 
@@ -95,12 +96,6 @@ const DEFAULT_MAX_JOURNAL_ENTRIES_BEFORE_COMPACT = 24;
 const BASELINE_DRAFT_KEY_PREFIX = 'baseline:';
 
 const buildBaselineDraftKey = (draftKey: string) => `${BASELINE_DRAFT_KEY_PREFIX}${draftKey}`;
-
-const cloneDrawingStroke = (stroke: DrawingStroke): DrawingStroke => ({
-	color: stroke.color,
-	points: stroke.points.map((point) => [point[0], point[1]] as [number, number]),
-	size: stroke.size
-});
 
 const normalizeSnapshotDocument = (document: DrawingDocumentV2) =>
 	parseEditableDrawingDocumentV2(serializeEditableDrawingDocument(document));

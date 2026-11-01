@@ -2,6 +2,7 @@ import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { decodeDrawingDocument, prepareDrawingDocumentForStorage } from './storage';
 import { DRAWING_LIMITS } from '#lib/shared/artwork/drawing-limits.js';
+import { encodeDrawingV3, type InkDocument } from '#lib/stroke/v3.js';
 
 const artwork = { kind: 'artwork', width: 768, height: 768, background: '#fdfbf7' } as const;
 const stroke = (points: [number, number][], color = '#1d3557', size = 8) => ({
@@ -54,6 +55,35 @@ describe('drawing document storage', () => {
 			code: 'INVALID_DRAWING_DOCUMENT',
 			status: 400
 		});
+	});
+
+	it('stores a v3 drawing as it was drawn and reads it back', async () => {
+		const drawing: InkDocument = {
+			...artwork,
+			strokes: [
+				{
+					brush: 'round@1',
+					color: '#1d3557',
+					pointer: 'pen',
+					points: [
+						[10.25, 20.5],
+						[30, 40.75]
+					],
+					pressures: [300 / 1023, 600 / 1023],
+					size: 8,
+					start: 0,
+					times: [0, 16]
+				}
+			]
+		};
+
+		const prepared = await prepareDrawingDocumentForStorage(
+			JSON.stringify(encodeDrawingV3(drawing))
+		);
+
+		expect(prepared.version).toBe(3);
+		expect(JSON.parse(gunzipSync(prepared.compressed).toString()).version).toBe(3);
+		expect((await decodeDrawingDocument(prepared.compressed)).tail).toEqual(drawing.strokes);
 	});
 
 	it('rejects a drawing over the size limits as too large', async () => {

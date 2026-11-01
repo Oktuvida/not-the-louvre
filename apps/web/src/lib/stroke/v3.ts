@@ -1,4 +1,4 @@
-import { DRAWING_LIMITS, type DrawingLimits } from '#lib/shared/artwork/drawing-limits.js';
+import { DRAWING_LIMITS, type DrawingLimits } from '../shared/artwork/drawing-limits';
 import { StrokeDocumentError } from './legacy';
 
 /*
