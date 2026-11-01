@@ -264,7 +264,8 @@
 </svelte:head>
 
 <div
-	class="relative h-screen w-full overflow-hidden bg-gradient-to-br from-shell via-paper-bright to-[#e8e0d5]"
+	class="home-entry-page relative h-dvh w-full overflow-hidden bg-gradient-to-br from-shell via-paper-bright to-[#e8e0d5]"
+	data-visitor={user ? 'signed-in' : 'guest'}
 >
 	<div class="absolute inset-0 flex items-center justify-center">
 		<div class="relative h-full w-full opacity-80">
@@ -348,3 +349,34 @@
 
 <!-- Leaving for one: the veil drops over the camera move, then we navigate. -->
 <PageFadeOverlay direction="in" onComplete={completeExit} visible={exitVeilVisible} />
+
+<style>
+	/* A big screen gets a bigger front door, as the gallery does: past 1440px
+	 * the page's rem grows with the window, up to half as big again. */
+	:global(html:has(.home-entry-page)) {
+		font-size: clamp(100%, 100vw / 90, 150%);
+	}
+
+	/*
+	 * Where a signed-in artist's badge and Logout stand (PersistentNav). The
+	 * badge is drawn in em: full size on a tall screen, smaller where room is
+	 * short.
+	 */
+	.home-entry-page {
+		--account-top: 1rem;
+		--account-em: 0.7rem;
+	}
+
+	@media (orientation: landscape) and (min-width: 48rem) and (min-height: 40rem) {
+		.home-entry-page {
+			--account-top: 2rem;
+			--account-em: 0.8rem;
+		}
+	}
+
+	@media (orientation: landscape) and (min-width: 48rem) and (min-height: 56rem) {
+		.home-entry-page {
+			--account-em: 1rem;
+		}
+	}
+</style>
