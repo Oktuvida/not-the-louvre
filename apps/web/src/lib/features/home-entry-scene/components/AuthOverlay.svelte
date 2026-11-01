@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/env';
-	import { deserialize, enhance } from '$app/forms';
+	import { deserialize, enhance, type SubmitFunction } from '$app/forms';
 	import { gsap } from '#lib/client/gsap.js';
 	import {
 		checkTextContent as defaultCheckTextContent,
@@ -293,13 +293,27 @@
 		return !nicknameError && !recoveryKeyError && !newPasswordError;
 	};
 
-	const createEnhancer = () => {
+	const createEnhancer: SubmitFunction = () => {
 		resetMessages();
 		isSubmitting = true;
 
-		return async ({ update }: { update: () => Promise<void> }) => {
+		return async ({ result, update }) => {
+			/*
+			 * The answer is read from the submission itself. Read only from `form`,
+			 * a second attempt that failed the same way as the first (the same wrong
+			 * password, the same lockout) changed nothing there and was never shown,
+			 * after its message had been cleared above: the sheet just went blank.
+			 * Marked as handled first, so the `form` effect does not show it twice.
+			 */
+			const data =
+				result.type === 'failure' || result.type === 'success'
+					? (result.data as HomeAuthActionData | undefined)
+					: undefined;
+			if (data) lastHandledFormKey = getFormKey(data);
+
 			await update();
 			isSubmitting = false;
+			if (data) handleActionResult(data);
 		};
 	};
 
