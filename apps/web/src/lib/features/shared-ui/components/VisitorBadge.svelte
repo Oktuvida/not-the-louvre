@@ -3,11 +3,12 @@
 	import { hashString } from '#lib/features/artwork-presentation/model/frame.js';
 
 	const BADGE_COLORS = [
-		{ fill: '#c84f4f', footer: '#c84f4f' },
-		{ fill: '#4a7fb5', footer: '#4a7fb5' },
-		{ fill: '#5a9a5a', footer: '#5a9a5a' },
-		{ fill: '#d4874d', footer: '#d4874d' },
-		{ fill: '#8b6aae', footer: '#8b6aae' }
+		// Each dark enough for the paper-white lettering on it (at least 4.6:1).
+		{ fill: '#c04b4b', footer: '#c04b4b' },
+		{ fill: '#4476a8', footer: '#4476a8' },
+		{ fill: '#497e49', footer: '#497e49' },
+		{ fill: '#9e6539', footer: '#9e6539' },
+		{ fill: '#8565a7', footer: '#8565a7' }
 	] as const;
 
 	let {
@@ -53,15 +54,15 @@
 		class="overflow-hidden rounded-xl border-[2px] border-black/10"
 		style="box-shadow: var(--shadow-sheet);"
 	>
-		<!-- Colored header -->
-		<div style={`background:${palette.fill};`}>
+		<!-- Colored header: the HELLO tag is decoration; the button names itself. -->
+		<div style={`background:${palette.fill};`} aria-hidden="true">
 			<p
 				class="px-[1em] pt-[0.55em] pb-[0.15em] text-center font-display text-[1.15em] font-bold tracking-[0.06em] text-paper-bright uppercase"
 			>
 				HELLO
 			</p>
 			<p
-				class="px-[1em] pb-[0.5em] text-center font-display text-[0.62em] font-semibold tracking-[0.15em] text-[rgba(253,251,247,0.8)] uppercase"
+				class="px-[1em] pb-[0.5em] text-center font-display text-[0.62em] font-semibold tracking-[0.15em] text-paper-bright uppercase"
 			>
 				MY NAME IS
 			</p>

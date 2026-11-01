@@ -35,6 +35,9 @@
 
 	let viewportEl: HTMLDivElement | undefined = $state();
 	let viewportWidth = $state(0);
+	// The frame size as the stylesheet resolved it (see .reel-viewport).
+	let frameProbeEl: HTMLDivElement | undefined = $state();
+	let measuredFrameSize = $state(0);
 	let viewportResizeObserver: ResizeObserver | null = null;
 
 	const BUFFER = 3;
@@ -99,21 +102,21 @@
 	// idle tween, but going from empty to non-empty must still start one.
 	const hasReelArtworks = $derived(reelArtworks.length > 0);
 
+	/*
+	 * The reel's boxes are sized by the stylesheet, from the width it has, so
+	 * the page is painted at its final size: sized here from a width assumed
+	 * before measuring, a phone painted 256px frames and then shrank them,
+	 * pulling the Spin button up under the visitor's thumb. The frames' moving
+	 * positions still come from here, from the size the stylesheet resolved.
+	 */
 	const reelMetrics = $derived.by(() => {
 		const width = viewportWidth || 768;
 		const isNarrow = width < 640;
-		const frameSize = isNarrow ? Math.max(156, Math.min(200, Math.floor(width * 0.46))) : 256;
+		const frameSize =
+			measuredFrameSize || (isNarrow ? Math.max(156, Math.min(200, width * 0.46)) : 256);
 		const frameGap = isNarrow ? 10 : 14;
-		const viewportHeight = frameSize + (isNarrow ? 20 : 24);
-		const highlightSize = frameSize + (isNarrow ? 16 : 24);
 
-		return {
-			frameGap,
-			frameSize,
-			frameStep: frameSize + frameGap,
-			highlightSize,
-			viewportHeight
-		};
+		return { frameGap, frameSize, frameStep: frameSize + frameGap };
 	});
 
 	/*
@@ -360,12 +363,14 @@
 	$effect(() => {
 		if (!browser || !viewportEl) return;
 
-		viewportWidth = viewportEl.offsetWidth;
-		viewportResizeObserver?.disconnect();
-		viewportResizeObserver = new ResizeObserver(() => {
+		const measure = () => {
 			if (!viewportEl) return;
 			viewportWidth = viewportEl.offsetWidth;
-		});
+			measuredFrameSize = frameProbeEl?.getBoundingClientRect().width ?? 0;
+		};
+		measure();
+		viewportResizeObserver?.disconnect();
+		viewportResizeObserver = new ResizeObserver(measure);
 		viewportResizeObserver.observe(viewportEl);
 
 		return () => {
@@ -411,12 +416,8 @@
 	data-reel-state={reelState}
 	data-testid="film-reel"
 >
-	<div
-		class="reel-viewport"
-		bind:this={viewportEl}
-		data-testid="film-reel-track"
-		style={`--reel-frame-size:${reelMetrics.frameSize}px; --reel-highlight-size:${reelMetrics.highlightSize}px; --reel-viewport-height:${reelMetrics.viewportHeight}px;`}
-	>
+	<div class="reel-viewport" bind:this={viewportEl} data-testid="film-reel-track">
+		<div class="reel-frame-probe" bind:this={frameProbeEl} aria-hidden="true"></div>
 		{#each visibleSlots as slot (slot.key)}
 			{@const isSensitiveBlurred = isArtworkBlurred(slot.artwork, {
 				adultContentEnabled,
@@ -447,16 +448,22 @@
 
 <style>
 	.reel-container {
+		container: reel / inline-size;
 		width: 100%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 	}
 
+	/* The reel's sizes, for the width it has: 256px frames, or on a narrow reel
+	 * 46% of its width between 156px and 200px. */
 	.reel-viewport {
+		--reel-frame-size: 256px;
+		--reel-viewport-height: calc(var(--reel-frame-size) + 24px);
+		--reel-highlight-size: calc(var(--reel-frame-size) + 24px);
 		position: relative;
 		width: 100%;
-		height: var(--reel-viewport-height, 280px);
+		height: var(--reel-viewport-height);
 		overflow: hidden;
 		border-radius: 12px;
 		/* Static edge fade replaces the old per-frame blur depth cue */
@@ -539,6 +546,21 @@
 		font-size: 12px;
 		font-weight: 900;
 		color: var(--color-paper-bright);
+	}
+
+	@container reel (max-width: 639.98px) {
+		.reel-viewport {
+			--reel-frame-size: clamp(156px, 46cqw, 200px);
+			--reel-viewport-height: calc(var(--reel-frame-size) + 20px);
+			--reel-highlight-size: calc(var(--reel-frame-size) + 16px);
+		}
+	}
+
+	.reel-frame-probe {
+		position: absolute;
+		width: var(--reel-frame-size);
+		height: 0;
+		visibility: hidden;
 	}
 
 	.center-highlight {

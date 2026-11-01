@@ -744,14 +744,14 @@
 									{#if artwork.isHidden}
 										<!-- Seen only by its author and moderators; nobody else can open it. -->
 										<p
-											class="truncate text-[0.62rem] font-black tracking-[0.12em] text-danger-bright uppercase"
+											class="truncate text-[0.75rem] font-black tracking-[0.12em] text-danger-bright uppercase"
 										>
 											Hidden · pending review
 										</p>
 									{/if}
 									{#if forkAttribution}
 										<p
-											class="truncate text-[0.62rem] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
+											class="truncate text-[0.75rem] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
 										>
 											{forkAttribution}
 										</p>
@@ -821,7 +821,9 @@
 								</GameButton>
 							</div>
 							<div class="postcard-footer">
-								<span class="postcard-edge-print">Not the Louvre · Gallery Post</span>
+								<span class="postcard-edge-print" aria-hidden="true"
+									>Not the Louvre · Gallery Post</span
+								>
 								<button
 									type="button"
 									class="flip-tape focus-ring"
@@ -988,7 +990,7 @@
 										</p>
 										<p class="postcard-address-line">
 											<span class="postcard-address-field">From:</span>
-											{artwork.artist}
+											<span class="postcard-address-value">{artwork.artist}</span>
 										</p>
 
 										<p class="postcard-address-line postcard-address-blank"></p>
@@ -1279,7 +1281,7 @@
 	.postcard-meta {
 		margin: 2px 0 0;
 		font-family: var(--font-display);
-		font-size: 0.62rem;
+		font-size: 0.75rem;
 		font-weight: 600;
 		letter-spacing: 0.16em;
 		text-transform: uppercase;
@@ -1386,6 +1388,8 @@
 	}
 
 	.postcard-edge-print {
+		min-width: 0;
+		overflow: hidden;
 		font-family: var(--font-display);
 		font-size: 0.56rem;
 		font-weight: 500;
@@ -1395,6 +1399,18 @@
 		white-space: nowrap;
 	}
 
+	/* On a phone-wide card the printed line gives way to the comments tape,
+	 * which would otherwise be pushed off the card's edge. */
+	@media (max-width: 30rem) {
+		.postcard-edge-print {
+			display: none;
+		}
+
+		.postcard-footer {
+			justify-content: flex-end;
+		}
+	}
+
 	/* Washi tape with writing on it — the flip affordance. It names WHY you
 		* flip (the comments live on the back) and reuses the 💬 N chip language
 		* of the polaroid cards. In-flow and filter-free on purpose (preserve-3d).
@@ -1402,6 +1418,7 @@
 		* clip-path line — the rest survives. */
 	.flip-tape {
 		position: relative;
+		flex-shrink: 0;
 		border: 0;
 		cursor: pointer;
 		display: inline-flex;
@@ -1470,7 +1487,7 @@
 		border-radius: 9999px;
 		border: 2px solid #4a3a2c;
 		background: var(--color-paper-card);
-		font-size: 0.72rem;
+		font-size: 0.75rem;
 		font-weight: 700;
 	}
 
@@ -1562,7 +1579,7 @@
 		flex-shrink: 0;
 		margin: 0 0 4px;
 		font-family: var(--font-display);
-		font-size: 0.62rem;
+		font-size: 0.75rem;
 		font-weight: 700;
 		letter-spacing: 0.2em;
 		text-transform: uppercase;
@@ -1637,7 +1654,7 @@
 		min-width: 0;
 		flex-shrink: 0;
 		padding-inline: 13px;
-		font-size: 11px;
+		font-size: 0.75rem;
 		/* The sticker's motion is three separate properties (transform, rotate
 		 * and the standalone scale the global `button:active` press also uses),
 		 * so all three have to be pinned or `transform: none` cancels none of it.
@@ -1756,9 +1773,15 @@
 		color: #3f3329;
 	}
 
+	/* A long nickname breaks rather than running off the card. */
+	.postcard-address-value {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
 	.postcard-address-field {
 		font-family: var(--font-display);
-		font-size: 0.6rem;
+		font-size: 0.75rem;
 		font-weight: 700;
 		letter-spacing: 0.14em;
 		text-transform: uppercase;
@@ -1780,7 +1803,7 @@
 		* flip, drop the mask-image line — the rest survives. */
 	.postcard-ink-stamp {
 		font-family: var(--font-display);
-		font-size: 0.66rem;
+		font-size: 0.75rem;
 		font-weight: 700;
 		letter-spacing: 0.14em;
 		text-transform: uppercase;

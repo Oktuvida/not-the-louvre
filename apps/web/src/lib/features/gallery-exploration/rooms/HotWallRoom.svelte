@@ -133,7 +133,7 @@
 						class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[rgba(45,36,32,0.85)] to-transparent p-6 pt-16"
 					>
 						<div
-							class="mb-1 inline-block rounded-full bg-alert px-3 py-1 text-xs font-black tracking-wider text-white uppercase"
+							class="mb-1 inline-block rounded-full bg-danger-deep px-3 py-1 text-xs font-black tracking-wider text-white uppercase"
 						>
 							Hottest right now
 						</div>

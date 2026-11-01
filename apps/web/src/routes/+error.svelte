@@ -48,20 +48,12 @@
 		</p>
 
 		<div class="flex flex-wrap justify-center gap-4">
-			<GameLink
-				href="/"
-				variant="primary"
-				className="rotate-1 border-4 px-8 py-4 shadow-xl font-body"
-			>
+			<GameLink href="/" variant="primary" size="lg" className="rotate-1 shadow-xl">
 				<House class="mr-3 h-6 w-6" />
 				<span class="text-lg">Go Home</span>
 			</GameLink>
 
-			<GameLink
-				href="/draw"
-				variant="secondary"
-				className="-rotate-1 border-4 px-8 py-4 shadow-xl font-body"
-			>
+			<GameLink href="/draw" variant="secondary" size="lg" className="-rotate-1 shadow-xl">
 				<Paintbrush class="mr-3 h-6 w-6" />
 				<span class="text-lg">Start Drawing</span>
 			</GameLink>
