@@ -1,0 +1,398 @@
+/*
+ * The studio, for every shape of window.
+ *
+ * One page, four pieces: the book with the canvas, the drawing's notes (title,
+ * 18+, fork), the supplies tray and the buttons. This sheet alone decides where
+ * they go and how big they are, the way gallery-grid.css owns the gallery:
+ * the components only bring their looks, and read the measures below through
+ * custom properties (--studio-* for the book, --tray-* for the tray,
+ * --actions-* for the buttons).
+ *
+ * Proportions are fixed and sizes are fluid. Every piece is in rem, and rem
+ * grows with the window like in the gallery. The canvas is always square and
+ * as big as the window allows once the other pieces have their room: the
+ * smaller of what the height and the width leave. Nothing is a fixed pixel
+ * size; the only floors are physical ones (a fingertip, readable text), which
+ * is why rem never goes below 100% and a crowded window gets another layout
+ * rather than smaller pieces.
+ *
+ * The layouts, picked by the window's shape (cascade order matters, the later
+ * ones win where queries overlap):
+ *  - compact desk: any window wider than tall (a tablet held sideways, 4:3, a
+ *    phone held sideways). The book, and a column with notes, tray, buttons.
+ *  - desk: windows at least 8:5 with room in height (laptops, desktops). The
+ *    open book with the notes lying on its cover, the tray to the right.
+ *  - tower: windows taller than wide (a tablet held upright). Notes on top,
+ *    the page, then the tray as a band with the buttons beside it.
+ *  - pocket: narrow windows (a phone). Page, tray strip, notes, buttons.
+ * The tower and the pocket have no cover; DrawingBookStage reads that from
+ * here and the page is open from the start.
+ */
+
+/* In the studio rem grows with the window, as in the gallery: 16px at a
+ * 1512×860 laptop, up to one and a half times on a big screen. */
+html:has(.studio-page) {
+	font-size: clamp(100%, min(100vw / 94.5, 100dvh / 53.75), 150%);
+}
+
+/* The audio tab joins the header row instead of covering the desk. */
+body:has(.studio-page) .ambient-tab-shell {
+	top: 0;
+	bottom: auto;
+}
+
+.studio-page {
+	--studio-margin: 1.5rem;
+	--studio-header: 5rem;
+	--studio-gap: 1.75rem;
+	--studio-book-edge: 0.5rem;
+	--studio-book-border: 3px;
+	--studio-spine: 14px;
+	--studio-inside-cover: 1.25rem;
+	--studio-page-pad: 1.75rem;
+	--studio-page-top: 1.75rem;
+	--studio-page-foot: 3.25rem;
+	--studio-notes-w: 19rem;
+	--studio-tools-w: 16rem;
+	--studio-column-w: 21rem;
+
+	/* What the book adds round the canvas, across and down. */
+	--studio-book-x: calc(
+		2 * var(--studio-book-edge) + 2 * var(--studio-book-border) + var(--studio-spine) +
+			var(--studio-inside-cover) + 1px + 2 * var(--studio-page-pad)
+	);
+	--studio-book-y: calc(
+		2 * var(--studio-book-edge) + 2 * var(--studio-book-border) + var(--studio-page-top) +
+			var(--studio-page-foot)
+	);
+	--studio-from-height: calc(
+		100dvh - var(--studio-header) - var(--studio-margin) - var(--studio-book-y)
+	);
+
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	height: 100dvh;
+	overflow: hidden;
+}
+
+/* The desk under everything, in this sheet rather than utility classes so the
+ * page keeps its shape wherever it is rendered. */
+.studio-desk {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	pointer-events: none;
+}
+
+.studio-desk-image {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center 115%;
+	scale: 1.4;
+}
+
+.studio-header {
+	position: relative;
+	z-index: 30;
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	height: var(--studio-header);
+	padding: 0 var(--studio-margin);
+}
+
+.studio-layout {
+	position: relative;
+	z-index: 10;
+	display: grid;
+	flex: 1;
+	min-height: 0;
+	justify-content: center;
+	align-content: start;
+	padding: 0 var(--studio-margin) var(--studio-margin);
+	/* Never sideways. Down only where a window is too short for everything (a
+	 * small phone, a phone held sideways). */
+	overflow-x: hidden;
+	overflow-y: auto;
+	scrollbar-width: none;
+}
+
+.studio-book {
+	grid-area: book;
+	justify-self: start;
+	align-self: start;
+	transition: transform 800ms var(--ease-glide);
+}
+
+.studio-notes {
+	grid-area: notes;
+	position: relative;
+	z-index: 6;
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.studio-tools {
+	grid-area: tools;
+	align-self: start;
+}
+
+.studio-actions {
+	grid-area: actions;
+	align-self: start;
+}
+
+/* ---------------------------------------------------------------- compact desk */
+
+@media (min-aspect-ratio: 11/10) {
+	/* A closed sketchbook lies a little crooked on the desk until it is opened. */
+	.studio-page[data-book-state='closed'] .studio-book {
+		transform: rotate(-3deg) scale(0.94);
+	}
+
+	.studio-page {
+		--studio-canvas: min(
+			var(--studio-from-height),
+			100vw - 2 * var(--studio-margin) - var(--studio-book-x) - var(--studio-gap) -
+				var(--studio-column-w)
+		);
+	}
+
+	/* The cover opens off the left edge; the notes move into the column. */
+	.studio-layout {
+		grid-template-columns: auto var(--studio-column-w);
+		grid-template-rows: auto auto 1fr;
+		grid-template-areas:
+			'book notes'
+			'book tools'
+			'book actions';
+		column-gap: var(--studio-gap);
+	}
+
+	.studio-notes {
+		gap: 0.875rem;
+		padding-top: 0.75rem;
+	}
+
+	.studio-tools {
+		--tray-palette-columns: 8;
+		--tray-tilt: 0.8deg;
+		margin-top: 1.5rem;
+	}
+
+	.studio-actions {
+		--actions-direction: row-reverse;
+		--actions-publish-flex: 1 1 auto;
+		--actions-clear-align: stretch;
+		margin-top: 1.25rem;
+	}
+}
+
+/* ------------------------------------------------------------------------ desk */
+
+@media (min-aspect-ratio: 8/5) and (min-height: 30rem) {
+	.studio-page {
+		--studio-canvas: min(
+			var(--studio-from-height),
+			100vw - 2 * var(--studio-margin) - var(--studio-notes-w) - var(--studio-book-x) -
+				var(--studio-gap) - var(--studio-tools-w)
+		);
+	}
+
+	/* The open book: the notes lie on its cover, beside the spine. */
+	.studio-layout {
+		grid-template-columns: var(--studio-notes-w) auto var(--studio-tools-w);
+		grid-template-rows: auto 1fr;
+		grid-template-areas:
+			'notes book tools'
+			'notes book actions';
+		column-gap: 0;
+	}
+
+	.studio-notes {
+		align-items: flex-end;
+		gap: 1.25rem;
+		padding: 5.5rem 1.75rem 0 0;
+	}
+
+	.studio-notes .cover-postit {
+		width: 15rem;
+	}
+
+	.studio-tools {
+		--tray-palette-columns: 6;
+		--tray-tilt: 1.2deg;
+		margin: 0.75rem 0 0 var(--studio-gap);
+	}
+
+	.studio-actions {
+		--actions-direction: column;
+		--actions-publish-flex: 0 0 auto;
+		--actions-clear-align: center;
+		margin: 1.5rem 0 0 var(--studio-gap);
+	}
+}
+
+/* ----------------------------------------------------------------------- tower */
+
+@media (max-aspect-ratio: 11/10) {
+	.studio-page {
+		--studio-spine: 0.875rem;
+		--studio-inside-cover: 0rem;
+		--studio-inside-cover-display: none;
+		--studio-cover-display: none;
+		--studio-page-foot: 2.75rem;
+		--studio-notes-h: 5.5rem;
+		--studio-tools-h: 14rem;
+		--studio-row-gap: 1rem;
+		--studio-canvas: min(
+			100vw - 2 * var(--studio-margin) - var(--studio-book-x),
+			var(--studio-from-height) - var(--studio-notes-h) - var(--studio-tools-h) - 2 *
+				var(--studio-row-gap)
+		);
+	}
+
+	.studio-layout {
+		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-areas:
+			'notes notes'
+			'book book'
+			'tools actions';
+		row-gap: var(--studio-row-gap);
+		column-gap: 1rem;
+		justify-content: stretch;
+	}
+
+	.studio-book {
+		justify-self: center;
+	}
+
+	.studio-notes {
+		flex-direction: row;
+		align-items: flex-start;
+		gap: 1.5rem;
+	}
+
+	.studio-notes .cover-postit {
+		flex: 1 1 0;
+	}
+
+	.studio-notes .cover-postit-title {
+		flex-grow: 1.4;
+	}
+
+	.studio-tools {
+		--tray-areas: 'palette palette' 'brush tools' 'ink ink';
+		--tray-columns: minmax(0, 1fr) auto;
+		--tray-palette-columns: 12;
+		--tray-brush-direction: row;
+		--tray-brush-align: center;
+		--tray-brush-gap: 0.75rem;
+		--tray-brush-scrap: none;
+		--tray-brush-preview-gap: 0;
+		--tray-tools-gap: 0;
+		--tray-tools-align: center;
+		--tray-section-gap: 0.5rem;
+		--tray-print: none;
+		--tray-tilt: -0.5deg;
+		width: 100%;
+	}
+
+	.studio-actions {
+		--actions-direction: column;
+		--actions-clear-align: stretch;
+		align-self: center;
+	}
+}
+
+/* ---------------------------------------------------------------------- pocket */
+
+@media (max-width: 39.99rem) {
+	.studio-page {
+		--studio-margin: 0.75rem;
+		--studio-header: 4rem;
+		--studio-book-edge: 0rem;
+		--studio-spine: 0px;
+		--studio-spine-display: none;
+		--studio-inside-cover: 0rem;
+		--studio-inside-cover-display: none;
+		--studio-cover-display: none;
+		--studio-page-pad: 0.625rem;
+		--studio-page-top: 0.625rem;
+		--studio-page-foot: 0.625rem;
+		--studio-tagline-display: none;
+		--studio-canvas: calc(100vw - 2 * var(--studio-margin) - var(--studio-book-x));
+	}
+
+	.studio-layout {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas:
+			'book'
+			'tools'
+			'notes'
+			'actions';
+		row-gap: 0.875rem;
+	}
+
+	.studio-notes {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.75rem;
+	}
+
+	.studio-notes .cover-postit {
+		flex: none;
+	}
+
+	/* A strip of paint to swipe through, and one row of brush and tools. */
+	.studio-tools {
+		--tray-areas: 'palette palette' 'brush tools' 'ink ink';
+		--tray-columns: minmax(0, 1fr) auto;
+		--tray-column-gap: 0.5rem;
+		--tray-padding: 14px 12px;
+		--tray-palette-label: none;
+		--tray-palette-template: none;
+		--tray-palette-flow: column;
+		--tray-palette-cell: 2.75rem;
+		--tray-palette-overflow: auto;
+		--tray-palette-gap: 2px;
+		--tray-palette-padding: 5px;
+		--tray-brush-label: none;
+		--tray-brush-direction: row;
+		--tray-brush-align: center;
+		--tray-brush-gap: 0.5rem;
+		--tray-brush-scrap: none;
+		--tray-brush-preview-gap: 0;
+		--tray-tools-gap: 0;
+		--tray-tools-align: center;
+		--tray-section-gap: 0.375rem;
+		--tray-eraser-flex: 0 0 auto;
+		--tray-tool-text-position: absolute;
+		--tray-tool-text-size: 1px;
+		--tray-tool-text-clip: inset(50%);
+		--tray-print: none;
+		--tray-tilt: -0.5deg;
+	}
+
+	.studio-actions {
+		--actions-direction: row-reverse;
+		--actions-publish-flex: 1 1 auto;
+		--actions-clear-align: stretch;
+	}
+}
+
+/* A short window (a phone held sideways) keeps the canvas big by trimming the
+ * margins, the header and the page's tagline. */
+@media (max-height: 30rem) {
+	.studio-page {
+		--studio-margin: 0.75rem;
+		--studio-header: 3.5rem;
+		--studio-book-edge: 0.25rem;
+		--studio-page-top: 0.75rem;
+		--studio-page-foot: 0.75rem;
+		--studio-tagline-display: none;
+	}
+}

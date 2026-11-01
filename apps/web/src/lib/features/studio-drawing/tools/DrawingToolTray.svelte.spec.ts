@@ -8,23 +8,12 @@ import '../../../../routes/layout.css';
 import DrawingToolTray from './DrawingToolTray.svelte';
 
 describe('DrawingToolTray', () => {
-	it('triggers clear and publish actions from the tray buttons', async () => {
-		const onClear = vi.fn();
-		const onPublish = vi.fn();
+	// The range input used to be 8px tall: a finger or a pen missed it.
+	it('has a brush size slider big enough to grab with a finger', async () => {
+		await render(DrawingToolTray, {});
 
-		await render(DrawingToolTray, { onClear, onPublish });
-
-		await expect
-			.element(page.getByRole('button', { name: 'Clear' }))
-			.toHaveAttribute('data-sticker-variant', 'danger');
-		await expect
-			.element(page.getByRole('button', { name: 'Publish' }))
-			.toHaveAttribute('data-sticker-variant', 'secondary');
-		await page.getByRole('button', { name: 'Clear' }).click();
-		await page.getByRole('button', { name: 'Publish' }).click();
-
-		expect(onClear).toHaveBeenCalled();
-		expect(onPublish).toHaveBeenCalled();
+		const slider = page.getByRole('slider', { name: 'Brush size' }).element();
+		expect(slider.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
 	});
 
 	it('offers undo and redo only when there is a line to take back or put back', async () => {
@@ -70,12 +59,6 @@ describe('DrawingToolTray', () => {
 		await tray.rerender({ inkUsed: 1 });
 		await expect.element(meter).toHaveAttribute('aria-valuenow', '0');
 		await expect.element(page.getByText('Out of ink')).toBeVisible();
-	});
-
-	it('disables publish while a publish request is in flight', async () => {
-		await render(DrawingToolTray, { isPublishing: true });
-
-		await expect.element(page.getByRole('button', { name: 'Publishing…' })).toBeDisabled();
 	});
 
 	it('is cut from the same paper as every other sheet in the museum', async () => {
@@ -124,16 +107,5 @@ describe('DrawingToolTray', () => {
 		const styles = getComputedStyle(slider as HTMLInputElement);
 		expect(styles.outlineStyle).toBe('solid');
 		expect(styles.outlineWidth).toBe('3px');
-	});
-
-	it('shows the full color palette directly on mobile', async () => {
-		await render(DrawingToolTray, { mobile: true });
-
-		await expect
-			.element(page.getByRole('button', { name: `Select color ${drawingPalette[10]}` }))
-			.toBeVisible();
-		await expect
-			.element(page.getByRole('button', { name: /more colors/i }))
-			.not.toBeInTheDocument();
 	});
 });
