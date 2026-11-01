@@ -117,28 +117,28 @@
 	onkeydown={handleKeydown}
 >
 	<div
-		class="polaroid relative bg-paper-card p-[8px] pb-0 shadow-sheet transition duration-200 group-hover:z-5 group-hover:scale-[1.06] group-active:scale-[0.97]"
+		class="polaroid relative bg-paper-card p-[0.5em] pb-0 shadow-sheet transition duration-200 group-hover:z-5 group-hover:scale-[1.06] group-active:scale-[0.97]"
 	>
 		<!-- Paint stain decoration -->
 		<div
 			class="pointer-events-none absolute rounded-full opacity-100"
 			style={`
 				background: ${stainColor};
-				width: ${28 + (seed % 20)}px;
-				height: ${24 + (seed % 16)}px;
-				${stainVariant === 0 ? 'bottom: 12px; right: -6px;' : stainVariant === 1 ? 'top: -4px; right: 10px;' : stainVariant === 2 ? 'bottom: 8px; left: -4px;' : stainVariant === 3 ? 'top: 50%; left: -8px;' : 'bottom: -4px; right: 14px;'}
-				filter: blur(4px);
+				width: ${(28 + (seed % 20)) / 16}em;
+				height: ${(24 + (seed % 16)) / 16}em;
+				${stainVariant === 0 ? 'bottom: 0.75em; right: -0.375em;' : stainVariant === 1 ? 'top: -0.25em; right: 0.625em;' : stainVariant === 2 ? 'bottom: 0.5em; left: -0.25em;' : stainVariant === 3 ? 'top: 50%; left: -0.5em;' : 'bottom: -0.25em; right: 0.875em;'}
+				filter: blur(0.25em);
 				transform: rotate(${(seed % 40) - 20}deg);
 			`}
 		></div>
 
 		{#if attachment === 'tape'}
 			<div
-				class={`pointer-events-none absolute z-3 h-4 w-12 border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)] ${tapeVariant === 0 ? 'top-[-7px] left-1/2 -translate-x-1/2 -rotate-3' : tapeVariant === 1 ? 'top-[-6px] left-2 rotate-[12deg]' : 'top-[-6px] right-[6px] -rotate-[8deg]'}`}
+				class={`pointer-events-none absolute z-3 h-[1em] w-[3em] border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)] ${tapeVariant === 0 ? 'top-[-0.4375em] left-1/2 -translate-x-1/2 -rotate-3' : tapeVariant === 1 ? 'top-[-0.375em] left-[0.5em] rotate-[12deg]' : 'top-[-0.375em] right-[0.375em] -rotate-[8deg]'}`}
 			></div>
 		{:else}
 			<div
-				class={`polaroid-pin pointer-events-none absolute top-[-6px] left-1/2 z-4 h-[14px] w-[14px] -translate-x-1/2 rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)] ${pinClass}`}
+				class={`polaroid-pin pointer-events-none absolute top-[-0.375em] left-1/2 z-4 h-[0.875em] w-[0.875em] -translate-x-1/2 rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)] ${pinClass}`}
 			></div>
 		{/if}
 
@@ -146,7 +146,7 @@
 		<div class="relative aspect-square overflow-hidden border border-hairline">
 			{#if isFork}
 				<div
-					class="absolute top-3 left-3 z-10 rounded-full border-2 border-ink-warm bg-[#f7d58a] px-3 py-1 text-[0.65rem] font-black tracking-[0.18em] text-ink-warm uppercase shadow-md"
+					class="absolute top-[0.75em] left-[0.75em] z-10 rounded-full border-2 border-ink-warm bg-[#f7d58a] px-[0.75em] py-[0.25em] text-[0.65em] font-black tracking-[0.18em] text-ink-warm uppercase shadow-md"
 				>
 					Forked
 				</div>
@@ -155,7 +155,7 @@
 				<!-- Only its author (in their studio) and moderators ever see a
 				     hidden artwork: the label says why nobody else does. -->
 				<div
-					class="absolute bottom-3 left-3 z-10 rounded-full border-2 border-ink-warm bg-paper-bright px-3 py-1 text-[0.65rem] font-black tracking-[0.12em] text-ink-warm uppercase shadow-md"
+					class="absolute bottom-[0.75em] left-[0.75em] z-10 rounded-full border-2 border-ink-warm bg-paper-bright px-[0.75em] py-[0.25em] text-[0.65em] font-black tracking-[0.12em] text-ink-warm uppercase shadow-md"
 				>
 					Hidden · pending review
 				</div>
@@ -175,9 +175,9 @@
 		</div>
 
 		<!-- Caption area -->
-		<div class="flex items-start gap-3 px-[6px] pt-2 pb-[10px]">
+		<div class="flex items-start gap-[0.75em] px-[0.375em] pt-[0.5em] pb-[0.625em]">
 			<div
-				class="flex h-8 w-8 min-w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-[2.5px] border-ink-warm bg-sand shadow-[1px_2px_4px_rgba(0,0,0,0.15)]"
+				class="flex h-[2em] w-[2em] min-w-[2em] shrink-0 items-center justify-center overflow-hidden rounded-full border-[0.15625em] border-ink-warm bg-sand shadow-[1px_2px_4px_rgba(0,0,0,0.15)]"
 			>
 				{#if artwork.artistAvatar}
 					<!-- The artwork is what the visitor came for: keep the avatar out of
@@ -197,17 +197,17 @@
 
 			<div class="min-w-0 flex-1">
 				<p
-					class="truncate text-[1.05rem] leading-[1.2] font-semibold text-ink-warm"
+					class="truncate text-[1.05em] leading-[1.2] font-semibold text-ink-warm"
 					style="font-family: var(--font-hand);"
 				>
 					{artwork.title}
 				</p>
-				<p class="truncate text-[0.82rem] text-muted-ink" style="font-family: var(--font-hand);">
+				<p class="truncate text-[0.82em] text-muted-ink" style="font-family: var(--font-hand);">
 					{artwork.artist}
 				</p>
 				{#if isFork}
 					<p
-						class="truncate font-display text-[0.7rem] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
+						class="truncate font-display text-[0.7em] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
 					>
 						{forkParentTitle ? `From ${forkParentTitle}` : 'Forked artwork'}
 					</p>
@@ -215,7 +215,7 @@
 			</div>
 
 			<div
-				class="shrink-0 pt-0.5 text-right font-display text-[0.7rem] leading-[1.2] tracking-[0.04em] text-muted-ink"
+				class="shrink-0 pt-[0.125em] text-right font-display text-[0.7em] leading-[1.2] tracking-[0.04em] text-muted-ink"
 			>
 				<div data-testid={testId ? `${testId}-score` : undefined}>
 					&#11088; {artwork.score}
@@ -237,6 +237,20 @@
 	.polaroid-card {
 		rotate: var(--card-rotate, 0deg);
 		transition: rotate var(--duration-ui) ease;
+		/* The card is drawn to its own width, like a picture: everything inside
+		 * is in em, and the em comes from how wide the card is, so a card on a
+		 * big screen is the same polaroid scaled up rather than a bigger photo
+		 * with the same small caption. 16px on a 373px card, the laptop size.
+		 * The card takes its width from where it is placed (a grid cell), never
+		 * from its content, which is what lets it be a size container; that is
+		 * load-bearing, so it is set here rather than with utility classes. */
+		display: block;
+		width: 100%;
+		container-type: inline-size;
+	}
+
+	.polaroid {
+		font-size: clamp(0.8125rem, 4.29cqi, 1.5rem);
 	}
 
 	.polaroid-card:hover {
@@ -250,29 +264,29 @@
 	}
 
 	.pin-blue {
-		background: radial-gradient(circle at 4px 4px, #4a90d9, #2d6bb5);
+		background: radial-gradient(circle at 0.25em 0.25em, #4a90d9, #2d6bb5);
 	}
 
 	.pin-red {
-		background: radial-gradient(circle at 4px 4px, var(--color-alert), #c0392b);
+		background: radial-gradient(circle at 0.25em 0.25em, var(--color-alert), #c0392b);
 	}
 
 	.pin-green {
-		background: radial-gradient(circle at 4px 4px, #5dba5d, #3a8f3a);
+		background: radial-gradient(circle at 0.25em 0.25em, #5dba5d, #3a8f3a);
 	}
 
 	.pin-yellow {
-		background: radial-gradient(circle at 4px 4px, var(--color-gold), #d4a017);
+		background: radial-gradient(circle at 0.25em 0.25em, var(--color-gold), #d4a017);
 	}
 
 	/* Pin highlight dot */
 	.polaroid-pin::after {
 		content: '';
 		position: absolute;
-		top: 3px;
-		left: 4px;
-		width: 4px;
-		height: 4px;
+		top: 0.1875em;
+		left: 0.25em;
+		width: 0.25em;
+		height: 0.25em;
 		background: rgba(255, 255, 255, 0.35);
 		border-radius: 50%;
 	}

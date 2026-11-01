@@ -24,6 +24,26 @@ const artwork = {
 } satisfies Artwork;
 
 describe('PolaroidCard', () => {
+	it('is drawn to its own width: a card half as wide again has a caption half as big again', async () => {
+		const captionSizeAt = async (width: number) => {
+			const holder = document.createElement('div');
+			holder.style.width = `${width}px`;
+			document.body.append(holder);
+			await render(PolaroidCard, { props: { artwork }, target: holder });
+			const title = [...holder.querySelectorAll('p')].find(
+				(element) => element.textContent?.trim() === artwork.title
+			)!;
+			const size = parseFloat(getComputedStyle(title).fontSize);
+			holder.remove();
+			return size;
+		};
+
+		const narrow = await captionSizeAt(320);
+		const wide = await captionSizeAt(480);
+
+		expect(wide / narrow).toBeCloseTo(1.5, 1);
+	});
+
 	it('tells its author when the artwork is hidden pending review', async () => {
 		const card = await render(PolaroidCard, { artwork });
 

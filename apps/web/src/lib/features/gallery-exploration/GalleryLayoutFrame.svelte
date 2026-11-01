@@ -72,7 +72,7 @@
 		</div>
 
 		<div
-			class="pointer-events-auto absolute top-3 right-3 z-20 flex flex-row items-start gap-2 md:top-6 md:right-8 md:max-w-none md:flex-col md:items-end md:gap-3"
+			class="pointer-events-auto absolute top-3 right-3 z-20 flex flex-row items-start gap-2 md:top-6 md:right-8 md:max-w-none xl:flex-col xl:items-end xl:gap-3"
 		>
 			{#if viewer}
 				<GameLink
@@ -124,7 +124,10 @@
 			{/if}
 		</div>
 
-		<div class="pointer-events-auto mx-auto max-w-full px-12 pt-15 md:w-fit md:px-0 md:pt-1">
+		<!-- The tabs share the top line with Back and the actions only from xl:
+		     narrower, the four of them plus a signed-in artist's two actions
+		     ran into each other, so they sit on a line of their own. -->
+		<div class="pointer-events-auto mx-auto max-w-full px-12 pt-15 xl:w-fit xl:px-0 xl:pt-1">
 			<GalleryRoomNav {roomId} {viewer} />
 		</div>
 	</div>
@@ -154,6 +157,16 @@
 	 * mounted the canvas matches the wall and late tiles become invisible. */
 	:global(body:has([data-testid='gallery-room-shell'])) {
 		background: var(--color-wall);
+	}
+
+	/* A big screen gets a bigger gallery, not only a wider one. Past 1440px the
+	 * gallery's rem grows with the window, up to half as big again at 2160px,
+	 * so the room's furniture (the podium, the lead artwork, the notes, the
+	 * header), the grid's cards and gaps and the postcard all scale together,
+	 * while the grid also gains columns as it widens. Media queries keep the
+	 * browser's own rem, so no breakpoint moves. */
+	:global(html:has([data-testid='gallery-room-shell'])) {
+		font-size: clamp(100%, 100vw / 90, 150%);
 	}
 
 	/* The room's light, in one element.

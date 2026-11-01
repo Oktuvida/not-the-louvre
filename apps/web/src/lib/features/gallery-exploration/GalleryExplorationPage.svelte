@@ -862,7 +862,7 @@
 <div class="relative z-10" data-testid="gallery-room-content">
 	<p aria-live="polite" class="sr-only" data-testid="gallery-room-status">{roomStatusMessage}</p>
 	<div
-		class="relative z-10 mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8"
+		class="relative z-10 mx-auto flex max-w-[160rem] flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8"
 	>
 		{#if roomId === 'your-studio'}
 			<div class="mb-4 flex justify-start md:mb-6" data-testid="your-studio-room-note-flow">
@@ -876,8 +876,12 @@
 				/>
 			</div>
 		{:else}
+			<!-- The room's note sits above the room until the screen is wide enough
+			     (2xl) for it to hang in the wall beside the room's first pieces without
+			     covering any of them or the champion's medal; it never hangs past the
+			     window's edge. -->
 			<div
-				class="pointer-events-none mb-4 flex justify-center md:absolute md:top-5 md:-left-16 md:z-25 md:mb-0 md:rotate-[-20deg] md:justify-start"
+				class="pointer-events-none mb-4 flex justify-center 2xl:absolute 2xl:top-5 2xl:left-8 2xl:z-25 2xl:mb-0 2xl:rotate-[-12deg] 2xl:justify-start"
 				data-testid="gallery-room-note"
 			>
 				<PostItNote
@@ -893,7 +897,7 @@
 
 		{#if showSensitiveArtworkNote}
 			<div
-				class="pointer-events-none mb-4 flex justify-center md:mb-6 md:rotate-14 md:justify-end lg:absolute lg:top-20 lg:right-0 lg:z-26 lg:mb-0 xl:right-[max(-17.5rem,calc((80rem-100vw)/2))]"
+				class="pointer-events-none mb-4 flex justify-center md:mb-6 md:rotate-6 md:justify-end 2xl:absolute 2xl:top-20 2xl:right-8 2xl:z-26 2xl:mb-0 2xl:rotate-12"
 			>
 				<PostItNote
 					attachment="tape"
