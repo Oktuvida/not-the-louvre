@@ -11,6 +11,31 @@ test.describe('sign-in lockout', () => {
 		await resetDemoState(request);
 	});
 
+	test('a visitor who keeps mistyping is told why every time, and told to wait once locked out', async ({
+		page
+	}) => {
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Come In' }).click();
+		await page.getByPlaceholder('artist_123').fill('nobody_here');
+		await page.getByPlaceholder('Enter your password').fill('not-the-password');
+		const signIn = page.getByRole('button', { name: /^sign in$/i });
+		const wrong = page.getByText('Invalid nickname or password');
+
+		// Every wrong guess says so, the second as clearly as the first: the same
+		// answer twice is still an answer.
+		for (let guess = 1; guess <= 4; guess++) {
+			await signIn.click();
+			await expect(wrong).toBeVisible();
+		}
+
+		// The fifth trips the block, and every try after it says to wait.
+		for (let attempt = 1; attempt <= 2; attempt++) {
+			await signIn.click();
+			await expect(page.getByText(/too many|try again/i)).toBeVisible();
+		}
+	});
+
 	test('a visitor who forges X-Forwarded-For on every attempt is still locked out', async ({
 		baseURL,
 		page,
