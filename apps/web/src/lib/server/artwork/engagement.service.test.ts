@@ -884,7 +884,11 @@ describe('artwork engagement service', () => {
 					generateId: () => `report-delete-${index}`,
 					now: () => new Date(`2026-03-26T15:0${index}:00.000Z`),
 					repository,
-					storage: { delete: async () => undefined, upload: async () => undefined }
+					storage: {
+						delete: async () => undefined,
+						read: async () => new Uint8Array(),
+						upload: async () => undefined
+					}
 				}
 			);
 		}
@@ -894,7 +898,11 @@ describe('artwork engagement service', () => {
 			{ user: createUser('user-1') },
 			{
 				repository,
-				storage: { delete: async () => undefined, upload: async () => undefined }
+				storage: {
+					delete: async () => undefined,
+					read: async () => new Uint8Array(),
+					upload: async () => undefined
+				}
 			}
 		);
 
@@ -963,7 +971,11 @@ describe('artwork engagement service', () => {
 			{
 				now: () => now,
 				repository,
-				storage: { delete: async () => undefined, upload: async () => undefined }
+				storage: {
+					delete: async () => undefined,
+					read: async () => new Uint8Array(),
+					upload: async () => undefined
+				}
 			}
 		);
 
@@ -994,7 +1006,11 @@ describe('artwork engagement service', () => {
 			{
 				now: () => new Date('2026-03-26T17:05:00.000Z'),
 				repository,
-				storage: { delete: async () => undefined, upload: async () => undefined }
+				storage: {
+					delete: async () => undefined,
+					read: async () => new Uint8Array(),
+					upload: async () => undefined
+				}
 			}
 		);
 
@@ -1077,7 +1093,11 @@ describe('artwork engagement service', () => {
 			status: 'pending',
 			updatedAt: new Date('2026-03-26T16:56:00.000Z')
 		});
-		const storage = { delete: vi.fn(async () => undefined), upload: async () => undefined };
+		const storage = {
+			delete: vi.fn(async () => undefined),
+			read: async () => new Uint8Array(),
+			upload: async () => undefined
+		};
 
 		const deletedArtwork = await moderateArtwork(
 			{ action: 'delete', artworkId: 'artwork-1' },
@@ -1169,7 +1189,14 @@ describe('artwork engagement service', () => {
 			moderateArtwork(
 				{ action: 'hide', artworkId: 'artwork-1' },
 				{ user: createUser('user-1') },
-				{ repository, storage: { delete: async () => undefined, upload: async () => undefined } }
+				{
+					repository,
+					storage: {
+						delete: async () => undefined,
+						read: async () => new Uint8Array(),
+						upload: async () => undefined
+					}
+				}
 			)
 		).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403 });
 

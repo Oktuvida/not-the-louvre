@@ -794,4 +794,27 @@ describe('DrawingCanvas', () => {
 			expect(committed[0]).toMatchObject({ brush: 'eraser@1', color: '#fdfbf7' });
 		});
 	});
+
+	describe('drawing a fork', () => {
+		// The parent's image: its left half #d66b4d, its right half #406c8f.
+		const parentImage =
+			'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="2" height="2" viewBox="0 0 2 2"%3E%3Crect width="1" height="2" fill="%23d66b4d"/%3E%3Crect x="1" width="1" height="2" fill="%23406c8f"/%3E%3C/svg%3E';
+
+		it('draws over the image of the artwork it was forked from, which undo never takes away', async () => {
+			const { colourAt, documents, draw, history } = await renderCanvas({ backdrop: parentImage });
+
+			await vi.waitFor(() => expect(colourAt(100, 400)).toEqual([0xd6, 0x6b, 0x4d]));
+			expect(colourAt(668, 400)).toEqual([0x40, 0x6c, 0x8f]);
+
+			draw([100, 200], [668, 200]);
+			await vi.waitFor(() => expect(colourAt(384, 200)).toEqual(INK));
+			// Only the fork's own line is in its drawing.
+			expect(documents.at(-1)?.tail).toHaveLength(1);
+
+			history.undo();
+			expect(history.undo()).toBe(false);
+			await vi.waitFor(() => expect(colourAt(384, 200)).not.toEqual(INK));
+			expect(colourAt(100, 400)).toEqual([0xd6, 0x6b, 0x4d]);
+		});
+	});
 });

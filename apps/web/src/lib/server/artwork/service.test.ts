@@ -218,6 +218,7 @@ const createStorage = () => {
 	const deletes: string[] = [];
 
 	const storage: ArtworkStorage = {
+		read: async () => new Uint8Array(),
 		upload: vi.fn(async (key: string, file: File) => {
 			uploads.push({ key, file });
 		}),
@@ -358,7 +359,7 @@ describe('artwork service', () => {
 		expect(result.drawingVersion).toBe(2);
 		// The row only names the drawing, which lives in object storage.
 		expect(result.drawingDocument).toBeUndefined();
-		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(drawingDocument);
+		expect(runtime.prepareDrawingDocumentForStorage).toHaveBeenCalledWith(drawingDocument, {});
 		expect(uploads).toHaveLength(1);
 		expect(uploads[0]?.file.type).toBe('image/webp');
 		expect(readStoredDocument(artworks.get('artwork-1'))).toBe(

@@ -390,6 +390,7 @@ const asViewer = (profile: ProfileRecord) => ({
 
 const createStorage = () => {
 	const storage: ArtworkStorage = {
+		read: async () => new Uint8Array(),
 		upload: async () => undefined,
 		delete: async () => undefined
 	};

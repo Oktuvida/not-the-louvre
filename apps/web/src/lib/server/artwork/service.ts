@@ -358,11 +358,9 @@ export const publishArtwork = async (
 
 	const parentArtworkId = input.parentArtworkId?.trim() ? input.parentArtworkId.trim() : null;
 
-	if (parentArtworkId) {
-		const parentArtwork = await repository.findArtworkById(parentArtworkId);
-		if (!parentArtwork) {
-			throw new ArtworkFlowError(400, 'Fork parent artwork not found', 'INVALID_FORK_PARENT');
-		}
+	const parentArtwork = parentArtworkId ? await repository.findArtworkById(parentArtworkId) : null;
+	if (parentArtworkId && !parentArtwork) {
+		throw new ArtworkFlowError(400, 'Fork parent artwork not found', 'INVALID_FORK_PARENT');
 	}
 
 	// An artwork is its strokes: the image is rendered from them, never uploaded.
@@ -371,7 +369,32 @@ export const publishArtwork = async (
 		throw new ArtworkFlowError(400, 'Artwork drawing document is required', 'INVALID_MEDIA_FORMAT');
 	}
 
-	const preparedDocument = await prepareDrawingDocumentForStorage(providedDrawingDocument);
+	const artworkId = nextId();
+
+	/*
+	 * A v3 fork holds only its own strokes, painted over the image of the
+	 * artwork it was drawn on. It keeps its own copy of that image, so nothing
+	 * that later happens to the parent's files reaches it, and names the
+	 * parent's drawing for a timelapse to follow back. (A v1/v2 fork from an
+	 * older client still carries a copy of the parent's strokes, as before.)
+	 */
+	const parentImageCopyKey = parentArtwork
+		? `artworks/${actor.user.id}/${artworkId}.parent.${parentArtwork.mediaContentType.replace('image/', '')}`
+		: null;
+	const preparedDocument = await prepareDrawingDocumentForStorage(
+		providedDrawingDocument,
+		parentArtwork && parentImageCopyKey
+			? {
+					parent: {
+						artwork: parentArtwork.id,
+						...(parentArtwork.drawingDocumentKey
+							? { document: parentArtwork.drawingDocumentKey }
+							: {}),
+						image: parentImageCopyKey
+					}
+				}
+			: {}
+	);
 	if (preparedDocument.document.kind !== 'artwork') {
 		throw new ArtworkFlowError(
 			400,
@@ -380,14 +403,23 @@ export const publishArtwork = async (
 		);
 	}
 
-	const media = await renderDrawingDocumentMedia(preparedDocument.document);
+	const forkedByReference = parentArtwork !== null && preparedDocument.version === 3;
+	const parentImage = forkedByReference ? await storage.read(parentArtwork.storageKey) : undefined;
+	const media = await renderDrawingDocumentMedia(preparedDocument.document, parentImage);
 
-	const artworkId = nextId();
 	const extension = media.contentType.replace('image/', '');
 	const storageKey = `artworks/${actor.user.id}/${artworkId}.${extension}`;
 
-	// The drawing and its image go to object storage first; the row comes last
-	// and names both, so a reader never finds an artwork without its drawing.
+	// The drawing and its images go to object storage first; the row comes last
+	// and names them, so a reader never finds an artwork without its drawing.
+	if (parentImage && parentImageCopyKey) {
+		await storage.upload(
+			parentImageCopyKey,
+			new File([Uint8Array.from(parentImage)], 'parent', {
+				type: parentArtwork!.mediaContentType
+			})
+		);
+	}
 	const drawingDocumentKey = await documents.put(preparedDocument.compressed);
 	await storage.upload(storageKey, media.file);
 
@@ -414,9 +446,12 @@ export const publishArtwork = async (
 			updatedAt: now
 		});
 	} catch (error) {
-		// The image belongs to this request alone. The drawing stays: it is named
+		// The images belong to this request alone. The drawing stays: it is named
 		// by its content, so another artwork may already share it.
 		await storage.delete(storageKey).catch(() => {});
+		if (parentImage && parentImageCopyKey) {
+			await storage.delete(parentImageCopyKey).catch(() => {});
+		}
 
 		if (error instanceof ArtworkFlowError) {
 			throw error;

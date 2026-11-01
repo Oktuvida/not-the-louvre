@@ -205,7 +205,7 @@ describe('draw route page', () => {
 		).resolves.toMatchObject({ initialIsMobile: false });
 	});
 
-	it('loads fork parent artwork metadata when opening the draw route for a fork', async () => {
+	it('opens a fork on its parent’s image without loading the parent’s drawing', async () => {
 		mocked.getArtworkDetail.mockResolvedValueOnce({
 			author: { avatarUrl: null, id: 'user-9', nickname: 'parent_artist' },
 			childForks: [],
@@ -230,24 +230,17 @@ describe('draw route page', () => {
 		await expect(
 			load(createLoadEvent('http://localhost/draw?fork=artwork-parent'))
 		).resolves.toMatchObject({
+			// A fork is drawn over its parent's image; the parent's drawing stays put.
 			forkParent: {
-				drawingDocument: {
-					kind: 'artwork',
-					version: 2
-				},
+				drawingDocument: null,
 				id: 'artwork-parent',
 				mediaUrl: '/api/artworks/artwork-parent/media',
 				title: 'Parent Artwork'
 			}
 		});
-		expect(mocked.openStoredDrawingDocument).toHaveBeenCalledWith({
-			key: 'documents/parent.json.gz',
-			legacyBase64: null,
-			version: 2
-		});
+		expect(mocked.openStoredDrawingDocument).not.toHaveBeenCalled();
 		expect(mocked.getArtworkDetail).toHaveBeenCalledWith('artwork-parent', {
-			user: authenticatedUser,
-			withDrawingDocument: true
+			user: authenticatedUser
 		});
 	});
 

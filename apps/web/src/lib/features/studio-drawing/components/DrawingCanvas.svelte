@@ -43,6 +43,7 @@
 	} from '#lib/features/studio-drawing/canvas-view.js';
 
 	let {
+		backdrop = null,
 		canvasRef = $bindable<HTMLCanvasElement | null>(null),
 		drawingDocument = $bindable<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork')),
 		clearVersion = 0,
@@ -61,6 +62,8 @@
 		strokeColor,
 		strokeSize
 	}: {
+		/** The image a fork is drawn over: its parent's, by URL. */
+		backdrop?: string | null;
 		canvasRef?: HTMLCanvasElement | null;
 		drawingDocument?: DrawingDocumentV2;
 		clearVersion?: number;
@@ -527,6 +530,35 @@
 		commitDrawingDocument(cloneDrawingDocumentV2(baselineDocument));
 	});
 
+	// The parent's image under a fork's strokes, painted once it has loaded.
+	let backdropImage = $state<HTMLImageElement | null>(null);
+	let mounted = $state(false);
+	$effect(() => {
+		const source = backdrop;
+		if (!source) {
+			backdropImage = null;
+			return;
+		}
+
+		let current = true;
+		const image = new Image();
+		image.decoding = 'async';
+		image.src = source;
+		void image.decode().then(
+			() => {
+				if (current) backdropImage = image;
+			},
+			() => {}
+		);
+		return () => {
+			current = false;
+		};
+	});
+	$effect(() => {
+		const image = backdropImage;
+		if (mounted) surface?.setBackdrop(image);
+	});
+
 	// A document this canvas did not draw itself (opened, cleared, reset after
 	// publishing) is painted again whole.
 	$effect(() => {
@@ -570,6 +602,7 @@
 		shownDocument = drawingDocument;
 		inkSurface.showDocument(drawingDocument);
 		surface = inkSurface;
+		mounted = true;
 
 		const resizeObserver = new ResizeObserver(fitToBox);
 		resizeObserver.observe(canvas);
@@ -599,6 +632,7 @@
 			clearTimeout(refitTimer);
 			inkSurface.destroy();
 			surface = null;
+			mounted = false;
 		};
 	});
 </script>

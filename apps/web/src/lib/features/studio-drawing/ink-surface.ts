@@ -51,6 +51,8 @@ export type InkSurface = {
 	rewind(document: DrawingDocumentV2): void;
 	/** The stroke under the pen, and the points it is predicted to reach next. */
 	wet(stroke: DrawingStroke | null, predicted?: DrawingPoint[]): void;
+	/** The image a fork is drawn over, under every stroke; or none. */
+	setBackdrop(image: CanvasImageSource | null): void;
 	/** The brush cursor at a document point, or none; the eraser's is a ring. */
 	cursor(point: DrawingPoint | null, color: string, size: number, ring: boolean): void;
 	destroy(): void;
@@ -73,6 +75,7 @@ export const createInkSurface = (
 	const dry = document.createElement('canvas');
 	const checkpoint = document.createElement('canvas');
 	let shown: DrawingDocumentV2 | null = null;
+	let backdrop: CanvasImageSource | null = null;
 	// How many of the shown document's strokes the checkpoint holds.
 	let checkpointCount = 0;
 	let wetStroke: DrawingStroke | null = null;
@@ -117,6 +120,8 @@ export const createInkSurface = (
 		context.setTransform(1, 0, 0, 1, 0, 0);
 		context.fillStyle = options.paper ?? shown.background;
 		context.fillRect(0, 0, checkpoint.width, checkpoint.height);
+		// A fork's parent, as the server lays it under the fork's strokes.
+		if (backdrop) context.drawImage(backdrop, 0, 0, checkpoint.width, checkpoint.height);
 		if (options.decorate) {
 			useDocumentSpace(context, checkpoint);
 			context.save();
@@ -215,6 +220,11 @@ export const createInkSurface = (
 		wet(stroke, nextPredicted = []) {
 			wetStroke = stroke;
 			predicted = nextPredicted;
+			schedule();
+		},
+		setBackdrop(image) {
+			backdrop = image;
+			paintDry();
 			schedule();
 		},
 		cursor(point, color, size, ring) {

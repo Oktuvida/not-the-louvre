@@ -3,10 +3,10 @@ import postgres from 'postgres';
 import type { Sql } from 'postgres';
 import { getPlatformProxy, type PlatformProxy } from 'wrangler';
 import type { AppBucket } from '#lib/server/platform.js';
-import {
-	createEmptyDrawingDocument,
-	getRenderableDrawingStrokes
-} from '#lib/features/stroke-json/document.js';
+import { gunzipSync } from 'node:zlib';
+import { createEmptyDrawingDocument } from '#lib/features/stroke-json/document.js';
+import { decodeImage } from '#lib/server/media/codecs/index.js';
+import { encodeDrawingV3, type InkDocument } from '#lib/stroke/v3.js';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 // Same opt-in flag as the other integration suites: `bun run test:integration`.
@@ -178,7 +178,7 @@ describeWithDatabase('artwork media storage', () => {
 		}
 	});
 
-	it('keeps a published drawing out of its row and reopens it for a fork as drawn', async () => {
+	it('keeps a published drawing out of its row and opens a fork on its image', async () => {
 		const userId = `fork-user-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 		const user = createCanonicalUser(userId);
 
@@ -204,18 +204,104 @@ describeWithDatabase('artwork media storage', () => {
 			expect(row?.drawing_document).toBeNull();
 			expect(row?.drawing_document_key).toMatch(/^documents\/[0-9a-f]{64}\.json\.gz$/);
 
+			// A fork starts from the image, not from hundreds of KiB of strokes.
 			const { load } = await import('../../../draw/+page.server');
 			const data = (await load({
 				locals: { user },
 				request: new Request(`http://localhost/draw?fork=${artwork.id}`),
 				url: new URL(`http://localhost/draw?fork=${artwork.id}`)
 			} as never)) as {
-				forkParent: { drawingDocument: Parameters<typeof getRenderableDrawingStrokes>[0] };
+				forkParent: { drawingDocument: unknown; mediaUrl: string };
 			};
 
-			expect(getRenderableDrawingStrokes(data.forkParent.drawingDocument)).toEqual(DRAWN_STROKES);
+			expect(data.forkParent.drawingDocument).toBeNull();
+			expect(data.forkParent.mediaUrl).toBe(`/api/artworks/${artwork.id}/media?v=webp`);
 		} finally {
 			await deleteUser(sql, userId);
+		}
+	});
+
+	it('publishes a fork as its own strokes over a copy of the image it was drawn on', async () => {
+		const parentAuthor = `parent-user-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+		const forkAuthor = `fork-author-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+		try {
+			await insertUser(sql, parentAuthor);
+			await insertUser(sql, forkAuthor);
+			const { publishArtwork } = await import('#lib/server/artwork/service.js');
+			const parent = await publishArtwork(
+				{
+					drawingDocument: JSON.stringify({
+						...createEmptyDrawingDocument('artwork'),
+						strokes: [
+							{
+								color: '#2d2420',
+								points: [
+									[100, 100],
+									[668, 100]
+								],
+								size: 24
+							}
+						]
+					}),
+					title: 'The original'
+				},
+				{ ipAddress: '127.0.0.1', user: createCanonicalUser(parentAuthor) }
+			);
+			const ownStrokes: InkDocument = {
+				background: '#fdfbf7',
+				height: 768,
+				kind: 'artwork',
+				strokes: [
+					{
+						brush: 'round@1',
+						color: '#c84f4f',
+						pointer: 'mouse',
+						points: [
+							[384, 200],
+							[384, 700]
+						],
+						size: 24,
+						start: 0,
+						times: [0, 120]
+					}
+				],
+				width: 768
+			};
+
+			const fork = await publishArtwork(
+				{
+					drawingDocument: JSON.stringify(encodeDrawingV3(ownStrokes)),
+					parentArtworkId: parent.id,
+					title: 'The fork'
+				},
+				{ ipAddress: '127.0.0.1', user: createCanonicalUser(forkAuthor) }
+			);
+
+			const bucket = platform.bucket as AppBucket;
+			const bytesOf = async (key: string) =>
+				new Uint8Array(await new Response((await bucket.get(key))!.body).arrayBuffer());
+			const [row] = await sql<Array<{ drawing_document_key: string; storage_key: string }>>`
+				select drawing_document_key, storage_key from app.artworks where id = ${fork.id}`;
+			const stored = JSON.parse(gunzipSync(await bytesOf(row!.drawing_document_key)).toString());
+
+			// Only the fork's own stroke, and where it was drawn.
+			expect(stored.strokes).toHaveLength(1);
+			expect(stored.parent.artwork).toBe(parent.id);
+			// The backup: the fork keeps its own copy of the original's image.
+			expect(stored.parent.image.startsWith(`artworks/${forkAuthor}/`)).toBe(true);
+			expect(await bytesOf(stored.parent.image)).toEqual(await bytesOf(parent.storageKey));
+
+			const image = await decodeImage(await bytesOf(row!.storage_key), 'webp');
+			const at = (x: number, y: number) => {
+				const offset = (y * image.width + x) * 4;
+				return Array.from(image.data.slice(offset, offset + 3));
+			};
+			expect(at(200, 100)).toEqual([0x2d, 0x24, 0x20]);
+			expect(at(384, 400)).toEqual([0xc8, 0x4f, 0x4f]);
+		} finally {
+			await deleteUser(sql, forkAuthor);
+			await deleteUser(sql, parentAuthor);
 		}
 	});
 });
