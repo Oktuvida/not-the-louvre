@@ -105,7 +105,9 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Coordenadas a ¼ px, y forks por referencia a la imagen del padre: el estudio pinta el original como papel y el fork solo guarda sus trazos; el servidor los compone sobre su propia copia de la imagen del original.
 - [x] Fuera de producción los ganchos de prueba de la exportación (`__drawingExportMode`, `__avatarExportMode`, `__ntlBypassClientContentFilters`) y fuera las dos e2e en cuarentena: las e2e dibujan trazos reales, los fallos de publicación se simulan interceptando la red, y el filtro de texto del cliente corre de verdad.
 - [x] Escritor v3 (JSON columnar con deltas), pinceles versionados y golden images entre cliente y servidor: el estudio registra tiempo por punto, presión en 10 bits (solo de un lápiz que la da de verdad), puntero y pincel; publica v3 y el servidor lee v1, v2 y v3. El pincel `ink@1` (perfect-freehand) da ancho variable con la presión, con la misma ruta SVG en el lienzo y en resvg; tres imágenes de referencia comprueban que el servidor las reproduce al píxel y que el lienzo del navegador coincide con ellas.
-- [ ] Reproductor de timelapse y exportación a vídeo. Pruebas en iPad y Galaxy reales.
+- [x] Reproductor de timelapse: el botón con la claqueta de la postal reproduce la obra trazo a trazo en el sitio de la foto, con pausa, velocidad (1× a 16×; un dibujo largo empieza más rápido para durar unos 30 s) y una barra para ir a cualquier momento. Las pausas se recortan (entre trazos a 0,4 s, el lápiz quieto a mitad de trazo a 0,25 s), así que un descanso no se reproduce. Las obras anteriores a v3 no tienen tiempos y se reproducen a ritmo uniforme, en el orden en que se dibujaron. Un fork se reproduce sobre su copia de la imagen del original. El dibujo sale de `/api/artworks/[id]/timelapse` con la misma visibilidad que el detalle (una obra oculta solo para su autor y los moderadores, y fuera de toda caché compartida), y la copia, de `/timelapse/backdrop`.
+- [ ] Exportación del timelapse a vídeo.
+- [ ] Pruebas en iPad y Galaxy reales.
 
 ### 5. Modos de juego
 

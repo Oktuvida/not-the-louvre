@@ -8,8 +8,13 @@ import {
 	toCanonicalV2,
 	toEditableV2
 } from '#lib/stroke/legacy.js';
-import { decodeDrawingV3, encodeDrawingV3, type ParentReference } from '#lib/stroke/v3.js';
-import { fromInkDocument } from '#lib/features/stroke-json/ink-document.js';
+import {
+	decodeDrawingV3,
+	encodeDrawingV3,
+	type InkDocument,
+	type ParentReference
+} from '#lib/stroke/v3.js';
+import { fromInkDocument, toInkDocument } from '#lib/features/stroke-json/ink-document.js';
 
 // Drawings are stored gzipped (document-store.ts keeps the bytes): a v3
 // drawing as v3, with its time and pressure, and an older one as the canonical
@@ -69,6 +74,20 @@ export const decodeDrawingDocument = async (
 		return isVersion3(json)
 			? fromInkDocument(decodeDrawingV3(JSON.parse(json)))
 			: toEditableV2(parseLegacyDocument(json));
+	} catch (error) {
+		throw toArtworkFlowError(error);
+	}
+};
+
+/** A stored drawing as it was drawn: v3 with its timing, or an older one without. */
+export const decodeInkDocument = async (
+	compressed: Uint8Array<ArrayBuffer>
+): Promise<InkDocument> => {
+	try {
+		const json = await decodeLegacyPayload(compressed);
+		return isVersion3(json)
+			? decodeDrawingV3(JSON.parse(json))
+			: toInkDocument(toEditableV2(parseLegacyDocument(json)));
 	} catch (error) {
 		throw toArtworkFlowError(error);
 	}
