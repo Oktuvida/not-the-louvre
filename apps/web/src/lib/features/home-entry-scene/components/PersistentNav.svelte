@@ -143,8 +143,10 @@
 
 <div class="pointer-events-none absolute inset-0 z-30">
 	{#if user}
+		<!-- The visitor's own corner: who they are, and the way out. Its size and
+		     place come from HomeEntryPage, which keeps room for it above the window. -->
 		<div
-			class="pointer-events-auto absolute top-4 left-4 max-w-[calc(100vw-2rem)] transition-all duration-700 ease-in md:top-8 md:left-8 md:max-w-[22rem]"
+			class="home-account pointer-events-auto absolute flex items-start gap-3 transition-[translate,opacity] duration-700 ease-in"
 			class:-translate-x-[calc(100%+3rem)]={isExiting}
 			class:opacity-0={isExiting}
 			inert={isExiting}
@@ -155,6 +157,19 @@
 				onclick={openAvatarEditor}
 				userId={user.id}
 			/>
+			<form method="POST" action="?/signOut">
+				<GameButton
+					type="submit"
+					variant="danger"
+					size="sm"
+					className="group rotate-1 hover:rotate-[-2deg]"
+				>
+					<LogOut
+						class="h-4 w-4 transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
+					/>
+					<span>LOGOUT</span>
+				</GameButton>
+			</form>
 		</div>
 	{/if}
 
@@ -164,7 +179,7 @@
 		layer out of the tab order and the a11y tree while it leaves.
 	-->
 	<div
-		class="pointer-events-auto absolute top-4 right-4 hidden transition-all duration-700 ease-in md:top-8 md:right-8 md:block"
+		class="home-previews pointer-events-auto absolute top-8 right-8 transition-[translate,opacity] duration-700 ease-in"
 		class:translate-x-[calc(100%+3rem)]={isExiting}
 		class:opacity-0={isExiting}
 		data-testid="home-preview-stack"
@@ -259,14 +274,12 @@
 	</div>
 
 	<div
-		class="pointer-events-auto absolute right-4 bottom-6 left-4 flex items-stretch justify-center transition-all duration-700 ease-in md:right-auto md:bottom-20 md:left-16 md:translate-x-0 md:items-start"
+		class="home-nav pointer-events-auto absolute flex transition-[translate,opacity] duration-700 ease-in"
 		class:translate-y-[calc(100%+6rem)]={isExiting}
 		class:opacity-0={isExiting}
 		inert={isExiting}
 	>
-		<div
-			class="flex w-full max-w-[22rem] flex-col items-stretch gap-4 md:w-auto md:max-w-none md:items-start"
-		>
+		<div class="flex w-full flex-col items-stretch gap-4 landscape:w-auto landscape:items-start">
 			{#if user}
 				<!--
 					The signed-in GALLERY control is a <button>, so the body-level
@@ -274,12 +287,12 @@
 					starts 2.4s of camera choreography before `goto` runs. Warming on
 					pointer/focus intent turns that hold into overlap.
 				-->
-				<div class="w-full md:w-auto" use:warmOnIntent={homeGalleryTarget}>
+				<div class="w-full landscape:w-auto" use:warmOnIntent={homeGalleryTarget}>
 					<GameButton
 						type="button"
 						variant="secondary"
 						size="lg"
-						className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 md:w-auto"
+						className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 landscape:w-auto"
 						onclick={handleGalleryClick}
 					>
 						<Trophy
@@ -293,29 +306,13 @@
 					href={galleryHref}
 					variant="secondary"
 					size="lg"
-					className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 md:w-auto"
+					className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 landscape:w-auto"
 				>
 					<Trophy
 						class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
 					/>
 					<span>GALLERY</span>
 				</GameLink>
-			{/if}
-
-			{#if user}
-				<form method="POST" action="?/signOut" class="w-full md:w-fit md:self-start">
-					<GameButton
-						type="submit"
-						variant="danger"
-						size="lg"
-						className="group w-full justify-center rotate-1 hover:translate-x-[10px] hover:rotate-[-2deg] md:w-auto"
-					>
-						<LogOut
-							class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-						/>
-						<span>LOGOUT</span>
-					</GameButton>
-				</form>
 			{/if}
 		</div>
 	</div>
@@ -392,6 +389,70 @@
 
 	.nsfw-scrim {
 		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
+	}
+
+	/*
+	 * Where the front door's pieces stand on each screen; MuseumWallOverlay
+	 * lays the window out around them, so the two must change together.
+	 */
+
+	/* The visitor's corner, at the top left, its size set by HomeEntryPage:
+	 * Logout under the badge on a screen on its side, beside it on an upright
+	 * one, where the title sits under the corner (HomeHeroOverlay). */
+	.home-account {
+		top: var(--account-top, 1rem);
+		left: var(--account-top, 1rem);
+		flex-direction: column;
+		font-size: var(--account-em, 1rem);
+	}
+
+	@media (orientation: portrait) {
+		.home-account {
+			flex-direction: row;
+		}
+	}
+
+	/* The best pieces hang down the right only where there is room for them
+	 * beside the window: a wide screen, on its side, at least 40rem tall. */
+	.home-previews {
+		display: none;
+	}
+
+	@media (orientation: landscape) and (min-width: 48rem) and (min-height: 40rem) {
+		.home-previews {
+			display: block;
+		}
+	}
+
+	/* Gallery: at the bottom left beside Come In on a screen on its side; under
+	 * the window on an upright one, clear of the audio tab in the corner. */
+	@media (orientation: landscape) {
+		.home-nav {
+			bottom: 2rem;
+			left: 2rem;
+		}
+	}
+
+	@media (orientation: landscape) and (max-height: 30rem) {
+		.home-nav {
+			bottom: 1rem;
+			left: 1rem;
+		}
+	}
+
+	@media (orientation: portrait) {
+		.home-nav {
+			right: 8.5rem;
+			bottom: 1rem;
+			left: 1rem;
+		}
+	}
+
+	@media (orientation: portrait) and (min-width: 43.75rem) {
+		.home-nav {
+			right: auto;
+			width: 22rem;
+		}
 	}
 
 	/* torn-out spiral perforations along the left edge */

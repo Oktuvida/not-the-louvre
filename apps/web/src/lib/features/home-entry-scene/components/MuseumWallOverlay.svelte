@@ -42,14 +42,13 @@
 		width: 0.246,
 		height: 2.395
 	};
-	const FRAME_WIDTH_CSS = 'clamp(19rem, 80vw, 49rem)';
-	const FRAME_HEIGHT_CSS = `calc((${FRAME_WIDTH_CSS} * 640) / 720)`;
-	const FRAME_LEFT_CSS = `calc(50% - (${FRAME_WIDTH_CSS} / 2))`;
-	const FRAME_TOP_CSS = `calc(50% - (${FRAME_HEIGHT_CSS} / 2))`;
-	const OPENING_LEFT_CSS = `calc(${FRAME_LEFT_CSS} + ((${FRAME_WIDTH_CSS} * 130) / 720))`;
-	const OPENING_RIGHT_CSS = `calc(${FRAME_LEFT_CSS} + ((${FRAME_WIDTH_CSS} * 590) / 720))`;
-	const OPENING_TOP_CSS = `calc(${FRAME_TOP_CSS} + ((${FRAME_HEIGHT_CSS} * 118) / 640))`;
-	const OPENING_BOTTOM_CSS = `calc(${FRAME_TOP_CSS} + ((${FRAME_HEIGHT_CSS} * 533) / 640))`;
+	// The window's opening before anything is measured, from the same numbers
+	// that place the window (.wall-layout below), so the first paint cuts the
+	// wall in the right place on every screen.
+	const OPENING_LEFT_CSS = 'calc(var(--frame-left) + (var(--frame-width) * 130 / 720))';
+	const OPENING_RIGHT_CSS = 'calc(var(--frame-left) + (var(--frame-width) * 590 / 720))';
+	const OPENING_TOP_CSS = 'calc(var(--frame-top) + (var(--frame-height) * 118 / 640))';
+	const OPENING_BOTTOM_CSS = 'calc(var(--frame-top) + (var(--frame-height) * 533 / 640))';
 
 	let {
 		entryState,
@@ -71,7 +70,7 @@
 	// SVG sources render the first frame; bitmaps replace them after mount so
 	// the zoom never triggers main-thread SVG re-rasterization (see svg-bitmap).
 	const WALL_TILE_CSS_PX = 512;
-	const LOGO_MAX_WIDTH_CSS_PX = 544; // clamp(24rem, 36vw, 34rem) upper bound
+	const LOGO_MAX_WIDTH_CSS_PX = 544; // .wall-sign's 34rem upper bound
 	const LOGO_VIEWBOX_RATIO = 440 / 680;
 	// A committed static file rather than an inlined data: URL — the pattern is
 	// 42.7KB of markup and it was serialized into the home document twice.
@@ -333,7 +332,10 @@
 </script>
 
 {#if isVisible}
-	<div bind:this={overlayElement} class="pointer-events-none absolute inset-0 z-20 overflow-hidden">
+	<div
+		bind:this={overlayElement}
+		class="wall-layout pointer-events-none absolute inset-0 z-20 overflow-hidden"
+	>
 		<div
 			bind:this={wallSceneElement}
 			data-testid="museum-wall-scene"
@@ -369,25 +371,27 @@
 				class="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,transparent_38%,rgba(12,9,7,0.16)_62%,rgba(12,9,7,0.38)_100%)]"
 			></div>
 
-			<!-- Framed window composition centered on the wall. -->
-			<div class="absolute inset-0 flex items-center justify-center px-6">
-				<div bind:this={frameVisualElement} class="relative flex items-center justify-center">
-					<!-- Graffiti logo floating beside the frame. -->
-					<img
-						src={logoUrl}
-						data-testid="museum-wall-logo"
-						alt=""
-						draggable="false"
-						class="pointer-events-none absolute top-[15%] right-[calc(100%-4.5rem)] z-1 w-[clamp(24rem,36vw,34rem)] -rotate-[10deg] opacity-95"
-						style="filter: sepia(0.42) saturate(1.08) contrast(0.96) brightness(0.88) drop-shadow(0 8px 16px rgba(44, 24, 8, 0.18));"
-					/>
-					<!-- Soft shadow that anchors the logo to the wall. -->
-					<div
-						class="pointer-events-none absolute top-[36%] right-[calc(100%-2.6rem)] z-0 h-[16rem] w-[24rem] -rotate-[9deg] bg-[radial-gradient(ellipse_at_62%_24%,rgba(26,14,6,0.2)_0%,rgba(26,14,6,0.28)_28%,rgba(26,14,6,0.16)_52%,transparent_72%)] blur-[10px]"
-					></div>
+			<!-- The window, its sign and its button, placed for the screen (.wall-layout). -->
+			<div class="absolute inset-0">
+				<div bind:this={frameVisualElement} class="wall-window">
+					<!-- The graffiti sign beside the window, or above it on an upright screen. -->
+					<div class="wall-sign pointer-events-none z-1">
+						<!-- Soft shadow that anchors the sign to the wall. -->
+						<div
+							class="wall-sign-shadow pointer-events-none bg-[radial-gradient(ellipse_at_62%_24%,rgba(26,14,6,0.2)_0%,rgba(26,14,6,0.28)_28%,rgba(26,14,6,0.16)_52%,transparent_72%)] blur-[10px]"
+						></div>
+						<img
+							src={logoUrl}
+							data-testid="museum-wall-logo"
+							alt=""
+							draggable="false"
+							class="relative block w-full opacity-95"
+							style="filter: sepia(0.42) saturate(1.08) contrast(0.96) brightness(0.88) drop-shadow(0 8px 16px rgba(44, 24, 8, 0.18));"
+						/>
+					</div>
 					<div
 						bind:this={frameElement}
-						class="relative w-[min(80vw,49rem)] max-w-[49rem] min-w-[19rem]"
+						class="relative h-full w-full"
 						style={`aspect-ratio:${museumWindowAspectRatio};`}
 					>
 						<!-- Outer glow catching light on the frame edges. -->
@@ -433,7 +437,7 @@
 					</div>
 
 					<!-- Entry button shown only when the visitor is outside. -->
-					<div class="pointer-events-none absolute top-full left-1/2 z-25 -translate-x-1/2">
+					<div class="wall-cta pointer-events-none z-25">
 						<GameButton
 							onclick={() => dispatch('COME_IN')}
 							size="hero"
@@ -448,3 +452,132 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	/*
+	 * The front door, laid out for the screen it is on, from the window's size:
+	 * the window as large as both the width and the height allow, Come In just
+	 * under it, and the sign beside it (landscape) or above it (portrait), all
+	 * clear of what stands around them: Gallery at the bottom, the best pieces
+	 * down the right. (A signed-in artist starts inside, past the wall.) It used to size the window from the width alone,
+	 * so on most laptops the sign hung past the left edge and on a 1280×720
+	 * screen Come In sat below the fold.
+	 *
+	 * The variables live on the overlay so the wall slabs, which cut the
+	 * window's opening from them before anything is measured, see them too.
+	 */
+	.wall-layout {
+		--cta-height: 4.25rem;
+		--gap: 1rem;
+		--top-reserve: 1rem;
+		--bottom-reserve: 2rem;
+		--side-reserve: 0px;
+		--avail: calc(100dvh - var(--top-reserve) - var(--bottom-reserve));
+		--frame-width: min(
+			49rem,
+			80vw,
+			calc((var(--avail) - var(--gap) - var(--cta-height)) * 720 / 640),
+			calc(100vw - 2 * var(--side-reserve))
+		);
+		--frame-height: calc(var(--frame-width) * 640 / 720);
+		--frame-left: calc(50% - var(--frame-width) / 2);
+		--frame-top: calc(
+			var(--top-reserve) + (var(--avail) - var(--frame-height) - var(--gap) - var(--cta-height)) / 2
+		);
+		/* Hung from the window's left, over its moulding by 4.5rem: as wide as the
+		 * wall left of the window holds (tilted 10°, its box is a tenth wider than
+		 * the sign), and short enough to clear Gallery below it. */
+		--sign-width: min(
+			34rem,
+			36vw,
+			calc(((100vw - var(--frame-width)) / 2 + 3.5rem) / 1.1),
+			calc(
+				(100dvh - var(--frame-top) - 0.15 * var(--frame-height) - var(--bottom-reserve) - 5rem) /
+					0.75
+			)
+		);
+	}
+
+	/* A short window on its side (a phone): tighter margins. */
+	@media (orientation: landscape) and (max-height: 30rem) {
+		.wall-layout {
+			--gap: 0.5rem;
+			--top-reserve: 0.5rem;
+			--bottom-reserve: 1rem;
+		}
+	}
+
+	/* Where the best pieces hang down the right (PersistentNav), the window
+	 * keeps clear of them. */
+	@media (orientation: landscape) and (min-width: 48rem) and (min-height: 40rem) {
+		.wall-layout {
+			--side-reserve: 15rem;
+		}
+	}
+
+	/* Upright: the sign above the window, Come In under it, Gallery below. */
+	@media (orientation: portrait) {
+		.wall-layout {
+			--gap: 0.75rem;
+			--bottom-reserve: 6rem;
+			--sign-width: min(26rem, 80vw, calc(var(--avail) * 0.34));
+			--sign-box: calc(var(--sign-width) * 0.75);
+			--frame-width: min(
+				34rem,
+				88vw,
+				calc((var(--avail) - var(--sign-box) - 2 * var(--gap) - var(--cta-height)) * 720 / 640)
+			);
+			--frame-top: calc(
+				var(--top-reserve) +
+					(
+						var(--avail) - var(--sign-box) - var(--frame-height) - 2 * var(--gap) -
+							var(--cta-height)
+					) /
+					2 + var(--sign-box) + var(--gap)
+			);
+		}
+	}
+
+	.wall-window {
+		position: absolute;
+		left: var(--frame-left);
+		top: var(--frame-top);
+		width: var(--frame-width);
+		height: var(--frame-height);
+	}
+
+	.wall-sign {
+		position: absolute;
+		top: 15%;
+		right: calc(100% - 4.5rem);
+		width: var(--sign-width);
+		rotate: -10deg;
+	}
+
+	.wall-sign-shadow {
+		position: absolute;
+		top: 42%;
+		right: 5.6%;
+		width: 70.6%;
+		height: 72.6%;
+		rotate: 1deg;
+	}
+
+	.wall-cta {
+		position: absolute;
+		top: calc(100% + var(--gap));
+		left: 50%;
+		translate: -50% 0;
+	}
+
+	@media (orientation: portrait) {
+		.wall-sign {
+			top: auto;
+			right: auto;
+			bottom: calc(100% + var(--gap) + var(--sign-width) * 0.05);
+			left: 50%;
+			translate: -50% 0;
+			rotate: -6deg;
+		}
+	}
+</style>

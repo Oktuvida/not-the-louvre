@@ -82,38 +82,6 @@ describe('MuseumWallOverlay', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('seeds wall slabs with centered opening geometry before layout measurement runs', async () => {
-		const authOverlayElement = document.createElement('div');
-		document.body.append(authOverlayElement);
-
-		// Mounting is synchronous; awaiting the render would also let the layout
-		// measurement run, and the seeded geometry is what is under test here.
-		const rendered = render(MuseumWallOverlay, {
-			authOverlayElement,
-			dispatch: vi.fn(),
-			entryState: 'outside'
-		});
-
-		const leftSlab = document.querySelector('[data-testid="museum-wall-slab-left"]');
-		const rightSlab = document.querySelector('[data-testid="museum-wall-slab-right"]');
-
-		expect(leftSlab?.getAttribute('style')).toContain(
-			'calc(50% - (0.444444 * clamp(19rem, 80vw, 49rem)) + (0.163889 * clamp(19rem, 80vw, 49rem)))'
-		);
-		expect(leftSlab?.getAttribute('style')).toContain(
-			'calc(50% - (0.5 * clamp(19rem, 80vw, 49rem)) + (0.180556 * clamp(19rem, 80vw, 49rem)))'
-		);
-		expect(rightSlab?.getAttribute('style')).toContain(
-			'calc(50% - (0.444444 * clamp(19rem, 80vw, 49rem)) + (0.740278 * clamp(19rem, 80vw, 49rem)))'
-		);
-		expect(rightSlab?.getAttribute('style')).toContain(
-			'calc(50% - (0.5 * clamp(19rem, 80vw, 49rem)) + (0.819444 * clamp(19rem, 80vw, 49rem)))'
-		);
-
-		await rendered;
-		authOverlayElement.remove();
-	});
-
 	it('references the committed wall texture by URL instead of inlining the svg', async () => {
 		const authOverlayElement = document.createElement('div');
 		document.body.append(authOverlayElement);

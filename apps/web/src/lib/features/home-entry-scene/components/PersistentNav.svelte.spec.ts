@@ -74,6 +74,9 @@ const topArtworks = [
 	}
 ];
 
+// The best pieces hang beside the window only on a wide screen on its side
+// (home-layout.e2e.ts checks where); the test window is phone-sized, so these
+// specs check what the stack holds, not that it is on screen.
 describe('PersistentNav', () => {
 	beforeEach(async () => {
 		window.localStorage.clear();
@@ -108,20 +111,11 @@ describe('PersistentNav', () => {
 	it('renders real homepage top-artwork preview cards from route data', async () => {
 		await render(PersistentNav, { previewCards: topArtworks, user: null });
 
-		await expect.element(page.getByTestId('home-preview-frame-1')).toBeVisible();
+		await expect.element(page.getByTestId('home-preview-frame-1')).toBeInTheDocument();
 		await expect
 			.element(page.getByTestId('home-preview-frame-1'))
 			.toHaveAttribute('data-frame-tier', 'premium');
 		await expect.element(page.getByText('#1')).not.toBeInTheDocument();
-	});
-
-	it('keeps the homepage preview stack desktop-only through responsive classes', async () => {
-		await render(PersistentNav, { previewCards: topArtworks, user: null });
-
-		const previewStack = document.querySelector('[data-testid="home-preview-stack"]');
-		expect(previewStack).not.toBeNull();
-		expect(previewStack?.className).toContain('hidden');
-		expect(previewStack?.className).toContain('md:block');
 	});
 
 	it('marks top-artwork previews as sensitive until 18+ content is enabled', async () => {
@@ -131,10 +125,10 @@ describe('PersistentNav', () => {
 			user: null
 		});
 
-		await expect.element(page.getByText('18+', { exact: true })).toBeVisible();
-		await expect.element(page.getByText('Sensitive preview', { exact: true })).toBeVisible();
-		await expect.element(page.getByText('18+ artworks', { exact: true })).toBeVisible();
-		await expect.element(page.getByText('Sign in to reveal 18+ artworks.')).toBeVisible();
+		await expect.element(page.getByText('18+', { exact: true })).toBeInTheDocument();
+		await expect.element(page.getByText('Sensitive preview', { exact: true })).toBeInTheDocument();
+		await expect.element(page.getByText('18+ artworks', { exact: true })).toBeInTheDocument();
+		await expect.element(page.getByText('Sign in to reveal 18+ artworks.')).toBeInTheDocument();
 	});
 
 	it('decodes the above-the-fold preview imagery without deferring it', async () => {
@@ -158,7 +152,7 @@ describe('PersistentNav', () => {
 		});
 
 		const image = page.getByAltText('Adults only study');
-		await expect.element(image).toBeVisible();
+		await expect.element(image).toBeInTheDocument();
 
 		// Same blur and scrim as every other room, read from --nsfw-* with the
 		// shared fallbacks — not a fourth set of numbers.

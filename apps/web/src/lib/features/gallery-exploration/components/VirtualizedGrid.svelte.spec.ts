@@ -65,35 +65,18 @@ describe('VirtualizedGrid', () => {
 		expect(page.getByTestId('grid-card-c3').element().textContent).toContain('Artwork c3');
 	});
 
-	it('on a screen three cards wide, rows of three; on a phone, one', async () => {
-		const items = createArtworks(24, 'd');
-		const cardsPerRow = () =>
-			[...document.querySelectorAll('[data-testid="virtualized-row"]')].map(
+	it('on a phone, one card per row', async () => {
+		// The test window is phone-sized; gallery-scale.e2e.ts checks the wider
+		// screens at their real sizes.
+		await render(VirtualizedGridHarness, { items: createArtworks(24, 'd') });
+
+		await vi.waitFor(() => {
+			const rows = [...document.querySelectorAll('[data-testid="virtualized-row"]')].map(
 				(row) => row.querySelectorAll('[data-testid^="grid-card-"]').length
 			);
-
-		const { innerHeight, innerWidth } = window;
-		try {
-			// 1000px holds three 17.5rem columns with their 3rem gaps, not four.
-			await page.viewport(1000, 800);
-			const wide = await render(VirtualizedGridHarness, { items });
-			await vi.waitFor(() => {
-				const rows = cardsPerRow();
-				expect(rows.length).toBeGreaterThan(1);
-				expect(rows.slice(0, -1).every((count) => count === 3)).toBe(true);
-			});
-			await wide.unmount();
-
-			await page.viewport(390, 844);
-			await render(VirtualizedGridHarness, { items });
-			await vi.waitFor(() => {
-				const rows = cardsPerRow();
-				expect(rows.length).toBeGreaterThan(1);
-				expect(rows.every((count) => count === 1)).toBe(true);
-			});
-		} finally {
-			await page.viewport(innerWidth, innerHeight);
-		}
+			expect(rows.length).toBeGreaterThan(1);
+			expect(rows.every((count) => count === 1)).toBe(true);
+		});
 	});
 
 	it('mounted again with the layout it had, shows the same card in the same place', async () => {

@@ -8,12 +8,12 @@
 
 <!-- Game Title -->
 <div
-	class="absolute top-16 left-1/2 z-20 -translate-x-1/2 transition-all duration-700 ease-in"
+	class="home-hero absolute left-1/2 z-20 -translate-x-1/2 transition-[translate,opacity] duration-700 ease-in"
 	class:-translate-y-[calc(100%+6rem)]={isExiting}
 	class:opacity-0={isExiting}
 >
 	<h1
-		class="text-center font-display text-7xl font-black tracking-tight text-ink-warm"
+		class="home-hero-title text-center font-display leading-none font-black tracking-tight whitespace-nowrap text-ink-warm"
 		style="text-shadow: 4px 4px 0px #e8b896, 8px 8px 0px rgba(45, 36, 32, 0.2);"
 	>
 		NOT THE LOUVRE
@@ -50,10 +50,44 @@
 </div>
 <!-- Footer tagline -->
 <div
-	class="pointer-events-none absolute bottom-6 left-1/2 z-20 -translate-x-1/2 text-sm text-wall-text italic transition-all duration-700 ease-in"
+	class="home-footer pointer-events-none absolute bottom-6 left-1/2 z-20 -translate-x-1/2 text-sm text-wall-text italic transition-[translate,opacity] duration-700 ease-in"
 	class:translate-y-[calc(100%+3rem)]={isExiting}
 	class:opacity-0={isExiting}
 	style="font-family: var(--font-body); letter-spacing: 0.01em; text-shadow: 0 1px 1px rgba(45,36,32,.7), 0 2px 8px rgba(45,36,32,.35);"
 >
 	A social art studio where your doodles compete for glory
 </div>
+
+<style>
+	/*
+	 * The title fits the screen: as wide as a third of a wide screen, most of an
+	 * upright one, never larger than it was designed (4.5rem). On an upright
+	 * screen a signed-in artist's corner (PersistentNav) is at the top left, so
+	 * the title starts under it.
+	 */
+	.home-hero {
+		top: 4rem;
+	}
+
+	.home-hero-title {
+		font-size: clamp(2.25rem, 5vw, 4.5rem);
+	}
+
+	@media (orientation: portrait) {
+		.home-hero-title {
+			font-size: clamp(2rem, 9vw, 4.5rem);
+		}
+
+		:global([data-visitor='signed-in']) .home-hero {
+			top: calc(var(--account-top, 1rem) + 8.8 * var(--account-em, 1rem) + 1rem);
+		}
+	}
+
+	/* The footer line only where it has the bottom of the screen to itself:
+	 * an upright screen gives that to Gallery, a short one has no room. */
+	@media (orientation: portrait), (max-height: 30rem) {
+		.home-footer {
+			display: none;
+		}
+	}
+</style>
