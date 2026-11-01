@@ -202,12 +202,15 @@
 				>
 					{artwork.title}
 				</p>
-				<p class="truncate text-[0.82em] text-muted-ink" style="font-family: var(--font-hand);">
+				<p
+					class="truncate text-[max(0.82em,0.75rem)] text-muted-ink"
+					style="font-family: var(--font-hand);"
+				>
 					{artwork.artist}
 				</p>
 				{#if isFork}
 					<p
-						class="truncate font-display text-[0.7em] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
+						class="truncate font-display text-[max(0.7em,0.75rem)] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
 					>
 						{forkParentTitle ? `From ${forkParentTitle}` : 'Forked artwork'}
 					</p>
@@ -215,7 +218,7 @@
 			</div>
 
 			<div
-				class="shrink-0 pt-[0.125em] text-right font-display text-[0.7em] leading-[1.2] tracking-[0.04em] text-muted-ink"
+				class="shrink-0 pt-[0.125em] text-right font-display text-[max(0.7em,0.75rem)] leading-[1.2] tracking-[0.04em] text-muted-ink"
 			>
 				<div data-testid={testId ? `${testId}-score` : undefined}>
 					&#11088; {artwork.score}

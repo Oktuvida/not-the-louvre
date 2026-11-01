@@ -146,7 +146,8 @@
 		<div class="ambient-tab-copy">
 			<span class="stroke-note" class:stroke-note-muted={isMuted} aria-hidden="true">♪</span>
 			<span class="ambient-tab-title">{statusLabel}</span>
-			<span class="ambient-tab-pill">{enabled ? 'ON' : 'OFF'}</span>
+			<!-- The state is in the button's own label; the stamp only shows it. -->
+			<span class="ambient-tab-pill" aria-hidden="true">{enabled ? 'ON' : 'OFF'}</span>
 		</div>
 	</button>
 </div>

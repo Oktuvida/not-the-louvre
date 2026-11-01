@@ -78,7 +78,7 @@
 			variant={isActive ? roomVariants[room.id] : 'ghost'}
 			size="md"
 			className={`relative shrink-0 ${isActive ? 'scale-105' : 'opacity-80'}`}
-			contentClassName="px-1 text-[0.7rem] sm:text-xs md:px-0 md:text-sm"
+			contentClassName="px-1 text-xs md:px-0 md:text-sm"
 			data-sveltekit-preload-data="hover"
 			data-room={room.id}
 			aria-current={isActive ? 'page' : undefined}

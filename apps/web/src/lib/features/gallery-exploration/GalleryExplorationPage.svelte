@@ -807,6 +807,14 @@
 						<span class="font-semibold">Join & draw</span>
 					</GameLink>
 				</div>
+			{:else if roomId === 'your-studio'}
+				<!-- The empty studio is the moment to draw: the way there, not just the news. -->
+				<div class="mt-6 flex justify-center">
+					<GameLink href="/draw" variant="primary" size="sm">
+						<Brush class="h-5 w-5" />
+						<span class="font-semibold">Draw your first piece</span>
+					</GameLink>
+				</div>
 			{/if}
 		</div>
 	{:else if roomId === 'hall-of-fame'}

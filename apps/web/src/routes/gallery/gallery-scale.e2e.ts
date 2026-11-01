@@ -85,6 +85,24 @@ test.describe('the gallery on every screen', () => {
 		});
 	}
 
+	test('the Mystery room keeps Spin a button, not a banner across the screen', async ({
+		browser
+	}) => {
+		for (const viewport of [
+			{ height: 1024, width: 768 },
+			{ height: 860, width: 1512 },
+			{ height: 1440, width: 2560 }
+		]) {
+			const { context, page } = await atSize(browser, viewport);
+			await page.goto('/gallery/mystery');
+			const spin = page.getByRole('button', { name: /spin/i });
+			await expect(spin).toBeVisible();
+			const width = await spin.evaluate((element) => element.getBoundingClientRect().width);
+			expect(width, `Spin at ${viewport.width}px`).toBeLessThanOrEqual(viewport.width * 0.5);
+			await context.close();
+		}
+	});
+
 	test('on a big screen the room grows with it, not only the number of columns', async ({
 		browser
 	}) => {

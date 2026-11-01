@@ -283,7 +283,7 @@
 			var(--banner-bg);
 		color: var(--banner-ink);
 		font-family: var(--font-display);
-		font-size: 0.68rem;
+		font-size: 0.75rem;
 		font-weight: 700;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
@@ -398,7 +398,7 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-size: 0.74rem;
+		font-size: 0.78rem;
 		font-weight: 600;
 		font-style: italic;
 		letter-spacing: 0.06em;
@@ -409,7 +409,7 @@
 	.plaque-score {
 		margin-top: 0.3rem;
 		font-family: var(--font-display);
-		font-size: 0.62rem;
+		font-size: 0.75rem;
 		font-weight: 700;
 		letter-spacing: 0.16em;
 		color: var(--plate-soft);

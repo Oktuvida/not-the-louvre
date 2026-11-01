@@ -134,7 +134,7 @@
 		type="button"
 		variant="danger"
 		size="hero"
-		className="w-full max-w-[16rem] justify-center shadow-2xl md:max-w-none"
+		className="w-full max-w-[16rem] justify-center shadow-2xl md:max-w-[22rem]"
 		disabled={isSpinning}
 		onclick={handleSpin}
 	>
@@ -148,7 +148,7 @@
 	{/if}
 
 	<div
-		class="pointer-events-none absolute -bottom-4 left-1/2 z-20 w-full max-w-[16rem] -translate-x-1/2 text-center text-xs text-wall-text italic transition-all duration-700 ease-in md:-bottom-7 md:max-w-none md:text-sm"
+		class="pointer-events-none absolute -bottom-4 left-1/2 z-20 w-full max-w-[16rem] -translate-x-1/2 text-center text-xs text-wall-text italic transition-all duration-700 ease-in md:-bottom-7 md:max-w-[28rem] md:text-sm"
 		style="font-family: var(--font-body); letter-spacing: 0.01em; text-shadow: 0 1px 1px rgba(45,36,32,.7), 0 2px 8px rgba(45,36,32,.35);"
 	>
 		Discover a random masterpiece… hopefully

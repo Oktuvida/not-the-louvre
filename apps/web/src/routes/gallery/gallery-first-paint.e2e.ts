@@ -46,4 +46,34 @@ test.describe('opening a gallery link', () => {
 		// 2.7 KB per artwork, some 65 KB a room, before anything is visible.
 		expect(html).not.toContain('data:image/png;base64');
 	});
+
+	// Rooms that size themselves to the screen do it before they are painted:
+	// a room that starts at one size and settles at another shoves its button
+	// out from under a visitor's thumb.
+	test('the Mystery room does not jump as it loads on a phone', async ({ page, request }) => {
+		const seeded = await request.post('/demo/test-support/gallery', { data: { count: 12 } });
+		expect(seeded.ok()).toBe(true);
+		await page.setViewportSize({ height: 844, width: 390 });
+		await page.addInitScript(() => {
+			const shifts = { total: 0 };
+			(window as unknown as { __shifts: typeof shifts }).__shifts = shifts;
+			new PerformanceObserver((list) => {
+				for (const entry of list.getEntries() as unknown as {
+					hadRecentInput: boolean;
+					value: number;
+				}[]) {
+					if (!entry.hadRecentInput) shifts.total += entry.value;
+				}
+			}).observe({ buffered: true, type: 'layout-shift' });
+		});
+
+		await page.goto('/gallery/mystery');
+		await expect(page.getByRole('button', { name: /spin/i })).toBeVisible();
+		await page.waitForTimeout(1500);
+
+		const shifted = await page.evaluate(
+			() => (window as unknown as { __shifts: { total: number } }).__shifts.total
+		);
+		expect(shifted).toBeLessThan(0.01);
+	});
 });

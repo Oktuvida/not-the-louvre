@@ -72,7 +72,7 @@
 		{/if}
 
 		<p
-			class="mb-1 font-display text-[0.7rem] font-bold tracking-[0.1em] text-[rgba(45,36,32,0.5)] uppercase"
+			class="mb-1 font-display text-[0.75rem] font-bold tracking-[0.1em] text-[rgba(45,36,32,0.62)] uppercase"
 		>
 			{label}
 		</p>
