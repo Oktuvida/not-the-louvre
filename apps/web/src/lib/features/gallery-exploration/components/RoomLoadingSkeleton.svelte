@@ -43,7 +43,7 @@
 		<div class="space-y-12">
 			<div
 				aria-hidden="true"
-				class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end lg:gap-10"
+				class="mb-16 flex flex-col items-center justify-center gap-8 xl:flex-row xl:items-end xl:gap-10"
 			>
 				{#each podiumBlocks as block, index (index)}
 					<div class="flex animate-pulse flex-col items-center gap-5">

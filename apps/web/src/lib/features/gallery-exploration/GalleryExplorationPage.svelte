@@ -876,12 +876,12 @@
 				/>
 			</div>
 		{:else}
-			<!-- The room's note sits above the room until the screen is wide enough
-			     (2xl) for it to hang in the wall beside the room's first pieces without
-			     covering any of them or the champion's medal; it never hangs past the
-			     window's edge. -->
+			<!-- The room's note is stuck on the wall over the top left, taking no room
+			     from the room (on a phone it sits above it). It stays inside the window,
+			     low enough to clear the room tabs and, until 2xl, a little smaller to
+			     keep off the champion's medal. -->
 			<div
-				class="pointer-events-none mb-4 flex justify-center 2xl:absolute 2xl:top-5 2xl:left-8 2xl:z-25 2xl:mb-0 2xl:rotate-[-12deg] 2xl:justify-start"
+				class="room-note pointer-events-none mb-4 flex justify-center md:absolute md:top-14 md:left-4 md:z-25 md:mb-0 md:origin-top-left md:-rotate-12 md:scale-80 md:justify-start 2xl:scale-100"
 				data-testid="gallery-room-note"
 			>
 				<PostItNote
@@ -897,7 +897,7 @@
 
 		{#if showSensitiveArtworkNote}
 			<div
-				class="pointer-events-none mb-4 flex justify-center md:mb-6 md:rotate-6 md:justify-end 2xl:absolute 2xl:top-20 2xl:right-8 2xl:z-26 2xl:mb-0 2xl:rotate-12"
+				class="pointer-events-none mb-4 flex justify-center md:mb-6 md:rotate-14 md:justify-end lg:absolute lg:top-20 lg:right-4 lg:z-26 lg:mb-0 lg:origin-top-right lg:scale-80 xl:scale-100"
 			>
 				<PostItNote
 					attachment="tape"

@@ -11,8 +11,9 @@ const SCREENS = [
 	{ columns: 1, name: 'a phone', viewport: { height: 844, width: 390 } },
 	{ columns: 2, name: 'a tablet', viewport: { height: 1024, width: 768 } },
 	{ columns: 3, name: 'a laptop', viewport: { height: 800, width: 1280 } },
-	{ columns: 4, name: 'a desktop monitor', viewport: { height: 1080, width: 1920 } },
-	{ columns: 5, name: 'a large monitor', viewport: { height: 1440, width: 2560 } }
+	{ columns: 3, name: 'a 14-inch MacBook', viewport: { height: 860, width: 1512 } },
+	{ columns: 3, name: 'a desktop monitor', viewport: { height: 1080, width: 1920 } },
+	{ columns: 4, name: 'a large monitor', viewport: { height: 1440, width: 2560 } }
 ] as const;
 
 /** The artwork cards on the wall (the Hot Wall's lead stands alone in its row). */
@@ -79,7 +80,7 @@ test.describe('the gallery on every screen', () => {
 			// Every card on the grid is big enough to see the drawing without
 			// opening it, and the row uses the width it has.
 			const gridCards = rows.filter((row) => row.length === widest).flat();
-			for (const card of gridCards) expect(card.width).toBeGreaterThanOrEqual(280);
+			for (const card of gridCards) expect(card.width).toBeGreaterThanOrEqual(300);
 			await context.close();
 		});
 	}

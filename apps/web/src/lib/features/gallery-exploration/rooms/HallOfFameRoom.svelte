@@ -137,9 +137,11 @@
 	});
 </script>
 
+<!-- The podium stands in a row from xl: its three frames need 62rem, more
+     than a 1024px screen holds beside its margins, so narrower ones stack it. -->
 <div class="space-y-12">
 	<div
-		class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end lg:gap-10"
+		class="mb-16 flex flex-col items-center justify-center gap-8 xl:flex-row xl:items-end xl:gap-10"
 	>
 		{#each podiumArtworks as entry (`podium-${entry.position}-${entry.artwork?.id ?? 'empty'}`)}
 			{@const artwork = entry.artwork}

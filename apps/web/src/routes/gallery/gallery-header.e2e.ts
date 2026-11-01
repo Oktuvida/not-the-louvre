@@ -81,12 +81,16 @@ const checkHeader = async (
 			.soft(overlap(note, control.box), `the room note and ${control.name} at ${width}px`)
 			.toBe(0);
 	}
-	// Nor does it cover what the room opens with: its first artworks, and the
-	// champion's medal and banner in the Hall of Fame.
+	// It is stuck on the wall over the room, so it may catch the corner of a
+	// piece, as a note pinned beside a photo would, but never hide one: at most
+	// a twentieth of it. It never covers the champion's medal and banner.
 	const artworks = page.getByRole('img', { name: /Seeded Piece/ });
 	for (let index = 0; index < Math.min(4, await artworks.count()); index += 1) {
 		const artwork = await boxOf(page, artworks.nth(index));
-		expect.soft(overlap(note, artwork), `the room note and an artwork at ${width}px`).toBe(0);
+		const area = (artwork.right - artwork.left) * (artwork.bottom - artwork.top);
+		expect
+			.soft(overlap(note, artwork) / area, `the room note over an artwork at ${width}px`)
+			.toBeLessThanOrEqual(0.05);
 	}
 	const champion = page.getByText(/^champion$/i);
 	if (await champion.count()) {

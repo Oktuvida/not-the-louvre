@@ -5,22 +5,24 @@
  * stand in on the same template, so nothing moves when the artworks arrive.
  *
  * - A phone gets one artwork per row.
- * - Wider screens fit as many columns as hold a card of at least 17.5rem. The
- *   gallery's rem grows on screens wider than 1440px (GalleryLayoutFrame), so a
- *   big screen gets bigger cards and gaps as well as more columns.
+ * - Wider screens fit as many columns as hold a card of at least 19rem with
+ *   4.5rem of wall between cards: the room breathes, and nothing fixes the
+ *   count (a tablet gets two, a laptop three, a 2560px monitor four). The
+ *   gallery's rem grows on screens wider than 1440px (GalleryLayoutFrame), so
+ *   a big screen gets bigger cards and gaps as well as more columns.
  *
  * A room can space its cards differently by setting --gallery-gap and
  * --gallery-gap-phone on an ancestor.
  */
 
 .gallery-grid-host {
-	--gallery-grid-gap: var(--gallery-gap, 3rem);
+	--gallery-grid-gap: var(--gallery-gap, 4.5rem);
 }
 
 .gallery-grid {
 	display: grid;
 	gap: var(--gallery-grid-gap);
-	grid-template-columns: repeat(auto-fill, minmax(min(17.5rem, 100%), 1fr));
+	grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr));
 }
 
 /* Each row ends with the gap to the next, so a row's height is the distance
@@ -47,6 +49,6 @@
 
 /* Your Studio's grid breathes a little wider than the other rooms. */
 .gallery-grid-roomy {
-	--gallery-gap: 3.75rem;
+	--gallery-gap: 5.25rem;
 	--gallery-gap-phone: 2.5rem;
 }
