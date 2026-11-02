@@ -743,11 +743,7 @@
 									{/if}
 									{#if artwork.isHidden}
 										<!-- Seen only by its author and moderators; nobody else can open it. -->
-										<p
-											class="truncate text-[0.75rem] font-black tracking-[0.12em] text-danger-bright uppercase"
-										>
-											Hidden · pending review
-										</p>
+										<p class="postcard-pending ink-stamp">Hidden · pending review</p>
 									{/if}
 									{#if forkAttribution}
 										<p
@@ -1264,6 +1260,12 @@
 		top: -18px;
 		right: 12px;
 		rotate: 9deg;
+	}
+
+	.postcard-pending {
+		margin: 0.35rem 0 0.15rem;
+		font-size: 0.62rem;
+		rotate: -3deg;
 	}
 
 	.postcard-title {

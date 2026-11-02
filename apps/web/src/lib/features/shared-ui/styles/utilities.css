@@ -281,6 +281,26 @@
 }
 
 /*
+ * A rubber stamp in red ink: a double rule, stamped on a little crooked, the
+ * ink catching unevenly. The call site places it and sets its size.
+ */
+.ink-stamp {
+	display: inline-block;
+	padding: 0.3em 0.55em;
+	border: 3px double rgb(181 71 60 / 0.85);
+	border-radius: 6px;
+	rotate: -7deg;
+	font-family: var(--font-display);
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	line-height: 1.15;
+	text-align: center;
+	text-transform: uppercase;
+	color: rgb(181 71 60 / 0.92);
+	mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -3 2.6'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23w)'/%3E%3C/svg%3E");
+}
+
+/*
  * The swipe of paint under a section title, on the ops desk, the auth sheet,
  * the avatar sheet and the tool tray's paints label.
  *
