@@ -35,7 +35,12 @@ describe('the studio model’s surfaces', () => {
 		const curtain = piece('perde');
 		const pot = piece('saks');
 		const bin = piece('metal');
-		const room = new Group().add(table, frame, cabinet, wall, curtain, pot, bin);
+		// The sketchbook on the side table, which the camera closes in on before
+		// the studio's own sketchbook takes over: the same cloth, spine, strap
+		// and label, and the pages' edge.
+		const sketchbook = piece('Architexture.001');
+		const pages = piece('Bookpage.001');
+		const room = new Group().add(table, frame, cabinet, wall, curtain, pot, bin, sketchbook, pages);
 
 		dressStudioSurfaces(room);
 
@@ -45,6 +50,8 @@ describe('the studio model’s surfaces', () => {
 		expect(surfaceOf(wall)).toBe('studio-surface-plaster');
 		expect(surfaceOf(curtain)).toBe('studio-surface-fabric');
 		expect(surfaceOf(pot)).toBe('studio-surface-clay');
+		expect(surfaceOf(sketchbook)).toBe('studio-surface-sketchbookCover');
+		expect(surfaceOf(pages)).toBe('studio-surface-pages');
 		expect(surfaceOf(bin)).not.toMatch(/^studio-surface/);
 	});
 
