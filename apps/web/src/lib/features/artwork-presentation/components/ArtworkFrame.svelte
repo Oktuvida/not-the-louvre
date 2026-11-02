@@ -104,7 +104,12 @@
 			return;
 		}
 
-		const bounds = host.getBoundingClientRect();
+		/* The host's layout box, which a transform does not change. Its bounding
+		 * rect would be the box around a tilted frame — the home wall hangs them
+		 * a few degrees askew — larger than the frame itself: the canvas drew the
+		 * frame that large, spilling right and down past the opening the artwork
+		 * sits in. */
+		const bounds = { height: host.offsetHeight, width: host.offsetWidth };
 
 		if (bounds.width === 0 || bounds.height === 0) {
 			return;
