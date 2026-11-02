@@ -17,6 +17,7 @@
 	import type { HomeSceneArtworkSlot } from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
 	import { studioCanvasShadowMap } from '#lib/features/home-entry-scene/scene/studio-renderer-config.js';
 	import { getStudioDracoLoader } from '#lib/features/home-entry-scene/scene/studio-draco-loader.js';
+	import SceneContextRelease from '#lib/features/home-entry-scene/scene/SceneContextRelease.svelte';
 	import SceneFrameInvalidator from '#lib/features/home-entry-scene/scene/SceneFrameInvalidator.svelte';
 	import SceneTextureBindings from '#lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
 	import {
@@ -503,6 +504,7 @@
 				invalidateFrame = invalidate;
 			}}
 		/>
+		<SceneContextRelease />
 		<T is={backdrop} attach="background" />
 		<T is={fog} attach="fog" />
 		<T.AmbientLight intensity={0.08} />
