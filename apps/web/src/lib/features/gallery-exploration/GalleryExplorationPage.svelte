@@ -42,6 +42,7 @@
 	import GalleryStatusRegion from '#lib/features/gallery-exploration/components/GalleryStatusRegion.svelte';
 	import RoomLoadingSkeleton from '#lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
 	import HallOfFameRoom from '#lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
+	import type { AwardStyle } from '#lib/features/shared-ui/award-style.js';
 	import HotWallRoom from '#lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
 	import MysteryRoom from '#lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
 	import YourStudioRoom from '#lib/features/gallery-exploration/rooms/YourStudioRoom.svelte';
@@ -166,7 +167,8 @@
 		},
 		room,
 		roomId,
-		viewer = null
+		viewer = null,
+		awardStyle = 'stamps'
 
 		/** Set only by the route's failure path; never reuses the empty-state slot. */
 		/**
@@ -192,6 +194,8 @@
 		room: GalleryRoomConfig;
 		roomId: GalleryRoomId;
 		viewer?: Viewer | null;
+		/** The Hall of Fame's award style, drawn once per visit to the gallery. */
+		awardStyle?: AwardStyle;
 	} = $props();
 
 	const galleryLayout = getGalleryLayoutContext();
@@ -820,6 +824,7 @@
 	{:else if roomId === 'hall-of-fame'}
 		<HallOfFameRoom
 			{artworks}
+			{awardStyle}
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}

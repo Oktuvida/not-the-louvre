@@ -1798,7 +1798,13 @@ describe('GalleryExplorationPage', () => {
 			expect(loadArtworkDetail).toHaveBeenCalled();
 		});
 
-		await expect.element(page.getByText('\u{1F947}')).toBeVisible();
+		await expect
+			.element(
+				page
+					.getByRole('dialog', { name: 'Artwork details for Champion Study' })
+					.getByRole('img', { name: /^Champion, first place/ })
+			)
+			.toBeVisible();
 	});
 
 	it('gives anonymous visitors a way in from the empty room', async () => {

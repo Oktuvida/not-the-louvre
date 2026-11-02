@@ -15,13 +15,17 @@
 	import { warmStudioBackground } from '#lib/features/shared-ui/studio-background-warmup.js';
 	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 	import type { Viewer } from '#lib/shared/viewer.js';
+	import type { AwardStyle } from '#lib/features/shared-ui/award-style.js';
 
 	let {
+		awardStyle = 'stamps',
 		children,
 		roomId,
 		viewer,
 		context
 	}: {
+		/** The Hall of Fame's award style for this visit, which the postcard wears too. */
+		awardStyle?: AwardStyle;
 		children?: Snippet;
 		/** `null` on a page that is not a room, such as an artwork's permalink. */
 		roomId: GalleryRoomId | null;
@@ -138,6 +142,7 @@
 		<ArtworkDetailPanel
 			adultContentEnabled={$panelBindings.adultContentEnabled}
 			artwork={$panelBindings.artwork}
+			{awardStyle}
 			isHydrating={$panelBindings.isHydratingDetail}
 			onAdultContentToggle={$panelBindings.onAdultContentToggle}
 			onArtworkChange={$panelBindings.onArtworkChange}
