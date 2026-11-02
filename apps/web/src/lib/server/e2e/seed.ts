@@ -2,13 +2,18 @@ import { sql } from 'drizzle-orm';
 import { createEmptyDrawingDocument } from '#lib/features/stroke-json/document.js';
 import { artworkStorage } from '#lib/server/artwork/storage.js';
 import { db } from '#lib/server/db/index.js';
-import { renderArtworkMedia } from '#lib/server/render/client.js';
+import { renderArtworkMedia, renderAvatarMedia } from '#lib/server/render/client.js';
+import { seedAvatarDrawing } from '#lib/server/seed-avatars.js';
+import { avatarStorageKey } from '#lib/server/user/avatar-key.js';
+import { avatarStorage } from '#lib/server/user/storage.js';
 
 const SEED_AUTHOR = { id: 'e2e-seed-author', nickname: 'seed_painter' };
 
 /**
  * A gallery with more than one page in it, for journeys that scroll. One image
  * is rendered and stored under every artwork's key; the rows are what differ.
+ * The artist has an avatar, stored the way a saved one is, so the cards carry
+ * a face and the podium its wax seal.
  */
 export const seedGalleryArtworks = async (count: number) => {
 	await db.execute(sql`
@@ -21,6 +26,18 @@ export const seedGalleryArtworks = async (count: number) => {
 		insert into app.users (id, nickname, recovery_hash, role, created_at, updated_at)
 		values (${SEED_AUTHOR.id}, ${SEED_AUTHOR.nickname}, 'e2e-seed', 'user', now(), now())
 		on conflict do nothing
+	`);
+
+	const avatar = await renderAvatarMedia(seedAvatarDrawing(0));
+	const avatarKey = await avatarStorageKey(
+		SEED_AUTHOR.id,
+		new Uint8Array(await avatar.file.arrayBuffer())
+	);
+	await avatarStorage.upload(avatarKey, avatar.file);
+	await db.execute(sql`
+		update app.users
+		set avatar_url = ${avatarKey}, avatar_onboarding_completed_at = now(), updated_at = now()
+		where id = ${SEED_AUTHOR.id}
 	`);
 
 	const media = await renderArtworkMedia({

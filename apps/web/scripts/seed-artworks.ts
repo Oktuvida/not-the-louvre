@@ -14,9 +14,14 @@ import {
 	type DrawingStroke
 } from '../src/lib/features/stroke-json/document';
 import { drawingDocumentKey } from '../src/lib/server/drawing-document/document-key';
-import { createArtworkDrawingDocumentMedia } from '../src/lib/server/drawing-document/media';
+import {
+	createArtworkDrawingDocumentMedia,
+	createAvatarDrawingDocumentMedia
+} from '../src/lib/server/drawing-document/media';
 import { prepareDrawingDocumentForStorage } from '../src/lib/server/drawing-document/storage';
 import type { AppBucket } from '../src/lib/server/platform';
+import { seedAvatarDrawing } from '../src/lib/server/seed-avatars';
+import { avatarStorageKey } from '../src/lib/server/user/avatar-key';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -100,7 +105,7 @@ const proxy = await getPlatformProxy<{ BUCKET: AppBucket }>();
 await db.connect();
 
 try {
-	for (const author of AUTHORS) {
+	for (const [authorIndex, author] of AUTHORS.entries()) {
 		await db.query(
 			`insert into better_auth.user (id, name, email, email_verified, created_at, updated_at, nickname)
 			 values ($1, $2, $3, true, now(), now(), $2) on conflict do nothing`,
@@ -110,6 +115,30 @@ try {
 			`insert into app.users (id, nickname, recovery_hash, role, created_at, updated_at)
 			 values ($1, $2, $3, 'user', now(), now()) on conflict do nothing`,
 			[author.id, author.nickname, `seed-recovery-${author.id}`]
+		);
+
+		// The self-portrait each artist drew on the way in, stored the way a
+		// saved avatar is: its drawing and its image in the bucket, the row naming
+		// both. Re-running gives an artist without one their face.
+		const avatarDocument = await prepareDrawingDocumentForStorage(
+			JSON.stringify(seedAvatarDrawing(authorIndex))
+		);
+		const avatarMedia = await createAvatarDrawingDocumentMedia(avatarDocument.document);
+		const avatarBytes = new Uint8Array(await avatarMedia.file.arrayBuffer());
+		const avatarKey = await avatarStorageKey(author.id, avatarBytes);
+		const avatarDocumentKey = await drawingDocumentKey(avatarDocument.compressed);
+		await proxy.env.BUCKET.put(avatarDocumentKey, avatarDocument.compressed.slice().buffer, {
+			httpMetadata: { contentType: 'application/gzip' }
+		});
+		await proxy.env.BUCKET.put(avatarKey, avatarBytes.buffer, {
+			httpMetadata: { contentType: avatarMedia.contentType }
+		});
+		await db.query(
+			`update app.users set avatar_url = $2, avatar_document_key = $3, avatar_document_version = $4,
+				avatar_onboarding_completed_at = coalesce(avatar_onboarding_completed_at, now()),
+				updated_at = now()
+			 where id = $1 and avatar_url is null`,
+			[author.id, avatarKey, avatarDocumentKey, avatarDocument.version]
 		);
 	}
 
