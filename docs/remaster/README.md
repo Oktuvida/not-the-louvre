@@ -111,6 +111,18 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Reproductor de timelapse: el botón con la claqueta de la postal reproduce la obra trazo a trazo en el sitio de la foto, con pausa, velocidad (1× a 16×; un dibujo largo empieza más rápido para durar unos 30 s) y una barra para ir a cualquier momento. Las pausas se recortan (entre trazos a 0,4 s, el lápiz quieto a mitad de trazo a 0,25 s), así que un descanso no se reproduce. Las obras anteriores a v3 no tienen tiempos y se reproducen a ritmo uniforme, en el orden en que se dibujaron. Un fork se reproduce sobre su copia de la imagen del original. El dibujo sale de `/api/artworks/[id]/timelapse` con la misma visibilidad que el detalle (una obra oculta solo para su autor y los moderadores, y fuera de toda caché compartida), y la copia, de `/timelapse/backdrop`.
 - [x] El estudio se ajusta a cada pantalla sin cambiar de estilo: cuatro disposiciones elegidas por la forma de la ventana (Mesa, Mesa compacta, Torre y Bolsillo), con el lienzo siempre cuadrado, entero y sin nada encima. Antes una tablet recibía el cuaderno de escritorio: en vertical el lienzo medía 899 px en una pantalla de 820 y la caja lo tapaba, y en ninguna orientación se veían el título ni el 18+. En el móvil el lienzo era un rectángulo de 326×273, así que el dibujo publicado salía estirado. Ahora el lienzo mide unos 650 px en un MacBook de 14" (antes 601), 515 en 1280×720 (antes 482, tapado), 615 en una tablet horizontal y 640 en vertical, y 339×339 en un iPhone. Hay una sola maqueta (sin el corte de 700 px ni la suposición de móvil del servidor), así que girar la pantalla no vuelve a montar el lienzo. Toda la geometría vive en `studio-layout.css`, y el cuaderno sabe si mostrar la tapa leyendo lo que resolvió el CSS. La caja: el grosor se agarra con el dedo (44 px de alto en lugar de 8), Publish y Clear salen a su propio bloque y Clear pide un segundo toque, y los textos llegan a 12 px. Un e2e comprueba las reglas en nueve pantallas, y el estudio entra en la pasada de accesibilidad. Diseño en `notas/estudio_vista_normal.md`.
 - [ ] Modo de pantalla completa para dibujar, después de la vista normal.
+- [x] Pasada de assets, la habitación 3D de la portada:
+  - El modelo es de color plano y solo el suelo tiene UVs. La madera de muebles y marcos, la madera pintada de las cajoneras, el yeso de las paredes, la tela de la cortina y el barro de las macetas salen de un patrón tejido en el shader de cada material (`studio-surfaces.ts`). Se proyecta desde la posición, así que no necesita UVs ni imágenes nuevas.
+  - Lo que más apagaba la habitación era otra cosa: se pintaba al 80 % de opacidad sobre un degradado beige desde la primera versión de la portada, y la niebla empezaba antes que la propia habitación. Ahora se pinta entera, con una luz de relleno cálida y la niebla solo en los rincones del fondo.
+  - Un e2e comprueba que nada atenúa la habitación y que sus materiales compilan sin errores de shader.
+- [ ] Pasada de assets, lo que queda:
+  - post-its, cinta y chinchetas;
+  - premios e insignias en papel y tinta (la etiqueta kraft para los forks y el sello "Pending review"; el podio y la placa, por decidir);
+  - polaroid y postal, con todo lo que muestran hoy;
+  - tapa del cuaderno.
+
+  El muro de ladrillo se queda como está. Bocetos en el lienzo "Assets — propuestas".
+
 - [ ] Exportación del timelapse a vídeo.
 - [ ] Pruebas en iPad y Galaxy reales.
 
