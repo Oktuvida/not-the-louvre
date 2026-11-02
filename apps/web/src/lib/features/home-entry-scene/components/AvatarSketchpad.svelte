@@ -417,8 +417,6 @@
 
 		<div class="sketch-easel">
 			<div class="canvas-mat aspect-square" data-testid="avatar-sketchpad-frame">
-				<span class="canvas-tape canvas-tape-left tape" aria-hidden="true"></span>
-				<span class="canvas-tape canvas-tape-right tape tape-washi" aria-hidden="true"></span>
 				<div class="sketch-canvas">
 					<DrawingCanvas
 						bind:drawingDocument
@@ -427,6 +425,7 @@
 						label="Avatar drawing canvas"
 						onStrokeCommitted={handleStrokeCommitted}
 						paper={AVATAR_CANVAS_BACKGROUND}
+						sheet
 						strokeColor={activeColor}
 						strokeSize={brushSize}
 					/>
@@ -744,31 +743,8 @@
 		width: 100%;
 		max-width: 27rem;
 		margin-inline: auto;
-		background: var(--color-paper-bright);
+		/* Room for the sheet's deckled edge and its tape; the sheet is the paper. */
 		padding: 11px;
-		border: 1px solid var(--color-hairline);
-		box-shadow:
-			3px 4px 12px rgba(0, 0, 0, 0.22),
-			1px 1px 3px rgba(0, 0, 0, 0.12);
-	}
-
-	.canvas-tape {
-		position: absolute;
-		width: 84px;
-		height: 24px;
-		z-index: 2;
-	}
-
-	.canvas-tape-left {
-		top: -11px;
-		left: 26px;
-		rotate: -6deg;
-	}
-
-	.canvas-tape-right {
-		top: -9px;
-		right: 30px;
-		rotate: 5deg;
 	}
 
 	.sketch-canvas {
