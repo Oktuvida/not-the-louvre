@@ -304,9 +304,6 @@
 					</svelte:boundary>
 				{/if}
 			</div>
-			<div
-				class="bg-gradient-radial absolute inset-0 from-transparent via-transparent to-shell"
-			></div>
 		</div>
 	</div>
 	<HomeHeroOverlay {isExiting} />
