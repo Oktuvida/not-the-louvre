@@ -153,8 +153,8 @@ export const resolveArtworkFrame = ({
 				...preset,
 				renderOptions: {
 					...preset.renderOptions,
-					// the trophies have hung here the longest — let the gilt wear
-					aged: 0.45,
+					// the trophies are kept polished: a little wear, and the metal still shines
+					aged: 0.12,
 					colorScheme
 				}
 			},

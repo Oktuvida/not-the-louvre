@@ -8,9 +8,11 @@ const MAT_COLORS = {
 };
 
 /* Museum metals: aged gilt, warm pewter, and deep copper — richer highlights
- * and darker shadow steps so the podium frames read carved, not plastic. */
+ * and darker shadow steps so the podium frames read carved, not plastic.
+ * `gHi` is where the light catches the metal, as on the podium's plaques. */
 const COLOR_SCHEMES = {
 	bronze: {
+		gHi: [248, 204, 156] as Rgb,
 		gA: [224, 158, 100] as Rgb,
 		gB: [186, 114, 56] as Rgb,
 		gC: [138, 80, 38] as Rgb,
@@ -18,6 +20,7 @@ const COLOR_SCHEMES = {
 		...MAT_COLORS
 	},
 	gold: {
+		gHi: [250, 226, 146] as Rgb,
 		gA: [240, 204, 114] as Rgb,
 		gB: [202, 154, 58] as Rgb,
 		gC: [150, 106, 38] as Rgb,
@@ -25,6 +28,7 @@ const COLOR_SCHEMES = {
 		...MAT_COLORS
 	},
 	silver: {
+		gHi: [252, 253, 255] as Rgb,
 		gA: [228, 230, 234] as Rgb,
 		gB: [190, 194, 202] as Rgb,
 		gC: [138, 144, 156] as Rgb,
@@ -35,7 +39,11 @@ const COLOR_SCHEMES = {
 
 const rgb = (color: Rgb, alpha = 1) => `rgba(${color[0]},${color[1]},${color[2]},${alpha})`;
 
-const polygon = (ctx: CanvasRenderingContext2D, points: number[], fill: string) => {
+const polygon = (
+	ctx: CanvasRenderingContext2D,
+	points: number[],
+	fill: string | CanvasGradient
+) => {
 	ctx.fillStyle = fill;
 	ctx.beginPath();
 	ctx.moveTo(points[0]!, points[1]!);
@@ -46,6 +54,73 @@ const polygon = (ctx: CanvasRenderingContext2D, points: number[], fill: string) 
 
 	ctx.closePath();
 	ctx.fill();
+};
+
+type MetalColors = { gA: Rgb; gB: Rgb; gC: Rgb; gD: Rgb; gHi: Rgb };
+
+/**
+ * Polished metal across a whole frame: bands of light and shade on a slant,
+ * like the podium's brass plaques, instead of one flat colour.
+ */
+const polishedMetal = (
+	ctx: CanvasRenderingContext2D,
+	width: number,
+	height: number,
+	colors: MetalColors,
+	depth: 'outer' | 'inner'
+) => {
+	const metal = ctx.createLinearGradient(0, 0, width, height);
+	const [light, base, shade] =
+		depth === 'outer' ? [colors.gA, colors.gB, colors.gC] : [colors.gB, colors.gC, colors.gD];
+	metal.addColorStop(0, rgb(light));
+	metal.addColorStop(0.22, rgb(colors.gHi));
+	metal.addColorStop(0.4, rgb(base));
+	metal.addColorStop(0.58, rgb(light));
+	metal.addColorStop(0.8, rgb(shade));
+	metal.addColorStop(1, rgb(base));
+	return metal;
+};
+
+/**
+ * A moulding's rounded profile, painted across one side from its outer edge
+ * (`from`) to its inner edge (`to`): a rim in shade, a ridge the light runs
+ * along, and a groove where it meets the next piece.
+ */
+const mouldingProfile = (
+	ctx: CanvasRenderingContext2D,
+	from: [number, number],
+	to: [number, number],
+	ridge: number
+) => {
+	const profile = ctx.createLinearGradient(from[0], from[1], to[0], to[1]);
+	profile.addColorStop(0, 'rgba(0,0,0,0.2)');
+	profile.addColorStop(0.14, 'rgba(255,250,232,0)');
+	profile.addColorStop(0.34, `rgba(255,250,232,${ridge})`);
+	profile.addColorStop(0.5, 'rgba(255,250,232,0)');
+	profile.addColorStop(0.82, 'rgba(0,0,0,0.08)');
+	profile.addColorStop(1, 'rgba(0,0,0,0.3)');
+	return profile;
+};
+
+/** Paints the four sides of a moulding band, each with its own profile. */
+const paintMouldingSides = (
+	ctx: CanvasRenderingContext2D,
+	outer: { x: number; y: number; w: number; h: number },
+	inner: { x: number; y: number; w: number; h: number },
+	ridge: number
+) => {
+	const [ox, oy, ox2, oy2] = [outer.x, outer.y, outer.x + outer.w, outer.y + outer.h];
+	const [ix, iy, ix2, iy2] = [inner.x, inner.y, inner.x + inner.w, inner.y + inner.h];
+	const sides: [number[], [number, number], [number, number], number][] = [
+		// top and left face the light; right and bottom turn away from it
+		[[ox, oy, ox2, oy, ix2, iy, ix, iy], [ox, oy], [ox, iy], ridge],
+		[[ox, oy, ix, iy, ix, iy2, ox, oy2], [ox, oy], [ix, oy], ridge * 0.8],
+		[[ox2, oy, ox2, oy2, ix2, iy2, ix2, iy], [ox2, oy], [ix2, oy], ridge * 0.45],
+		[[ox, oy2, ox2, oy2, ix2, iy2, ix, iy2], [ox, oy2], [ox, iy2], ridge * 0.35]
+	];
+	for (const [points, from, to, light] of sides) {
+		polygon(ctx, points, mouldingProfile(ctx, from, to, light));
+	}
 };
 
 const normalizeOptions = (options: ArtworkFrameRenderOptions = {}) => ({
@@ -138,11 +213,17 @@ export function drawArtworkFrame(
 	const innerWidth = width - outerThickness * 2;
 	const innerHeight = height - outerThickness * 2;
 
-	ctx.fillStyle = rgb(colors.gB);
+	ctx.fillStyle = polishedMetal(ctx, width, height, colors, 'outer');
 	ctx.beginPath();
 	ctx.rect(outerX, outerY, outerWidth, outerHeight);
 	ctx.rect(innerX, innerY + innerHeight, innerWidth, -innerHeight);
 	ctx.fill('evenodd');
+	paintMouldingSides(
+		ctx,
+		{ h: outerHeight, w: outerWidth, x: outerX, y: outerY },
+		{ h: innerHeight, w: innerWidth, x: innerX, y: innerY },
+		0.45
+	);
 	polygon(
 		ctx,
 		[outerX, outerY, outerX + outerWidth, outerY, innerX + innerWidth, innerY, innerX, innerY],
@@ -217,11 +298,17 @@ export function drawArtworkFrame(
 	const matWidth = innerWidth - innerThickness * 2;
 	const matHeight = innerHeight - innerThickness * 2;
 
-	ctx.fillStyle = rgb(colors.gC);
+	ctx.fillStyle = polishedMetal(ctx, width, height, colors, 'inner');
 	ctx.beginPath();
 	ctx.rect(innerMouldingX, innerMouldingY, innerMouldingWidth, innerMouldingHeight);
 	ctx.rect(matX, matY + matHeight, matWidth, -matHeight);
 	ctx.fill('evenodd');
+	paintMouldingSides(
+		ctx,
+		{ h: innerMouldingHeight, w: innerMouldingWidth, x: innerMouldingX, y: innerMouldingY },
+		{ h: matHeight, w: matWidth, x: matX, y: matY },
+		0.4
+	);
 	polygon(
 		ctx,
 		[
@@ -281,6 +368,27 @@ export function drawArtworkFrame(
 	ctx.strokeStyle = rgb(colors.gD, 0.45);
 	ctx.lineWidth = 1;
 	ctx.strokeRect(innerX + 0.5, innerY + 0.5, innerWidth - 1, innerHeight - 1);
+	// The gilt fillet where the inner lip meets the mat catches the light.
+	ctx.strokeStyle = rgb(colors.gHi, 0.7);
+	ctx.strokeRect(matX - 0.5, matY - 0.5, matWidth + 1, matHeight + 1);
+
+	// One soft reflection sweeping across the metal, as off a gallery lamp.
+	ctx.save();
+	ctx.beginPath();
+	ctx.rect(0, 0, width, height);
+	ctx.rect(matX, matY + matHeight, matWidth, -matHeight);
+	ctx.clip('evenodd');
+	ctx.globalCompositeOperation = 'screen';
+	const sheen = ctx.createLinearGradient(0, 0, width, height);
+	sheen.addColorStop(0.18, 'rgba(255,252,240,0)');
+	sheen.addColorStop(0.3, 'rgba(255,252,240,0.2)');
+	sheen.addColorStop(0.42, 'rgba(255,252,240,0)');
+	sheen.addColorStop(0.7, 'rgba(255,252,240,0)');
+	sheen.addColorStop(0.78, 'rgba(255,252,240,0.12)');
+	sheen.addColorStop(0.86, 'rgba(255,252,240,0)');
+	ctx.fillStyle = sheen;
+	ctx.fillRect(0, 0, width, height);
+	ctx.restore();
 
 	ctx.fillStyle = rgb(colors.mat);
 	ctx.beginPath();
