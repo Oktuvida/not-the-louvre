@@ -4,7 +4,7 @@
 	import { gsap } from '#lib/client/gsap.js';
 	import { Canvas, T } from '@threlte/core';
 	import { GLTF } from '@threlte/extras';
-	import type { Group, Object3D, OrthographicCamera } from 'three';
+	import { Color, Fog, type Group, type Object3D, type OrthographicCamera } from 'three';
 	import type { HomeSceneArtworkSlot } from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
 	import { studioCanvasShadowMap } from '#lib/features/home-entry-scene/scene/studio-renderer-config.js';
 	import { getStudioDracoLoader } from '#lib/features/home-entry-scene/scene/studio-draco-loader.js';
@@ -88,6 +88,17 @@
 			: initialPoseValue === 'top-close'
 				? TOP_CLOSE_CAMERA
 				: DEFAULT_CAMERA;
+
+	/*
+	 * The backdrop and the fog go to threlte as instances, not as <T.Color> and
+	 * <T.Fog>: threlte only builds a class whose source starts with "class ", and
+	 * the production build minifies both to anonymous classes ("class{"), so it
+	 * attached the classes themselves and the room stood on a white clear.
+	 */
+	const backdrop = new Color('#d7c2a8');
+	// It only softens the far corners; starting at 14 it washed the whole room,
+	// which sits about 16 from the camera.
+	const fog = new Fog('#d7c2a8', 26, 48);
 
 	let studioCamera = $state<OrthographicCamera | undefined>(undefined);
 	let sceneWidth = $state(0);
@@ -414,10 +425,8 @@
 				invalidateFrame = invalidate;
 			}}
 		/>
-		<T.Color attach="background" args={['#d7c2a8']} />
-		<!-- The fog only softens the far corners; starting at 14 it washed the whole
-		     room, which sits about 16 from the camera. -->
-		<T.Fog args={['#d7c2a8', 26, 48]} />
+		<T is={backdrop} attach="background" />
+		<T is={fog} attach="fog" />
 		<T.AmbientLight intensity={0.08} />
 		<!-- A warm sky and a wood-brown floor bounce, so the shaded sides keep their colour. -->
 		<T.HemisphereLight args={['#fff1dc', '#6b4f3a', 0.55]} />
