@@ -62,11 +62,15 @@ describe('AmbientAudioController', () => {
 			viewerId: 'user-1'
 		});
 
-		await expect.element(page.getByRole('button', { name: 'Enable ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: false }))
+			.toBeVisible();
 
-		await page.getByRole('button', { name: 'Enable ambient audio' }).click();
+		await page.getByRole('button', { name: 'Ambient music', pressed: false }).click();
 
-		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: true }))
+			.toBeVisible();
 		expect(window.localStorage.getItem(AMBIENT_AUDIO_ENABLED_STORAGE_KEY)).toBe('true');
 		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
 			body: JSON.stringify({ ambientAudioEnabled: true }),
@@ -85,7 +89,9 @@ describe('AmbientAudioController', () => {
 			viewerId: null
 		});
 
-		await expect.element(page.getByRole('button', { name: 'Enable ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: false }))
+			.toBeVisible();
 		await vi.waitFor(() => {
 			expect(fakeAudio.play).not.toHaveBeenCalled();
 		});
@@ -130,9 +136,11 @@ describe('AmbientAudioController', () => {
 		});
 
 		await expect.element(page.getByText('Night Hall')).toBeInTheDocument();
-		await page.getByRole('button', { name: 'Enable ambient audio' }).click();
+		await page.getByRole('button', { name: 'Ambient music', pressed: false }).click();
 
-		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: true }))
+			.toBeVisible();
 		expect(window.localStorage.getItem(AMBIENT_AUDIO_ENABLED_STORAGE_KEY)).toBe('true');
 		expect(window.localStorage.getItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY)).toBe('track-2');
 		expect(fakeAudio.load).toHaveBeenCalledTimes(1);
@@ -180,7 +188,9 @@ describe('AmbientAudioController', () => {
 			viewerId: null
 		});
 
-		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: true }))
+			.toBeVisible();
 		await vi.waitFor(() => {
 			expect(fakeAudio.play).toHaveBeenCalledTimes(1);
 		});
@@ -191,7 +201,7 @@ describe('AmbientAudioController', () => {
 			vi.fn(() => 0)
 		);
 
-		await page.getByRole('button', { name: 'Mute ambient audio' }).click();
+		await page.getByRole('button', { name: 'Ambient music', pressed: true }).click();
 
 		await vi.waitFor(() => {
 			expect(fakeAudio.pause).toHaveBeenCalled();
@@ -210,13 +220,15 @@ describe('AmbientAudioController', () => {
 			viewerId: null
 		});
 
-		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: true }))
+			.toBeVisible();
 		await vi.waitFor(() => {
 			expect(fakeAudio.play).toHaveBeenCalledTimes(1);
 		});
 		fakeAudio.currentTime = 42;
 
-		await page.getByRole('button', { name: 'Mute ambient audio' }).click();
+		await page.getByRole('button', { name: 'Ambient music', pressed: true }).click();
 
 		await vi.waitFor(() => {
 			expect(fakeAudio.pause).toHaveBeenCalled();
@@ -224,7 +236,7 @@ describe('AmbientAudioController', () => {
 		expect(fakeAudio.currentTime).toBe(42);
 		expect(fakeAudio.__currentTimeWrites()).not.toContain(0);
 
-		await page.getByRole('button', { name: 'Enable ambient audio' }).click();
+		await page.getByRole('button', { name: 'Ambient music', pressed: false }).click();
 
 		expect(fakeAudio.currentTime).toBe(42);
 		expect(fakeAudio.play).toHaveBeenCalledTimes(2);

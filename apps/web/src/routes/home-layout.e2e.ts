@@ -50,7 +50,7 @@ const frontDoor = async (page: Page, signedIn: boolean) => {
 				['Come In', page.getByRole('button', { name: 'Come In' })],
 				['Gallery', page.getByRole('link', { name: 'GALLERY' })]
 			];
-	pieces.push(['the audio tab', page.getByRole('button', { name: /ambient audio/i })]);
+	pieces.push(['the audio tab', page.getByRole('button', { name: 'Ambient music' })]);
 	// The footer line is shown where there is room for it, and must fit there.
 	const footer = page.getByText('A social art studio where your doodles compete for glory');
 	if (signedIn && (await footer.isVisible())) pieces.push(['the footer line', footer]);

@@ -4,26 +4,43 @@ import { render } from 'vitest-browser-svelte';
 
 import AmbientAudioTab from './AmbientAudioTab.svelte';
 
-describe('AmbientAudioTab', () => {
-	it('renders the current track label and emits a toggle click', async () => {
-		const onToggle = vi.fn();
+// The music is a little record player in the corner: one toggle, pressed
+// while it plays, that says which record is on.
 
-		await render(AmbientAudioTab, {
+describe('AmbientAudioTab', () => {
+	it('is one toggle, pressed while the music plays', async () => {
+		const onToggle = vi.fn();
+		const { rerender } = await render(AmbientAudioTab, {
 			currentTrackLabel: 'Gallery Rain',
-			enabled: true,
+			enabled: false,
 			onToggle,
 			playbackUnavailable: false
 		});
 
-		const button = page.getByRole('button', { name: 'Mute ambient audio' });
-		await expect.element(button).toBeVisible();
+		const player = page.getByRole('button', { name: 'Ambient music' });
+		await expect.element(player).toHaveAttribute('aria-pressed', 'false');
 
-		await button.click();
-
+		await player.click();
 		expect(onToggle).toHaveBeenCalledTimes(1);
+
+		await rerender({ currentTrackLabel: 'Gallery Rain', enabled: true, onToggle });
+		await expect.element(player).toHaveAttribute('aria-pressed', 'true');
 	});
 
-	it('shows the quiet state when playback is unavailable', async () => {
+	it('says which record is on', async () => {
+		await render(AmbientAudioTab, {
+			currentTrackLabel: 'Gallery Rain',
+			enabled: true,
+			onToggle: () => {},
+			playbackUnavailable: false
+		});
+
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music' }))
+			.toHaveAccessibleDescription('Gallery Rain');
+	});
+
+	it('says so when there is nothing it can play', async () => {
 		await render(AmbientAudioTab, {
 			currentTrackLabel: null,
 			enabled: false,
@@ -31,21 +48,8 @@ describe('AmbientAudioTab', () => {
 			playbackUnavailable: true
 		});
 
-		await expect.element(page.getByRole('button', { name: 'Enable ambient audio' })).toBeVisible();
-		const icon = document.querySelector('.ambient-tab-icon');
-		expect(icon?.getAttribute('data-muted')).toBe('true');
-	});
-
-	it('renders a muted-state audio icon affordance', async () => {
-		await render(AmbientAudioTab, {
-			currentTrackLabel: null,
-			enabled: false,
-			onToggle: () => {},
-			playbackUnavailable: false
-		});
-
-		const icon = document.querySelector('.ambient-tab-icon');
-		expect(icon).not.toBeNull();
-		expect(icon?.getAttribute('data-muted')).toBe('true');
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music' }))
+			.toHaveAccessibleDescription('Quiet for now');
 	});
 });
