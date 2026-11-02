@@ -6,8 +6,11 @@ import {
 	createMuseumWindowFrameUrl,
 	createStickerBackgroundUrl
 } from '../src/lib/features/home-entry-scene/canvas/museum-canvas';
+import { createCutoutTitleSvg } from '../src/lib/features/home-entry-scene/canvas/cutout-title';
 import { getStickerControlPreset } from '../src/lib/features/shared-ui/sticker-controls';
+import { loadCutoutGlyphs } from '../src/lib/server/art/cutout-title-glyphs';
 import {
+	CUTOUT_TITLE_ASSET_NAMES,
 	MUSEUM_WALL_ASSET_NAME,
 	MUSEUM_WINDOW_FRAME_ASSET_NAME,
 	STICKER_CONTROL_SIZES,
@@ -70,6 +73,15 @@ for (const size of STICKER_CONTROL_SIZES) {
 			)
 		});
 	}
+}
+
+// The title, lettered in paths from fonts the visitor never downloads.
+const cutoutGlyphs = loadCutoutGlyphs();
+for (const layout of ['wide', 'stacked'] as const) {
+	assets.push({
+		name: CUTOUT_TITLE_ASSET_NAMES[layout],
+		markup: createCutoutTitleSvg(layout, cutoutGlyphs)
+	});
 }
 
 // Derived here rather than read from the module below: the names these files
