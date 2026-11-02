@@ -132,6 +132,13 @@
 				>
 					<div class="cover-surface" aria-hidden="true"></div>
 					<div class="cover-spine-strip" aria-hidden="true"></div>
+					<!-- Leather corners, the block of pages showing past the board, and
+					     the ribbon marker hanging out of the bottom. -->
+					<span class="cover-corner cover-corner-top" aria-hidden="true"></span>
+					<span class="cover-corner cover-corner-bottom" aria-hidden="true"></span>
+					<span class="cover-pages cover-pages-side" aria-hidden="true"></span>
+					<span class="cover-pages cover-pages-foot" aria-hidden="true"></span>
+					<span class="cover-ribbon" aria-hidden="true"></span>
 					<div class="cover-strap" aria-hidden="true"></div>
 					<div class="cover-title-area">
 						<strong class="cover-title">Sketchbook</strong>
@@ -436,8 +443,16 @@
 		display: var(--studio-cover-display, block);
 		position: absolute;
 		inset: var(--studio-book-edge, 0.5rem);
-		border-radius: 3px 6px 6px 3px;
-		background: linear-gradient(155deg, #e8e0d4 0%, #ddd5c8 30%, #d5cdc0 60%, #cec5b8 100%);
+		border-radius: 3px 8px 8px 3px;
+		/* Bookcloth: the weave's warp and weft, the light catching the top left
+		 * and the board darkening towards the far corner. The same linen, spine
+		 * and strap the sketchbook on the 3D studio's side table wears. */
+		background-color: #d8cfc0;
+		background-image:
+			repeating-linear-gradient(0deg, rgb(80 64 44 / 0.07) 0 1px, transparent 1px 3px),
+			repeating-linear-gradient(90deg, rgb(80 64 44 / 0.06) 0 1px, transparent 1px 3px),
+			radial-gradient(ellipse at 30% 20%, rgb(255 255 255 / 0.25), transparent 55%),
+			radial-gradient(ellipse at 100% 100%, rgb(60 40 20 / 0.18), transparent 50%);
 		box-shadow:
 			inset 0 0 0 1px rgb(255 255 255 / 0.3),
 			inset -3px 0 15px rgb(0 0 0 / 0.06),
@@ -511,15 +526,8 @@
 		left: 0;
 		top: 0;
 		bottom: 0;
-		width: 16px;
-		background: linear-gradient(
-			90deg,
-			#1a1611 0%,
-			#252019 30%,
-			#2a241c 50%,
-			#252019 70%,
-			#1a1611 100%
-		);
+		width: 26px;
+		background: linear-gradient(90deg, #2a221b, #3b3027 60%, #241d17);
 		border-radius: 0;
 		box-shadow: 3px 0 12px rgb(0 0 0 / 0.3);
 		pointer-events: none;
@@ -541,20 +549,75 @@
 		);
 	}
 
-	/* Cover elastic band (replaces old strap) */
+	/* The leather corners that keep the board's edges from fraying. */
+	.cover-corner {
+		position: absolute;
+		right: 0;
+		width: 2.875rem;
+		height: 2.875rem;
+		pointer-events: none;
+	}
+
+	.cover-corner-top {
+		top: 0;
+		border-top-right-radius: 8px;
+		background: linear-gradient(225deg, #3b3027 50%, transparent 50%);
+	}
+
+	.cover-corner-bottom {
+		bottom: 0;
+		border-bottom-right-radius: 8px;
+		background: linear-gradient(315deg, #3b3027 50%, transparent 50%);
+	}
+
+	/* The pages' edges, just past the board on the open side and the foot.
+	 * They sit outside the cover's box, so nothing of them lies over the cloth,
+	 * and they turn away with the cover's front when it opens. */
+	.cover-pages {
+		position: absolute;
+		background: repeating-linear-gradient(0deg, #f3ecdf 0 2px, #d9cfbe 2px 3px);
+		pointer-events: none;
+	}
+
+	.cover-pages-side {
+		top: 6px;
+		right: -6px;
+		bottom: -6px;
+		width: 6px;
+		border-radius: 0 3px 3px 0;
+		background: repeating-linear-gradient(90deg, #f3ecdf 0 2px, #d9cfbe 2px 3px);
+	}
+
+	.cover-pages-foot {
+		right: -6px;
+		bottom: -6px;
+		left: 10px;
+		height: 6px;
+		border-radius: 0 0 3px 3px;
+	}
+
+	/* The ribbon marker, hanging out of the foot of the pages. */
+	.cover-ribbon {
+		position: absolute;
+		top: calc(100% + 6px);
+		left: 70%;
+		width: 1.25rem;
+		height: 2.25rem;
+		background: linear-gradient(90deg, #8f2a22, #b5473c 50%, #8f2a22);
+		clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%);
+		pointer-events: none;
+	}
+
+	/* The elastic band that keeps the book shut. */
 	.cover-strap {
 		position: absolute;
-		right: 9px;
 		top: -4px;
+		right: 11%;
 		bottom: -4px;
-		width: 3px;
-		height: auto;
-		transform: none;
-		background: var(--color-primary);
-		border: none;
-		border-radius: var(--radius-hairline);
-		display: block;
-		box-shadow: 0 0 8px rgb(212 131 74 / 0.25);
+		width: 12px;
+		border-radius: 6px;
+		background: linear-gradient(90deg, #b8642f, #e08a4c 45%, #b8642f);
+		box-shadow: 3px 0 6px rgb(0 0 0 / 0.35);
 		pointer-events: none;
 		z-index: 6;
 	}
@@ -576,11 +639,16 @@
 		font-family: var(--font-display);
 		font-size: clamp(3rem, 9vw, 4.5rem);
 		font-weight: 700;
-		letter-spacing: 6px;
+		letter-spacing: 0.14em;
 		text-transform: uppercase;
+		/* Pressed into the cloth: a faint darkening where the die bit, lit along
+		 * its lower edge and shadowed along its upper one. The colour itself
+		 * stays transparent, so the deboss is decoration, not low-contrast text. */
 		color: transparent;
-		-webkit-text-stroke: 1px rgb(160 150 135 / 0.45);
-		text-shadow: 0 1px 0 rgb(255 255 255 / 0.35);
+		-webkit-text-fill-color: rgb(120 100 70 / 0.1);
+		text-shadow:
+			0 1px 0 rgb(255 255 255 / 0.55),
+			0 -1px 0 rgb(70 55 35 / 0.35);
 		line-height: 1;
 	}
 
@@ -590,11 +658,12 @@
 		bottom: clamp(3.5rem, 12vh, 6rem);
 		left: 50%;
 		transform: translateX(-50%);
-		background: var(--color-paper);
+		background: #fdfbf7;
 		border: 1px solid rgb(0 0 0 / 0.06);
 		border-radius: 3px;
-		box-shadow: 0 2px 6px rgb(0 0 0 / 0.1);
+		box-shadow: 0 2px 5px rgb(0 0 0 / 0.18);
 		padding: 14px 36px 12px;
+		rotate: -1deg;
 		text-align: center;
 		z-index: 5;
 		white-space: nowrap;
