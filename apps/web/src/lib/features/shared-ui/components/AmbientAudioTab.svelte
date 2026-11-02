@@ -109,9 +109,12 @@
 
 <style>
 	.record-player-shell {
+		/* A page that moves the player (the studio's header row) reckons with these. */
+		--record-player-size: 56px;
+		--record-player-margin: 20px;
 		position: fixed;
-		right: 20px;
-		bottom: 20px;
+		right: var(--record-player-margin);
+		bottom: var(--record-player-margin);
 		/* Below the navigation fade overlays, above page chrome. */
 		z-index: var(--z-ambient);
 		pointer-events: none;
@@ -132,8 +135,8 @@
 		pointer-events: auto;
 		position: relative;
 		display: block;
-		width: 56px;
-		height: 56px;
+		width: var(--record-player-size);
+		height: var(--record-player-size);
 		padding: 0;
 		border: 0;
 		border-radius: 50%;
