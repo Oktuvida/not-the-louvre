@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { LogOut, Trophy, X } from 'lucide-svelte';
+	import { Trophy, X } from 'lucide-svelte';
 	import { resolve } from '$app/paths';
 	import ArtworkFrame from '#lib/features/artwork-presentation/components/ArtworkFrame.svelte';
 	import { resolveArtworkFrame } from '#lib/features/artwork-presentation/model/frame.js';
@@ -23,7 +23,7 @@
 	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
 	import PaperSheet from '#lib/features/shared-ui/components/PaperSheet.svelte';
 	import PostItNote from '#lib/features/shared-ui/components/PostItNote.svelte';
-	import VisitorBadge from '#lib/features/shared-ui/components/VisitorBadge.svelte';
+	import VisitorPass from '#lib/features/shared-ui/components/VisitorPass.svelte';
 	import WashiTape from '#lib/features/shared-ui/components/WashiTape.svelte';
 	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import { dispatchAvatarFaviconUpdate } from '#lib/favicon.js';
@@ -151,25 +151,12 @@
 			class:opacity-0={isExiting}
 			inert={isExiting}
 		>
-			<VisitorBadge
+			<VisitorPass
 				avatarUrl={user.avatarUrl ?? user.image ?? null}
 				nickname={user.nickname}
-				onclick={openAvatarEditor}
+				onEdit={openAvatarEditor}
 				userId={user.id}
 			/>
-			<form method="POST" action="?/signOut">
-				<GameButton
-					type="submit"
-					variant="danger"
-					size="sm"
-					className="group rotate-1 hover:rotate-[-2deg]"
-				>
-					<LogOut
-						class="h-4 w-4 transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-					/>
-					<span>LOGOUT</span>
-				</GameButton>
-			</form>
 		</div>
 	{/if}
 

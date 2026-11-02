@@ -41,7 +41,7 @@ const frontDoor = async (page: Page, signedIn: boolean) => {
 				['the tagline', page.getByText('Where masterpieces are made')],
 				['Studio', page.getByRole('button', { name: 'Studio' })],
 				['Gallery', page.getByRole('button', { name: 'GALLERY' })],
-				['Logout', page.getByRole('button', { name: 'LOGOUT' })],
+				['Leave', page.getByRole('button', { name: 'Leave' })],
 				['the visitor badge', page.getByRole('button', { name: /Edit avatar for/ })]
 			]
 		: [
@@ -95,6 +95,8 @@ const checkFrontDoor = async (page: Page, signedIn: boolean) => {
 				// as a sign hung beside it would; it may touch the window, nothing else.
 				const pair = [a.name, b.name];
 				if (pair.includes('the sign') && pair.includes('the window')) continue;
+				// Leave is the visitor pass's own stub, torn along its perforation.
+				if (pair.includes('Leave') && pair.includes('the visitor badge')) continue;
 				expect.soft(overlap(a.box, b.box), `${a.name} and ${b.name} ${where}`).toBe(0);
 			}
 		}
