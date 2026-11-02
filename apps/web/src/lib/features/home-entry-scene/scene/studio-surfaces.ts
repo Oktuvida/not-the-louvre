@@ -1,4 +1,14 @@
-import type { Material, Mesh, Object3D } from 'three';
+import {
+	DataTexture,
+	NoColorSpace,
+	RepeatWrapping,
+	type MeshStandardMaterial,
+	type Material,
+	type Mesh,
+	type Object3D,
+	type Texture
+} from 'three';
+import { SKETCHBOOK_COVER } from '#lib/features/shared-ui/sketchbook/cover.js';
 
 /*
  * The studio model is flat colour, and only its floor carries UVs, so an image
@@ -6,7 +16,72 @@ import type { Material, Mesh, Object3D } from 'three';
  * from a pattern woven into each material's own shader: projected from the
  * world position along the face's dominant axis, it needs no UVs and no image,
  * and adds nothing to download.
+ *
+ * The one exception is the sketchbook on the side table. The camera closes in
+ * on it until the studio's own sketchbook takes over, so it wears that book's
+ * bookcloth and wear (shared-ui/sketchbook) and its label, laid on through
+ * coordinates worked out from the cover's own shape.
  */
+
+/** The sketchbook's images, as shader uniforms whose textures can arrive later. */
+export type SketchbookCloth = {
+	cloth: { value: Texture };
+	label: { value: Texture };
+	wear: { value: Texture };
+};
+
+const solid = (rgba: [number, number, number, number]) => {
+	const texture = new DataTexture(new Uint8Array(rgba), 1, 1);
+	texture.needsUpdate = true;
+	return texture;
+};
+
+/**
+ * The sketchbook's uniforms, until its images arrive (and for good if they
+ * never do): the cloth's plain colour, no wear, a blank label.
+ */
+export const createSketchbookCloth = (): SketchbookCloth => ({
+	cloth: { value: solid([184, 170, 143, 255]) },
+	label: { value: solid([237, 224, 195, 255]) },
+	wear: { value: solid([0, 0, 0, 0]) }
+});
+
+type TextureSource = { loadAsync: (url: string) => Promise<Texture> };
+
+/**
+ * Loads the bookcloth tile and the cover's wear into the sketchbook's
+ * uniforms. Both are mixed as stored, in sRGB, the way the browser composites
+ * the CSS cover's layers; the shader turns the result to linear light. A
+ * failed image keeps its plain stand-in, and never fails the room.
+ */
+export const loadSketchbookCloth = async (
+	sketchbook: SketchbookCloth,
+	urls: { cloth: string; wear: string },
+	loader: TextureSource
+) => {
+	const [cloth, wear] = await Promise.allSettled([
+		loader.loadAsync(urls.cloth),
+		loader.loadAsync(urls.wear)
+	]);
+	if (cloth.status === 'fulfilled') {
+		cloth.value.wrapS = RepeatWrapping;
+		cloth.value.wrapT = RepeatWrapping;
+		cloth.value.colorSpace = NoColorSpace;
+		cloth.value.anisotropy = 4;
+		sketchbook.cloth.value = cloth.value;
+	}
+	if (wear.status === 'fulfilled') {
+		wear.value.colorSpace = NoColorSpace;
+		sketchbook.wear.value = wear.value;
+	}
+};
+
+/** Gives the sketchbook its painted label, in place of the blank one. */
+export const labelSketchbook = (sketchbook: SketchbookCloth, label: Texture) => {
+	label.colorSpace = NoColorSpace;
+	label.anisotropy = 4;
+	sketchbook.label.value = label;
+};
 
 type Surface = 'wood' | 'paintedWood' | 'plaster' | 'fabric' | 'clay' | 'sketchbookCover' | 'pages';
 
@@ -72,6 +147,18 @@ vec2 surfacePlane(vec3 p, vec3 n) {
 }
 `;
 
+/** A number as GLSL reads it. */
+const glsl = (value: number) => value.toFixed(5);
+
+/*
+ * The side table's sketchbook, in its mesh's own units: the cover runs from
+ * x = 0.0388 at the spine to 0.7727 at the fore-edge and from y = -0.5 at the
+ * tail to 0.5 at the head, the front board faces +z, and with the node's
+ * scale the board measures 0.6585 across and 0.7484 along.
+ */
+const BOOK = { across: 0.6585, along: 0.7484, scaleZ: 0.8973, spineX: 0.0388, widthX: 0.7339 };
+const { elastic, label, tile } = SKETCHBOOK_COVER;
+
 // Each pattern sets `shade`, which multiplies the material's own colour; the
 // sketchbook's patterns paint their own colours (in linear light, as the
 // shader works) and leave `shade` at 1.
@@ -96,32 +183,75 @@ const PATTERN: Record<Surface, string> = {
 	clay: /* glsl */ `
 	vec3 p = vSurfacePos * 3.0;
 	float shade = mix(0.88, 1.08, surfaceFbm(p)) * mix(0.96, 1.03, surfaceNoise(p * 25.0));`,
-	// The studio's own sketchbook, in the model's units: across the cover (u)
-	// and along it (v). Linen with a dark spine, the orange strap, the label.
+	// The studio's own sketchbook: its bookcloth and wear, the label and the thin
+	// elastic, placed as on the desk's CSS cover. u runs across the cover from
+	// the spine, v along it from the tail; colours mix in sRGB, as the browser
+	// mixes the CSS cover's layers, and turn to linear light at the end.
 	sketchbookCover: /* glsl */ `
-	float u = clamp((vSurfaceLocal.x - 0.0388) / 0.7339, 0.0, 1.0);
+	float u = clamp((vSurfaceLocal.x - ${glsl(BOOK.spineX)}) / ${glsl(BOOK.widthX)}, 0.0, 1.0);
 	float v = clamp(vSurfaceLocal.y + 0.5, 0.0, 1.0);
-	vec3 cover = pow(vec3(0.847, 0.812, 0.753), vec3(2.2));
-	cover *= 1.0 + 0.012 * (sin(u * 260.0) + sin(v * 340.0));
-	cover *= mix(0.97, 1.02, surfaceNoise(vec3(u, v, 0.0) * 40.0));
-	if (u < 0.06) cover = pow(vec3(0.165, 0.133, 0.106), vec3(2.2));
-	if (abs(u - 0.9) < 0.012) cover = pow(vec3(0.831, 0.514, 0.29), vec3(2.2));
-	if (u > 0.3 && u < 0.72 && v > 0.1 && v < 0.24) {
-		cover = pow(vec3(0.984, 0.973, 0.949), vec3(2.2));
-		if (abs(v - 0.19) < 0.006 && u > 0.38 && u < 0.64) cover = pow(vec3(0.176, 0.141, 0.125), vec3(2.2));
-		if (abs(v - 0.145) < 0.004 && u > 0.44 && u < 0.58) cover = pow(vec3(0.541, 0.478, 0.4), vec3(2.2));
+	vec3 facing = abs(normalize(vSurfaceLocalNormal));
+	vec2 board = vec2(u * ${glsl(BOOK.across)}, v * ${glsl(BOOK.along)});
+	// Over the boards' edges the cloth runs on round their thickness.
+	vec2 weave = board;
+	if (facing.z < 0.6) {
+		float round = vSurfaceLocal.z * ${glsl(BOOK.scaleZ)};
+		weave = facing.x > facing.y ? vec2(round, board.y) : vec2(board.x, round);
 	}
-	diffuseColor.rgb = cover;
+	// The tile starts at the head, as on the desk.
+	vec3 cover = texture2D(sketchbookCloth, (weave - vec2(0.0, ${glsl(BOOK.along)})) / ${glsl(tile * BOOK.across)}).rgb;
+	vec4 wear = texture2D(sketchbookWear, vec2(u, v));
+	cover = mix(cover, wear.rgb, wear.a);
+
+	if (normalize(vSurfaceLocalNormal).z > 0.6) {
+		// The label, glued on a little crooked, a hairline of shadow under it.
+		vec2 halfLabel = vec2(${glsl((label.width * BOOK.across) / 2)}, ${glsl((label.height * BOOK.across) / 2)});
+		vec2 fromLabel = board - vec2(${glsl(label.centre * BOOK.across)}, ${glsl(label.foot * BOOK.along)} + halfLabel.y);
+		float turn = radians(${glsl(label.turn)});
+		fromLabel = mat2(cos(turn), sin(turn), -sin(turn), cos(turn)) * fromLabel;
+		vec2 outside = abs(fromLabel + vec2(0.0, 0.0012)) - halfLabel;
+		float gap = length(max(outside, 0.0)) + min(max(outside.x, outside.y), 0.0);
+		cover *= 1.0 - 0.32 * (1.0 - smoothstep(-0.0006, 0.0032, gap));
+		if (all(lessThan(abs(fromLabel), halfLabel))) {
+			cover = texture2D(sketchbookLabel, fromLabel / (2.0 * halfLabel) + 0.5).rgb;
+		}
+	}
+
+	// The thin elastic, round the head, the tail and both boards, and its shadow.
+	float strap = (u - ${glsl(1 - elastic.fromEdge)}) / ${glsl(elastic.width / 2)};
+	if (facing.x < 0.6) {
+		if (abs(strap) < 1.0) {
+			float rib = step(0.67, fract(weave.y * ${glsl(1 / (0.004 * BOOK.across))}));
+			cover = vec3(0.169, 0.137, 0.114) * (1.0 + 0.1 * rib) * (1.0 - 0.35 * smoothstep(0.5, 1.0, strap));
+		} else if (strap > 1.0) {
+			cover *= 1.0 - 0.45 * (1.0 - smoothstep(1.0, 2.3, strap));
+		}
+	}
+
+	// The room's lamp and tone mapping flatten the book, its linen darker and
+	// its dark cloth lighter than on the desk; stretched back here, so the zoom
+	// hands over a book of the same colour.
+	cover = clamp((cover - 0.5) * 1.6 + 0.55, 0.0, 1.0);
+	diffuseColor.rgb = pow(cover, vec3(2.2));
 	float shade = 1.0;`,
-	// Cream paper on the faces, fine page lines along the edges.
+	// Cream paper on the faces, fine page lines along the edges, as the desk's.
 	pages: /* glsl */ `
 	float side = 1.0 - step(0.6, abs(normalize(vSurfaceLocalNormal).z));
 	float line = step(0.55, fract((vSurfaceLocal.z + 0.08) * 420.0));
-	diffuseColor.rgb = pow(vec3(0.973, 0.957, 0.925), vec3(2.2)) * (1.0 - side * line * 0.14);
+	diffuseColor.rgb = pow(vec3(0.925, 0.89, 0.815), vec3(2.2)) * (1.0 - side * line * 0.16);
 	float shade = 1.0;`
 };
 
-const dress = (material: Material, surface: Surface) => {
+// The images only the sketchbook's cover samples.
+const UNIFORMS: Partial<Record<Surface, string>> = {
+	sketchbookCover: /* glsl */ `
+uniform sampler2D sketchbookCloth;
+uniform sampler2D sketchbookWear;
+uniform sampler2D sketchbookLabel;
+`
+};
+
+const dress = (material: Material, surface: Surface, sketchbook: SketchbookCloth) => {
 	material.onBeforeCompile = (shader) => {
 		shader.vertexShader = shader.vertexShader
 			.replace('#include <common>', `#include <common>\n${VARYINGS}`)
@@ -130,19 +260,37 @@ const dress = (material: Material, surface: Surface) => {
 				'#include <begin_vertex>\nvSurfacePos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvSurfaceNormal = normalize(mat3(modelMatrix) * objectNormal);\nvSurfaceLocal = transformed;\nvSurfaceLocalNormal = objectNormal;'
 			);
 		shader.fragmentShader = shader.fragmentShader
-			.replace('#include <common>', `#include <common>\n${VARYINGS}${NOISE}`)
+			.replace(
+				'#include <common>',
+				`#include <common>\n${VARYINGS}${UNIFORMS[surface] ?? ''}${NOISE}`
+			)
 			.replace(
 				'#include <color_fragment>',
 				`#include <color_fragment>\n{${PATTERN[surface]}\n\tdiffuseColor.rgb *= shade;\n}`
 			);
+		if (surface === 'sketchbookCover') {
+			shader.uniforms.sketchbookCloth = sketchbook.cloth;
+			shader.uniforms.sketchbookWear = sketchbook.wear;
+			shader.uniforms.sketchbookLabel = sketchbook.label;
+		}
 	};
+	if (surface === 'sketchbookCover' && 'roughness' in material) {
+		// Cloth, not a laminated board: no sheen under the lamp.
+		(material as MeshStandardMaterial).roughness = 0.95;
+	}
 	// One compiled program per surface, shared by every piece made of it.
 	material.customProgramCacheKey = () => `studio-surface-${surface}`;
 	material.needsUpdate = true;
 };
 
-/** Gives the model's wooden, plastered, cloth and clay pieces their surface. */
-export const dressStudioSurfaces = (root: Object3D) => {
+/**
+ * Gives the model's wooden, plastered, cloth and clay pieces their surface,
+ * and the side table's sketchbook the studio sketchbook's cloth.
+ */
+export const dressStudioSurfaces = (
+	root: Object3D,
+	sketchbook: SketchbookCloth = createSketchbookCloth()
+) => {
 	const dressed = new Set<Material>();
 	root.traverse((object) => {
 		const mesh = object as Mesh;
@@ -151,7 +299,7 @@ export const dressStudioSurfaces = (root: Object3D) => {
 		for (const material of materials) {
 			const surface = surfaceFor(material.name);
 			if (!surface || dressed.has(material)) continue;
-			dress(material, surface);
+			dress(material, surface, sketchbook);
 			dressed.add(material);
 		}
 	});

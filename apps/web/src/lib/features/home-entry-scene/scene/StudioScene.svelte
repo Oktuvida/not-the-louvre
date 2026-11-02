@@ -4,13 +4,28 @@
 	import { gsap } from '#lib/client/gsap.js';
 	import { Canvas, T } from '@threlte/core';
 	import { GLTF } from '@threlte/extras';
-	import { Color, Fog, type Group, type Object3D, type OrthographicCamera } from 'three';
+	import {
+		Color,
+		Fog,
+		TextureLoader,
+		type Group,
+		type Object3D,
+		type OrthographicCamera
+	} from 'three';
+	import bookclothUrl from '#lib/assets/sketchbook/bookcloth.webp';
+	import coverWearUrl from '#lib/assets/sketchbook/cover-wear.webp';
 	import type { HomeSceneArtworkSlot } from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
 	import { studioCanvasShadowMap } from '#lib/features/home-entry-scene/scene/studio-renderer-config.js';
 	import { getStudioDracoLoader } from '#lib/features/home-entry-scene/scene/studio-draco-loader.js';
 	import SceneFrameInvalidator from '#lib/features/home-entry-scene/scene/SceneFrameInvalidator.svelte';
 	import SceneTextureBindings from '#lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
-	import { dressStudioSurfaces } from '#lib/features/home-entry-scene/scene/studio-surfaces.js';
+	import {
+		createSketchbookCloth,
+		dressStudioSurfaces,
+		labelSketchbook,
+		loadSketchbookCloth
+	} from '#lib/features/home-entry-scene/scene/studio-surfaces.js';
+	import { paintSketchbookLabel } from '#lib/features/home-entry-scene/scene/sketchbook-label.js';
 	import { studioZoomScale } from '#lib/features/home-entry-scene/scene/studio-framing.js';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
 	import type { EntryFlowState } from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
@@ -132,6 +147,37 @@
 	const sceneReady = $derived(sceneMediaState === 'loaded');
 
 	let invalidateFrame: (() => void) | undefined;
+
+	/*
+	 * The sketchbook on the side table wears the studio sketchbook's cloth, wear
+	 * and label. It starts plain; each image asks for a frame as it arrives, and
+	 * one that arrives after the room is gone is let go.
+	 */
+	const sketchbook = createSketchbookCloth();
+	let sketchbookGone = false;
+	const releaseSketchbook = () => {
+		for (const uniform of Object.values(sketchbook)) uniform.value.dispose();
+	};
+	const showSketchbook = () => {
+		if (sketchbookGone) releaseSketchbook();
+		else invalidateFrame?.();
+	};
+	if (browser) {
+		void loadSketchbookCloth(
+			sketchbook,
+			{ cloth: bookclothUrl, wear: coverWearUrl },
+			new TextureLoader()
+		).then(showSketchbook);
+		void paintSketchbookLabel(document).then((label) => {
+			if (!label) return;
+			labelSketchbook(sketchbook, label);
+			showSketchbook();
+		});
+	}
+	$effect(() => () => {
+		sketchbookGone = true;
+		releaseSketchbook();
+	});
 
 	/**
 	 * Applies studioMotion straight onto the three.js objects and requests a
@@ -448,7 +494,7 @@
 			castShadow
 			receiveShadow
 			onload={() => {
-				if (studioSceneRoot) dressStudioSurfaces(studioSceneRoot);
+				if (studioSceneRoot) dressStudioSurfaces(studioSceneRoot, sketchbook);
 				setSceneMediaState('loaded');
 			}}
 			onerror={() => {
