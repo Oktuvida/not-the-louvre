@@ -282,11 +282,15 @@
 
 /*
  * Polaroid paper: a warm off-white with a fine grain of dots, lifted off the
- * wall by a soft, warm shadow. The grid's cards and the Hot Wall's lead.
+ * wall by a soft, warm shadow. The grid's cards, the Hot Wall's lead, and the
+ * postcard a card opens into, which lays its aging over the same stock through
+ * `--polaroid-paper` and `--polaroid-grain`.
  */
 .polaroid-paper {
-	background-color: #fbf8f2;
-	background-image: radial-gradient(rgb(107 90 69 / 0.08) 1px, transparent 1px);
+	--polaroid-paper: #fbf8f2;
+	--polaroid-grain: radial-gradient(rgb(107 90 69 / 0.08) 1px, transparent 1px);
+	background-color: var(--polaroid-paper);
+	background-image: var(--polaroid-grain);
 	background-size: 4px 4px;
 	box-shadow:
 		0 1px 1px rgb(0 0 0 / 0.08),
