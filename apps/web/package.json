@@ -8,6 +8,7 @@
 		"build": "bun run scripts/generate-static-art.ts && bun run scripts/copy-draco-decoder.ts && bun run scripts/build-production.ts",
 		"build:e2e": "bun run scripts/build-e2e.ts",
 		"model:transform:studio": "bun run scripts/transform-studio-model.ts",
+		"sketchbook:cloth": "bun run scripts/generate-sketchbook-cloth.ts",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && tsc --noEmit -p ./tsconfig.json && svelte-check --tsconfig ./tsconfig.json",
