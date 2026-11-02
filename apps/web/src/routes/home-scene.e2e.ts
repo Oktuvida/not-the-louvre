@@ -79,6 +79,52 @@ test.describe('the studio behind the front door', () => {
 		expect(shaderErrors).toEqual([]);
 	});
 
+	// Every visit to the front door used to leave its room's GPU memory
+	// behind: the canvas left the page, but its WebGL context stayed alive
+	// until the garbage collector got round to it, and Safari reloads a page
+	// that holds too much.
+	test('lets go of the room’s GPU memory once the visitor walks into the gallery', async ({
+		page
+	}) => {
+		await page.addInitScript(() => {
+			const contexts: { canvas: HTMLCanvasElement; context: WebGLRenderingContext }[] = [];
+			Object.assign(window, { __contexts: contexts });
+			const getContext = HTMLCanvasElement.prototype.getContext;
+			HTMLCanvasElement.prototype.getContext = function (
+				this: HTMLCanvasElement,
+				...args: Parameters<HTMLCanvasElement['getContext']>
+			) {
+				const context = getContext.apply(this, args);
+				if (context instanceof WebGL2RenderingContext || context instanceof WebGLRenderingContext) {
+					if (!contexts.some((known) => known.context === context)) {
+						contexts.push({ canvas: this, context });
+					}
+				}
+				return context;
+			} as typeof getContext;
+		});
+		/** The room's contexts: the ones that drew into a canvas on the page. */
+		const roomContexts = () =>
+			page.evaluate(() =>
+				(
+					window as unknown as {
+						__contexts: { canvas: HTMLCanvasElement; context: WebGLRenderingContext }[];
+					}
+				).__contexts
+					.filter(({ canvas }) => canvas.width > 300)
+					.map(({ context }) => ({ lost: context.isContextLost() }))
+			);
+
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Studio' }).waitFor();
+		await expect.poll(roomContexts, { timeout: 15_000 }).toEqual([{ lost: false }]);
+
+		await page.getByRole('button', { name: 'Gallery' }).click();
+		await expect(page).toHaveURL(/\/gallery/, { timeout: 15_000 });
+
+		await expect.poll(roomContexts).toEqual([{ lost: true }]);
+	});
+
 	test('stands the room on the studio’s warm backdrop, not on white', async ({ page }) => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Studio' }).waitFor();
