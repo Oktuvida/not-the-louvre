@@ -12,6 +12,7 @@
 	let { children } = $props();
 	const roomId = $derived(page.data.roomId as GalleryRoomId);
 	const viewer = $derived(page.data.viewer);
+	const awardStyle = $derived(page.data.awardStyle);
 
 	const galleryLayout = createGalleryLayoutContext();
 	const previousRoomId = galleryLayout.previousRoomId;
@@ -37,7 +38,7 @@
 	});
 </script>
 
-<GalleryLayoutFrame {roomId} {viewer} context={galleryLayout}>
+<GalleryLayoutFrame {awardStyle} {roomId} {viewer} context={galleryLayout}>
 	<div class="room-stage">
 		{#key roomId}
 			<div

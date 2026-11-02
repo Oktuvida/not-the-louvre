@@ -15,6 +15,7 @@
 <GalleryExplorationPage
 	adultContentEnabled={data.initialRoomContent?.adultContentEnabled}
 	artworks={data.initialRoomContent?.artworks}
+	awardStyle={data.awardStyle}
 	discovery={data.initialRoomContent?.discovery}
 	emptyStateMessage={data.initialRoomContent?.emptyStateMessage ?? null}
 	room={data.room}

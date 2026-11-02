@@ -57,6 +57,18 @@ describe('ArtworkDetailPanel', () => {
 		await expect.element(page.getByText('Hidden · pending review')).toBeVisible();
 	});
 
+	it('wears the award the gallery visit drew in the corner of a top-three postcard', async () => {
+		await render(ArtworkDetailPanel, {
+			artwork: { ...artwork, rank: 2 },
+			awardStyle: 'stamps',
+			viewer: null
+		});
+
+		await expect
+			.element(page.getByRole('img', { name: 'Runner-up, second place (rubber stamp)' }))
+			.toBeVisible();
+	});
+
 	it('links forking into the draw studio with the parent artwork id', async () => {
 		goto.mockReset();
 

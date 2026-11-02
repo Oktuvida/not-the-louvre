@@ -53,6 +53,49 @@ describe('HallOfFameRoom', () => {
 		await expect.element(page.getByTestId('podium-artwork-3')).toBeVisible();
 	});
 
+	it('marks its top three with the award the visit drew', async () => {
+		const artworks = [
+			createArtwork('a1', 100, 1),
+			createArtwork('a2', 90, 2),
+			createArtwork('a3', 80, 3),
+			createArtwork('a4', 70)
+		];
+
+		await renderRoom({
+			artworks,
+			awardStyle: 'doodles',
+			pageInfo: { hasMore: false, nextCursor: null }
+		});
+
+		for (const name of [
+			'Champion, first place',
+			'Runner-up, second place',
+			'Bronze star, third place'
+		]) {
+			await expect
+				.element(page.getByRole('img', { name: `${name} (marker doodle)` }))
+				.toBeVisible();
+		}
+	});
+
+	it('labels each of the top three like a museum: the work, its artist and year, and the place it won', async () => {
+		const artworks = [
+			createArtwork('a1', 100, 1),
+			createArtwork('a2', 90, 2),
+			createArtwork('a3', 80, 3)
+		];
+
+		await renderRoom({ artworks, pageInfo: { hasMore: false, nextCursor: null } });
+
+		const champion = page.getByTestId('podium-plaque-1');
+		await expect.element(champion.getByText('Artwork a1')).toBeVisible();
+		await expect.element(champion.getByText('artist-a1 · 2023')).toBeVisible();
+		await expect.element(champion.getByText('Champion · ★ 100')).toBeVisible();
+		await expect
+			.element(page.getByTestId('podium-plaque-3').getByText('Bronze star · ★ 80'))
+			.toBeVisible();
+	});
+
 	it('renders podium above VirtualizedGrid with remaining artworks', async () => {
 		const artworks = [
 			createArtwork('a1', 100, 1),

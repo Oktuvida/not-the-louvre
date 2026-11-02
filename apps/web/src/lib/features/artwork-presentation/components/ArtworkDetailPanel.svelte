@@ -20,6 +20,8 @@
 	import { decodeDrawingV3, type InkDocument } from '#lib/stroke/v3.js';
 	import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
 	import type { Viewer } from '#lib/shared/viewer.js';
+	import AwardMark from '#lib/features/shared-ui/components/AwardMark.svelte';
+	import type { AwardStyle } from '#lib/features/shared-ui/award-style.js';
 
 	/* The visitor never reads a stack trace. Codes whose server message is
 	 * already written for them (moderation reasons, rate-limit countdowns) pass
@@ -60,6 +62,7 @@
 	let {
 		artwork,
 		adultContentEnabled = false,
+		awardStyle = 'stamps',
 		checkTextContent = defaultCheckTextContent,
 		isHydrating = false,
 		onAdultContentToggle,
@@ -79,6 +82,8 @@
 	}: {
 		artwork: Artwork | null;
 		adultContentEnabled?: boolean;
+		/** The award style this visit to the gallery drew, for a top-three artwork. */
+		awardStyle?: AwardStyle;
 		checkTextContent?: TextContentChecker;
 		isHydrating?: boolean;
 		onAdultContentToggle?: (enabled: boolean) => Promise<void> | void;
@@ -708,10 +713,8 @@
 									{/if}
 								</div>
 								{#if artwork.rank && artwork.rank <= 3}
-									<div
-										class="absolute -top-3 -left-3 animate-[bob_1.8s_ease-in-out_infinite] text-4xl md:text-5xl"
-									>
-										{{ 1: '🥇', 2: '🥈', 3: '🥉' }[artwork.rank as 1 | 2 | 3]}
+									<div class={`postcard-award postcard-award-${awardStyle}`}>
+										<AwardMark {awardStyle} corner place={artwork.rank as 1 | 2 | 3} />
 									</div>
 								{/if}
 							</div>
@@ -1260,6 +1263,26 @@
 		top: -18px;
 		right: 12px;
 		rotate: 9deg;
+	}
+
+	/* The Hall of Fame's award on a top-three postcard: a stamp pressed over
+	 * the photo's bottom corner, or a doodle drawn over its top one. */
+	.postcard-award {
+		position: absolute;
+		z-index: 5;
+		pointer-events: none;
+	}
+
+	.postcard-award-stamps {
+		right: -0.75rem;
+		bottom: -0.75rem;
+		rotate: -12deg;
+	}
+
+	.postcard-award-doodles {
+		top: -1.75rem;
+		left: -1rem;
+		rotate: -16deg;
 	}
 
 	.postcard-pending {
