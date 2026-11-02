@@ -118,8 +118,9 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
   - La cámara encuadra la habitación entera en cualquier pantalla. Su zoom contaba píxeles por unidad, así que la habitación solo cabía en 1920×1080, donde se compusieron las poses: en un portátil el retrato de la pared izquierda quedaba fuera. Ahora el zoom de cada pose escala con `min(ancho/1920, alto/1080)` (`studio-framing.ts`).
   - En producción la habitación nunca tuvo su fondo beige ni su niebla: threlte solo construye `<T.Color>` y `<T.Fog>` si el código de la clase empieza por `"class "`, y el build las minifica a `class{`. Ahora se le pasan ya construidos, y un e2e lee las esquinas de la pantalla en el build de producción.
 - [x] Pasada de assets, post-its, cinta y chinchetas: un solo material para cada cosa, en `utilities.css`. La cinta (`.tape`, con `.tape-washi` a rayas y `.tape-dots` a puntos) va rasgada por los dos extremos, deja ver el crepé y proyecta su sombra sin `filter`, para no aplanar el giro 3D de la postal. Sustituye a diez rectángulos planos repartidos por notas, polaroids, postal, bandeja, boceto del avatar, gafete y cierres. El post-it (`.sticky-note`) tiene grano, la banda de pegamento arriba y el borde de abajo levantado con su sombra; sustituye la esquina doblada rota. La chincheta (`.push-pin`) tiene cabeza brillante, aguja y sombra.
+- [x] Pasada de assets, las insignias ya elegidas: el fork lleva una etiqueta kraft atada a la esquina de la polaroid, y una obra oculta lleva un sello de tinta roja, "Hidden · pending review", en la polaroid y en la postal (`.ink-stamp`, tinta gastada con una máscara de ruido). Los textos no cambian.
 - [ ] Pasada de assets, lo que queda:
-  - premios e insignias en papel y tinta (la etiqueta kraft para los forks y el sello "Pending review"; el podio y la placa, por decidir);
+  - premios en papel y tinta: el podio del Hall of Fame y la placa, por decidir;
   - polaroid y postal, con todo lo que muestran hoy;
   - tapa del cuaderno.
 

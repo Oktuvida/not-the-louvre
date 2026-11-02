@@ -144,23 +144,17 @@
 			></span>
 		{/if}
 
+		{#if isFork}
+			<!-- A kraft luggage tag tied on at the corner: this one was forked. -->
+			<span class="fork-tag"><span class="fork-tag-paper">Forked</span></span>
+		{/if}
+
 		<!-- Image area -->
 		<div class="relative aspect-square overflow-hidden border border-hairline">
-			{#if isFork}
-				<div
-					class="absolute top-[0.75em] left-[0.75em] z-10 rounded-full border-2 border-ink-warm bg-[#f7d58a] px-[0.75em] py-[0.25em] text-[0.65em] font-black tracking-[0.18em] text-ink-warm uppercase shadow-md"
-				>
-					Forked
-				</div>
-			{/if}
 			{#if artwork.isHidden}
 				<!-- Only its author (in their studio) and moderators ever see a
 				     hidden artwork: the label says why nobody else does. -->
-				<div
-					class="absolute bottom-[0.75em] left-[0.75em] z-10 rounded-full border-2 border-ink-warm bg-paper-bright px-[0.75em] py-[0.25em] text-[0.65em] font-black tracking-[0.12em] text-ink-warm uppercase shadow-md"
-				>
-					Hidden · pending review
-				</div>
+				<p class="pending-stamp"><span class="ink-stamp">Hidden · pending review</span></p>
 			{/if}
 			<NsfwImage
 				src={artwork.imageUrl}
@@ -270,5 +264,81 @@
 
 	.polaroid-pin {
 		--pin-size: 1.125em;
+	}
+
+	/* The tag's clip-path would cut its shadow off, so the shadow is cast by
+	 * the span around it. */
+	.fork-tag {
+		position: absolute;
+		top: 1.375em;
+		left: -0.625em;
+		z-index: 6;
+		rotate: -9deg;
+		filter: drop-shadow(0.08em 0.18em 0.16em rgb(40 25 10 / 0.38));
+		pointer-events: none;
+	}
+
+	.fork-tag-paper {
+		position: relative;
+		display: block;
+		padding: 0.3em 0.75em 0.3em 1.5em;
+		background-color: #c9a46b;
+		background-image: radial-gradient(rgb(90 60 20 / 0.18) 1px, transparent 1px);
+		background-size: 3px 3px;
+		clip-path: polygon(0.75em 0, 100% 0, 100% 100%, 0.75em 100%, 0 72%, 0 28%);
+		font-family: var(--font-hand);
+		font-size: 1.1em;
+		font-weight: 700;
+		line-height: 1.1;
+		color: #3d2a12;
+	}
+
+	/* The reinforced hole near the tag's point. */
+	.fork-tag-paper::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 0.5em;
+		width: 0.42em;
+		height: 0.42em;
+		translate: 0 -50%;
+		border-radius: 50%;
+		background: #e7d3a8;
+		box-shadow: inset 1px 1px 2px rgb(0 0 0 / 0.35);
+	}
+
+	/* The loop of string through the hole. */
+	.fork-tag::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: -0.55em;
+		z-index: 1;
+		width: 1.35em;
+		height: 0.8em;
+		translate: 0 -50%;
+		border: 1.5px solid #6b5a45;
+		border-right-color: transparent;
+		border-radius: 50%;
+	}
+
+	/* Stamped on a slip of paper over the artwork, so the ink reads on any
+	 * drawing; only the ink is worn, not the slip. */
+	.pending-stamp {
+		position: absolute;
+		bottom: 0.75em;
+		left: 0.75em;
+		z-index: 10;
+		max-width: 9em;
+		margin: 0;
+		font-size: 0.68em;
+		border-radius: 6px;
+		background: rgb(253 251 247 / 0.82);
+		rotate: -7deg;
+	}
+
+	.pending-stamp .ink-stamp {
+		display: block;
+		rotate: 0deg;
 	}
 </style>
