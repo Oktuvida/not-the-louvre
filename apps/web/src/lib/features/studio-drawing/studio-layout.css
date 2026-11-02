@@ -35,10 +35,31 @@ html:has(.studio-page) {
 	font-size: clamp(100%, min(100vw / 94.5, 100dvh / 53.75), 150%);
 }
 
-/* The audio tab joins the header row instead of covering the desk. */
-body:has(.studio-page) .ambient-tab-shell {
-	top: 0;
-	bottom: auto;
+/*
+ * The record player joins the header row, across from Exit Studio, instead of
+ * covering the supplies and Publish. It slides up there from the corner it
+ * holds on every other page, which is where it stands in the home room's last
+ * frame.
+ */
+body:has(.studio-page) .record-player-shell {
+	--studio-record-top: 12px;
+	translate: 0
+		calc(
+			var(--studio-record-top) + var(--record-player-size) + var(--record-player-margin) - 100dvh
+		);
+	transition: translate 700ms var(--ease-glide) 300ms;
+}
+
+@media (max-width: 39.99rem) {
+	body:has(.studio-page) .record-player-shell {
+		--studio-record-top: 4px;
+	}
+}
+
+@media (max-height: 30rem) {
+	body:has(.studio-page) .record-player-shell {
+		--studio-record-top: 0px;
+	}
 }
 
 .studio-page {
@@ -412,8 +433,9 @@ body:has(.studio-page) .ambient-tab-shell {
 	}
 }
 
-/* Under reduced motion the book takes its place at once. */
+/* Under reduced motion the book and the record player take their places at once. */
 @media (prefers-reduced-motion: reduce) {
+	body:has(.studio-page) .record-player-shell,
 	.studio-book {
 		transition: none;
 	}

@@ -4,8 +4,8 @@ import { deterministicAuthUser, resetDemoState } from '../demo/e2e-helpers';
 // The studio is one page that has to fit every screen an artist draws on: a
 // desktop, a laptop, a tablet either way up, a phone either way up. On each of
 // them the canvas is square, whole and uncovered, the page never scrolls
-// sideways, the supplies stay off the canvas, and the title, the 18+ switch
-// and Publish are on screen. The canvas also takes a fair share of the screen,
+// sideways, the supplies stay off the canvas, the title, the 18+ switch
+// and Publish are on screen, and the record player covers none of them. The canvas also takes a fair share of the screen,
 // so "fits" never means "shrunk to a stamp".
 
 type Screen = {
@@ -181,15 +181,25 @@ test.describe('the studio fits the screen it is on', () => {
 				}
 			}
 
-			// What the artist needs to finish is on screen.
+			// What the artist needs to finish is on screen, under no record player.
+			const recordPlayer = page.getByRole('button', { name: 'Ambient music' });
 			const finishing = [
 				page.getByPlaceholder('Untitled genius'),
 				page.getByRole('checkbox', { name: /Not safe for the Louvre/ }),
-				page.getByRole('button', { name: 'Publish' })
+				page.getByRole('button', { name: 'Publish' }),
+				page.getByRole('button', { name: /Clear/ })
 			];
 			for (const control of finishing) {
 				if (screen.controlsBelowTheFold) await control.scrollIntoViewIfNeeded();
 				await expect(control).toBeInViewport({ ratio: 1 });
+				const [box, player] = await Promise.all([
+					control.boundingBox(),
+					recordPlayer.boundingBox()
+				]);
+				expect(
+					box && player && overlaps(box, player),
+					`the record player sits on ${(await control.getAttribute('placeholder')) ?? (await control.textContent())?.trim()}`
+				).toBe(false);
 			}
 		});
 	}
