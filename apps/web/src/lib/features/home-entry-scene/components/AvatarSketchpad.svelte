@@ -47,6 +47,7 @@
 			JSON.stringify(encodeDrawingV3(toInkDocument(documentState))),
 		draftUserKey = null,
 		draftStore,
+		fit = false,
 		initialDrawingDocument = null,
 		nickname,
 		onContinue,
@@ -60,6 +61,12 @@
 		createAvatarPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		draftUserKey?: string | null;
 		draftStore?: IndexedDbDrawingDraftStore;
+		/**
+		 * Take the height the sheet gives it instead of growing the sheet: the
+		 * canvas becomes the largest square the easel has room for. The
+		 * onboarding sheet, which sizes itself to the screen, asks for this.
+		 */
+		fit?: boolean;
 		initialDrawingDocument?: DrawingDocumentV2 | null;
 		nickname: string;
 		onContinue?: () => void;
@@ -335,7 +342,7 @@
 	});
 </script>
 
-<div class="sketchpad">
+<div class="sketchpad" class:sketchpad-fit={fit}>
 	<p class="sketch-subtitle">
 		Sketch a quick self-portrait for <span class="sketch-nickname">{nickname}</span>.
 	</p>
@@ -424,15 +431,15 @@
 						strokeSize={brushSize}
 					/>
 				</div>
-			</div>
-			<div class="seal-station" aria-hidden="true">
-				<div class="seal-blob" bind:this={sealBlobElement}>
-					<div class="seal-well">
-						<canvas bind:this={sealCanvasElement} width="124" height="124" class="seal-canvas"
-						></canvas>
+				<div class="seal-station" aria-hidden="true">
+					<div class="seal-blob" bind:this={sealBlobElement}>
+						<div class="seal-well">
+							<canvas bind:this={sealCanvasElement} width="124" height="124" class="seal-canvas"
+							></canvas>
+						</div>
 					</div>
+					<p class="seal-caption">your wax seal</p>
 				</div>
-				<p class="seal-caption">your wax seal</p>
 			</div>
 			<p class="easel-note">draw inside the lines… or don't.</p>
 		</div>
@@ -865,6 +872,132 @@
 	@media (max-width: 540px) {
 		.footer-note {
 			display: none;
+		}
+	}
+
+	/*
+	 * Fitted to its sheet: the pad takes the height it is given, the easel is
+	 * measured so the canvas can be the largest square inside it, and the paints
+	 * pack into fewer rows. Side by side from 640px wide; below that the paints
+	 * run in one row under the canvas, scrolling sideways.
+	 */
+	.sketchpad-fit {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	.sketchpad-fit .sketch-bench {
+		flex: 1;
+		/* The easel stretches to its row: it is measured, not sized by its content. */
+		align-items: stretch;
+		grid-template-rows: minmax(0, 1fr) auto;
+		gap: 14px 24px;
+		min-height: 0;
+		margin-top: 12px;
+	}
+
+	.sketchpad-fit .sketch-easel {
+		container-type: size;
+		min-height: 0;
+	}
+
+	.sketchpad-fit .canvas-mat {
+		/* The easel note keeps its line under the canvas. */
+		width: min(100cqw, 100cqh - 2.4rem);
+	}
+
+	.sketchpad-fit .paint-grid {
+		grid-template-columns: repeat(6, 34px);
+		gap: 8px;
+	}
+
+	.sketchpad-fit .paint-dab {
+		width: 34px;
+		height: 32px;
+	}
+
+	.sketchpad-fit .brush-block {
+		margin-top: 14px;
+	}
+
+	@media (min-width: 640px) {
+		.sketchpad-fit .sketch-bench {
+			grid-template-columns: auto minmax(0, 1fr);
+			grid-template-rows: minmax(0, 1fr);
+		}
+
+		.sketchpad-fit .sketch-rail {
+			order: 1;
+		}
+
+		.sketchpad-fit .sketch-easel {
+			order: 2;
+		}
+	}
+
+	@media (max-width: 639.98px) {
+		.sketchpad-fit .paint-grid {
+			grid-auto-columns: 40px;
+			grid-auto-flow: column;
+			grid-template-columns: none;
+			grid-template-rows: 36px;
+			/* Room for the pencil ring around the chosen paint. */
+			margin: -6px -6px 0;
+			padding: 6px 6px 8px;
+			overflow-x: auto;
+		}
+
+		.sketchpad-fit .paint-dab {
+			width: 40px;
+			height: 36px;
+		}
+
+		/* A phone gives the canvas the note's line, and the dab's caption's. */
+		.sketchpad-fit .easel-note,
+		.sketchpad-fit .test-caption {
+			display: none;
+		}
+
+		.sketchpad-fit .canvas-mat {
+			width: min(100cqw, 100cqh);
+		}
+	}
+
+	/* A short screen keeps the canvas and the controls and drops the asides. */
+	@media (max-height: 640px) {
+		.sketchpad-fit .sketch-subtitle,
+		.sketchpad-fit .easel-note,
+		.sketchpad-fit .test-caption,
+		.sketchpad-fit .footer-note {
+			display: none;
+		}
+
+		.sketchpad-fit .sketch-bench {
+			margin-top: 8px;
+		}
+
+		.sketchpad-fit .canvas-mat {
+			width: min(100cqw, 100cqh);
+		}
+
+		.sketchpad-fit .paint-grid {
+			grid-template-columns: repeat(8, 30px);
+			gap: 6px;
+		}
+
+		.sketchpad-fit .paint-dab {
+			width: 30px;
+			height: 30px;
+		}
+
+		.sketchpad-fit .brush-block {
+			margin-top: 8px;
+		}
+
+		.sketchpad-fit .sketch-footer {
+			margin-top: 10px;
 		}
 	}
 

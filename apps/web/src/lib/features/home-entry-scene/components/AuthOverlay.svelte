@@ -115,7 +115,11 @@
 		view === 'signup-account' || view === 'signup-success' || view === 'signup-avatar'
 	);
 	const isAvatarView = $derived(view === 'signup-avatar');
-	const panelClassName = $derived(isAvatarView ? 'w-full max-w-[50rem]' : 'w-full max-w-[44rem]');
+	// The avatar step sizes its sheet to the screen and lets the sketchpad fill
+	// it (`auth-sheet-fit`), so drawing never starts with a scroll.
+	const panelClassName = $derived(
+		isAvatarView ? 'auth-sheet-fit w-full max-w-[50rem]' : 'w-full max-w-[44rem]'
+	);
 	const contentClassName = $derived(
 		isAvatarView ? 'space-y-5 p-6 md:p-8 lg:pl-16 lg:p-10' : 'min-h-[26rem] space-y-5 p-6 md:p-8'
 	);
@@ -605,14 +609,14 @@
 <div
 	bind:this={backdropElement}
 	data-testid="auth-overlay"
-	class={`absolute inset-0 z-40 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,240,214,0.24),rgba(24,15,8,0.58))] px-4 py-6 opacity-0 md:px-6 md:py-10 ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
+	class={`absolute inset-0 z-40 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,240,214,0.24),rgba(24,15,8,0.58))] px-4 opacity-0 md:px-6 ${isAvatarView ? 'auth-overlay-fit' : 'py-6 md:py-10'} ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
 	aria-hidden={!isInteractive}
 	inert={!isInteractive}
 >
 	<div class="flex min-h-full w-full items-center justify-center">
 		<div
 			bind:this={overlayElement}
-			class="flex w-full items-center justify-center py-2 opacity-0 md:py-0"
+			class={`flex w-full items-center justify-center opacity-0 ${isAvatarView ? '' : 'py-2 md:py-0'}`}
 			style="transform: scale(0.95);"
 		>
 			<div
@@ -631,12 +635,14 @@
 				<div class={`auth-sheet-inner paper-grain relative pl-8 md:pl-11 ${contentClassName}`}>
 					<div class="flex items-start justify-between gap-4">
 						<div class="space-y-2">
-							<p class="font-display text-xs font-semibold tracking-[0.28em] text-muted uppercase">
+							<p
+								class="auth-sheet-kicker font-display text-xs font-semibold tracking-[0.28em] text-muted uppercase"
+							>
 								Studio Access
 							</p>
 							<h2
 								id={AUTH_SHEET_TITLE_ID}
-								class="font-display text-2xl tracking-[0.06em] text-ink uppercase md:text-3xl"
+								class="auth-sheet-title font-display text-2xl tracking-[0.06em] text-ink uppercase md:text-3xl"
 							>
 								{view === 'signup-account'
 									? 'Draw yourself'
@@ -668,7 +674,7 @@
 					</div>
 
 					<div
-						class={showLiveAuthContent ? '' : 'pointer-events-none invisible'}
+						class={`auth-sheet-body ${showLiveAuthContent ? '' : 'pointer-events-none invisible'}`}
 						inert={!showLiveAuthContent}
 						aria-hidden={!showLiveAuthContent}
 					>
@@ -999,6 +1005,7 @@
 							</div>
 						{:else}
 							<AvatarSketchpad
+								fit
 								draftUserKey={authenticatedUser?.id ?? authenticatedUser?.nickname ?? null}
 								initialDrawingDocument={authenticatedUser?.avatarDrawingDocument ?? null}
 								{nickname}
@@ -1047,5 +1054,63 @@
 		font-weight: 600;
 		color: var(--color-bark);
 		rotate: -0.4deg;
+	}
+
+	/*
+	 * The avatar step: the sheet is as tall as the screen leaves it, up to what
+	 * a full-size canvas needs, and the sketchpad fills what the header leaves.
+	 * `--auth-fit-gap` is the overlay's padding above and below the sheet.
+	 */
+	.auth-overlay-fit {
+		--auth-fit-gap: 2.5rem;
+		padding-block: calc(var(--auth-fit-gap) / 2);
+	}
+
+	.auth-sheet-fit {
+		display: flex;
+		flex-direction: column;
+		height: min(100dvh - var(--auth-fit-gap), 50rem);
+	}
+
+	.auth-sheet-fit .auth-sheet-inner {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	.auth-sheet-fit .auth-sheet-body {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	/* On a phone or a short screen the header keeps only its title. */
+	@media (max-width: 639.98px), (max-height: 640px) {
+		.auth-sheet-fit .auth-sheet-kicker,
+		.auth-sheet-fit .auth-sheet-swipe,
+		.auth-sheet-fit .auth-sheet-subtitle {
+			display: none;
+		}
+	}
+
+	@media (max-height: 640px) {
+		.auth-overlay-fit {
+			--auth-fit-gap: 1rem;
+		}
+
+		.auth-sheet-fit .auth-sheet-inner {
+			padding-top: 0.875rem;
+			padding-bottom: 0.875rem;
+		}
+
+		.auth-sheet-fit .auth-sheet-inner > :not(:last-child) {
+			margin-block-end: 0.5rem;
+		}
+
+		.auth-sheet-fit .auth-sheet-title {
+			font-size: 1.25rem;
+		}
 	}
 </style>

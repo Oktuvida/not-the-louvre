@@ -223,9 +223,25 @@ const drawLineThroughCentre = async (page: import('@playwright/test').Page) => {
 	const canvas = page.getByLabel('Drawing canvas');
 	// The canvas takes strokes once the local draft has loaded.
 	await expect(canvas).toHaveAttribute('aria-disabled', 'false');
-	// The sketchbook can still be scaling into place; a line drawn on a moving
-	// canvas lands somewhere else. Draw once its box holds still for a frame.
-	await expect
+	// The sketchbook can still be scaling into place.
+	await waitUntilStill(canvas);
+	const box = await canvas.boundingBox();
+	if (!box) throw new Error('Expected the drawing canvas to expose a bounding box');
+
+	await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2, { steps: 8 });
+	await page.mouse.up();
+	await expect.poll(() => readDrawingCanvasCenterPixel(page)).not.toEqual([253, 251, 247, 255]);
+};
+
+/**
+ * A line drawn on a moving canvas lands somewhere else: draw once its box holds
+ * still for a frame. The sketchbook scales into place, and the avatar sheet
+ * settles into the size of the screen as the step it holds changes.
+ */
+const waitUntilStill = (canvas: import('@playwright/test').Locator) =>
+	expect
 		.poll(() =>
 			canvas.evaluate(
 				(node) =>
@@ -240,21 +256,13 @@ const drawLineThroughCentre = async (page: import('@playwright/test').Page) => {
 			)
 		)
 		.toBe(true);
-	const box = await canvas.boundingBox();
-	if (!box) throw new Error('Expected the drawing canvas to expose a bounding box');
-
-	await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2);
-	await page.mouse.down();
-	await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2, { steps: 8 });
-	await page.mouse.up();
-	await expect.poll(() => readDrawingCanvasCenterPixel(page)).not.toEqual([253, 251, 247, 255]);
-};
 
 const drawRepeatedDenseStroke = async (
 	page: import('@playwright/test').Page,
 	canvas: import('@playwright/test').Locator,
 	repetitionCount = 45
 ) => {
+	await waitUntilStill(canvas);
 	const box = await canvas.boundingBox();
 	if (!box) {
 		throw new Error('Expected the drawing canvas to expose a bounding box');
