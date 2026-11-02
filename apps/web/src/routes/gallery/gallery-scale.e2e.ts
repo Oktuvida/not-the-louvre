@@ -85,6 +85,34 @@ test.describe('the gallery on every screen', () => {
 		});
 	}
 
+	test('from a laptop up, the artworks hang with wall on either side, not edge to edge', async ({
+		browser
+	}) => {
+		for (const viewport of [
+			{ height: 800, width: 1280 },
+			{ height: 860, width: 1512 },
+			{ height: 1080, width: 1920 },
+			{ height: 1440, width: 2560 }
+		]) {
+			const { context, page } = await atSize(browser, viewport);
+			await openHotWall(page);
+
+			const rows = rowsOf(await cardBoxes(page));
+			const widest = Math.max(...rows.map((row) => row.length));
+			const gridCards = rows.filter((row) => row.length === widest).flat();
+			const left = Math.min(...gridCards.map((card) => card.x));
+			const right = viewport.width - Math.max(...gridCards.map((card) => card.x + card.width));
+
+			expect(left, `wall on the left at ${viewport.width}px`).toBeGreaterThanOrEqual(
+				viewport.width * 0.06
+			);
+			expect(right, `wall on the right at ${viewport.width}px`).toBeGreaterThanOrEqual(
+				viewport.width * 0.06
+			);
+			await context.close();
+		}
+	});
+
 	test('the Mystery room keeps Spin a button, not a banner across the screen', async ({
 		browser
 	}) => {

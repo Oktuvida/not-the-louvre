@@ -11,12 +11,18 @@
  *   gallery's rem grows on screens wider than 1440px (GalleryLayoutFrame), so
  *   a big screen gets bigger cards and gaps as well as more columns.
  *
+ * - From a laptop up the artworks hang with wall on either side instead of
+ *   running edge to edge: the margin grows with the screen, from nothing on
+ *   a tablet (two columns of 19rem barely fit there) to 6rem, and stays
+ *   within what keeps a laptop's three columns and a 2560px monitor's four.
+ *
  * A room can space its cards differently by setting --gallery-gap and
  * --gallery-gap-phone on an ancestor.
  */
 
 .gallery-grid-host {
 	--gallery-grid-gap: var(--gallery-gap, 4.5rem);
+	padding-inline: clamp(0px, (100vw - 800px) * 0.14, 6rem);
 }
 
 .gallery-grid {
