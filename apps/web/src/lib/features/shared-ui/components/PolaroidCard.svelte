@@ -117,7 +117,7 @@
 	onkeydown={handleKeydown}
 >
 	<div
-		class="polaroid relative bg-paper-card p-[0.5em] pb-0 shadow-sheet transition duration-200 group-hover:z-5 group-hover:scale-[1.06] group-active:scale-[0.97]"
+		class="polaroid polaroid-paper relative p-[0.5em] pb-0 transition duration-200 group-hover:z-5 group-hover:scale-[1.06] group-active:scale-[0.97]"
 	>
 		<!-- Paint stain decoration -->
 		<div

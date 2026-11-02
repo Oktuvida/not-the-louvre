@@ -719,8 +719,8 @@
 								{/if}
 							</div>
 
-							<!-- Caption strip -->
-							<div class="flex items-start gap-3 px-1 pt-3 pb-1">
+							<!-- Caption strip: written in pen, the postage stuck in the corner -->
+							<div class="postcard-caption">
 								{#if artwork.artistAvatar}
 									<button
 										bind:this={avatarTriggerElement}
@@ -755,13 +755,31 @@
 											{forkAttribution}
 										</p>
 									{/if}
+									<p class="postcard-signature truncate">by {artwork.artist}</p>
 								</div>
-								<div class="flex shrink-0 flex-col items-end gap-0.5 pr-1 text-right">
-									<p class="postcard-signature max-w-[10rem] truncate">by {artwork.artist}</p>
-									<p class="font-display text-sm font-semibold text-muted-ink">
-										<span class="text-base leading-none">⭐</span>
-										{artwork.score}
-									</p>
+								<!-- The postage: the artwork as its own stamp, its stars the value. -->
+								<div class="postcard-postage">
+									<div class="postcard-stamp postcard-stamp-front">
+										<img
+											class={isSensitiveBlurred ? 'blur-md saturate-0' : ''}
+											src={artwork.imageUrl}
+											alt=""
+										/>
+										<span class="postcard-stamp-value">★ {artwork.score}</span>
+									</div>
+									<svg class="postcard-front-postmark" viewBox="0 0 92 64" aria-hidden="true">
+										<g stroke="currentColor" fill="none">
+											<circle cx="32" cy="32" r="24" stroke-width="2.2"></circle>
+											<path
+												d="M60 20 q 7 -5 14 0 t 14 0 M60 31 q 7 -5 14 0 t 14 0 M60 42 q 7 -5 14 0 t 14 0"
+												stroke-width="1.8"
+											></path>
+										</g>
+										<g fill="currentColor" class="postmark-small">
+											<text x="32" y="30" text-anchor="middle">NOT THE</text>
+											<text x="32" y="39" text-anchor="middle">LOUVRE</text>
+										</g>
+									</svg>
 								</div>
 							</div>
 							<!-- Action row: sticker buttons, hand-applied on the card -->
@@ -1189,6 +1207,10 @@
 		z-index: 2;
 		padding: 14px 14px 10px;
 		transform: translateZ(0.1px);
+		/* The card's corners yellowing, the way old postcards do. */
+		background-image:
+			radial-gradient(ellipse at 100% 100%, rgb(160 120 70 / 0.16), transparent 45%),
+			radial-gradient(ellipse at 0% 0%, rgb(160 120 70 / 0.1), transparent 40%);
 	}
 
 	.postcard.is-flipped .postcard-front {
@@ -1291,13 +1313,14 @@
 		rotate: -3deg;
 	}
 
+	/* Written in ballpoint, in the pen's navy. */
 	.postcard-title {
 		margin: 0;
 		font-family: var(--font-hand);
-		font-size: 1.65rem;
-		font-weight: 600;
-		line-height: 1.05;
-		color: var(--color-ink-warm);
+		font-size: 1.75rem;
+		font-weight: 700;
+		line-height: 1;
+		color: #1f2a44;
 	}
 
 	.postcard-meta {
@@ -1311,11 +1334,64 @@
 	}
 
 	.postcard-signature {
+		margin: 4px 0 0;
 		font-family: var(--font-hand);
-		font-size: 1.45rem;
+		font-size: 1.2rem;
 		line-height: 1.1;
-		color: #6b4226;
-		transform: rotate(-2deg);
+		color: #1f2a44;
+	}
+
+	.postcard-caption {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+		padding: 12px 4px 4px;
+	}
+
+	.postcard-postage {
+		position: relative;
+		flex-shrink: 0;
+		width: 5.25rem;
+		height: 5.5rem;
+	}
+
+	/* The front's stamp, smaller than the back's and stuck on a little crooked;
+	 * its value, the artwork's stars, printed in the margin under the picture. */
+	.postcard-stamp-front {
+		position: absolute;
+		top: 0;
+		right: 2px;
+		width: 3.75rem;
+		rotate: 3deg;
+	}
+
+	.postcard-stamp-front .postcard-stamp-value {
+		position: static;
+		display: block;
+		padding-top: 2px;
+		text-align: right;
+		font-size: 0.75rem;
+		line-height: 1.1;
+		color: #1f2a44;
+		text-shadow: none;
+	}
+
+	/* The postmark struck half over the stamp, half on the card. */
+	.postcard-front-postmark {
+		position: absolute;
+		top: 1.5rem;
+		left: -1.5rem;
+		width: 5.25rem;
+		color: #5a3a6e;
+		opacity: 0.7;
+		rotate: -12deg;
+		pointer-events: none;
+	}
+
+	.postmark-small {
+		font-family: var(--font-display);
+		font-size: 6.5px;
+		font-weight: 700;
 	}
 
 	/* Sticker action row. GameButtons normally carry a 140px min-width;
@@ -1446,22 +1522,19 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 7px;
-		padding: 9px 20px 9px 16px;
+		min-height: 40px;
+		padding: 0 20px 0 16px;
 		font-family: var(--font-display);
-		font-size: 0.78rem;
-		font-weight: 600;
-		letter-spacing: 0.05em;
+		font-size: 0.8125rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
 		white-space: nowrap;
-		color: #4a3a2c;
+		color: #3d3530;
 		background:
-			repeating-linear-gradient(
-				115deg,
-				rgba(212, 131, 74, 0.13) 0 9px,
-				rgba(212, 131, 74, 0) 9px 18px
-			),
-			rgba(255, 248, 230, 0.94);
+			repeating-linear-gradient(45deg, rgb(212 131 74 / 0.22) 0 6px, transparent 6px 13px),
+			rgb(241 226 188 / 0.95);
 		box-shadow: 1px 2.5px 5px rgba(45, 36, 32, 0.22);
-		rotate: -2.5deg;
+		rotate: -2deg;
 		/* overhangs the card edge like real tape */
 		margin-right: -6px;
 		clip-path: polygon(
