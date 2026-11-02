@@ -112,23 +112,24 @@ describe('gallery route layout', () => {
 		await expect.element(page.getByRole('link', { name: 'Create Art' })).not.toBeInTheDocument();
 	});
 
-	it('keeps the refresh action alive after two room changes', async () => {
+	it('keeps the new-pieces notice wired to the live room after two room changes', async () => {
 		refreshAll.mockClear();
+		const checkForNewArtworks = vi.fn(async () => ({ count: 2, preview: null }));
 
 		setRoom({ roomId: 'hall-of-fame', viewer: { id: 'user-1', role: 'user' } });
 
-		await render(GalleryRoomSwitchHarness);
+		await render(GalleryRoomSwitchHarness, { checkForNewArtworks });
 
-		await expect.element(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /2 new pieces/ })).toBeVisible();
 
 		setRoom({ roomId: 'hot-wall', viewer: { id: 'user-1', role: 'user' } });
-		setRoom({ roomId: 'mystery', viewer: { id: 'user-1', role: 'user' } });
+		setRoom({ roomId: 'your-studio', viewer: { id: 'user-1', role: 'user' } });
 
 		// The outgoing room's effect teardown is deferred until the 225ms slide
 		// outro finishes — long after the incoming room published its bindings.
 		await new Promise((resolve) => setTimeout(resolve, 500));
 
-		await page.getByRole('button', { name: 'Refresh' }).click();
+		await page.getByRole('button', { name: /2 new pieces/ }).click();
 
 		await vi.waitFor(() => {
 			expect(refreshAll).toHaveBeenCalledTimes(1);

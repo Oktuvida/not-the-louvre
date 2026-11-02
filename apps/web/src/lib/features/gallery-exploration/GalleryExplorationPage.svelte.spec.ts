@@ -425,7 +425,6 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByRole('link', { name: 'Your Studio' })).not.toBeInTheDocument();
 		await expect.element(page.getByRole('link', { name: 'Create Art' })).not.toBeInTheDocument();
-		await expect.element(page.getByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
 		await expect
 			.element(page.getByText('New pieces will appear here as artists publish them.'))
 			.toBeVisible();
@@ -443,16 +442,61 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByRole('link', { name: 'Create Art' })).toBeVisible();
-		await expect.element(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
-		expect(page.getByRole('button', { name: 'Refresh' })).toBeDefined();
-		const refreshButton = document.querySelector('[data-sticker-variant="secondary"]');
-		expect(refreshButton?.className).toContain('z-20');
 		await expect
 			.element(page.getByText('Publish a new piece from the studio and it will show up here.'))
 			.toBeVisible();
+	});
 
-		await page.getByRole('button', { name: 'Refresh' }).click();
+	// No Refresh button: when pieces go up that are not on the wall yet, the
+	// newest one peeks in from the top, and tapping it hangs them all.
+	it('drops in the newest piece when new ones go up, and hangs them when tapped', async () => {
+		// Once they are hung, nothing on the first page is new any more.
+		let hung = false;
+		refreshAll.mockReset();
+		refreshAll.mockImplementation(async () => {
+			hung = true;
+		});
+		const checkForNewArtworks = vi.fn(async () =>
+			hung
+				? { count: 0, preview: null }
+				: { count: 3, preview: { ...baseArtwork, id: 'artwork-new', title: 'Fresh Paint' } }
+		);
+
+		await render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Desk Study' }],
+			checkForNewArtworks,
+			emptyStateMessage: null,
+			newArtworkCheckMs: 10,
+			room: getGalleryRoom('hot-wall'),
+			roomId: 'hot-wall',
+			viewer: null
+		});
+
+		const notice = page.getByRole('button', { name: /3 new pieces/ });
+		await expect.element(notice).toBeVisible();
+		expect(checkForNewArtworks).toHaveBeenCalledWith(['artwork-1']);
+
+		await notice.click();
 		expect(refreshAll).toHaveBeenCalledTimes(1);
+		await expect.element(notice).not.toBeInTheDocument();
+	});
+
+	it('shows nothing while nothing new has gone up', async () => {
+		const checkForNewArtworks = vi.fn().mockResolvedValue({ count: 0, preview: null });
+
+		await render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Desk Study' }],
+			checkForNewArtworks,
+			emptyStateMessage: null,
+			newArtworkCheckMs: 10,
+			room: getGalleryRoom('hot-wall'),
+			roomId: 'hot-wall',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await vi.waitFor(() => expect(checkForNewArtworks.mock.calls.length).toBeGreaterThan(1));
+		await expect.element(page.getByRole('button', { name: /new piece/ })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
 	});
 
 	it('renders the your studio room note in normal flow above the artworks', async () => {

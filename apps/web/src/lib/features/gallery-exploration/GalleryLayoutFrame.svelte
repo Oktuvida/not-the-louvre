@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { type Snippet } from 'svelte';
-	import { ArrowLeft, Brush, Paintbrush, RefreshCw } from 'lucide-svelte';
+	import { ArrowLeft, Brush, Paintbrush } from 'lucide-svelte';
 	import ArtworkDetailPanel from '#lib/features/artwork-presentation/components/ArtworkDetailPanel.svelte';
 	import GalleryRoomNav from '#lib/features/gallery-exploration/components/GalleryRoomNav.svelte';
+	import NewPiecesNotice from '#lib/features/gallery-exploration/components/NewPiecesNotice.svelte';
 	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
-	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
 	import {
 		createGalleryLayoutContext,
@@ -66,6 +66,15 @@
 		class="pointer-events-none sticky top-0 z-40 px-3 pt-3 md:px-8 md:pt-6"
 		data-testid="gallery-room-header"
 	>
+		{#if $actionBindings?.newPieces}
+			{@const pieces = $actionBindings.newPieces}
+			<NewPiecesNotice
+				blurred={pieces.previewBlurred}
+				count={pieces.count}
+				onHang={() => $actionBindings?.onHangNewPieces()}
+				previewUrl={pieces.previewUrl}
+			/>
+		{/if}
 		<div class="pointer-events-auto absolute top-3 left-3 md:top-6 md:left-8">
 			<div onclickcapture={$actionBindings?.onBack}>
 				<GameLink href="/" variant="ghost" size="sm" className="w-fit -rotate-1 shadow-xl">
@@ -92,23 +101,6 @@
 					<span class="sr-only">Create Art</span>
 					<div aria-hidden="true" class="hidden font-semibold md:inline-flex">Create Art</div>
 				</GameLink>
-				<GameButton
-					variant="secondary"
-					size="sm"
-					className="relative z-20 h-11 min-w-11 rotate-1 px-0 shadow-xl md:h-auto md:min-w-0 md:px-[var(--sticker-padding-x)]"
-					disabled={$actionBindings?.isRefreshingGallery ?? false}
-					onclick={() => $actionBindings?.onRefresh?.()}
-				>
-					<RefreshCw
-						class={`h-5 w-5 md:mr-1 ${$actionBindings?.isRefreshingGallery ? 'animate-spin' : ''}`}
-					/>
-					<span class="sr-only"
-						>{$actionBindings?.isRefreshingGallery ? 'Refreshing…' : 'Refresh'}</span
-					>
-					<div aria-hidden="true" class="hidden font-semibold md:inline-flex">
-						{$actionBindings?.isRefreshingGallery ? 'Refreshing…' : 'Refresh'}
-					</div>
-				</GameButton>
 			{:else}
 				<!--
 					The gallery is the shareable surface: a link used to land a

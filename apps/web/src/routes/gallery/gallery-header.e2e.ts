@@ -25,10 +25,10 @@ const headerControls = async (page: Page, signedIn: boolean) => {
 	const named: [string, Locator][] = [
 		['Back', header.getByRole('link', { name: 'Back' })],
 		...(signedIn
-			? ([
-					['Create Art', header.getByRole('link', { name: 'Create Art' })],
-					['Refresh', header.getByRole('button', { name: 'Refresh' })]
-				] satisfies [string, Locator][])
+			? ([['Create Art', header.getByRole('link', { name: 'Create Art' })]] satisfies [
+					string,
+					Locator
+				][])
 			: ([['Join & draw', header.getByRole('link', { name: /Join/ })]] satisfies [
 					string,
 					Locator

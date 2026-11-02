@@ -24,10 +24,11 @@
 	const revealedArtworkIds = writable(new Set<string>());
 
 	const galleryLayout = createGalleryLayoutContext();
+	// A single artwork has no wall to hang new pieces on.
 	galleryLayout.actionBindings.set({
-		isRefreshingGallery: false,
+		newPieces: null,
 		onBack: () => {},
-		onRefresh: () => invalidateAll()
+		onHangNewPieces: () => {}
 	});
 
 	// The panel only offers the 18+ switch to a signed-in viewer.

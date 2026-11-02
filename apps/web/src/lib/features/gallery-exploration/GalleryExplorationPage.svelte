@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { get } from 'svelte/store';
+	import { prefersReducedMotion } from 'svelte/motion';
 	import { apiErrorMessage, requestJson } from '#lib/client/api.js';
 	import { setAdultContentEnabled } from '#lib/client/avatar-upload.js';
 	import { getGalleryLayoutContext } from '#lib/features/gallery-exploration/gallery-layout-context.js';
@@ -48,6 +49,8 @@
 	import YourStudioRoom from '#lib/features/gallery-exploration/rooms/YourStudioRoom.svelte';
 
 	type GalleryDetailHistoryState = NonNullable<App.PageState['galleryDetail']>;
+
+	type NewArtworksCheck = { count: number; preview: Artwork | null };
 
 	const LOCAL_GALLERY_DETAIL_SOURCE = 'local-room-selection' as const;
 
@@ -168,7 +171,9 @@
 		room,
 		roomId,
 		viewer = null,
-		awardStyle = 'stamps'
+		awardStyle = 'stamps',
+		checkForNewArtworks,
+		newArtworkCheckMs = 60_000
 
 		/** Set only by the route's failure path; never reuses the empty-state slot. */
 		/**
@@ -196,6 +201,13 @@
 		viewer?: Viewer | null;
 		/** The Hall of Fame's award style, drawn once per visit to the gallery. */
 		awardStyle?: AwardStyle;
+		/**
+		 * How many pieces are up that are not on the wall yet, and the newest of
+		 * them. Reads the room's own first page unless a caller supplies one.
+		 */
+		checkForNewArtworks?: (knownIds: string[]) => Promise<NewArtworksCheck>;
+		/** How often the room looks for new pieces while it is on screen. */
+		newArtworkCheckMs?: number;
 	} = $props();
 
 	const galleryLayout = getGalleryLayoutContext();
@@ -671,6 +683,66 @@
 		}
 	};
 
+	// --- New pieces ---
+	// The room re-reads its own first page now and then while it is on screen,
+	// and counts what is not on the wall yet. Nothing shows until something is
+	// new, so the gallery needs no Refresh button.
+	const readFirstPage = async (knownIds: string[]): Promise<NewArtworksCheck> => {
+		const request = seedDiscovery.request;
+		if (!request) return { count: 0, preview: null };
+
+		const query = [
+			`limit=${encodeURIComponent(String(request.limit))}`,
+			`sort=${encodeURIComponent(request.sort)}`
+		];
+		if (request.authorId) query.push(`authorId=${encodeURIComponent(request.authorId)}`);
+		if (request.window) query.push(`window=${encodeURIComponent(request.window)}`);
+
+		const payload = await requestJson<{ items: Parameters<typeof toGalleryArtwork>[0][] }>(
+			`/api/artworks?${query.join('&')}`
+		);
+		const known = new Set(knownIds);
+		const fresh = payload.items
+			.map((item) => toGalleryArtwork(item))
+			.filter((artwork) => !known.has(artwork.id));
+		return { count: fresh.length, preview: fresh[0] ?? null };
+	};
+
+	let newPieces = $state<NewArtworksCheck | null>(null);
+
+	$effect(() => {
+		if (roomId === 'mystery' || isRoomBusy) return;
+		const check = checkForNewArtworks ?? readFirstPage;
+		const knownIds = artworks.map((artwork) => artwork.id);
+		let stopped = false;
+		let timer: number | undefined;
+
+		const look = async () => {
+			if (!document.hidden) {
+				try {
+					const found = await check(knownIds);
+					// A look that lands while the wall is being re-hung saw the old wall.
+					if (!stopped && !isRefreshingGallery) newPieces = found.count > 0 ? found : null;
+				} catch {
+					// A missed look is not worth telling anyone about: the next one runs on time.
+				}
+			}
+			if (!stopped) timer = window.setTimeout(look, newArtworkCheckMs);
+		};
+
+		timer = window.setTimeout(look, newArtworkCheckMs);
+		return () => {
+			stopped = true;
+			window.clearTimeout(timer);
+		};
+	});
+
+	const hangNewPieces = async () => {
+		newPieces = null;
+		window.scrollTo({ top: 0, behavior: prefersReducedMotion.current ? 'auto' : 'smooth' });
+		await refreshGallery();
+	};
+
 	// --- Clean home return query param ---
 	onMount(() => {
 		if (!enteredFromHome) return;
@@ -746,9 +818,15 @@
 		 * its fade to the home page, and the detail panel unmounted entirely.
 		 */
 		const actions = {
-			isRefreshingGallery,
+			newPieces: newPieces
+				? {
+						count: newPieces.count,
+						previewBlurred: Boolean(newPieces.preview?.isNsfw) && !adultContentAllowed,
+						previewUrl: newPieces.preview?.imageUrl ?? null
+					}
+				: null,
 			onBack: handleBackToHome,
-			onRefresh: refreshGallery
+			onHangNewPieces: hangNewPieces
 		};
 
 		const panel = {
