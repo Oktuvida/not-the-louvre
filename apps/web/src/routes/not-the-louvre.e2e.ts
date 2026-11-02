@@ -36,11 +36,11 @@ const expectSignedInHomeChrome = async (
 	page: import('@playwright/test').Page,
 	nickname: string
 ) => {
-	await expect(page.getByText('HELLO')).toBeVisible();
+	await expect(page.getByText('Visitor pass')).toBeVisible();
 	await expect(
 		page.getByRole('button', { name: new RegExp(`Edit avatar for ${nickname}`) })
 	).toBeVisible();
-	await expect(page.getByRole('button', { name: /logout/i })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Leave' })).toBeVisible();
 };
 
 const readDrawingCanvasCenterPixel = async (page: import('@playwright/test').Page) =>
@@ -362,7 +362,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
-		await page.getByRole('button', { name: /logout/i }).click();
+		await page.getByRole('button', { name: 'Leave' }).click();
 
 		await openHomeAuthOverlay(page);
 		await page.getByPlaceholder('artist_123').fill(deterministicAuthUser.nickname);
@@ -412,7 +412,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.reload();
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
-		await expect(page.getByText('HELLO')).not.toBeVisible();
+		await expect(page.getByText('Visitor pass')).not.toBeVisible();
 	});
 
 	// Publish used to "compact" the drawing and drop strokes hidden under later
@@ -530,7 +530,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
-		await page.getByRole('button', { name: /logout/i }).click();
+		await page.getByRole('button', { name: 'Leave' }).click();
 
 		await openHomeAuthOverlay(page);
 		await page.getByRole('button', { name: 'Use recovery key' }).click();
@@ -578,10 +578,10 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/');
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
-		await page.getByRole('button', { name: /logout/i }).click();
+		await page.getByRole('button', { name: 'Leave' }).click();
 
 		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
-		await expect(page.getByText('HELLO')).not.toBeVisible();
+		await expect(page.getByText('Visitor pass')).not.toBeVisible();
 	});
 
 	test('draw route publishes real artwork through the product flow', async ({ page }) => {

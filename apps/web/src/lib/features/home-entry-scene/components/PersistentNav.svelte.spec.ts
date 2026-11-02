@@ -95,16 +95,21 @@ describe('PersistentNav', () => {
 			}
 		});
 
-		await expect.element(page.getByText('HELLO')).toBeVisible();
+		// A visitor pass: the artist's name on it, admitting one artist, and its
+		// stub torn off to leave.
+		await expect.element(page.getByText('Visitor pass')).toBeVisible();
 		await expect.element(page.getByText('artist_1', { exact: true })).toBeVisible();
-		await expect.element(page.getByRole('button', { name: /logout/i })).toBeVisible();
+		await expect.element(page.getByText('Admit one artist')).toBeVisible();
+		const leave = page.getByRole('button', { name: 'Leave' });
+		await expect.element(leave).toBeVisible();
+		expect(leave.element().closest('form')?.getAttribute('action')).toBe('?/signOut');
 	});
 
 	it('hides signed-in chrome when no canonical backend user exists', async () => {
 		await render(PersistentNav, { previewCards: [], user: null });
 
-		await expect.element(page.getByText('HELLO')).not.toBeInTheDocument();
-		await expect.element(page.getByRole('button', { name: /logout/i })).not.toBeInTheDocument();
+		await expect.element(page.getByText('Visitor pass')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Leave' })).not.toBeInTheDocument();
 		await expect.element(page.getByRole('link', { name: 'GALLERY' })).toBeVisible();
 	});
 
