@@ -389,6 +389,7 @@
 					/>
 					<div class="test-scrap-stack">
 						<div class="test-scrap">
+							<span class="test-scrap-tape tape" aria-hidden="true"></span>
 							<div
 								class="flex items-center justify-center"
 								data-testid="brush-preview-shell"
@@ -409,8 +410,8 @@
 
 		<div class="sketch-easel">
 			<div class="canvas-mat aspect-square" data-testid="avatar-sketchpad-frame">
-				<span class="canvas-tape canvas-tape-left" aria-hidden="true"></span>
-				<span class="canvas-tape canvas-tape-right" aria-hidden="true"></span>
+				<span class="canvas-tape canvas-tape-left tape" aria-hidden="true"></span>
+				<span class="canvas-tape canvas-tape-right tape tape-washi" aria-hidden="true"></span>
 				<div class="sketch-canvas">
 					<DrawingCanvas
 						bind:drawingDocument
@@ -701,16 +702,13 @@
 		rotate: 3deg;
 	}
 
-	.test-scrap::before {
-		content: '';
+	.test-scrap-tape {
 		position: absolute;
-		top: -7px;
-		left: 12px;
-		width: 30px;
-		height: 12px;
-		background: rgba(243, 235, 216, 0.9);
+		top: -8px;
+		left: 10px;
+		width: 34px;
+		height: 13px;
 		rotate: -4deg;
-		box-shadow: 0 1px 2px rgba(45, 36, 32, 0.15);
 	}
 
 	.test-dot {
@@ -751,8 +749,6 @@
 		position: absolute;
 		width: 84px;
 		height: 24px;
-		background: rgba(243, 235, 216, 0.85);
-		box-shadow: 0 1px 3px rgba(45, 36, 32, 0.18);
 		z-index: 2;
 	}
 

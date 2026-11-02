@@ -20,21 +20,20 @@
 		text: string;
 	} = $props();
 
+	// Each room's note is its own pad of paper, light at the top and deeper
+	// where the paper curls.
+	const ROOM_PAPER: Record<string, string> = {
+		'hall-of-fame': 'linear-gradient(172deg, #fff3a8 0%, #fbe57e 60%, #f2d65e 100%)',
+		'hot-wall': 'linear-gradient(172deg, #ffd6de 0%, #f8b9c7 55%, #f0a5b6 100%)',
+		mystery: 'linear-gradient(172deg, #d6ecff 0%, #b9dbfb 60%, #a3cdf5 100%)',
+		'your-studio': 'linear-gradient(172deg, #dcf2d4 0%, #c3e6bb 60%, #a9d6a0 100%)'
+	};
+
 	const seed = $derived(hashString(seedKey));
 	const rotation = $derived((seed % 9) - 4);
 	const tapeVariant = $derived(seed % 3);
 	const curlSide = $derived(seed % 2 === 0 ? 'right' : 'left');
-	const gradient = $derived(
-		seedKey === 'hall-of-fame'
-			? 'linear-gradient(160deg, #fef49c 0%, #f7e67a 100%)'
-			: seedKey === 'hot-wall'
-				? 'linear-gradient(160deg, #ffcdd2 0%, #f7929e 100%)'
-				: seedKey === 'mystery'
-					? 'linear-gradient(160deg, #bbdefb 0%, #8bb8d0 100%)'
-					: seedKey === 'your-studio'
-						? 'linear-gradient(160deg, #c8e6c9 0%, #a5d6a7 100%)'
-						: color
-	);
+	const paper = $derived(ROOM_PAPER[seedKey] ?? color);
 </script>
 
 <div
@@ -42,33 +41,19 @@
 	style={`transform: rotate(${rotation}deg); z-index: 25;`}
 >
 	<div
-		class="relative w-[17.5rem] px-4 pt-[1.2rem] pb-4 text-note-ink shadow-[2px_3px_8px_rgba(0,0,0,0.18)]"
-		style={`background:${gradient};`}
+		class={`sticky-note w-[17.5rem] px-4 pt-[1.2rem] pb-5 text-note-ink ${curlSide === 'left' ? 'sticky-note-curl-left' : ''}`}
+		style={`--note-paper: ${paper};`}
 	>
 		{#if attachment === 'tape'}
-			<div
-				class={`pointer-events-none absolute z-3 h-[1.125rem] w-[3.25rem] border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)] ${tapeVariant === 0 ? 'top-[-0.5rem] left-1/2 -translate-x-1/2 -rotate-2' : tapeVariant === 1 ? 'top-[-0.375rem] left-[0.625rem] rotate-[10deg]' : 'top-[-0.375rem] right-[0.625rem] -rotate-[6deg]'}`}
-			></div>
+			<span
+				class={`tape pointer-events-none absolute z-3 h-[1.375rem] w-[4.5rem] ${tapeVariant === 0 ? 'top-[-0.625rem] left-1/2 -translate-x-1/2 -rotate-2' : tapeVariant === 1 ? 'tape-washi top-[-0.5rem] left-[0.375rem] -rotate-[8deg]' : 'top-[-0.5rem] right-[0.5rem] rotate-[6deg]'}`}
+				aria-hidden="true"
+			></span>
 		{:else}
-			<div
-				class="pointer-events-none absolute top-[-0.3125rem] left-1/2 z-4 h-[0.875rem] w-[0.875rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_0.25rem_0.25rem,var(--color-alert),#c0392b)] shadow-[0_2px_4px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)]"
-			></div>
-		{/if}
-
-		{#if curlSide === 'right'}
-			<div
-				class="pointer-events-none absolute right-0 bottom-0 h-[1.375rem] w-[1.375rem] bg-[linear-gradient(225deg,#b8956e_0%,#b8956e_45%,transparent_46%)]"
-			></div>
-			<div
-				class="pointer-events-none absolute right-[-0.125rem] bottom-[-0.125rem] h-6 w-6 bg-[linear-gradient(225deg,transparent_42%,rgba(0,0,0,0.08)_44%,#e8d86c_45%)]"
-			></div>
-		{:else}
-			<div
-				class="pointer-events-none absolute bottom-0 left-0 h-[1.375rem] w-[1.375rem] bg-[linear-gradient(315deg,#b8956e_0%,#b8956e_45%,transparent_46%)]"
-			></div>
-			<div
-				class="pointer-events-none absolute bottom-[-0.125rem] left-[-0.125rem] h-6 w-6 bg-[linear-gradient(315deg,transparent_42%,rgba(0,0,0,0.08)_44%,#e8d86c_45%)]"
-			></div>
+			<span
+				class="push-pin absolute top-[-0.875rem] left-1/2 z-4 -translate-x-1/2"
+				aria-hidden="true"
+			></span>
 		{/if}
 
 		<p

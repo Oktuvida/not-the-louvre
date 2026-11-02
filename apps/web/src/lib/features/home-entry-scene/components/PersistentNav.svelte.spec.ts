@@ -409,9 +409,9 @@ describe('PersistentNav', () => {
 			true
 		);
 
-		// The tape carries its own clip-path, so it needs no global stylesheet.
+		// The close is the app's own paper tape, the strip that holds the notes down.
 		const close = page.getByRole('button', { name: 'Close' }).element();
 		expect(close.classList.contains('washi-tape')).toBe(true);
-		expect(getComputedStyle(close).clipPath).toContain('polygon');
+		expect(close.classList.contains('tape')).toBe(true);
 	});
 });

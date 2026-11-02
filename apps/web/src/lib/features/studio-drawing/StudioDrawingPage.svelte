@@ -658,8 +658,8 @@
 			aria-hidden={!toolsVisible}
 			inert={!toolsVisible}
 		>
-			<div class="cover-postit cover-postit-title">
-				<div class="postit-tape" aria-hidden="true"></div>
+			<div class="cover-postit cover-postit-title sticky-note">
+				<span class="postit-tape tape tape-washi" aria-hidden="true"></span>
 				<label class="postit-label" for="studio-artwork-title">Title your masterpiece</label>
 				<input
 					id="studio-artwork-title"
@@ -675,8 +675,8 @@
 				{/if}
 			</div>
 
-			<div class="cover-postit cover-postit-nsfw">
-				<div class="postit-tape" aria-hidden="true"></div>
+			<div class="cover-postit cover-postit-nsfw sticky-note sticky-note-curl-left">
+				<span class="postit-tape tape" aria-hidden="true"></span>
 				<button
 					type="button"
 					role="checkbox"
@@ -703,8 +703,8 @@
 			</div>
 
 			{#if currentForkParent}
-				<div class="cover-postit cover-postit-cancel">
-					<div class="postit-tape" aria-hidden="true"></div>
+				<div class="cover-postit cover-postit-cancel sticky-note">
+					<span class="postit-tape postit-tape-corner tape" aria-hidden="true"></span>
 					<p class="postit-label">Change of plan</p>
 					<p class="postit-fork-note postit-fork-note-compact">
 						Forking <span class="postit-fork-name">{currentForkParent.title}</span>
@@ -739,8 +739,8 @@
 			<StudioActions {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
 
 			{#if publishedArtwork}
-				<div class="publish-postit">
-					<div class="postit-tape" aria-hidden="true"></div>
+				<div class="publish-postit sticky-note">
+					<span class="postit-tape tape tape-dots" aria-hidden="true"></span>
 					<p class="postit-label">Hung on the wall!</p>
 					<h2 class="publish-postit-title">{publishedArtwork.title}</h2>
 					<div class="publish-postit-actions">
@@ -751,7 +751,6 @@
 							<span>See it on the wall</span>
 						</GameLink>
 					</div>
-					<div class="postit-curl" aria-hidden="true"></div>
 				</div>
 			{/if}
 		</div>
@@ -794,37 +793,40 @@
 	/* --- Post-it notes --- */
 
 	.cover-postit {
-		position: relative;
 		padding: 0.875rem 0.875rem 0.625rem;
-		box-shadow: var(--shadow-lift);
 	}
 
 	.cover-postit-title {
-		background: linear-gradient(160deg, #fef49c 0%, #f7e67a 100%);
+		--note-paper: linear-gradient(172deg, #fff3a8 0%, #fbe57e 60%, #f2d65e 100%);
 		transform: rotate(-1.5deg);
 	}
 
 	.cover-postit-nsfw {
-		background: linear-gradient(160deg, #ffcdd2 0%, #f7929e 100%);
+		--note-paper: linear-gradient(172deg, #ffd6de 0%, #f8b9c7 55%, #f0a5b6 100%);
 		transform: rotate(2deg);
 	}
 
 	.cover-postit-cancel {
-		background: linear-gradient(160deg, #d5ecff 0%, #a9d4ff 100%);
+		--note-paper: linear-gradient(172deg, #d6ecff 0%, #b9dbfb 60%, #a3cdf5 100%);
 		transform: rotate(1deg);
 	}
 
 	.postit-tape {
 		position: absolute;
-		top: -7px;
+		top: -9px;
 		left: 50%;
 		transform: translateX(-50%) rotate(-2deg);
-		width: 42px;
-		height: 14px;
-		background: rgb(255 255 240 / 0.55);
-		border: 1px solid rgb(200 190 170 / 0.3);
+		width: 60px;
+		height: 18px;
 		pointer-events: none;
 		z-index: 3;
+	}
+
+	/* Stuck across the top left corner. */
+	.postit-tape-corner {
+		top: 2px;
+		left: -14px;
+		transform: rotate(-38deg);
 	}
 
 	.postit-label {
@@ -946,8 +948,7 @@
 		position: relative;
 		margin-top: 1.5rem;
 		padding: 14px 12px 12px;
-		background: linear-gradient(160deg, #c8e6c9 0%, #a5d6a7 100%);
-		box-shadow: var(--shadow-lift);
+		--note-paper: linear-gradient(172deg, #dcf2d4 0%, #c3e6bb 60%, #a9d6a0 100%);
 		transform: rotate(-2deg);
 		/* The reveal has to be declared in this stylesheet: Svelte renames scoped
 		 * keyframes and only rewrites `animation` references inside the same block,
@@ -977,25 +978,6 @@
 		flex-direction: column;
 		gap: 4px;
 		margin-top: 8px;
-	}
-
-	.postit-curl {
-		position: absolute;
-		right: 0;
-		bottom: 0;
-		width: 22px;
-		height: 22px;
-		background: linear-gradient(225deg, #b8956e 0%, #b8956e 45%, transparent 46%);
-	}
-
-	.postit-curl::after {
-		content: '';
-		position: absolute;
-		right: -2px;
-		bottom: -2px;
-		width: 24px;
-		height: 24px;
-		background: linear-gradient(225deg, transparent 42%, rgb(0 0 0 / 0.08) 44%, #8cc98f 45%);
 	}
 
 	/* --- Animations --- */
