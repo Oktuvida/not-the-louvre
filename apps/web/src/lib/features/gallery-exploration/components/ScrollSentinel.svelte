@@ -1,6 +1,8 @@
 <script lang="ts">
 	import PolaroidSkeletonGrid from '#lib/features/gallery-exploration/components/PolaroidSkeletonGrid.svelte';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import ChalkEasel from '#lib/features/gallery-exploration/components/ChalkEasel.svelte';
+	import VelvetRope from '#lib/features/gallery-exploration/components/VelvetRope.svelte';
 
 	interface Props {
 		onTrigger?: () => void;
@@ -82,26 +84,23 @@
 {/if}
 
 <!--
-	Both notices sit on the dark museum wall (var(--color-wall)), where the stone greys they
-	used to wear resolved to ~2.1:1. The palette here is the wall's own paper and
-	dust tones, and the retry is the same sticker control every other action in the
-	gallery uses instead of a lone flat grey button.
+	Both notices are objects on the wall, not text over its bricks: a failed page
+	is chalked on an easel with its retry, and the end of the wall is roped off
+	with its label. Either way the words sit on their own board or paper.
 -->
 {#if error}
-	<div
-		data-testid="scroll-sentinel-error"
-		class="flex flex-col items-center gap-3 py-8 text-center"
-	>
-		<p class="wall-text text-sm text-wall-text">{error}</p>
-		<GameButton variant="secondary" size="sm" onclick={() => onRetry?.()}>
-			<span class="font-semibold">Retry</span>
-		</GameButton>
+	<div data-testid="scroll-sentinel-error" class="py-8">
+		<ChalkEasel title="Hold on a moment" message={error}>
+			<GameButton variant="secondary" size="sm" onclick={() => onRetry?.()}>
+				<span class="font-semibold">Retry</span>
+			</GameButton>
+		</ChalkEasel>
 	</div>
 {/if}
 
 {#if !hasMore && !isLoading && !error}
-	<div data-testid="scroll-sentinel-end" class="py-8 text-center">
-		<p class="wall-text text-sm text-clay">You've seen it all — nothing more to show.</p>
+	<div data-testid="scroll-sentinel-end" class="py-10">
+		<VelvetRope />
 	</div>
 {/if}
 
@@ -111,11 +110,3 @@
 	style="height: 1px; width: 100%;"
 	aria-hidden="true"
 ></div>
-
-<style>
-	/* The wall is a photographic texture, not a flat fill; the same shadow the
-	 * room empty states use keeps the text readable over its lighter bricks. */
-	.wall-text {
-		text-shadow: 0 1px 2px rgba(45, 36, 32, 0.5);
-	}
-</style>

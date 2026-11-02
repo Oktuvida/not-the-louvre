@@ -445,6 +445,9 @@ describe('GalleryExplorationPage', () => {
 		await expect
 			.element(page.getByText('Publish a new piece from the studio and it will show up here.'))
 			.toBeVisible();
+		// An empty spot on the wall, pencilled out and reserved for them.
+		await expect.element(page.getByText('Reserved')).toBeVisible();
+		await expect.element(page.getByText('for you', { exact: true })).toBeVisible();
 	});
 
 	// No Refresh button: when pieces go up that are not on the wall yet, the
@@ -1717,7 +1720,8 @@ describe('GalleryExplorationPage', () => {
 		deferred.reject(new Error('stream failed'));
 
 		await expect.element(page.getByTestId('gallery-room-error')).toBeVisible();
-		await expect.element(page.getByText('Something went wrong')).toBeVisible();
+		// Chalked on an easel by the door, the way a museum closes a room.
+		await expect.element(page.getByText('Closed for re-hanging')).toBeVisible();
 		// Not the themed "nothing is heating up" panel, which would tell the
 		// visitor the product is empty rather than broken.
 		expect(document.querySelector('[data-testid="hot-wall-empty"]')).toBeNull();

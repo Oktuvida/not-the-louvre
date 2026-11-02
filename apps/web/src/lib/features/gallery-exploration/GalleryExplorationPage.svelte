@@ -39,6 +39,9 @@
 	import type { Viewer } from '#lib/shared/viewer.js';
 	import PostItNote from '#lib/features/shared-ui/components/PostItNote.svelte';
 	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import ChalkEasel from '#lib/features/gallery-exploration/components/ChalkEasel.svelte';
+	import ReservedSpot from '#lib/features/gallery-exploration/components/ReservedSpot.svelte';
 	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
 	import GalleryStatusRegion from '#lib/features/gallery-exploration/components/GalleryStatusRegion.svelte';
 	import RoomLoadingSkeleton from '#lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
@@ -855,50 +858,40 @@
 {#snippet roomLoadFailure(message: string)}
 	<!-- `role="alert"` on the failure, never on the skeleton: a room that failed
 	     to load is the one room event worth interrupting a reader for. -->
-	<div
-		class="rounded-xl border-4 border-ink-warm bg-paper-bright p-10 text-center shadow-md"
-		data-testid="gallery-room-error"
-		role="alert"
-	>
-		<p class="font-display text-2xl text-ink-warm">Something went wrong</p>
-		<p class="mt-3 text-ink-faint">{message}</p>
-		<button
-			class="mt-6 rounded-full border-3 border-ink-warm bg-[#f6df65] px-5 py-2 text-sm font-black text-ink-warm transition hover:-translate-y-0.5 disabled:opacity-60"
-			disabled={isRefreshingGallery}
-			onclick={() => refreshGallery()}
-			type="button"
-		>
-			{isRefreshingGallery ? 'Retrying…' : 'Try again'}
-		</button>
+	<div class="py-6" data-testid="gallery-room-error" role="alert">
+		<ChalkEasel title="Closed for re-hanging" {message}>
+			<GameButton
+				variant="secondary"
+				size="sm"
+				disabled={isRefreshingGallery}
+				onclick={() => refreshGallery()}
+			>
+				<span class="font-semibold">{isRefreshingGallery ? 'Retrying…' : 'Try again'}</span>
+			</GameButton>
+		</ChalkEasel>
 	</div>
 {/snippet}
 
 {#snippet roomBody()}
 	{#if showEmptyState}
-		<div
-			class="rounded-xl border-4 border-dashed border-olive bg-paper-bright p-10 text-center shadow-md"
+		<ReservedSpot
+			message={roomEmptyStateMessage ?? ''}
+			reservedFor={roomId === 'your-studio' ? 'for you' : 'for the next masterpiece'}
+			support={emptyStateSupportMessage}
 		>
-			<p class="font-display text-2xl text-ink-warm">{roomEmptyStateMessage}</p>
-			<p class="mt-3 text-ink-faint">
-				{emptyStateSupportMessage}
-			</p>
 			{#if !viewer}
-				<div class="mt-6 flex justify-center">
-					<GameLink href="/" variant="primary" size="sm">
-						<Brush class="h-5 w-5" />
-						<span class="font-semibold">Join & draw</span>
-					</GameLink>
-				</div>
+				<GameLink href="/" variant="primary" size="sm">
+					<Brush class="h-5 w-5" />
+					<span class="font-semibold">Join & draw</span>
+				</GameLink>
 			{:else if roomId === 'your-studio'}
 				<!-- The empty studio is the moment to draw: the way there, not just the news. -->
-				<div class="mt-6 flex justify-center">
-					<GameLink href="/draw" variant="primary" size="sm">
-						<Brush class="h-5 w-5" />
-						<span class="font-semibold">Draw your first piece</span>
-					</GameLink>
-				</div>
+				<GameLink href="/draw" variant="primary" size="sm">
+					<Brush class="h-5 w-5" />
+					<span class="font-semibold">Draw your first piece</span>
+				</GameLink>
 			{/if}
-		</div>
+		</ReservedSpot>
 	{:else if roomId === 'hall-of-fame'}
 		<HallOfFameRoom
 			{artworks}

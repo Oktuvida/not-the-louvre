@@ -173,7 +173,10 @@ describe('ScrollSentinel', () => {
 				error: null
 			});
 
+			// The end of the wall is roped off, with its museum label.
 			await expect.element(page.getByTestId('scroll-sentinel-end')).toBeVisible();
+			await expect.element(page.getByText('End of the collection')).toBeVisible();
+			await expect.element(page.getByText('The rest is still being drawn')).toBeVisible();
 		});
 
 		it('does not render end-of-list when hasMore is true', async () => {
