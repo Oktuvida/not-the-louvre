@@ -27,6 +27,13 @@
 	} from '#lib/features/home-entry-scene/scene/studio-surfaces.js';
 	import { paintSketchbookLabel } from '#lib/features/home-entry-scene/scene/sketchbook-label.js';
 	import { studioZoomScale } from '#lib/features/home-entry-scene/scene/studio-framing.js';
+	import {
+		deskSnapshotCameraPose,
+		findSideTableBook,
+		handoffCameraPose,
+		type SideTableBook
+	} from '#lib/features/home-entry-scene/scene/studio-handoff-pose.js';
+	import { SIDE_TABLE_BOOK_STRETCH } from '#lib/features/shared-ui/studio-handoff.js';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
 	import type { EntryFlowState } from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
 
@@ -38,6 +45,8 @@
 		scenePose = 'default',
 		artworkSlots = [],
 		avatarUrl = null,
+		deskSnapshot = false,
+		dpr = 1.5,
 		onMediaStateChange
 
 		/*
@@ -51,6 +60,12 @@
 		scenePose?: 'default' | 'left-wall' | 'top-close';
 		artworkSlots?: HomeSceneArtworkSlot[];
 		avatarUrl?: string | null;
+		/**
+		 * Holds the camera where the studio's desk is rendered from
+		 * (scripts/render-studio-desk.ts), with the side table's book left out.
+		 */
+		deskSnapshot?: boolean;
+		dpr?: number;
 		onMediaStateChange?: (state: StudioSceneMediaState) => void;
 	} = $props();
 
@@ -61,7 +76,10 @@
 		onMediaStateChange?.(state);
 	};
 
+	/** Every pose but the Studio one sees the room level, and the book as it is. */
+	const LEVEL = { roll: 0, shiftY: 0, bookStretch: 1 };
 	const LEFT_WALL_CAMERA = {
+		...LEVEL,
 		cameraX: 0,
 		cameraDepth: 16,
 		cameraHeight: 0.8,
@@ -72,18 +90,26 @@
 		targetZ: 0,
 		zoom: 12000
 	};
-	const TOP_CLOSE_CAMERA = {
-		cameraX: 1.8,
-		cameraDepth: 0.6,
-		cameraHeight: 0,
-		rotationX: 0,
-		rotationY: 0,
-		targetX: 1.8,
-		targetY: -1.8,
-		targetZ: 0.6,
-		zoom: 450
+	/*
+	 * The Studio move ends on the side table's sketchbook, lying on the spot
+	 * the studio page lays its own (studio-handoff-pose.ts). Its zoom is set in
+	 * screen pixels for this window, so it is handed over divided by the scale
+	 * every other pose is drawn at.
+	 */
+	const topCloseCamera = (width: number, height: number) => {
+		const { pixelsPerUnit, ...pose } = handoffCameraPose(width, height);
+		return {
+			...pose,
+			bookStretch: SIDE_TABLE_BOOK_STRETCH,
+			zoom: pixelsPerUnit / studioZoomScale(width, height)
+		};
+	};
+	const deskSnapshotCamera = () => {
+		const { pixelsPerUnit, ...pose } = deskSnapshotCameraPose();
+		return { ...pose, bookStretch: 1, zoom: pixelsPerUnit };
 	};
 	const DEFAULT_CAMERA = {
+		...LEVEL,
 		cameraX: 0,
 		cameraDepth: 16,
 		cameraHeight: 7.8,
@@ -97,11 +123,13 @@
 	/** Where every "back to the room" move ends: the default pose, turned 45deg. */
 	const RESTING_CAMERA = { ...DEFAULT_CAMERA, rotationY: -Math.PI / 4, zoom: 60 };
 	const initialPoseValue = untrack(() => initialPose);
-	const initialCamera =
-		initialPoseValue === 'left-wall'
+	const snapshot = untrack(() => deskSnapshot);
+	const initialCamera = snapshot
+		? deskSnapshotCamera()
+		: initialPoseValue === 'left-wall'
 			? LEFT_WALL_CAMERA
 			: initialPoseValue === 'top-close'
-				? TOP_CLOSE_CAMERA
+				? topCloseCamera(browser ? window.innerWidth : 0, browser ? window.innerHeight : 0)
 				: DEFAULT_CAMERA;
 
 	/*
@@ -120,8 +148,9 @@
 	let sceneHeight = $state(0);
 	let studioNodes = $state<Record<string, Object3D>>({});
 	let studioSceneRoot = $state<Group | null>(null);
+	let sideTableBook: SideTableBook | null = null;
 	let previousScenePose: 'default' | 'left-wall' | 'top-close' | undefined = initialPoseValue;
-	let holdingInitialPose = initialPoseValue !== 'default';
+	let holdingInitialPose = snapshot || initialPoseValue !== 'default';
 	let activeSceneTimeline: gsap.core.Animation | null = null;
 	const ENTER_DURATION = 2.08;
 	const RESET_DURATION = 1.13;
@@ -141,7 +170,10 @@
 		targetY: initialCamera.targetY,
 		targetZ: initialCamera.targetZ,
 		rotationX: initialCamera.rotationX,
-		rotationY: initialCamera.rotationY
+		rotationY: initialCamera.rotationY,
+		roll: initialCamera.roll,
+		shiftY: initialCamera.shiftY,
+		bookStretch: initialCamera.bookStretch
 	};
 	const studioDracoLoader = browser ? getStudioDracoLoader() : undefined;
 	const sceneReady = $derived(sceneMediaState === 'loaded');
@@ -194,12 +226,18 @@
 				studioMotion.cameraHeight,
 				studioMotion.cameraDepth
 			);
-			camera.zoom = studioMotion.zoom * studioZoomScale(sceneWidth, sceneHeight);
+			// The desk is rendered at the zoom the studio measures it by, on any window.
+			camera.zoom = snapshot
+				? studioMotion.zoom
+				: studioMotion.zoom * studioZoomScale(sceneWidth, sceneHeight);
 			camera.updateProjectionMatrix();
 			camera.lookAt(studioMotion.targetX, studioMotion.targetY, studioMotion.targetZ);
+			camera.rotateZ(studioMotion.roll);
+			camera.translateY(studioMotion.shiftY);
 		}
 
 		sceneRoot?.rotation.set(studioMotion.rotationX, studioMotion.rotationY, 0);
+		sideTableBook?.stretch(studioMotion.bookStretch);
 
 		if (camera || sceneRoot) {
 			invalidateFrame?.();
@@ -303,22 +341,15 @@
 
 		if (isTopClosePose && isInside) {
 			previousScenePose = scenePose;
+			const topClose = untrack(() => topCloseCamera(sceneWidth, sceneHeight));
 
 			if (reducedMotion) {
-				snapStudioMotion(TOP_CLOSE_CAMERA);
+				snapStudioMotion(topClose);
 				return;
 			}
 
 			activeSceneTimeline = gsap.to(studioMotion, {
-				zoom: TOP_CLOSE_CAMERA.zoom,
-				cameraX: TOP_CLOSE_CAMERA.cameraX,
-				cameraDepth: TOP_CLOSE_CAMERA.cameraDepth,
-				cameraHeight: TOP_CLOSE_CAMERA.cameraHeight,
-				targetX: TOP_CLOSE_CAMERA.targetX,
-				targetY: TOP_CLOSE_CAMERA.targetY,
-				targetZ: TOP_CLOSE_CAMERA.targetZ,
-				rotationX: TOP_CLOSE_CAMERA.rotationX,
-				rotationY: TOP_CLOSE_CAMERA.rotationY,
+				...topClose,
 				duration: TOP_CLOSE_ENTER_DURATION,
 				ease: 'power3.inOut',
 				onUpdate: applyStudioMotion
@@ -379,6 +410,7 @@
 					targetY: 0.8,
 					targetZ: 0,
 					rotationX: -0.22,
+					...LEVEL,
 					duration: TOP_CLOSE_EXIT_DURATION,
 					ease: 'power3.inOut',
 					onUpdate: applyStudioMotion
@@ -457,7 +489,7 @@
 	bind:clientHeight={sceneHeight}
 	class={`h-full w-full transition-opacity duration-500 ${sceneReady ? 'opacity-100' : 'opacity-0'}`}
 >
-	<Canvas dpr={1.5} shadows={studioCanvasShadowMap}>
+	<Canvas {dpr} shadows={studioCanvasShadowMap}>
 		<T.OrthographicCamera
 			bind:ref={studioCamera}
 			makeDefault
@@ -494,7 +526,12 @@
 			castShadow
 			receiveShadow
 			onload={() => {
-				if (studioSceneRoot) dressStudioSurfaces(studioSceneRoot, sketchbook);
+				if (studioSceneRoot) {
+					dressStudioSurfaces(studioSceneRoot, sketchbook);
+					sideTableBook = findSideTableBook(studioSceneRoot);
+					if (snapshot) sideTableBook.hide();
+					applyStudioMotion();
+				}
 				setSceneMediaState('loaded');
 			}}
 			onerror={() => {

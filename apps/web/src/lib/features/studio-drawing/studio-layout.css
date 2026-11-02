@@ -76,21 +76,36 @@ body:has(.studio-page) .ambient-tab-shell {
 	overflow: hidden;
 }
 
-/* The desk under everything, in this sheet rather than utility classes so the
- * page keeps its shape wherever it is rendered. */
+/*
+ * The desk under everything, in this sheet rather than utility classes so the
+ * page keeps its shape wherever it is rendered. It is the home room's side
+ * table, photographed from where the Studio move ends, centred on the place
+ * of the book it left out. That place goes on the closed book's spot, at the
+ * size the room drew it: the page's `--handoff-*` variables come from
+ * shared-ui/studio-handoff.ts. On a window shaped for no closed book, it only
+ * has to cover the window. The floor's own brown stands in until it arrives.
+ */
 .studio-desk {
 	position: absolute;
 	inset: 0;
 	z-index: 0;
+	overflow: hidden;
+	background-color: rgb(66 36 19);
 	pointer-events: none;
 }
 
 .studio-desk-image {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-	object-position: center 115%;
-	scale: 1.4;
+	position: absolute;
+	left: 50%;
+	top: var(--handoff-book-centre-y);
+	width: max(
+		var(--studio-desk-span) * var(--handoff-book-height),
+		100vw,
+		var(--studio-desk-cover-width)
+	);
+	max-width: none;
+	height: auto;
+	translate: -50% -50%;
 }
 
 .studio-header {
@@ -394,5 +409,12 @@ body:has(.studio-page) .ambient-tab-shell {
 		--studio-page-top: 0.75rem;
 		--studio-page-foot: 0.75rem;
 		--studio-tagline-display: none;
+	}
+}
+
+/* Under reduced motion the book takes its place at once. */
+@media (prefers-reduced-motion: reduce) {
+	.studio-book {
+		transition: none;
 	}
 }

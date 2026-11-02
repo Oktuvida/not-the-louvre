@@ -9,6 +9,7 @@
 		"build:e2e": "bun run scripts/build-e2e.ts",
 		"model:transform:studio": "bun run scripts/transform-studio-model.ts",
 		"sketchbook:cloth": "bun run scripts/generate-sketchbook-cloth.ts",
+		"studio:desk": "bun run scripts/render-studio-desk.ts",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && tsc --noEmit -p ./tsconfig.json && svelte-check --tsconfig ./tsconfig.json",

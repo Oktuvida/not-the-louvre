@@ -33,9 +33,3 @@
 # free without that risk. Hash the filename if you ever want `immutable` here.
 /models/*
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
-
-/table.avif
-  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
-
-/table.webp
-  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
