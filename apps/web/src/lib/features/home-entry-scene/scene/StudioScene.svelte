@@ -10,6 +10,7 @@
 	import { getStudioDracoLoader } from '#lib/features/home-entry-scene/scene/studio-draco-loader.js';
 	import SceneFrameInvalidator from '#lib/features/home-entry-scene/scene/SceneFrameInvalidator.svelte';
 	import SceneTextureBindings from '#lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
+	import { dressStudioSurfaces } from '#lib/features/home-entry-scene/scene/studio-surfaces.js';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
 	import type { EntryFlowState } from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
 
@@ -404,9 +405,13 @@
 			}}
 		/>
 		<T.Color attach="background" args={['#d7c2a8']} />
-		<T.Fog args={['#d7c2a8', 14, 32]} />
+		<!-- The fog only softens the far corners; starting at 14 it washed the whole
+		     room, which sits about 16 from the camera. -->
+		<T.Fog args={['#d7c2a8', 26, 48]} />
 		<T.AmbientLight intensity={0.08} />
-		<T.DirectionalLight position={[5, 16, 6]} intensity={1.4} castShadow />
+		<!-- A warm sky and a wood-brown floor bounce, so the shaded sides keep their colour. -->
+		<T.HemisphereLight args={['#fff1dc', '#6b4f3a', 0.55]} />
+		<T.DirectionalLight position={[5, 16, 6]} intensity={1.25} color="#fff0da" castShadow />
 		<SceneTextureBindings
 			{avatarUrl}
 			{artworkSlots}
@@ -424,6 +429,7 @@
 			castShadow
 			receiveShadow
 			onload={() => {
+				if (studioSceneRoot) dressStudioSurfaces(studioSceneRoot);
 				setSceneMediaState('loaded');
 			}}
 			onerror={() => {

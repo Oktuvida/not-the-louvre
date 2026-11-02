@@ -268,7 +268,7 @@
 	data-visitor={user ? 'signed-in' : 'guest'}
 >
 	<div class="absolute inset-0 flex items-center justify-center">
-		<div class="relative h-full w-full opacity-80">
+		<div class="relative h-full w-full">
 			<div
 				class="relative h-full w-full overflow-hidden border-[var(--border-frame)] bg-[radial-gradient(circle_at_50%_18%,_rgba(255,255,255,0.44),_transparent_30%),linear-gradient(180deg,_#ccb194_0%,_#8b6f57_100%)] shadow-strong"
 			>
