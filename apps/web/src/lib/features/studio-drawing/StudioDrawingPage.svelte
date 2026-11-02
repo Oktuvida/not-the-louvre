@@ -635,6 +635,7 @@
 				{openingDurationMs}
 			>
 				<DrawingCanvas
+					sheet
 					backdrop={currentForkParent?.mediaUrl ?? null}
 					bind:this={canvasHistory}
 					bind:canvasRef

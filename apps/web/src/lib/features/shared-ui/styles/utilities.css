@@ -281,6 +281,85 @@
 }
 
 /*
+ * A sheet of watercolour paper, its four edges deckled as they come off the
+ * mould. The edge is a clip-path, so the sheet's shadow belongs to a separate
+ * `.deckled-sheet-shadow` element behind it. `--sheet-paper` is its colour.
+ */
+.deckled-sheet {
+	background: var(--sheet-paper, #fffdf8);
+	clip-path: polygon(
+		0% 0.8%,
+		4% 0%,
+		9% 0.6%,
+		15% 0%,
+		21% 0.7%,
+		27% 0.1%,
+		33% 0.8%,
+		40% 0%,
+		46% 0.6%,
+		53% 0.1%,
+		59% 0.8%,
+		66% 0%,
+		72% 0.7%,
+		78% 0.1%,
+		85% 0.8%,
+		91% 0%,
+		96% 0.6%,
+		100% 0.2%,
+		99.3% 6%,
+		100% 12%,
+		99.2% 19%,
+		100% 26%,
+		99.4% 33%,
+		100% 40%,
+		99.2% 47%,
+		100% 54%,
+		99.3% 61%,
+		100% 68%,
+		99.2% 75%,
+		100% 82%,
+		99.4% 89%,
+		100% 95%,
+		99.5% 100%,
+		94% 99.2%,
+		88% 100%,
+		82% 99.3%,
+		75% 100%,
+		69% 99.2%,
+		62% 100%,
+		56% 99.3%,
+		49% 100%,
+		43% 99.2%,
+		36% 100%,
+		30% 99.3%,
+		23% 100%,
+		17% 99.2%,
+		10% 100%,
+		4% 99.3%,
+		0% 99.8%,
+		0.7% 93%,
+		0% 86%,
+		0.8% 79%,
+		0% 72%,
+		0.6% 65%,
+		0% 58%,
+		0.8% 51%,
+		0% 44%,
+		0.7% 37%,
+		0% 30%,
+		0.8% 23%,
+		0% 16%,
+		0.6% 9%
+	);
+}
+
+.deckled-sheet-shadow {
+	box-shadow:
+		0 2px 2px rgb(40 25 10 / 0.18),
+		0 8px 16px rgb(40 25 10 / 0.16);
+}
+
+/*
  * Polaroid paper: a warm off-white with a fine grain of dots, lifted off the
  * wall by a soft, warm shadow. The grid's cards, the Hot Wall's lead, and the
  * postcard a card opens into, which lays its aging over the same stock through

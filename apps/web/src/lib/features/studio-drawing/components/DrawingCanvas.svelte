@@ -57,6 +57,7 @@
 		onOutOfInk,
 		onStrokeCommitted,
 		paper,
+		sheet = false,
 		statusMessage = '',
 		statusTone = 'idle',
 		strokeColor,
@@ -91,6 +92,11 @@
 		}) => void | Promise<void>;
 		/** The paper on screen, when it is not the document's background (the avatar pad). */
 		paper?: string;
+		/**
+		 * Lay the canvas on a sheet of watercolour paper taped down at its
+		 * corners, its deckled edge just past the drawing (the studio's page).
+		 */
+		sheet?: boolean;
 		statusMessage?: string;
 		statusTone?: 'error' | 'success' | 'idle';
 		/** A brush of the host's own; the studio's shared tools otherwise. */
@@ -643,20 +649,41 @@
      which Safari cannot resolve a percentage height against. -->
 <div
 	class="relative h-full w-full items-center justify-center"
+	style:isolation="isolate"
 	style:position="relative"
 	style:width="100%"
 	style:height="100%"
 	style:aspect-ratio={`${drawingDocument.width} / ${drawingDocument.height}`}
 >
+	{#if sheet}
+		<!-- The sheet the drawing is on: its deckled edge a little past the
+		     drawing, and tape over its corners. Decoration only. -->
+		<span class="canvas-sheet canvas-sheet-shadow deckled-sheet-shadow" aria-hidden="true"></span>
+		<span
+			class="canvas-sheet deckled-sheet"
+			style:--sheet-paper={paper ?? 'var(--color-paper-bright)'}
+			aria-hidden="true"
+		></span>
+		{#each ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as corner (corner)}
+			<span class={`canvas-sheet-tape canvas-sheet-tape-${corner} tape`} aria-hidden="true"></span>
+		{/each}
+	{/if}
+
 	<!-- The frame stays put and clips; the view inside it zooms and pans. -->
-	<div bind:this={frameRef} data-canvas-frame class="canvas-frame" onwheel={handleWheel}>
+	<div
+		bind:this={frameRef}
+		data-canvas-frame
+		class="canvas-frame"
+		class:canvas-frame-sheet={sheet}
+		onwheel={handleWheel}
+	>
 		<div
 			class="canvas-view"
 			style:transform={`translate(${view.x}px, ${view.y}px) scale(${view.scale})`}
 		>
 			<canvas
 				bind:this={canvasRef}
-				class={`block h-full w-full rounded-lg border ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
+				class={`block h-full w-full ${sheet ? '' : 'rounded-lg border'} ${interactive ? 'cursor-crosshair' : 'cursor-not-allowed opacity-85'}`}
 				style="width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;"
 				style:background={paper ?? 'var(--color-paper-bright)'}
 				aria-label={label}
@@ -681,7 +708,7 @@
 
 			<canvas
 				bind:this={overlayRef}
-				class="pointer-events-none block h-full w-full rounded-lg"
+				class={`pointer-events-none block h-full w-full ${sheet ? '' : 'rounded-lg'}`}
 				style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
 			></canvas>
 		</div>
@@ -724,6 +751,55 @@
 		inset: 0;
 		overflow: hidden;
 		border-radius: 0.5rem;
+	}
+
+	/* On a sheet the drawing's corners are the paper's: square. */
+	.canvas-frame-sheet {
+		border-radius: 0;
+	}
+
+	.canvas-sheet {
+		position: absolute;
+		inset: -0.6rem;
+		z-index: -1;
+		pointer-events: none;
+	}
+
+	.canvas-sheet-shadow {
+		inset: -0.45rem;
+	}
+
+	/* Masking tape across each corner, mostly on the sheet's margin. */
+	.canvas-sheet-tape {
+		position: absolute;
+		z-index: 3;
+		width: 4.2rem;
+		height: 1.25rem;
+		pointer-events: none;
+	}
+
+	.canvas-sheet-tape-top-left {
+		top: -0.85rem;
+		left: -1.65rem;
+		rotate: -40deg;
+	}
+
+	.canvas-sheet-tape-top-right {
+		top: -0.85rem;
+		right: -1.65rem;
+		rotate: 40deg;
+	}
+
+	.canvas-sheet-tape-bottom-left {
+		bottom: -0.85rem;
+		left: -1.65rem;
+		rotate: 40deg;
+	}
+
+	.canvas-sheet-tape-bottom-right {
+		bottom: -0.85rem;
+		right: -1.65rem;
+		rotate: -40deg;
 	}
 
 	.canvas-view {
