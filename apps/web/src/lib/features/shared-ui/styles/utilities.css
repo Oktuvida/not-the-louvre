@@ -281,6 +281,19 @@
 }
 
 /*
+ * Polaroid paper: a warm off-white with a fine grain of dots, lifted off the
+ * wall by a soft, warm shadow. The grid's cards and the Hot Wall's lead.
+ */
+.polaroid-paper {
+	background-color: #fbf8f2;
+	background-image: radial-gradient(rgb(107 90 69 / 0.08) 1px, transparent 1px);
+	background-size: 4px 4px;
+	box-shadow:
+		0 1px 1px rgb(0 0 0 / 0.08),
+		0 10px 22px rgb(40 25 10 / 0.38);
+}
+
+/*
  * A rubber stamp in red ink: a double rule, stamped on a little crooked, the
  * ink catching unevenly. The call site places it and sets its size.
  */

@@ -105,9 +105,11 @@
 		<!-- Lead artwork: strongest prominence -->
 		{#if leadArtwork}
 			<div data-testid="hot-wall-lead" class="flex flex-col items-center gap-4">
+				<!-- Hung like the rest of the wall, as a polaroid: the drawing whole and
+				     uncovered, the ribbon across its corner, the caption on the paper. -->
 				<button
 					type="button"
-					class="group relative mt-12 w-full max-w-md cursor-pointer overflow-hidden rounded-xl shadow-2xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_28px_60px_rgba(45,36,32,0.45)]"
+					class="lead-polaroid polaroid-paper group relative mt-12 w-full max-w-md cursor-pointer"
 					onclick={() => {
 						if (isLeadBlurred(leadArtwork) && viewerId) {
 							revealArtwork(leadArtwork.id);
@@ -118,7 +120,8 @@
 					onkeydown={(event) => signalKeyboardIntent(event, leadArtwork.id)}
 					onpointerdown={(event) => signalPointerIntent(event, leadArtwork.id)}
 				>
-					<div class="relative aspect-square w-full">
+					<span class="lead-pin push-pin" aria-hidden="true"></span>
+					<div class="lead-photo relative aspect-square w-full overflow-hidden">
 						<NsfwImage
 							src={leadArtwork.imageUrl}
 							alt={leadArtwork.title}
@@ -128,18 +131,25 @@
 							loading="eager"
 							fetchpriority="high"
 						/>
+						<span class="lead-ribbon">Hottest right now</span>
 					</div>
-					<div
-						class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[rgba(45,36,32,0.85)] to-transparent p-6 pt-16"
-					>
-						<div
-							class="mb-1 inline-block rounded-full bg-danger-deep px-3 py-1 text-xs font-black tracking-wider text-white uppercase"
-						>
-							Hottest right now
+					<div class="lead-caption">
+						{#if leadArtwork.artistAvatar}
+							<img
+								class="lead-avatar"
+								src={leadArtwork.artistAvatar}
+								alt=""
+								loading="lazy"
+								decoding="async"
+							/>
+						{/if}
+						<div class="min-w-0 flex-1">
+							<h3 class="lead-title">{leadArtwork.title}</h3>
+							<p class="lead-artist">{leadArtwork.artist}</p>
 						</div>
-						<h3 class="text-xl font-bold text-paper-bright">{leadArtwork.title}</h3>
-						<p class="mt-1 text-sm text-clay">
-							{leadArtwork.artist} · ⭐ {leadArtwork.score}
+						<p class="lead-stats">
+							<span>★ {leadArtwork.score}</span>
+							<span>💬 {leadArtwork.commentCount ?? leadArtwork.comments.length}</span>
 						</p>
 					</div>
 				</button>
@@ -185,3 +195,97 @@
 		/>
 	</div>
 {/if}
+
+<style>
+	.lead-polaroid {
+		display: block;
+		padding: 0.75rem 0.75rem 0;
+		text-align: left;
+		rotate: -1.5deg;
+		transition: translate 300ms ease;
+	}
+
+	.lead-polaroid:hover {
+		translate: 0 -0.25rem;
+	}
+
+	.lead-pin {
+		--pin-size: 1.375rem;
+		position: absolute;
+		top: -0.75rem;
+		left: 50%;
+		z-index: 2;
+		translate: -50% 0;
+	}
+
+	.lead-photo {
+		background: #fffdf9;
+		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.07);
+	}
+
+	/* A ribbon across the top right corner, the photo's edge trimming it. */
+	.lead-ribbon {
+		position: absolute;
+		top: 1.75rem;
+		right: -2.5rem;
+		padding: 0.3rem 2.5rem;
+		rotate: 35deg;
+		background: #b5473c;
+		box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+		font-family: var(--font-display);
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: #fdfbf7;
+	}
+
+	.lead-caption {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5625rem;
+		padding: 0.5625rem 0.1875rem 0.75rem;
+	}
+
+	.lead-avatar {
+		width: 1.875rem;
+		height: 1.875rem;
+		flex-shrink: 0;
+		border: 2.5px solid #2d2420;
+		border-radius: 50%;
+		object-fit: cover;
+		background: #e8ddd0;
+	}
+
+	.lead-title {
+		margin: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-family: var(--font-hand);
+		font-size: 1.5rem;
+		font-weight: 700;
+		line-height: 1.05;
+		color: #2d2420;
+	}
+
+	.lead-artist {
+		margin: 1px 0 0;
+		font-family: var(--font-hand);
+		font-size: 1.0625rem;
+		color: #7c5f46;
+	}
+
+	.lead-stats {
+		display: flex;
+		flex-direction: column;
+		flex-shrink: 0;
+		margin: 0;
+		text-align: right;
+		font-family: var(--font-display);
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1.45;
+		color: #6b5a45;
+	}
+</style>
