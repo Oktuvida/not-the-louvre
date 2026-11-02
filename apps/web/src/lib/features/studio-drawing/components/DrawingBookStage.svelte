@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { untrack, type Snippet } from 'svelte';
+	import bookclothUrl from '#lib/assets/sketchbook/bookcloth.webp';
+	import coverWearUrl from '#lib/assets/sketchbook/cover-wear.webp';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import { SKETCHBOOK_COVER } from '#lib/features/shared-ui/sketchbook/cover.js';
 
 	// A 950ms 3D cover flip is the biggest motion on /draw. Under reduced motion it
 	// becomes an instant cut: the same duration feeds `--book-open-duration` and the
@@ -8,6 +11,23 @@
 	const REDUCED_MOTION_OPENING_DURATION_MS = 1;
 
 	export type BookStageState = 'closed' | 'opening' | 'open' | 'closing';
+
+	/*
+	 * The cover's cloth and wear, and where its elastic and its label sit: the
+	 * same images and measures the 3D sketchbook on the home's side table
+	 * wears, so the zoom from the room hands over the same book. Measures are
+	 * shares of the cover (cqw and cqh, against .cover-front).
+	 */
+	const coverMaterial = [
+		`--cover-cloth: url(${bookclothUrl})`,
+		`--cover-wear: url(${coverWearUrl})`,
+		`--cover-tile: ${SKETCHBOOK_COVER.tile * 100}cqw`,
+		`--cover-elastic-centre: ${SKETCHBOOK_COVER.elastic.fromEdge * 100}cqw`,
+		`--cover-elastic-width: ${SKETCHBOOK_COVER.elastic.width * 100}cqw`,
+		`--cover-label-centre: ${SKETCHBOOK_COVER.label.centre * 100}%`,
+		`--cover-label-foot: ${SKETCHBOOK_COVER.label.foot * 100}cqh`,
+		`--cover-label-turn: ${SKETCHBOOK_COVER.label.turn}deg`
+	].join('; ');
 
 	let {
 		children,
@@ -122,7 +142,7 @@
 				</div>
 			</div>
 
-			<div class="book-cover" bind:this={coverElement}>
+			<div class="book-cover" bind:this={coverElement} style={coverMaterial}>
 				<button
 					type="button"
 					class="cover-front focus-ring-cover"
@@ -130,16 +150,14 @@
 					disabled={stageState !== 'closed'}
 					aria-label="Open sketchbook"
 				>
-					<div class="cover-surface" aria-hidden="true"></div>
-					<div class="cover-spine-strip" aria-hidden="true"></div>
-					<!-- Leather corners, the block of pages showing past the board, and
-					     the ribbon marker hanging out of the bottom. -->
-					<span class="cover-corner cover-corner-top" aria-hidden="true"></span>
-					<span class="cover-corner cover-corner-bottom" aria-hidden="true"></span>
+					<!-- The bookcloth with its spine, corners and wear; the block of
+					     pages and the back board showing past it; the ribbon marker
+					     hanging out of the foot; the elastic that keeps it shut. -->
+					<span class="cover-cloth" aria-hidden="true"></span>
 					<span class="cover-pages cover-pages-side" aria-hidden="true"></span>
 					<span class="cover-pages cover-pages-foot" aria-hidden="true"></span>
 					<span class="cover-ribbon" aria-hidden="true"></span>
-					<div class="cover-strap" aria-hidden="true"></div>
+					<span class="cover-elastic" aria-hidden="true"></span>
 					<div class="cover-title-area">
 						<strong class="cover-title">Sketchbook</strong>
 					</div>
@@ -161,11 +179,10 @@
 <style>
 	.book-shell {
 		/*
-		 * The book's own linen tile — a coarser weave than the shared
-		 * `.paper-grain` utility, so it stays local — declared once here and
-		 * worn by both the front cover and the cover back.
+		 * The endpaper's grain inside the cover — coarser than the shared
+		 * `.paper-grain` utility, so it stays local.
 		 */
-		--book-linen: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+		--book-endpaper-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
 
 		display: inline-flex;
 	}
@@ -437,25 +454,19 @@
 		line-height: 1.35;
 	}
 
-	/* --- Book cover (3D flip) — cloth surface --- */
+	/* --- Book cover (3D flip) --- */
 
 	.book-cover {
 		display: var(--studio-cover-display, block);
 		position: absolute;
 		inset: var(--studio-book-edge, 0.5rem);
-		border-radius: 3px 8px 8px 3px;
-		/* Bookcloth: the weave's warp and weft, the light catching the top left
-		 * and the board darkening towards the far corner. The same linen, spine
-		 * and strap the sketchbook on the 3D studio's side table wears. */
-		background-color: #d8cfc0;
-		background-image:
-			repeating-linear-gradient(0deg, rgb(80 64 44 / 0.07) 0 1px, transparent 1px 3px),
-			repeating-linear-gradient(90deg, rgb(80 64 44 / 0.06) 0 1px, transparent 1px 3px),
-			radial-gradient(ellipse at 30% 20%, rgb(255 255 255 / 0.25), transparent 55%),
-			radial-gradient(ellipse at 100% 100%, rgb(60 40 20 / 0.18), transparent 50%);
+		border-radius: 3px 7px 7px 3px;
+		/* The cloth's own colour, until its images arrive. */
+		background-color: #b8aa8f;
+		/* Lying on the desk: tight where the board touches it, softer further out. */
 		box-shadow:
-			inset 0 0 0 1px rgb(255 255 255 / 0.3),
-			inset -3px 0 15px rgb(0 0 0 / 0.06),
+			0 1px 1px rgb(30 20 12 / 0.45),
+			0 0.4rem 0.9rem rgb(30 20 12 / 0.24),
 			0 1.6rem 3rem rgb(47 36 28 / 0.3);
 		color: var(--color-paper);
 		text-align: left;
@@ -469,15 +480,15 @@
 
 	.cover-front {
 		/* The cover fills its book, so the ring needs room to clear the spine
-		   and the leather edge. Colour comes from `focus-ring-cover`. */
+		   and the pages' edge. Colour comes from `focus-ring-cover`. */
 		--focus-ring-offset: 5px;
+		/* Everything on the cover is measured against its width (cqw), as on
+		 * the 3D sketchbook. No padding: cqw counts the content box. */
+		container-type: size;
 		position: absolute;
 		inset: 0;
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-		align-items: center;
-		padding: clamp(1.2rem, 2.5vw, 2rem);
+		display: block;
+		padding: 0;
 		border: 0;
 		border-radius: inherit;
 		background: transparent;
@@ -502,214 +513,261 @@
 		transform: scale(0.985);
 	}
 
-	/* Linen cloth texture overlay on cover */
-	.cover-surface {
+	/*
+	 * The bookcloth: a tile of linen, and over it this book's own wear (the
+	 * dark cloth spine and corners, the rubbed edges, the grime where it is
+	 * held), drawn for a square cover, which this one always nearly is. Both
+	 * images come from scripts/generate-sketchbook-cloth.ts. One element, one
+	 * draw each: pieces drawn side by side would show their seams on the
+	 * tilted desk.
+	 */
+	.cover-cloth {
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
-		background: var(--book-linen);
-		mix-blend-mode: multiply;
+		background:
+			var(--cover-wear) 0 0 / 100% 100% no-repeat,
+			var(--cover-cloth) 0 0 / var(--cover-tile) auto repeat;
 		pointer-events: none;
 	}
 
-	.cover-surface::after {
+	/* The desk lamp's fall-off across the board, and the board's edges. */
+	.cover-cloth::after {
 		content: '';
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
-		background: radial-gradient(ellipse at 35% 25%, rgb(255 255 255 / 0.12), transparent 55%);
-		pointer-events: none;
+		background:
+			radial-gradient(130% 100% at 18% 0%, rgb(255 246 228 / 0.12), transparent 60%),
+			radial-gradient(110% 110% at 100% 100%, rgb(36 24 12 / 0.16), transparent 62%);
+		box-shadow:
+			inset 0 1px 0 rgb(255 248 236 / 0.28),
+			inset -1px 0 0 rgb(30 20 10 / 0.3),
+			inset 0 -1px 0 rgb(30 20 10 / 0.34);
 	}
 
-	.cover-spine-strip {
-		position: absolute;
-		left: 0;
-		top: 0;
-		bottom: 0;
-		width: 26px;
-		background: linear-gradient(90deg, #2a221b, #3b3027 60%, #241d17);
-		border-radius: 0;
-		box-shadow: 3px 0 12px rgb(0 0 0 / 0.3);
-		pointer-events: none;
-	}
-
-	.cover-spine-strip::after {
-		content: '';
-		position: absolute;
-		top: 16px;
-		bottom: 16px;
-		left: 50%;
-		width: 1px;
-		background: repeating-linear-gradient(
-			180deg,
-			transparent,
-			transparent 5px,
-			rgb(212 131 74 / 0.12) 5px,
-			rgb(212 131 74 / 0.12) 6px
-		);
-	}
-
-	/* The leather corners that keep the board's edges from fraying. */
-	.cover-corner {
-		position: absolute;
-		right: 0;
-		width: 2.875rem;
-		height: 2.875rem;
-		pointer-events: none;
-	}
-
-	.cover-corner-top {
-		top: 0;
-		border-top-right-radius: 8px;
-		background: linear-gradient(225deg, #3b3027 50%, transparent 50%);
-	}
-
-	.cover-corner-bottom {
-		bottom: 0;
-		border-bottom-right-radius: 8px;
-		background: linear-gradient(315deg, #3b3027 50%, transparent 50%);
-	}
-
-	/* The pages' edges, just past the board on the open side and the foot.
-	 * They sit outside the cover's box, so nothing of them lies over the cloth,
-	 * and they turn away with the cover's front when it opens. */
+	/* The pages' edges, and the back board under them, just past the front
+	 * board on the open side and the foot: the book's thickness. They sit
+	 * outside the cover's box, so nothing of them lies over the cloth, and
+	 * they turn away with the cover's front when it opens. */
 	.cover-pages {
 		position: absolute;
-		background: repeating-linear-gradient(0deg, #f3ecdf 0 2px, #d9cfbe 2px 3px);
 		pointer-events: none;
 	}
 
 	.cover-pages-side {
-		top: 6px;
-		right: -6px;
-		bottom: -6px;
-		width: 6px;
+		top: 4px;
+		right: -8px;
+		bottom: -8px;
+		width: 8px;
 		border-radius: 0 3px 3px 0;
-		background: repeating-linear-gradient(90deg, #f3ecdf 0 2px, #d9cfbe 2px 3px);
+		background:
+			/* the back board's cloth edge */
+			linear-gradient(90deg, transparent 5px, #7d705c 5px, #6a5d4b),
+			/* thumbed darker towards the corners */
+			linear-gradient(
+					180deg,
+					rgb(110 84 50 / 0.22),
+					transparent 14%,
+					transparent 78%,
+					rgb(110 84 50 / 0.26)
+				),
+			/* the front board's shadow on the pages */
+			linear-gradient(90deg, rgb(40 28 16 / 0.35), transparent 2px),
+			repeating-linear-gradient(
+				90deg,
+				#efe6d3 0 0.6px,
+				#d6cab3 0.6px 1px,
+				#e9dfca 1px 1.7px,
+				#cfc2aa 1.7px 2.1px
+			);
 	}
 
 	.cover-pages-foot {
-		right: -6px;
-		bottom: -6px;
-		left: 10px;
-		height: 6px;
+		right: -8px;
+		bottom: -8px;
+		left: 6px;
+		height: 8px;
 		border-radius: 0 0 3px 3px;
+		background:
+			linear-gradient(180deg, transparent 5px, #7d705c 5px, #6a5d4b),
+			linear-gradient(
+				90deg,
+				rgb(110 84 50 / 0.12),
+				transparent 10%,
+				transparent 80%,
+				rgb(110 84 50 / 0.26)
+			),
+			linear-gradient(180deg, rgb(40 28 16 / 0.35), transparent 2px),
+			repeating-linear-gradient(
+				180deg,
+				#efe6d3 0 0.6px,
+				#d6cab3 0.6px 1px,
+				#e9dfca 1px 1.7px,
+				#cfc2aa 1.7px 2.1px
+			);
 	}
 
-	/* The ribbon marker, hanging out of the foot of the pages. */
+	/* The ribbon marker: a grosgrain ribbon hanging out of the foot, its end
+	 * cut in a V. */
 	.cover-ribbon {
 		position: absolute;
-		top: calc(100% + 6px);
-		left: 70%;
-		width: 1.25rem;
-		height: 2.25rem;
-		background: linear-gradient(90deg, #8f2a22, #b5473c 50%, #8f2a22);
+		top: calc(100% + 5px);
+		left: 68%;
+		width: 2.1cqw;
+		height: 5.6cqw;
+		background:
+			repeating-linear-gradient(180deg, rgb(0 0 0 / 0.16) 0 1px, transparent 1px 2.2px),
+			linear-gradient(
+				90deg,
+				rgb(0 0 0 / 0.25),
+				transparent 30%,
+				transparent 72%,
+				rgb(0 0 0 / 0.25)
+			),
+			#7a2c23;
 		clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%);
 		pointer-events: none;
 	}
 
-	/* The elastic band that keeps the book shut. */
-	.cover-strap {
+	/* The thin elastic that keeps the book shut, bending over the head and the
+	 * tail of the board. Knitted, not glossy. */
+	.cover-elastic {
 		position: absolute;
-		top: -4px;
-		right: 11%;
-		bottom: -4px;
-		width: 12px;
-		border-radius: 6px;
-		background: linear-gradient(90deg, #b8642f, #e08a4c 45%, #b8642f);
-		box-shadow: 3px 0 6px rgb(0 0 0 / 0.35);
+		top: -0.4rem;
+		bottom: -0.4rem;
+		right: calc(var(--cover-elastic-centre) - var(--cover-elastic-width) / 2);
+		width: var(--cover-elastic-width);
+		border-radius: 1.5px;
+		background:
+			linear-gradient(
+				180deg,
+				rgb(8 5 3 / 0.6),
+				transparent 0.55rem,
+				transparent calc(100% - 0.55rem),
+				rgb(8 5 3 / 0.65)
+			),
+			repeating-linear-gradient(180deg, rgb(255 240 220 / 0.07) 0 1px, transparent 1px 3px),
+			linear-gradient(
+				90deg,
+				rgb(255 240 220 / 0.12) 0 1px,
+				transparent 1px calc(100% - 1px),
+				rgb(0 0 0 / 0.4) calc(100% - 1px)
+			),
+			#2b231d;
+		box-shadow:
+			1px 1px 1.5px rgb(20 12 6 / 0.5),
+			2px 2px 4px rgb(20 12 6 / 0.2);
 		pointer-events: none;
 		z-index: 6;
 	}
 
 	.cover-title-area {
 		position: absolute;
-		/* Was `clamp(7rem, 3vw, 2rem)`: min above max, so it resolved to a flat
-		 * 7rem at every width. The cap keeps the offset the wide cover ships with
-		 * and the preferred value now lets the title ride up on narrow ones. */
-		top: clamp(2rem, 8vw, 7rem);
-		left: 50%;
+		top: 15cqh;
+		left: var(--cover-label-centre);
 		transform: translateX(-50%);
 		z-index: 5;
-		text-align: center;
 		width: max-content;
 	}
 
+	/* "SKETCHBOOK", blind-stamped into the cloth: a darker pressed letter,
+	 * shaded along its top edge and lit along its bottom one. Its colour
+	 * stays translucent, so the stamp is decoration, not low-contrast text
+	 * for axe; the button's name is its aria-label. */
 	.cover-title {
+		display: block;
+		margin-right: -0.36em;
 		font-family: var(--font-display);
-		font-size: clamp(3rem, 9vw, 4.5rem);
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-		/* Pressed into the cloth: a faint darkening where the die bit, lit along
-		 * its lower edge and shadowed along its upper one. The colour itself
-		 * stays transparent, so the deboss is decoration, not low-contrast text. */
-		color: transparent;
-		-webkit-text-fill-color: rgb(120 100 70 / 0.1);
-		text-shadow:
-			0 1px 0 rgb(255 255 255 / 0.55),
-			0 -1px 0 rgb(70 55 35 / 0.35);
+		font-size: 4.6cqw;
+		font-weight: 600;
+		letter-spacing: 0.36em;
 		line-height: 1;
+		text-transform: uppercase;
+		color: transparent;
+		-webkit-text-fill-color: rgb(62 46 28 / 0.2);
+		text-shadow: 0 1px 0 rgb(255 247 230 / 0.36);
 	}
 
-	/* Paper label sticker on cover */
+	/* A paper label glued on a little crooked, yellowed and foxed with the
+	 * years, inside a double rule printed in brown ink. */
 	.cover-label {
 		position: absolute;
-		bottom: clamp(3.5rem, 12vh, 6rem);
-		left: 50%;
-		transform: translateX(-50%);
-		background: #fdfbf7;
-		border: 1px solid rgb(0 0 0 / 0.06);
-		border-radius: 3px;
-		box-shadow: 0 2px 5px rgb(0 0 0 / 0.18);
-		padding: 14px 36px 12px;
-		rotate: -1deg;
-		text-align: center;
+		bottom: var(--cover-label-foot);
+		left: var(--cover-label-centre);
 		z-index: 5;
+		padding: 2.5cqw 5.4cqw 2.1cqw;
+		border-radius: 2px 2px 4px 2px;
+		background-color: #ede0c3;
+		background-image:
+			radial-gradient(circle 0.2rem at 87% 26%, rgb(138 88 36 / 0.3), rgb(138 88 36 / 0) 100%),
+			radial-gradient(circle 0.3rem at 10% 70%, rgb(138 88 36 / 0.2), rgb(138 88 36 / 0) 100%),
+			radial-gradient(circle 0.14rem at 64% 86%, rgb(138 88 36 / 0.24), rgb(138 88 36 / 0) 100%),
+			radial-gradient(90% 80% at 42% 45%, rgb(255 251 238 / 0.62), rgb(255 251 238 / 0) 72%);
+		box-shadow:
+			inset 0 0 0.9rem rgb(160 118 58 / 0.24),
+			inset 0 0 0 1px rgb(140 100 56 / 0.2),
+			0 1px 1px rgb(40 26 12 / 0.32),
+			0 1px 3px rgb(40 26 12 / 0.14);
+		text-align: center;
 		white-space: nowrap;
+		transform: translateX(-50%) rotate(var(--cover-label-turn));
+	}
+
+	.cover-label::before {
+		content: '';
+		position: absolute;
+		inset: 0.8cqw;
+		border: 1px solid rgb(112 60 38 / 0.55);
+		outline: 1px solid rgb(112 60 38 / 0.32);
+		outline-offset: 2px;
+		border-radius: 1px;
+		pointer-events: none;
 	}
 
 	.cover-label-title {
-		font-family: var(--font-display);
-		font-size: 1.3rem;
-		font-weight: 600;
-		letter-spacing: 4px;
-		text-transform: uppercase;
-		color: var(--color-ink);
 		display: block;
+		font-family: var(--font-display);
+		font-size: 2.45cqw;
+		font-weight: 600;
+		letter-spacing: 0.24em;
+		text-transform: uppercase;
+		color: rgb(52 34 24 / 0.92);
 	}
 
 	.cover-label-line {
-		width: 60px;
+		width: 9cqw;
 		height: 1px;
-		background: rgb(47 36 28 / 0.12);
-		margin: 6px auto;
+		margin: 0.8cqw auto 0.5cqw;
+		background: rgb(112 60 38 / 0.35);
 	}
 
 	.cover-label-sub {
 		font-family: var(--font-hand);
-		font-size: 1.35rem;
-		color: rgb(47 36 28 / 0.45);
+		font-size: 2.9cqw;
+		color: rgb(58 54 66 / 0.62);
 	}
 
 	.cover-invite {
 		position: absolute;
-		bottom: clamp(1rem, 2.5vw, 2rem);
-		left: 50%;
+		bottom: 6cqh;
+		left: var(--cover-label-centre);
 		transform: translateX(-50%);
 		max-width: 20ch;
 		font-family: var(--font-hand);
 		font-size: 1.5rem;
 		line-height: 1.5;
-		color: rgba(33, 31, 29, 0.76);
+		color: rgb(40 32 24 / 0.86);
 		white-space: nowrap;
 	}
 
+	/* Inside the board: the cloth turned in round its edges, and the endpaper
+	 * pasted over the rest. The drawing's notes lie here once it opens. */
 	.cover-back-face {
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
-		background: linear-gradient(135deg, #e8e0d4 0%, #ddd5c8 40%, #cec5b8 100%);
+		background: var(--cover-cloth) 0 0 / 34% auto repeat;
 		backface-visibility: hidden;
 		transform: rotateY(180deg);
 		display: flex;
@@ -717,13 +775,18 @@
 		overflow: hidden;
 	}
 
-	/* Linen texture on cover back */
 	.cover-back-face::before {
 		content: '';
 		position: absolute;
-		inset: 0;
-		background: var(--book-linen);
-		mix-blend-mode: multiply;
+		inset: 1.6%;
+		border-radius: 1px;
+		background-color: #e4d9c6;
+		background-image:
+			var(--book-endpaper-grain), linear-gradient(270deg, rgb(70 50 30 / 0.12), transparent 9%),
+			radial-gradient(120% 90% at 40% 30%, rgb(255 250 240 / 0.35), transparent 70%);
+		box-shadow:
+			0 0 0 1px rgb(60 44 28 / 0.18),
+			0 1px 2px rgb(40 28 16 / 0.2);
 		pointer-events: none;
 		z-index: 0;
 	}
