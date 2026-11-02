@@ -11,6 +11,7 @@
 	import SceneFrameInvalidator from '#lib/features/home-entry-scene/scene/SceneFrameInvalidator.svelte';
 	import SceneTextureBindings from '#lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
 	import { dressStudioSurfaces } from '#lib/features/home-entry-scene/scene/studio-surfaces.js';
+	import { studioZoomScale } from '#lib/features/home-entry-scene/scene/studio-framing.js';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
 	import type { EntryFlowState } from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
 
@@ -89,6 +90,8 @@
 				: DEFAULT_CAMERA;
 
 	let studioCamera = $state<OrthographicCamera | undefined>(undefined);
+	let sceneWidth = $state(0);
+	let sceneHeight = $state(0);
 	let studioNodes = $state<Record<string, Object3D>>({});
 	let studioSceneRoot = $state<Group | null>(null);
 	let previousScenePose: 'default' | 'left-wall' | 'top-close' | undefined = initialPoseValue;
@@ -134,7 +137,7 @@
 				studioMotion.cameraHeight,
 				studioMotion.cameraDepth
 			);
-			camera.zoom = studioMotion.zoom;
+			camera.zoom = studioMotion.zoom * studioZoomScale(sceneWidth, sceneHeight);
 			camera.updateProjectionMatrix();
 			camera.lookAt(studioMotion.targetX, studioMotion.targetY, studioMotion.targetZ);
 		}
@@ -154,10 +157,15 @@
 		untrack(applyStudioMotion);
 	};
 
-	/** Re-sync once the camera binds or the GLTF scene finishes loading mid-tween. */
+	/**
+	 * Re-sync once the camera binds, the GLTF scene finishes loading mid-tween,
+	 * or the screen changes size.
+	 */
 	$effect(() => {
 		void studioCamera;
 		void studioSceneRoot;
+		void sceneWidth;
+		void sceneHeight;
 		applyStudioMotion();
 	});
 
@@ -388,6 +396,8 @@
 </script>
 
 <div
+	bind:clientWidth={sceneWidth}
+	bind:clientHeight={sceneHeight}
 	class={`h-full w-full transition-opacity duration-500 ${sceneReady ? 'opacity-100' : 'opacity-0'}`}
 >
 	<Canvas dpr={1.5} shadows={studioCanvasShadowMap}>
