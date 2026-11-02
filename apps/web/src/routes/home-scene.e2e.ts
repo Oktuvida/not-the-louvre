@@ -256,5 +256,44 @@ test.describe('the studio behind the front door', () => {
 				});
 			});
 		});
+
+		test('closes the book straight back onto its spot on the way out of the studio', async ({
+			page
+		}) => {
+			// The room's data waits, so the studio stays on screen to be watched.
+			await page.route('**/__data.json*', (route) => {
+				if (new URL(route.request().url()).pathname === '/__data.json') return;
+				return route.continue();
+			});
+			await page.goto('/draw');
+			await page.getByRole('button', { name: 'Open sketchbook' }).click();
+			await expect(page.getByPlaceholder('Untitled genius')).toBeEnabled();
+			await page.waitForTimeout(1_000);
+
+			// Where the drawing's centre is, every frame, from Exit Studio until
+			// the book has lain closed for a while.
+			const sampling = page.evaluate(
+				() =>
+					new Promise<number[]>((resolve) => {
+						const canvas = document.querySelector('[aria-label="Drawing canvas"]')!;
+						const centres: number[] = [];
+						const start = performance.now();
+						const sample = () => {
+							const box = canvas.getBoundingClientRect();
+							centres.push(box.left + box.width / 2);
+							if (performance.now() - start < 2_200) requestAnimationFrame(sample);
+							else resolve(centres);
+						};
+						requestAnimationFrame(sample);
+					})
+			);
+			await page.getByRole('link', { name: /Exit Studio/ }).click();
+			const centres = await sampling;
+
+			// It travels from the open book's place to the spot and no further.
+			const [open, closed] = [centres[0], centres.at(-1)!];
+			expect(Math.max(...centres)).toBeLessThanOrEqual(Math.max(open, closed) + 2);
+			expect(Math.min(...centres)).toBeGreaterThanOrEqual(Math.min(open, closed) - 2);
+		});
 	});
 });

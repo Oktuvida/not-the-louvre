@@ -13,6 +13,18 @@ import { HANDOFF_BOOK_TILT, handoffBookRect } from '#lib/features/shared-ui/stud
 /** Same curve as the studio's `--ease-glide`. */
 const GLIDE = { duration: 700, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' };
 
+/** An element's box as laid out in its positioned parent, before its own transform. */
+const layoutBox = (element: HTMLElement) => {
+	const parent = element.offsetParent as HTMLElement;
+	const parentBox = parent.getBoundingClientRect();
+	const style = getComputedStyle(element);
+	const width = parseFloat(style.width);
+	const height = parseFloat(style.height);
+	const left = parentBox.left + parent.clientLeft + parseFloat(style.left);
+	const top = parentBox.top + parent.clientTop + parseFloat(style.top);
+	return { height, left, top, width };
+};
+
 /**
  * Moves `book` so its `cover` lies on the spot. With `glide`, it travels there
  * from wherever it was; without, it is there from the next frame.
@@ -21,10 +33,12 @@ export const layBookOnSpot = (book: HTMLElement, cover: HTMLElement, glide: bool
 	const from = getComputedStyle(book).transform;
 	for (const animation of book.getAnimations()) animation.cancel();
 
-	// Where the cover is laid out, with no transform in the way.
+	// Where the cover is laid out, with no transform in the way: not the
+	// book's, and not the cover's own, which is still turning when the book
+	// closes to leave.
 	book.style.transition = 'none';
 	book.style.transform = 'none';
-	const laidOut = cover.getBoundingClientRect();
+	const laidOut = layoutBox(cover);
 	const spot = handoffBookRect(window.innerWidth, window.innerHeight);
 	const onSpot = [
 		`translate(${spot.cx - (laidOut.left + laidOut.width / 2)}px, ${
