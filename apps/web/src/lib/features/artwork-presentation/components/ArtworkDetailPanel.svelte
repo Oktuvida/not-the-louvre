@@ -641,8 +641,8 @@
 							<div class="postcard-stain postcard-stain-front-a" aria-hidden="true"></div>
 							<div class="postcard-stain postcard-stain-front-b" aria-hidden="true"></div>
 							<div class="relative">
-								<span class="photo-tape photo-tape-left" aria-hidden="true"></span>
-								<span class="photo-tape photo-tape-right" aria-hidden="true"></span>
+								<span class="photo-tape photo-tape-left tape" aria-hidden="true"></span>
+								<span class="photo-tape photo-tape-right tape" aria-hidden="true"></span>
 								<!-- Unmounted while flipped or mid-flip: the positioned wrapper gets
 								     its own compositor layer, which ignores the face's
 								     backface-visibility and would ghost mirrored through the back. -->
@@ -1245,15 +1245,12 @@
 		background: radial-gradient(closest-side, rgba(113, 145, 127, 0.13), transparent 72%);
 	}
 
-	/* Masking tape holding the photo onto the card — same as PolaroidCard */
+	/* Masking tape holding the photo onto the card — same tape as PolaroidCard */
 	.photo-tape {
 		position: absolute;
 		z-index: 3;
-		height: 17px;
-		width: 52px;
-		background: rgba(255, 255, 240, 0.55);
-		border: 1px solid rgba(200, 190, 170, 0.3);
-		box-shadow: 0 1px 2px rgba(45, 36, 32, 0.08);
+		height: 18px;
+		width: 56px;
 		pointer-events: none;
 	}
 

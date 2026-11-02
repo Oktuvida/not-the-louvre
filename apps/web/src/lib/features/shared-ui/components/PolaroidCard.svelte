@@ -88,7 +88,7 @@
 	const rotation = $derived((seed % 7) - 3 || 1);
 	const tapeVariant = $derived(seed % 3);
 	const pinClass = $derived(
-		['pin-blue', 'pin-red', 'pin-green', 'pin-yellow'][seed % 4] ?? 'pin-blue'
+		['push-pin-blue', '', 'push-pin-green', 'push-pin-yellow'][seed % 4] ?? ''
 	);
 	const isFork = $derived(Boolean(artwork.lineage?.isFork));
 	const forkParentTitle = $derived(
@@ -133,13 +133,15 @@
 		></div>
 
 		{#if attachment === 'tape'}
-			<div
-				class={`pointer-events-none absolute z-3 h-[1em] w-[3em] border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)] ${tapeVariant === 0 ? 'top-[-0.4375em] left-1/2 -translate-x-1/2 -rotate-3' : tapeVariant === 1 ? 'top-[-0.375em] left-[0.5em] rotate-[12deg]' : 'top-[-0.375em] right-[0.375em] -rotate-[8deg]'}`}
-			></div>
+			<span
+				class={`tape pointer-events-none absolute z-3 h-[1.125em] w-[3.5em] ${tapeVariant === 0 ? 'top-[-0.5em] left-1/2 -translate-x-1/2 -rotate-3' : tapeVariant === 1 ? 'tape-washi top-[-0.4375em] left-[0.375em] rotate-[12deg]' : 'top-[-0.4375em] right-[0.25em] -rotate-[8deg]'}`}
+				aria-hidden="true"
+			></span>
 		{:else}
-			<div
-				class={`polaroid-pin pointer-events-none absolute top-[-0.375em] left-1/2 z-4 h-[0.875em] w-[0.875em] -translate-x-1/2 rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)] ${pinClass}`}
-			></div>
+			<span
+				class={`push-pin polaroid-pin absolute top-[-0.625em] left-1/2 z-4 -translate-x-1/2 ${pinClass}`}
+				aria-hidden="true"
+			></span>
 		{/if}
 
 		<!-- Image area -->
@@ -266,31 +268,7 @@
 		}
 	}
 
-	.pin-blue {
-		background: radial-gradient(circle at 0.25em 0.25em, #4a90d9, #2d6bb5);
-	}
-
-	.pin-red {
-		background: radial-gradient(circle at 0.25em 0.25em, var(--color-alert), #c0392b);
-	}
-
-	.pin-green {
-		background: radial-gradient(circle at 0.25em 0.25em, #5dba5d, #3a8f3a);
-	}
-
-	.pin-yellow {
-		background: radial-gradient(circle at 0.25em 0.25em, var(--color-gold), #d4a017);
-	}
-
-	/* Pin highlight dot */
-	.polaroid-pin::after {
-		content: '';
-		position: absolute;
-		top: 0.1875em;
-		left: 0.25em;
-		width: 0.25em;
-		height: 0.25em;
-		background: rgba(255, 255, 255, 0.35);
-		border-radius: 50%;
+	.polaroid-pin {
+		--pin-size: 1.125em;
 	}
 </style>

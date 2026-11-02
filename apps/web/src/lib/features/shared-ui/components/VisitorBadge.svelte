@@ -45,9 +45,10 @@
 	aria-label={onclick ? `Edit avatar for ${nickname}` : undefined}
 >
 	<!-- Tape on top (sits outside the rounded card) -->
-	<div
-		class="badge-tape pointer-events-none absolute top-[-0.5em] left-1/2 z-3 h-[1.125em] w-[3.375em] -translate-x-1/2 -rotate-2 border border-[rgba(200,190,170,0.3)] bg-[rgba(255,255,240,0.55)]"
-	></div>
+	<span
+		class="badge-tape tape pointer-events-none absolute top-[-0.625em] left-1/2 z-3 h-[1.25em] w-[4em] -translate-x-1/2 -rotate-2"
+		aria-hidden="true"
+	></span>
 
 	<!-- Rounded card container -->
 	<div

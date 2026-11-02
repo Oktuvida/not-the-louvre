@@ -332,10 +332,11 @@
 
 	/* Darker tape so the moderator strip reads apart from the report strip. */
 	.action-row :global(.action-button.mod) {
-		background: repeating-linear-gradient(
+		--tape-paper: rgb(236 222 198 / 0.94);
+		--tape-print: repeating-linear-gradient(
 			-45deg,
-			rgba(224, 207, 180, 0.94) 0 9px,
-			rgba(236, 222, 198, 0.94) 9px 18px
+			rgb(224 207 180 / 0.94) 0 9px,
+			transparent 9px 18px
 		);
 	}
 

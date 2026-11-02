@@ -97,6 +97,190 @@
 }
 
 /*
+ * Paper tape: one strip torn off the roll, ragged at both ends, its crepe
+ * showing. `.tape` is plain masking tape; `.tape-washi` prints stripes on it
+ * and `.tape-dots` dots. Where the strip goes, how long it is and how crooked
+ * belong to the call site, which also positions it.
+ *
+ * The strip and its shadow are both pseudo-elements behind whatever the host
+ * holds (the washi close buttons hold their label): a clip-path on the host
+ * would cut its own shadow off, and `filter: drop-shadow` would flatten the
+ * postcard's 3D flip the photo tape sits in (see `.paper-noise` above).
+ */
+.tape {
+	--tape-paper: rgb(233 220 192 / 0.9);
+	--tape-print: none;
+	--tape-torn: polygon(
+		3px 0,
+		calc(100% - 3px) 1px,
+		100% 20%,
+		calc(100% - 3px) 38%,
+		100% 57%,
+		calc(100% - 2px) 76%,
+		calc(100% - 3px) 100%,
+		4px calc(100% - 1px),
+		0 80%,
+		3px 61%,
+		0 42%,
+		2px 21%
+	);
+	isolation: isolate;
+}
+
+.tape::before,
+.tape::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	clip-path: var(--tape-torn);
+	pointer-events: none;
+}
+
+/* The shadow the strip's edge casts on the paper under it. */
+.tape::before {
+	translate: 0 1px;
+	background: rgb(45 36 32 / 0.2);
+}
+
+.tape::after {
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4 0.25' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.18 0'/%3E%3C/filter%3E%3Crect width='120' height='40' filter='url(%23f)'/%3E%3C/svg%3E"),
+		var(--tape-print), var(--tape-paper);
+}
+
+.tape-washi {
+	--tape-paper: rgb(243 220 192 / 0.9);
+	--tape-print: repeating-linear-gradient(
+		45deg,
+		rgb(231 185 138 / 0.9) 0 5px,
+		transparent 5px 12px
+	);
+}
+
+.tape-dots {
+	--tape-paper: rgb(207 229 216 / 0.88);
+	--tape-print: radial-gradient(circle, rgb(110 154 128) 1.8px, transparent 2.2px) 0 0 / 10px 10px;
+}
+
+/*
+ * A sticky note: coloured paper with a grain, the band of glue along its top
+ * edge, and its bottom edge lifting off the wall, casting a soft shadow under
+ * the curl. The paper comes from `--note-paper`, a gradient from light to
+ * deep; `.sticky-note-curl-left` lifts the other corner.
+ *
+ * The paper and its shadow are pseudo-elements behind the note's content, in
+ * the note's own stacking context, so the shadow lands under the paper
+ * whether or not the note is rotated. The call site keeps its padding, width
+ * and tilt.
+ */
+.sticky-note {
+	--note-paper: linear-gradient(172deg, #fff3a8 0%, #fbe57e 60%, #f2d65e 100%);
+	position: relative;
+	isolation: isolate;
+}
+
+.sticky-note::before,
+.sticky-note::after {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	pointer-events: none;
+}
+
+.sticky-note::before {
+	right: 12%;
+	bottom: 7%;
+	left: 6%;
+	height: 22%;
+	box-shadow: 0 1.125rem 1rem rgb(30 15 5 / 0.38);
+	rotate: -1.5deg;
+}
+
+.sticky-note::after {
+	inset: 0;
+	border-bottom-right-radius: 60% 9%;
+	background:
+		linear-gradient(180deg, rgb(90 40 30 / 0.1), rgb(90 40 30 / 0) 2.125rem),
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.25 0 0 0 0 0.2 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"),
+		var(--note-paper);
+	background-blend-mode: multiply, multiply, normal;
+	box-shadow: 0 1px 1px rgb(0 0 0 / 0.1);
+}
+
+.sticky-note-curl-left::before {
+	right: 6%;
+	left: 12%;
+	rotate: 1.5deg;
+}
+
+.sticky-note-curl-left::after {
+	border-bottom-right-radius: 0;
+	border-bottom-left-radius: 60% 9%;
+}
+
+/*
+ * A pushpin: a glossy head on a steel needle, casting its shadow on what it
+ * holds. `--pin-size` is the head's diameter and `--pin-light`, `--pin-base`
+ * and `--pin-dark` its colour; the call site positions it over the point it
+ * pins.
+ */
+.push-pin {
+	--pin-size: 1.5rem;
+	--pin-light: #ff9b8c;
+	--pin-base: #d23c2e;
+	--pin-dark: #7e1a12;
+	width: var(--pin-size);
+	height: var(--pin-size);
+	pointer-events: none;
+}
+
+/* The needle, slanting into the paper from under the head. */
+.push-pin::before {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 46%;
+	width: 9%;
+	height: 78%;
+	border-radius: 999px;
+	background: linear-gradient(90deg, #c4c4c4, #858585);
+	transform-origin: 50% 0;
+	rotate: -22deg;
+}
+
+/* The head, its highlight, and the shadow it casts. */
+.push-pin::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	background:
+		radial-gradient(34% 22% at 32% 27%, rgb(255 255 255 / 0.6), rgb(255 255 255 / 0)),
+		radial-gradient(circle at 35% 30%, var(--pin-light), var(--pin-base) 55%, var(--pin-dark));
+	box-shadow: calc(var(--pin-size) * 0.28) calc(var(--pin-size) * 0.52) calc(var(--pin-size) * 0.22)
+		rgb(30 15 5 / 0.32);
+}
+
+.push-pin-yellow {
+	--pin-light: #fff2a8;
+	--pin-base: #e8b306;
+	--pin-dark: #8a6400;
+}
+
+.push-pin-blue {
+	--pin-light: #a9d1f7;
+	--pin-base: #2f74c0;
+	--pin-dark: #163d6b;
+}
+
+.push-pin-green {
+	--pin-light: #b5e6a8;
+	--pin-base: #3f9a45;
+	--pin-dark: #1d5222;
+}
+
+/*
  * The swipe of paint under a section title, on the ops desk, the auth sheet,
  * the avatar sheet and the tool tray's paints label.
  *

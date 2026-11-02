@@ -42,8 +42,8 @@
      strip on a phone) is the studio layout's call, through the --tray-* custom
      properties it sets per screen in studio-layout.css. -->
 <div class="tool-tray paper-sheet paper-grain">
-	<span class="tray-tape tray-tape-left" aria-hidden="true"></span>
-	<span class="tray-tape tray-tape-right" aria-hidden="true"></span>
+	<span class="tray-tape tray-tape-left tape" aria-hidden="true"></span>
+	<span class="tray-tape tray-tape-right tape" aria-hidden="true"></span>
 	<span class="tray-stain tray-stain-a" aria-hidden="true"></span>
 	<span class="tray-stain tray-stain-b" aria-hidden="true"></span>
 
@@ -94,6 +94,7 @@
 		</div>
 		<div class="brush-preview">
 			<div class="test-scrap">
+				<span class="test-scrap-tape tape" aria-hidden="true"></span>
 				<div class="brush-preview-shell">
 					<div
 						class="brush-dot"
@@ -288,8 +289,6 @@
 		top: -10px;
 		width: 74px;
 		height: 22px;
-		background: rgba(243, 235, 216, 0.88);
-		box-shadow: 0 1px 3px rgba(45, 36, 32, 0.18);
 	}
 
 	.tray-tape-left {
@@ -566,16 +565,13 @@
 		rotate: 3deg;
 	}
 
-	.test-scrap::before {
-		content: '';
+	.test-scrap-tape {
 		position: absolute;
-		top: -6px;
-		left: 10px;
-		width: 26px;
-		height: 10px;
-		background: rgba(243, 235, 216, 0.9);
+		top: -7px;
+		left: 8px;
+		width: 30px;
+		height: 12px;
 		rotate: -4deg;
-		box-shadow: 0 1px 2px rgba(45, 36, 32, 0.15);
 	}
 
 	.brush-preview-shell {
