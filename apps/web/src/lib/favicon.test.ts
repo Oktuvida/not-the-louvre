@@ -5,7 +5,9 @@ describe('favicon state', () => {
 	it('returns the sketch favicon when there is no authenticated user', () => {
 		expect(resolveFaviconState(null)).toEqual({
 			href: sketchFaviconHref,
-			kind: 'sketch'
+			kind: 'sketch',
+			sizes: 'any',
+			type: 'image/svg+xml'
 		});
 	});
 
@@ -19,7 +21,9 @@ describe('favicon state', () => {
 			})
 		).toEqual({
 			href: sketchFaviconHref,
-			kind: 'sketch'
+			kind: 'sketch',
+			sizes: 'any',
+			type: 'image/svg+xml'
 		});
 	});
 
@@ -33,7 +37,9 @@ describe('favicon state', () => {
 			})
 		).toEqual({
 			href: '/api/users/user-1/favicon?v=1774787400000',
-			kind: 'avatar'
+			kind: 'avatar',
+			sizes: '64x64',
+			type: 'image/png'
 		});
 	});
 });

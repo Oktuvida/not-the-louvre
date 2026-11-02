@@ -6,8 +6,10 @@ import {
 	encodePng,
 	sniffImageFormat
 } from '#lib/server/media/codecs/index.js';
+import { AVATAR_FAVICON_SIZE } from '#lib/favicon.js';
 
-const FAVICON_SIZE = 64;
+// The size the favicon's link declares (see `avatarFavicon`).
+const FAVICON_SIZE = AVATAR_FAVICON_SIZE;
 const FAVICON_RADIUS = 18;
 const FAVICON_ZOOM_FACTOR = 1.22;
 

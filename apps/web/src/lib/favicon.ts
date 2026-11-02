@@ -3,7 +3,16 @@ import type { CanonicalUser } from '#lib/server/auth/types.js';
 export type FaviconState = {
 	href: string;
 	kind: 'avatar' | 'sketch';
+	/**
+	 * What the icon is, said on its link. Safari takes an icon for what its link
+	 * declares, so the avatar's PNG is not announced as a scalable icon.
+	 */
+	sizes: string;
+	type: string;
 };
+
+/** The avatar favicon's side in pixels; the server renders it at exactly this. */
+export const AVATAR_FAVICON_SIZE = 64;
 
 type FaviconUser = Pick<
 	CanonicalUser,
@@ -36,18 +45,27 @@ export const sketchFaviconHref = `data:image/svg+xml,${encodeURIComponent(sketch
 export const resolveAvatarFaviconHref = (userId: string, version: number | string) =>
 	`/api/users/${userId}/favicon?v=${encodeURIComponent(String(version))}`;
 
+const sketchFavicon: FaviconState = {
+	href: sketchFaviconHref,
+	kind: 'sketch',
+	sizes: 'any',
+	type: 'image/svg+xml'
+};
+
+/** The avatar favicon at this address, described as the PNG the server renders. */
+export const avatarFavicon = (href: string): FaviconState => ({
+	href,
+	kind: 'avatar',
+	sizes: `${AVATAR_FAVICON_SIZE}x${AVATAR_FAVICON_SIZE}`,
+	type: 'image/png'
+});
+
 export const resolveFaviconState = (user: FaviconUser | null | undefined): FaviconState => {
 	if (!user?.avatarUrl || !user.avatarOnboardingCompletedAt) {
-		return {
-			href: sketchFaviconHref,
-			kind: 'sketch'
-		};
+		return sketchFavicon;
 	}
 
-	return {
-		href: resolveAvatarFaviconHref(user.id, user.updatedAt.getTime()),
-		kind: 'avatar'
-	};
+	return avatarFavicon(resolveAvatarFaviconHref(user.id, user.updatedAt.getTime()));
 };
 
 export const dispatchAvatarFaviconUpdate = (userId: string, version = Date.now()) => {

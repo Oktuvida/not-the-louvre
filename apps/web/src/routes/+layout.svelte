@@ -60,17 +60,18 @@
 	import balooBodyFontUrl from '@fontsource/baloo-2/files/baloo-2-latin-400-normal.woff2?url';
 	import fredokaDisplayFontUrl from '@fontsource/fredoka/files/fredoka-latin-700-normal.woff2?url';
 	import type { LayoutProps } from './$types';
-	import { faviconUpdateEventName } from '#lib/favicon.js';
+	import { avatarFavicon, faviconUpdateEventName } from '#lib/favicon.js';
 
 	let { children, data }: LayoutProps = $props();
 	let clientFaviconHref = $state<string | null>(null);
 	let clientFaviconBaseHref = $state<string | null>(null);
 
 	const serverFaviconHref = $derived(data.favicon.href);
-	const faviconHref = $derived(
+	// An avatar saved in the page replaces the icon the server rendered.
+	const favicon = $derived(
 		clientFaviconHref && clientFaviconBaseHref === serverFaviconHref
-			? clientFaviconHref
-			: serverFaviconHref
+			? avatarFavicon(clientFaviconHref)
+			: data.favicon
 	);
 
 	// Routes contribute `meta` from their `load`; the head is rendered here
@@ -104,7 +105,11 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={faviconHref} sizes="any" />
+	<!-- Keyed, so a new icon arrives as a new link: Safari reads a page's icon
+	     when a link arrives, never when an existing link's address changes. -->
+	{#key favicon.href}
+		<link rel="icon" href={favicon.href} type={favicon.type} sizes={favicon.sizes} />
+	{/key}
 
 	<link rel="preload" as="font" type="font/woff2" href={balooBodyFontUrl} crossorigin="anonymous" />
 
