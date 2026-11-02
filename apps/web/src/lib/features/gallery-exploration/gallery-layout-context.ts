@@ -23,10 +23,18 @@ export type GalleryPanelBindings = {
 	viewer: Viewer;
 };
 
+/** Pieces that went up since the room was hung, and the newest of them. */
+export type GalleryNewPieces = {
+	count: number;
+	previewUrl: string | null;
+	/** The newest piece is sensitive and this visitor has not opted in. */
+	previewBlurred: boolean;
+};
+
 export type GalleryActionBindings = {
-	isRefreshingGallery: boolean;
+	newPieces: GalleryNewPieces | null;
 	onBack: (event: MouseEvent) => void;
-	onRefresh: () => Promise<void> | void;
+	onHangNewPieces: () => Promise<void> | void;
 };
 
 export type GalleryLayoutContext = {

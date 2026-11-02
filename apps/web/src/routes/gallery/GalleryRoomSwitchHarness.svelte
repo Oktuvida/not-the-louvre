@@ -13,6 +13,12 @@
 	 * next one is already mounted. That overlap is what the layout-binding
 	 * ownership guard exists for.
 	 */
+	let {
+		checkForNewArtworks
+	}: {
+		checkForNewArtworks?: () => Promise<{ count: number; preview: null }>;
+	} = $props();
+
 	const roomId = $derived(page.data.roomId as GalleryRoomId);
 	const viewer = $derived(page.data.viewer as { id: string; role: 'user' } | null);
 </script>
@@ -20,7 +26,9 @@
 <Layout>
 	<GalleryExplorationPage
 		artworks={[]}
+		{checkForNewArtworks}
 		emptyStateMessage={null}
+		newArtworkCheckMs={10}
 		room={getGalleryRoom(roomId)}
 		{roomId}
 		{viewer}
