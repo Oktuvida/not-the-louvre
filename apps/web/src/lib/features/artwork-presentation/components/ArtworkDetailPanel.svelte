@@ -642,7 +642,7 @@
 				>
 					<div class="postcard" class:is-flipped={isFlipped} class:is-lifting={isLifting}>
 						<!-- FRONT: the photo side -->
-						<div class="postcard-face postcard-front paper-sheet paper-noise" inert={isFlipped}>
+						<div class="postcard-face postcard-front paper-sheet polaroid-paper" inert={isFlipped}>
 							<div class="postcard-stain postcard-stain-front-a" aria-hidden="true"></div>
 							<div class="postcard-stain postcard-stain-front-b" aria-hidden="true"></div>
 							<div class="relative">
@@ -1207,10 +1207,17 @@
 		z-index: 2;
 		padding: 14px 14px 10px;
 		transform: translateZ(0.1px);
-		/* The card's corners yellowing, the way old postcards do. */
+		/* The polaroid it was on the wall, its corners yellowing the way old
+		 * postcards do: the same stock and grain as the closed card. */
+		background-color: var(--polaroid-paper);
 		background-image:
 			radial-gradient(ellipse at 100% 100%, rgb(160 120 70 / 0.16), transparent 45%),
-			radial-gradient(ellipse at 0% 0%, rgb(160 120 70 / 0.1), transparent 40%);
+			radial-gradient(ellipse at 0% 0%, rgb(160 120 70 / 0.1), transparent 40%),
+			var(--polaroid-grain);
+		background-size:
+			100% 100%,
+			100% 100%,
+			4px 4px;
 	}
 
 	.postcard.is-flipped .postcard-front {
