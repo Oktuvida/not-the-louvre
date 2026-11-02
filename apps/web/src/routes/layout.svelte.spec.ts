@@ -4,11 +4,12 @@ import { page } from 'vitest/browser';
 
 import RootLayoutHarness from './RootLayoutHarness.svelte';
 import { SITE_NAME } from '#lib/features/shared-ui/site-meta.js';
+import { STUDIO_DESK_IMAGE } from '#lib/features/shared-ui/studio-background-warmup.js';
 
 const idleCallbacks: IdleRequestCallback[] = [];
 
 const { imageInstances, pageState } = vi.hoisted(() => ({
-	imageInstances: [] as Array<{ decoding: string; src: string }>,
+	imageInstances: [] as Array<{ decoding: string; src: string; srcset: string }>,
 	// The layout is the only place that renders <title>, so the error page's
 	// status has to reach it through `page`.
 	pageState: {
@@ -23,6 +24,7 @@ vi.mock('$app/state', () => ({ page: pageState }));
 
 const TrackingImage = class {
 	decoding = '';
+	srcset = '';
 	#src = '';
 
 	constructor() {
@@ -68,7 +70,7 @@ describe('root layout', () => {
 		vi.stubGlobal('cancelIdleCallback', vi.fn());
 	});
 
-	// The /table.avif warm-up belongs to the surfaces that lead to /draw (the
+	// The studio desk's warm-up belongs to the surfaces that lead to /draw (the
 	// home page and the gallery's "Create Art" control), not to every route.
 	it('does not warm the studio background from routes that may never reach /draw', async () => {
 		await renderRootLayout();
@@ -77,7 +79,7 @@ describe('root layout', () => {
 			callback({ didTimeout: false, timeRemaining: () => 1 } as IdleDeadline);
 		}
 
-		expect(imageInstances.map((image) => image.src)).not.toContain('/table.avif');
+		expect(imageInstances.map((image) => image.srcset)).not.toContain(STUDIO_DESK_IMAGE.avif);
 	});
 
 	it('renders the shared document title and share-preview metadata', async () => {

@@ -41,9 +41,7 @@ describe('route document head', () => {
 	it('keeps the studio page out of the head', async () => {
 		const source = await readRouteSource('../lib/features/studio-drawing/StudioDrawingPage.svelte');
 
-		// The preload stays: only <title> has a single owner.
 		expect(source).not.toContain('<title>');
-		expect(source).toContain('<link rel="preload" as="image" href="/table.avif"');
 	});
 
 	it('keeps the ops dashboard out of the head', async () => {

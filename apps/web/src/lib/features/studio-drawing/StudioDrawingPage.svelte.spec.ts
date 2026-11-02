@@ -20,7 +20,11 @@ import {
 	createIndexedDbDrawingDraftStore
 } from '#lib/features/stroke-json/drafts.js';
 import { drawingTools } from '#lib/features/studio-drawing/state/drawing.svelte.js';
+import { STUDIO_DESK_IMAGE } from '#lib/features/shared-ui/studio-background-warmup.js';
 import StudioDrawingPage from './StudioDrawingPage.svelte';
+
+const deskPreload = () =>
+	document.head.querySelector('link[rel="preload"][as="image"][type="image/avif"]');
 
 const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
@@ -180,14 +184,13 @@ describe('StudioDrawingPage', () => {
 		showTheCover();
 	});
 
-	it('preloads the studio background image', async () => {
+	it('preloads the desk, at the size it is drawn', async () => {
 		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
-		const preloadLink = document.head.querySelector('link[rel="preload"][href="/table.avif"]');
+		const preloadLink = deskPreload();
 
-		expect(preloadLink).not.toBeNull();
-		expect(preloadLink?.getAttribute('as')).toBe('image');
-		expect(preloadLink?.getAttribute('type')).toBe('image/avif');
+		expect(preloadLink?.getAttribute('imagesrcset')).toBe(STUDIO_DESK_IMAGE.avif);
+		expect(preloadLink?.getAttribute('imagesizes')).toBe(STUDIO_DESK_IMAGE.sizes);
 	});
 
 	it('leaves the document title to the root layout instead of adding a second one', async () => {
@@ -201,7 +204,7 @@ describe('StudioDrawingPage', () => {
 		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await vi.waitFor(() => {
-			expect(document.head.querySelector('link[rel="preload"][href="/table.avif"]')).not.toBeNull();
+			expect(deskPreload()).not.toBeNull();
 		});
 		expect(document.title).toBe(titleBeforeRender);
 	});

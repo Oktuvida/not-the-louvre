@@ -30,7 +30,9 @@
 	].join('; ');
 
 	let {
+		arriving = false,
 		children,
+		coverElement = $bindable(null),
 		coverShown = $bindable(true),
 		onClosed,
 		onOpened,
@@ -38,7 +40,14 @@
 		openingDurationMs = 950,
 		stageState
 	}: {
+		/**
+		 * The book takes over from the home room's sketchbook, which has no
+		 * lettering, ribbon or page edges: those join it after the cut.
+		 */
+		arriving?: boolean;
 		children?: Snippet;
+		/** The closed cover, for the page to lay the book by. */
+		coverElement?: HTMLElement | null;
 		/**
 		 * Whether this screen's layout shows the cover at all. The studio layout
 		 * (studio-layout.css) drops it where there is no room for an open book,
@@ -52,8 +61,6 @@
 		openingDurationMs?: number;
 		stageState: BookStageState;
 	} = $props();
-
-	let coverElement = $state<HTMLElement | null>(null);
 
 	$effect(() => {
 		const cover = coverElement;
@@ -103,6 +110,7 @@
 
 <section
 	class="book-shell"
+	data-arriving={arriving || undefined}
 	data-state={stageState}
 	style={`--book-open-duration:${effectiveOpeningDurationMs}ms;`}
 >
@@ -660,6 +668,16 @@
 			2px 2px 4px rgb(20 12 6 / 0.2);
 		pointer-events: none;
 		z-index: 6;
+	}
+
+	.book-shell[data-arriving] :is(.cover-title-area, .cover-invite, .cover-ribbon, .cover-pages) {
+		animation: coverArrival 600ms 300ms ease-out both;
+	}
+
+	@keyframes coverArrival {
+		from {
+			opacity: 0;
+		}
 	}
 
 	.cover-title-area {

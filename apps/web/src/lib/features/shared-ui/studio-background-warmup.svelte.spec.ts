@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { scheduleStudioBackgroundWarmup, warmStudioBackground } from './studio-background-warmup';
+import {
+	STUDIO_DESK_IMAGE,
+	readyStudioBackground,
+	scheduleStudioBackgroundWarmup,
+	warmStudioBackground
+} from './studio-background-warmup';
 
 /*
  * Lives in the client project because the warm-up only exists in a browser:
@@ -7,22 +12,22 @@ import { scheduleStudioBackgroundWarmup, warmStudioBackground } from './studio-b
  */
 
 const idleCallbacks: IdleRequestCallback[] = [];
-const imageInstances: Array<{ decoding: string; src: string }> = [];
+const imageInstances: Array<{ decoding: string; sizes: string; srcset: string }> = [];
+let finishDecoding = () => {};
 
 const TrackingImage = class {
 	decoding = '';
-	#src = '';
+	sizes = '';
+	srcset = '';
 
 	constructor() {
 		imageInstances.push(this);
 	}
 
-	set src(value: string) {
-		this.#src = value;
-	}
-
-	get src() {
-		return this.#src;
+	decode() {
+		return new Promise<void>((resolve) => {
+			finishDecoding = resolve;
+		});
 	}
 };
 
@@ -42,7 +47,7 @@ afterEach(() => {
 });
 
 describe('studio background warm-up', () => {
-	it('fetches the table background once the page goes idle', () => {
+	it('fetches the desk, at the size the studio will draw it, once the page goes idle', () => {
 		const cancel = scheduleStudioBackgroundWarmup();
 
 		expect(imageInstances).toHaveLength(0);
@@ -50,7 +55,8 @@ describe('studio background warm-up', () => {
 		idleCallbacks[0]?.({ didTimeout: false, timeRemaining: () => 1 } as IdleDeadline);
 
 		expect(imageInstances).toHaveLength(1);
-		expect(imageInstances[0]?.src).toBe('/table.avif');
+		expect(imageInstances[0]?.srcset).toBe(STUDIO_DESK_IMAGE.avif);
+		expect(imageInstances[0]?.sizes).toBe(STUDIO_DESK_IMAGE.sizes);
 		expect(imageInstances[0]?.decoding).toBe('async');
 
 		cancel();
@@ -66,6 +72,22 @@ describe('studio background warm-up', () => {
 		expect(imageInstances).toHaveLength(1);
 
 		cancel();
+	});
+
+	// The room hands its book to the studio without a veil, so the desk must
+	// be ready to paint the moment the studio does.
+	it('says when the desk is decoded and ready to paint', async () => {
+		let ready = false;
+		void readyStudioBackground().then(() => {
+			ready = true;
+		});
+		await Promise.resolve();
+
+		expect(imageInstances).toHaveLength(1);
+		expect(ready).toBe(false);
+
+		finishDecoding();
+		await vi.waitFor(() => expect(ready).toBe(true));
 	});
 
 	it('cancels a pending idle callback when the caller tears down first', () => {

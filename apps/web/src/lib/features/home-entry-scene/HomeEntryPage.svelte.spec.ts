@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakePage } from '#lib/testing/fake-page-state.svelte.js';
 import { render } from 'vitest-browser-svelte';
 import HomeEntryPage from './HomeEntryPage.svelte';
+import { takeHandedOverBook } from '#lib/features/shared-ui/studio-handoff.js';
 
 // The scene mounts a Threlte `<Canvas>`, which the headless browser cannot give
 // a WebGL context; the stub keeps the rest of the page mountable.
@@ -33,10 +34,15 @@ vi.mock(
 
 const warmup = vi.hoisted(() => ({
 	cancel: vi.fn(),
+	deskReady: () => {},
 	schedule: vi.fn()
 }));
 
 vi.mock('#lib/features/shared-ui/studio-background-warmup.js', () => ({
+	readyStudioBackground: () =>
+		new Promise<void>((resolve) => {
+			warmup.deskReady = resolve;
+		}),
 	scheduleStudioBackgroundWarmup: () => {
 		warmup.schedule();
 		return warmup.cancel;
@@ -124,9 +130,39 @@ describe('HomeEntryPage', () => {
 		await settlePrefetches();
 		unmount();
 
-		// A visitor who leaves before the idle callback fires never spends the
-		// 109KB.
+		// A visitor who leaves before the idle callback fires never fetches it.
 		expect(warmup.cancel).toHaveBeenCalledTimes(1);
+	});
+
+	// The camera ends on the side table's sketchbook lying where the studio lays
+	// its own, on the desk the studio is drawn on: the room itself is the way
+	// in, so no veil drops over it.
+	it('walks into the studio once the camera reaches the book, with no veil over the room', async () => {
+		await render(HomeEntryPage, {
+			entryState: 'inside',
+			user: {
+				authUserId: 'auth-1',
+				avatarOnboardingCompletedAt: new Date(),
+				email: 'artist@example.com',
+				id: 'user-1',
+				nickname: 'artist',
+				role: 'user'
+			}
+		});
+
+		await page.getByRole('button', { name: 'Studio' }).click();
+
+		// The camera move takes two seconds; the desk is still decoding after it.
+		await new Promise((resolve) => setTimeout(resolve, 2300));
+		expect(navigation.goto).not.toHaveBeenCalled();
+		expect(document.querySelector('[data-testid="page-fade-overlay"]')).toBeNull();
+
+		warmup.deskReady();
+		await vi.waitFor(() => expect(navigation.goto).toHaveBeenCalledWith('/draw'));
+		expect(document.querySelector('[data-testid="page-fade-overlay"]')).toBeNull();
+		expect(takeHandedOverBook()).toBe(true);
+
+		await settlePrefetches();
 	});
 
 	it('prefetches the studio model and its DRACO decoder from the page that needs them', async () => {

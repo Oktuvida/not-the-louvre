@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
+import { HANDOFF_BOOK_TILT, handoffBookRect } from '../lib/features/shared-ui/studio-handoff';
 import { createEmptyDrawingDocument } from '../lib/features/stroke-json/document';
 import { deterministicAuthUser, resetDemoState } from './demo/e2e-helpers';
 
@@ -104,5 +105,156 @@ test.describe('the studio behind the front door', () => {
 				{ timeout: 15_000 }
 			)
 			.toEqual(['warm', 'warm', 'warm', 'warm']);
+	});
+
+	test.describe('on a desk-shaped screen', () => {
+		test.use({ viewport: { height: 860, width: 1512 } });
+
+		test('hands the side table’s sketchbook to the studio on the spot it lies, on the same desk', async ({
+			page
+		}) => {
+			// The room's scene, as three.js announces it to its devtools.
+			await page.addInitScript(() => {
+				const hook = new EventTarget();
+				const scenes: unknown[] = [];
+				Object.assign(window, { __THREE_DEVTOOLS__: hook, __scenes: scenes });
+				hook.addEventListener('observe', (event) => {
+					const detail = (event as CustomEvent<{ isScene?: boolean }>).detail;
+					if (detail?.isScene) scenes.push(detail);
+				});
+			});
+			// The studio's data waits until the room's last frame has been looked at.
+			const heldRoutes: Route[] = [];
+			await page.route('**/draw/__data.json*', (route) => {
+				heldRoutes.push(route);
+			});
+
+			const { height, width } = page.viewportSize()!;
+			const spot = handoffBookRect(width, height);
+			const turn = (HANDOFF_BOOK_TILT * Math.PI) / 180;
+			// The box the book fills on screen, turned to its slant.
+			const spotBox = {
+				height: spot.width * Math.abs(Math.sin(turn)) + spot.height * Math.cos(turn),
+				width: spot.width * Math.cos(turn) + spot.height * Math.abs(Math.sin(turn))
+			};
+			const deskPoints = [
+				[0.12, 0.45],
+				[0.88, 0.45],
+				[0.2, 0.9],
+				[0.8, 0.9]
+			].map(([x, y]) => [Math.round(x * width), Math.round(y * height)]);
+
+			await page.goto('/');
+			await page.getByRole('button', { name: 'Studio' }).click();
+
+			// The camera ends with the side table's book on that spot, level with
+			// the screen but for the studio's slant.
+			const roomBook = () =>
+				page.evaluate(() => {
+					type Vector = { x: number; y: number; z: number; project(camera: unknown): Vector };
+					type Node = {
+						isCamera?: boolean;
+						isMesh?: boolean;
+						material?: { name?: string };
+						geometry?: {
+							boundingBox: { max: Vector; min: Vector } | null;
+							computeBoundingBox(): void;
+						};
+						position: { constructor: new (x: number, y: number, z: number) => Vector };
+						localToWorld(vector: Vector): Vector;
+					};
+					const [scene] = (
+						window as unknown as { __scenes: { traverse(visit: (node: Node) => void): void }[] }
+					).__scenes;
+					if (!scene) return null;
+					let camera: Node | undefined;
+					let cover: Node | undefined;
+					scene.traverse((node) => {
+						if (node.isCamera) camera = node;
+						if (node.isMesh && node.material?.name === 'Architexture.001') cover = node;
+					});
+					if (!camera || !cover?.geometry) return null;
+					cover.geometry.computeBoundingBox();
+					const { max, min } = cover.geometry.boundingBox!;
+					const canvas = document.querySelector('.home-entry-page canvas')!.getBoundingClientRect();
+					const corner = (x: number, y: number) => {
+						const point = cover!
+							.localToWorld(new cover!.position.constructor(x, y, max.z))
+							.project(camera);
+						return [
+							canvas.left + ((point.x + 1) / 2) * canvas.width,
+							canvas.top + ((1 - point.y) / 2) * canvas.height
+						];
+					};
+					const corners = [
+						corner(min.x, max.y),
+						corner(max.x, max.y),
+						corner(max.x, min.y),
+						corner(min.x, min.y)
+					];
+					const xs = corners.map(([x]) => x);
+					const ys = corners.map(([, y]) => y);
+					return {
+						cx: (Math.min(...xs) + Math.max(...xs)) / 2,
+						cy: (Math.min(...ys) + Math.max(...ys)) / 2,
+						height: Math.max(...ys) - Math.min(...ys),
+						width: Math.max(...xs) - Math.min(...xs)
+					};
+				});
+			const expected = {
+				cx: spot.cx,
+				cy: spot.cy,
+				height: spotBox.height,
+				width: spotBox.width
+			};
+			/** How far, in CSS px, a box on screen is from the spot. */
+			const offSpot = (box: typeof expected | null) =>
+				box
+					? Math.max(
+							...(Object.keys(expected) as (keyof typeof expected)[]).map((side) =>
+								Math.abs(box[side] - expected[side])
+							)
+						)
+					: Infinity;
+			await expect.poll(async () => offSpot(await roomBook()), { timeout: 15_000 }).toBeLessThan(2);
+
+			// No veil drops over it: the book shows in its own cloth.
+			const [red, , blue] = await colourAt(page, spot.cx - 4, spot.cy - 4);
+			expect(red - blue).toBeGreaterThan(15);
+			const roomDesk = await Promise.all(deskPoints.map(([x, y]) => colourAt(page, x, y)));
+
+			for (const route of heldRoutes) await route.continue();
+			await page.unroute('**/draw/__data.json*');
+			await expect(page).toHaveURL(/\/draw$/);
+
+			// The studio's closed book lies on the same spot…
+			const cover = page.getByRole('button', { name: 'Open sketchbook' });
+			await expect
+				.poll(async () =>
+					offSpot(
+						await cover.evaluate((element) => {
+							const box = element.getBoundingClientRect();
+							return {
+								cx: box.left + box.width / 2,
+								cy: box.top + box.height / 2,
+								height: box.height,
+								width: box.width
+							};
+						})
+					)
+				)
+				.toBeLessThan(2);
+
+			// …on a desk drawn from the same room: what lies round it matches.
+			await expect
+				.poll(() => page.evaluate(() => [...document.images].every((image) => image.complete)))
+				.toBe(true);
+			const studioDesk = await Promise.all(deskPoints.map(([x, y]) => colourAt(page, x, y)));
+			studioDesk.forEach((colour, point) => {
+				colour.forEach((channel, index) => {
+					expect(Math.abs(channel - roomDesk[point][index])).toBeLessThan(14);
+				});
+			});
+		});
 	});
 });

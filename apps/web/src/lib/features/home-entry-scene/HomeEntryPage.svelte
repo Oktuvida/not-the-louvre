@@ -24,8 +24,11 @@
 	import type { EntryFlowState } from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
-	import { PAGE_FADE_DURATION_MS } from '#lib/features/shared-ui/page-fade.js';
-	import { scheduleStudioBackgroundWarmup } from '#lib/features/shared-ui/studio-background-warmup.js';
+	import {
+		readyStudioBackground,
+		scheduleStudioBackgroundWarmup
+	} from '#lib/features/shared-ui/studio-background-warmup.js';
+	import { handOverBook } from '#lib/features/shared-ui/studio-handoff.js';
 
 	let {
 		children,
@@ -51,8 +54,6 @@
 		user?: HomeAuthUser | null;
 	} = $props();
 
-	/** The shared veil's own duration, in the seconds GSAP's timeline speaks. */
-	const FADE_DURATION_S = PAGE_FADE_DURATION_MS / 1000;
 	const GALLERY_EXIT_HOLD = 2;
 	const TOP_CLOSE_DURATION = 2;
 	/** A beat of reverse camera move before the veil starts lifting. */
@@ -108,9 +109,9 @@
 		let cancelled = false;
 
 		/*
-		 * The 109KB /draw table background used to be warmed by the root layout,
-		 * so /gallery and /admin paid for it too. The Studio button below is the
-		 * primary path to /draw, so the warm-up belongs here; the module-level
+		 * The /draw desk used to be warmed by the root layout, so /gallery and
+		 * /admin paid for it too. The Studio button below is the primary path
+		 * to /draw, so the warm-up belongs here; the module-level
 		 * guard in the helper keeps this and the gallery's own warm-up from
 		 * fetching it twice.
 		 */
@@ -150,6 +151,7 @@
 	 */
 	$effect(() => () => {
 		exitDelayedCall?.kill();
+		exitDelayedCall = null;
 
 		if (returnFadeSafetyHandle !== null) {
 			clearTimeout(returnFadeSafetyHandle);
@@ -231,23 +233,28 @@
 		});
 	};
 
-	/** Called when the Studio button is clicked — plays top-close animation then navigates to /draw. */
+	/*
+	 * Called when the Studio button is clicked. The camera ends on the side
+	 * table's sketchbook, lying where the studio lays its own closed book, on
+	 * the desk the studio is drawn on (shared-ui/studio-handoff.ts): the room
+	 * itself is the way in, so no veil drops over it. The studio is shown once
+	 * the move is over and its desk is ready to paint.
+	 */
 	const handleStudioNavigate = () => {
 		if (isExiting) return;
 		isExiting = true;
 		scenePose = 'top-close';
 
 		warmNavigationTargetWhenIdle(homeStudioTarget);
+		const deskReady = readyStudioBackground();
+		const moveSeconds = prefersReducedMotion() ? 0 : TOP_CLOSE_DURATION;
 
-		// Start the fade overlay near the end of the camera animation so
-		// navigation overlaps with the final stretch: the veil takes
-		// FADE_DURATION_S, so we begin it (duration − veil − 0.15)s in.
-		const fadeDelay = prefersReducedMotion()
-			? 0
-			: Math.max(0, TOP_CLOSE_DURATION - FADE_DURATION_S - 0.15);
-
-		exitDelayedCall = gsap.delayedCall(fadeDelay, () => {
-			startExitTo(homeStudioTarget);
+		exitDelayedCall = gsap.delayedCall(moveSeconds, () => {
+			void deskReady.then(() => {
+				if (!exitDelayedCall) return;
+				handOverBook();
+				void goto(homeStudioTarget);
+			});
 		});
 	};
 </script>

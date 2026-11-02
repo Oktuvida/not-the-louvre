@@ -39,6 +39,12 @@
 	// Every screen's layout of the studio lives in this one sheet.
 	import './studio-layout.css';
 	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
+	import { STUDIO_DESK_IMAGE } from '#lib/features/shared-ui/studio-background-warmup.js';
+	import {
+		HANDOFF_CSS_VARIABLES,
+		takeHandedOverBook
+	} from '#lib/features/shared-ui/studio-handoff.js';
+	import { layBookOnSpot, liftBookOffSpot } from '#lib/features/studio-drawing/book-on-spot.js';
 
 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
@@ -204,6 +210,34 @@
 	};
 	const draftKey = $derived(resolveDraftKeys(currentForkParent?.id ?? null).draftKey);
 	const legacyDraftKey = $derived(resolveDraftKeys(currentForkParent?.id ?? null).legacyDraftKey);
+
+	/*
+	 * Closed, the book lies on the hand-off spot, where the home room's camera
+	 * left the side table's book (book-on-spot.ts). Coming from that room it is
+	 * there from the first frame; otherwise it glides there from the layout.
+	 */
+	let bookElement = $state<HTMLElement | null>(null);
+	let coverElement = $state<HTMLElement | null>(null);
+	let bookArrivesFromRoom = takeHandedOverBook();
+	/** The room's last frame has no header nor cover lettering; they join after the cut. */
+	const arrivedFromRoom = bookArrivesFromRoom;
+
+	$effect(() => {
+		const book = bookElement;
+		const cover = coverElement;
+		if (!book || !cover) return;
+
+		if (!coverShown || (sceneState !== 'closed' && sceneState !== 'closing')) {
+			liftBookOffSpot(book);
+			return;
+		}
+
+		layBookOnSpot(book, cover, !bookArrivesFromRoom);
+		bookArrivesFromRoom = false;
+		const relay = () => layBookOnSpot(book, cover, false);
+		window.addEventListener('resize', relay);
+		return () => window.removeEventListener('resize', relay);
+	});
 
 	let studioUnlocked = $derived(draftHydrated && (!coverShown || sceneState === 'open'));
 	let toolsVisible = $derived(
@@ -588,13 +622,37 @@
 <svelte:head>
 	<!-- No title element here on purpose: the route contributes `meta.title`
 	from its load and the root layout renders the document's only one. -->
-	<link rel="preload" as="image" href="/table.avif" type="image/avif" fetchpriority="high" />
+	<link
+		rel="preload"
+		as="image"
+		type="image/avif"
+		imagesrcset={STUDIO_DESK_IMAGE.avif}
+		imagesizes={STUDIO_DESK_IMAGE.sizes}
+		fetchpriority="high"
+	/>
 </svelte:head>
 
-<div class="studio-page" data-book-state={sceneState}>
+<div
+	class="studio-page"
+	data-arrival={arrivedFromRoom ? 'room' : undefined}
+	data-book-state={sceneState}
+	style={HANDOFF_CSS_VARIABLES}
+>
+	<!-- The home room's side table, photographed from where the Studio move
+	     ends (scripts/render-studio-desk.ts), laid so the book's place is the
+	     closed book's spot. -->
 	<picture class="studio-desk">
-		<source type="image/avif" srcset="/table.avif" />
-		<img src="/table.webp" alt="" class="studio-desk-image" loading="eager" decoding="async" />
+		<source type="image/avif" srcset={STUDIO_DESK_IMAGE.avif} sizes={STUDIO_DESK_IMAGE.sizes} />
+		<source type="image/webp" srcset={STUDIO_DESK_IMAGE.webp} sizes={STUDIO_DESK_IMAGE.sizes} />
+		<img
+			src={STUDIO_DESK_IMAGE.fallback}
+			alt=""
+			width="1920"
+			height="1080"
+			class="studio-desk-image"
+			loading="eager"
+			decoding="async"
+		/>
 	</picture>
 
 	<AmbientParticleOverlay className="z-5 opacity-90" />
@@ -625,8 +683,10 @@
 	<!-- One page for every screen: studio-layout.css places these four pieces
 	     (the book, its notes, the supplies, the buttons) for each shape of window. -->
 	<main class="studio-layout">
-		<div class="studio-book">
+		<div class="studio-book" bind:this={bookElement}>
 			<DrawingBookStage
+				arriving={arrivedFromRoom}
+				bind:coverElement
 				bind:coverShown
 				stageState={sceneState}
 				onClosed={handleBookClosed}
@@ -982,6 +1042,16 @@
 	}
 
 	/* --- Animations --- */
+
+	.studio-page[data-arrival='room'] .studio-header {
+		animation: studioArrival 500ms 250ms ease-out both;
+	}
+
+	@keyframes studioArrival {
+		from {
+			opacity: 0;
+		}
+	}
 
 	@keyframes studioPanelReveal {
 		from {
