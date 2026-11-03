@@ -184,6 +184,26 @@ describe('StudioDrawingPage', () => {
 		showTheCover();
 	});
 
+	// Where the drawing's notes lie on the open cover (the desk layout), the
+	// inside of the cover is the artist's own: a bookplate signed with their name.
+	it('signs the inside of the cover with the artist’s name, where the notes lie on it', async () => {
+		const style = document.createElement('style');
+		style.dataset.spec = 'show-the-cover';
+		style.textContent = 'html .studio-page { --studio-bookplate-display: block; }';
+		document.head.append(style);
+
+		await render(StudioDrawingPage, {
+			openingDurationMs: 1,
+			user: { nickname: 'journey_artist' }
+		});
+		await openSketchbook();
+
+		const bookplate = page.getByRole('complementary', { name: 'Ex libris' });
+		await expect.element(bookplate).toBeVisible();
+		await expect.element(bookplate.getByText(/this sketchbook belongs to/)).toBeVisible();
+		await expect.element(bookplate.getByText('journey_artist', { exact: true })).toBeVisible();
+	});
+
 	it('preloads the desk, at the size it is drawn', async () => {
 		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
