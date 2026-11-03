@@ -8,8 +8,9 @@
 	 * font import.
 	 */
 	import './layout.css';
+	import { beforeNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { page, updated } from '$app/state';
 	import { onMount } from 'svelte';
 	import AmbientAudioController from '#lib/features/ambient-audio/AmbientAudioController.svelte';
 	import SiteMeta from '#lib/features/shared-ui/components/SiteMeta.svelte';
@@ -50,6 +51,13 @@
 	// returned — which would title a 404 after the page the visitor never
 	// reached. The status is the only title an error page can carry.
 	const documentTitle = $derived(page.error ? String(page.status) : routeMeta.title);
+
+	// A release went out while this tab was open: the code it runs asks for
+	// hashed files the new build no longer has, the studio model among them. The
+	// next page the visitor opens is loaded whole, from the new release.
+	beforeNavigate(({ to, willUnload }) => {
+		if (updated.current && !willUnload && to?.url) location.href = to.url.href;
+	});
 
 	onMount(() => {
 		const handleFaviconUpdate = (event: Event) => {

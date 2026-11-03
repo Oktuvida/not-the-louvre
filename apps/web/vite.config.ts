@@ -76,7 +76,13 @@ export default defineConfig(({ mode }) => {
 					}
 				},
 				adapter: adapter(),
-				files: { routes: routesDirectory }
+				files: { routes: routesDirectory },
+				// A tab left open across a release asks for hashed files the new
+				// build no longer has. SvelteKit notices a release on focus and on
+				// server responses; the hourly default poll was too slow a backstop
+				// for a tab kept open on one page. The root layout turns the next
+				// navigation after a release into a full page load.
+				version: { pollInterval: 60_000 }
 			})
 		],
 		// Build-time constant so Rollup dead-code-eliminates the Playwright-only

@@ -20,7 +20,11 @@ const { imageInstances, pageState } = vi.hoisted(() => ({
 	}
 }));
 
-vi.mock('$app/state', () => ({ page: pageState }));
+// No release goes out while a spec runs.
+vi.mock('$app/state', () => ({
+	page: pageState,
+	updated: { check: async () => false, current: false }
+}));
 
 const TrackingImage = class {
 	decoding = '';
