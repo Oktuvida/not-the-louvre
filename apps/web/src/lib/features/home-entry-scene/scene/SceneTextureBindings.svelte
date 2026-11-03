@@ -8,8 +8,10 @@
 	} from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
 
 	const DEBUG_SHOW_AVATAR_MESH = false;
+	// The size is the image's own: WebGL takes an image by its natural size, and
+	// an SVG with only a viewBox has none to give (Chromium refuses it).
 	const FALLBACK_AVATAR_SVG = `
-		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+		<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
 			<rect width="256" height="256" fill="#f3eadf" />
 			<rect x="18" y="18" width="220" height="220" rx="28" fill="#fbf6ef" stroke="#8f6b4f" stroke-width="10" />
 			<circle cx="128" cy="96" r="38" fill="#d1b08f" />
