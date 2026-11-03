@@ -130,6 +130,29 @@ describe('DrawingCanvas', () => {
 		Reflect.deleteProperty(window, 'devicePixelRatio');
 	});
 
+	// Clearing the page on its sheet tears that sheet off: the drawing goes
+	// with it, flying off, and a clean sheet is left in its place.
+	it('tears the old sheet off with the drawing on it, leaving a clean one', async () => {
+		const { canvas, colourAt, draw, rerender } = await renderCanvas({ sheet: true });
+		draw([200, 384], [384, 384], [560, 384]);
+		await vi.waitFor(() => expect(colourAt(384, 384)).toEqual(INK));
+
+		await rerender({ clearVersion: 1, sheet: true });
+
+		// The page is clean at once…
+		await vi.waitFor(() => expect(colourAt(384, 384)).toEqual(BACKGROUND));
+		// …while a copy of the old drawing is carried off and then let go.
+		const torn = [...document.querySelectorAll('canvas')].find(
+			(element) => element !== canvas && element.getAttribute('aria-hidden') === 'true'
+		) as HTMLCanvasElement | undefined;
+		expect(torn).toBeDefined();
+		const [, , , alpha] = torn!
+			.getContext('2d')!
+			.getImageData(Math.floor(torn!.width / 2), Math.floor(torn!.height / 2), 1, 1).data;
+		expect(alpha).toBeGreaterThan(0);
+		await vi.waitFor(() => expect(torn!.isConnected).toBe(false), { timeout: 3000 });
+	});
+
 	it('renders product-facing status messaging below the canvas', async () => {
 		await renderCanvas({
 			statusMessage: 'Artwork published as Untitled #0001',

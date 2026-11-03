@@ -168,7 +168,7 @@ test.describe('the studio fits the screen it is on', () => {
 				page.getByRole('button', { name: 'Undo' }),
 				page.getByRole('button', { name: 'Redo' }),
 				page.getByRole('button', { name: 'Publish' }),
-				page.getByRole('button', { name: /Clear/ })
+				page.getByRole('button', { name: /Tear out this page/ })
 			];
 			for (const control of supplies) {
 				for (const one of await control.all()) {
@@ -187,7 +187,7 @@ test.describe('the studio fits the screen it is on', () => {
 				page.getByPlaceholder('Untitled genius'),
 				page.getByRole('checkbox', { name: /Not safe for the Louvre/ }),
 				page.getByRole('button', { name: 'Publish' }),
-				page.getByRole('button', { name: /Clear/ })
+				page.getByRole('button', { name: /Tear out this page/ })
 			];
 			for (const control of finishing) {
 				if (screen.controlsBelowTheFold) await control.scrollIntoViewIfNeeded();

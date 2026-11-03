@@ -243,7 +243,7 @@ describe('StudioDrawingPage', () => {
 
 		await openSketchbook();
 
-		await expect.element(page.getByRole('button', { name: 'Clear page' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Tear out this page' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 		await expect.element(page.getByPlaceholder('Untitled genius')).toBeVisible();
 	});
@@ -1110,8 +1110,8 @@ describe('StudioDrawingPage', () => {
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 		await expect.element(page.getByPlaceholder('Untitled genius')).toBeEnabled();
 
-		await page.getByRole('button', { name: 'Clear page' }).click();
-		await page.getByRole('button', { name: 'Tap again to clear' }).click();
+		await page.getByRole('button', { name: 'Tear out this page' }).click();
+		await page.getByRole('button', { name: 'Sure? Tap again' }).click();
 
 		await vi.waitFor(async () => {
 			const persistedDraft = await readPersistedDrawingDraft(draftKey);
