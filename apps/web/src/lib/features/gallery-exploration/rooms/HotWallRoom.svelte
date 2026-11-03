@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { MessageCircle, Star } from 'lucide-svelte';
 	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 	import NsfwImage from '#lib/features/gallery-exploration/components/NsfwImage.svelte';
 	import ScrollSentinel from '#lib/features/gallery-exploration/components/ScrollSentinel.svelte';
@@ -82,6 +83,9 @@
 		});
 
 	const leadArtwork = $derived(accumulator.allArtworks[0] ?? null);
+	const leadComments = $derived(
+		leadArtwork ? (leadArtwork.commentCount ?? leadArtwork.comments.length) : 0
+	);
 	const supportingArtworks = $derived(accumulator.allArtworks.slice(1));
 </script>
 
@@ -148,8 +152,19 @@
 							<p class="lead-artist">{leadArtwork.artist}</p>
 						</div>
 						<p class="lead-stats">
-							<span>★ {leadArtwork.score}</span>
-							<span>💬 {leadArtwork.commentCount ?? leadArtwork.comments.length}</span>
+							<span class="lead-stat"
+								><Star
+									class="lead-stat-icon lead-stat-star"
+									aria-hidden="true"
+								/>{leadArtwork.score}<span class="sr-only"
+									>{leadArtwork.score === 1 ? ' vote' : ' votes'}</span
+								></span
+							>
+							<span class="lead-stat"
+								><MessageCircle class="lead-stat-icon" aria-hidden="true" />{leadComments}<span
+									class="sr-only">{leadComments === 1 ? ' comment' : ' comments'}</span
+								></span
+							>
 						</p>
 					</div>
 				</button>
@@ -287,5 +302,23 @@
 		font-weight: 600;
 		line-height: 1.45;
 		color: #6b5a45;
+	}
+
+	.lead-stat {
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.3em;
+	}
+
+	.lead-stat :global(.lead-stat-icon) {
+		width: 1.05em;
+		height: 1.05em;
+		stroke-width: 2.2;
+	}
+
+	.lead-stat :global(.lead-stat-star) {
+		fill: #d9a43a;
+		stroke: #a8772a;
 	}
 </style>

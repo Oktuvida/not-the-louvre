@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+	import { MessageCircle, Star } from 'lucide-svelte';
 	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 	import { hashString } from '#lib/features/artwork-presentation/model/frame.js';
 	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
@@ -90,6 +91,7 @@
 	const pinClass = $derived(
 		['push-pin-blue', '', 'push-pin-green', 'push-pin-yellow'][seed % 4] ?? ''
 	);
+	const commentTotal = $derived(artwork.commentCount ?? artwork.comments.length);
 	const isFork = $derived(Boolean(artwork.lineage?.isFork));
 	const forkParentTitle = $derived(
 		artwork.lineage?.parentStatus === 'available' ? (artwork.lineage.parent?.title ?? null) : null
@@ -216,11 +218,13 @@
 			<div
 				class="shrink-0 pt-[0.125em] text-right font-display text-[max(0.7em,0.75rem)] leading-[1.2] tracking-[0.04em] text-muted-ink"
 			>
-				<div data-testid={testId ? `${testId}-score` : undefined}>
-					&#11088; {artwork.score}
+				<div class="polaroid-count" data-testid={testId ? `${testId}-score` : undefined}>
+					<Star class="polaroid-count-icon polaroid-count-star" aria-hidden="true" />
+					{artwork.score}<span class="sr-only">{artwork.score === 1 ? ' vote' : ' votes'}</span>
 				</div>
-				<div data-testid={testId ? `${testId}-comments` : undefined}>
-					&#128172; {artwork.commentCount ?? artwork.comments.length}
+				<div class="polaroid-count" data-testid={testId ? `${testId}-comments` : undefined}>
+					<MessageCircle class="polaroid-count-icon" aria-hidden="true" />
+					{commentTotal}<span class="sr-only">{commentTotal === 1 ? ' comment' : ' comments'}</span>
 				</div>
 			</div>
 		</div>
@@ -228,6 +232,27 @@
 </button>
 
 <style>
+	/* The counts carry drawn marks, sized to the caption's em like the rest of
+	 * the card. */
+	.polaroid-count {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.3em;
+	}
+
+	.polaroid-count :global(.polaroid-count-icon) {
+		width: 1.05em;
+		height: 1.05em;
+		flex-shrink: 0;
+		stroke-width: 2.2;
+	}
+
+	.polaroid-count :global(.polaroid-count-star) {
+		fill: #d9a43a;
+		stroke: #a8772a;
+	}
+
 	/* The hand-pinned tilt lives on the element that straightens, expressed as
 	 * the standalone `rotate` property: it composes with the global
 	 * `button:active { scale }` press instead of being replaced by it, and it

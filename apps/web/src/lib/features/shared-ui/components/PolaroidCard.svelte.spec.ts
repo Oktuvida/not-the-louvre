@@ -65,8 +65,14 @@ describe('PolaroidCard', () => {
 
 		await expect.element(page.getByText('Pinned Study')).toBeVisible();
 		await expect.element(page.getByText('journey_artist')).toBeVisible();
-		await expect.element(page.getByTestId('polaroid-card-score')).toMatchTextContent('⭐ 12');
-		await expect.element(page.getByTestId('polaroid-card-comments')).toMatchTextContent('💬 5');
+		await expect.element(page.getByTestId('polaroid-card-score')).toMatchTextContent('12 votes');
+		await expect
+			.element(page.getByTestId('polaroid-card-comments'))
+			.toMatchTextContent('5 comments');
+		// Drawn marks, not emoji: the counts are words to a screen reader.
+		expect(page.getByTestId('polaroid-card-score').element().textContent).not.toMatch(
+			/\p{Extended_Pictographic}/u
+		);
 	});
 
 	it('shows fork lineage on forked artworks', async () => {

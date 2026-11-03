@@ -423,8 +423,8 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		const upvote = page.getByRole('button', { name: /👍/ });
-		const downvote = page.getByRole('button', { name: /👎/ });
+		const upvote = page.getByRole('button', { name: /^Upvote/ });
+		const downvote = page.getByRole('button', { name: /^Downvote/ });
 
 		await expect.element(upvote).toBeVisible();
 		expect(upvote.element().className).toContain('vote-cast');
@@ -445,10 +445,10 @@ describe('ArtworkDetailPanel', () => {
 		// The ring is the only visual signal of the viewer's own vote, so without
 		// aria-pressed a screen reader hears nothing at all about it.
 		await expect
-			.element(page.getByRole('button', { name: /👍/ }))
+			.element(page.getByRole('button', { name: /^Upvote/ }))
 			.toHaveAttribute('aria-pressed', 'true');
 		await expect
-			.element(page.getByRole('button', { name: /👎/ }))
+			.element(page.getByRole('button', { name: /^Downvote/ }))
 			.toHaveAttribute('aria-pressed', 'false');
 	});
 
@@ -468,7 +468,7 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await page.getByRole('button', { name: /👍/ }).click();
+		await page.getByRole('button', { name: /^Upvote/ }).click();
 
 		await expect.element(page.getByText('This piece has left the wall.')).toBeVisible();
 		await expect.element(page.getByText('Artwork not found')).not.toBeInTheDocument();
@@ -485,7 +485,7 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await page.getByRole('button', { name: /👍/ }).click();
+		await page.getByRole('button', { name: /^Upvote/ }).click();
 
 		const notice = page.getByRole('alert');
 		await expect.element(notice).toBeVisible();
@@ -514,7 +514,7 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await page.getByRole('button', { name: /👍/ }).click();
+		await page.getByRole('button', { name: /^Upvote/ }).click();
 
 		await vi.waitFor(() => {
 			expect(onNotify).toHaveBeenCalledWith('The attendants will not let you do that.');
