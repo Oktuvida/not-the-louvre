@@ -18,8 +18,9 @@
       "version": "0.0.1",
       "dependencies": {
         "@2toad/profanity": "^3.3.0",
-        "@fontsource/baloo-2": "^5.3.0",
-        "@fontsource/caveat": "^5.3.0",
+        "@fontsource-variable/baloo-2": "^5.3.0",
+        "@fontsource-variable/caveat": "^5.3.0",
+        "@fontsource-variable/fredoka": "^5.3.0",
         "@fontsource/fredoka": "^5.3.0",
         "@fontsource/playfair-display": "^5.3.0",
         "@fontsource/special-elite": "^5.3.0",
@@ -295,6 +296,12 @@
 
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.6.1", "", { "dependencies": { "@eslint/core": "^1.1.1", "levn": "^0.4.1" } }, "sha512-iH1B076HoAshH1mLpHMgwdGeTs0CYwL0SPMkGuSebZrwBp16v415e9NZXg2jtrqPVQjf6IANe2Vtlr5KswtcZQ=="],
 
+    "@fontsource-variable/baloo-2": ["@fontsource-variable/baloo-2@5.3.0", "", {}, "sha512-F7UfemLyAzp22LWRuy0IumnAPy/us+H5sxlDUsJ5a6LxinGf1BZaauL5kxBiLkvsfvoQWpY7DuUZ7GSdz+cR7g=="],
+
+    "@fontsource-variable/caveat": ["@fontsource-variable/caveat@5.3.0", "", {}, "sha512-Q3mjghoYIlXgwqBPJKZ4q6f3zu921Gq7UU76r9Z+NAmhapHfX130GIFpOCYf8vt2SIcgCi9RHDT7anfJKg/kiA=="],
+
+    "@fontsource-variable/fredoka": ["@fontsource-variable/fredoka@5.3.0", "", {}, "sha512-13w98iw2RcmYfZQRZPLSu+0YJK3HHm5A2XrpU26moFIAePmfiKfvkmEJUgkc8r5GNR+pbDijOueS1KdGAMAWmQ=="],
+
     "@fontsource/abril-fatface": ["@fontsource/abril-fatface@5.3.0", "", {}, "sha512-voKCJEhGGZNdlk+OS3uFRSDV/HWbs6TAy7qKe9wXq96Uzwadfksyk5eyXLa1T5FkEazBgpHRMRSFBKfA3rbKbg=="],
 
     "@fontsource/alfa-slab-one": ["@fontsource/alfa-slab-one@5.3.0", "", {}, "sha512-J/ANFZ7S9CbZClr/QhMjmBtpFmmKipVkEXHj20aurR5uqJPCBChVPJn1/kx6vtrwnfnDY0kQaYSTYasSt4GruA=="],
@@ -302,10 +309,6 @@
     "@fontsource/anton": ["@fontsource/anton@5.3.0", "", {}, "sha512-OR1D5n124n2XRs66SbX7IjcOSptljEJE8FcDNnlni2y1/M6KpTx7cU2PIWzTSsBj4WFkHPw24On8qw3qkQZuTw=="],
 
     "@fontsource/archivo-black": ["@fontsource/archivo-black@5.3.0", "", {}, "sha512-7EsTIQ+Blf96ktpzTUpI7msi+u9/AJxM/GZxOSkEubVd1jSTrFSTNxMgfpX/8rQsjZ+19a+qvRbtcTEp5J/72g=="],
-
-    "@fontsource/baloo-2": ["@fontsource/baloo-2@5.3.0", "", {}, "sha512-CBuxZ27jvMmD5+KaaPkMWv/yjdRNppVAd5/002yAyvyQyLNL3aZCbkx6gbAT/bjxPd1A0VMdDQjfcELI8chccQ=="],
-
-    "@fontsource/caveat": ["@fontsource/caveat@5.3.0", "", {}, "sha512-eHTfzQxFSW9ABERRLNruHoNJmKed2J7pqTUc5lp4a4POMgXGKpxmWj3d9Hz10kmAg6iuTTLe6UagbA4bnsmfQw=="],
 
     "@fontsource/fredoka": ["@fontsource/fredoka@5.3.0", "", {}, "sha512-s2IhjQ50wDnKkkaKmjhtL0rxQg6ITsVusiipM3m7zUwVZZbbCKsscNDkngwp28xVzfIt7neWrkgU1qKqyTycQg=="],
 

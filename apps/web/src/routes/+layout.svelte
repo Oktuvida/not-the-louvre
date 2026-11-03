@@ -15,50 +15,17 @@
 	import SiteMeta from '#lib/features/shared-ui/components/SiteMeta.svelte';
 	import { readRouteMeta } from '#lib/features/shared-ui/site-meta.js';
 	/*
-	 * Self-hosted fonts, latin + latin-ext subsets only.
-	 *
-	 * The aggregate entry points (`@fontsource/baloo-2/400.css`) declare EVERY
-	 * subset the family ships — devanagari, vietnamese, cyrillic(-ext) and
-	 * hebrew as well — which put 40 @font-face rules on the render-blocking
-	 * path of every route and pushed 2MB of never-requested font files into the
-	 * Workers asset bundle. The per-subset entry points below carry the 22
-	 * faces this UI can actually paint.
-	 *
-	 * The accepted trade: user-generated text in a non-Latin script (a nickname,
-	 * a guestbook note) renders in the system fallback stack rather than in
-	 * Baloo 2 / Fredoka / Caveat.
-	 *
-	 * Only the latin entry points are imported from the package: they declare no
-	 * `unicode-range`, so each one is the family's universal fallback face. The
-	 * latin-ext faces are declared in `fonts-latin-ext.css` instead, with the
-	 * range their package entry points forgot — importing those alongside these
-	 * put two rangeless faces on the same family/style/weight, and the later one
-	 * (latin-ext) then owned the whole range and pulled both files down.
+	 * The house typefaces, self-hosted as variable fonts (`fonts.css` says why
+	 * and how). Two of them paint above the fold on every route: Baloo 2 is the
+	 * body font and Fredoka letters every sticker control and the home hero.
+	 * Imported as URLs so Vite hashes them and the preload can never drift from
+	 * the emitted filename. `crossorigin` is mandatory even same-origin —
+	 * without it the preload does not match the font fetch and the file is
+	 * downloaded twice.
 	 */
-	import '@fontsource/baloo-2/latin-400.css';
-	import '@fontsource/baloo-2/latin-500.css';
-	import '@fontsource/baloo-2/latin-600.css';
-	import '@fontsource/baloo-2/latin-700.css';
-	// Weight 800 stays: `font-black` (900) has no 900 face anywhere and matches
-	// upward onto it, so dropping it would visibly lighten 11 call sites.
-	import '@fontsource/baloo-2/latin-800.css';
-	import '@fontsource/caveat/latin-400.css';
-	import '@fontsource/caveat/latin-700.css';
-	import '@fontsource/fredoka/latin-400.css';
-	import '@fontsource/fredoka/latin-500.css';
-	import '@fontsource/fredoka/latin-600.css';
-	import '@fontsource/fredoka/latin-700.css';
-	import './fonts-latin-ext.css';
-	/*
-	 * The two faces that paint above the fold on every route: Baloo 2 400 is
-	 * the body font and Fredoka 700 letters every sticker control and the home
-	 * hero. Imported as URLs so Vite hashes them and the preload can never
-	 * drift from the emitted filename. `crossorigin` is mandatory even
-	 * same-origin — without it the preload does not match the font fetch and
-	 * the file is downloaded twice.
-	 */
-	import balooBodyFontUrl from '@fontsource/baloo-2/files/baloo-2-latin-400-normal.woff2?url';
-	import fredokaDisplayFontUrl from '@fontsource/fredoka/files/fredoka-latin-700-normal.woff2?url';
+	import './fonts.css';
+	import balooBodyFontUrl from '@fontsource-variable/baloo-2/files/baloo-2-latin-wght-normal.woff2?url';
+	import fredokaDisplayFontUrl from '@fontsource-variable/fredoka/files/fredoka-latin-wght-normal.woff2?url';
 	import type { LayoutProps } from './$types';
 	import { avatarFavicon, faviconUpdateEventName } from '#lib/favicon.js';
 
