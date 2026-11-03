@@ -1782,6 +1782,60 @@ describe('GalleryExplorationPage', () => {
 		});
 	});
 
+	it('builds a room walked into only as far as its rows need', async () => {
+		const deferred = createDeferred<{
+			adultContentEnabled: boolean;
+			artworks: Artwork[];
+			discovery: {
+				pageInfo: { hasMore: boolean; nextCursor: string | null };
+				request: { authorId: string | null; limit: number; sort: 'hot'; window: null };
+			};
+			emptyStateMessage: string | null;
+		}>();
+		// The plain grid is measured and then handed over to the virtual one;
+		// what it held is what leaves the page at the hand-over.
+		let cardsHandedOver = 0;
+		new MutationObserver((records) => {
+			for (const { removedNodes } of records) {
+				for (const node of removedNodes) {
+					if (node instanceof Element) {
+						cardsHandedOver += node.querySelectorAll('[data-testid^="hot-wall-card-"]').length;
+					}
+				}
+			}
+		}).observe(document.body, { childList: true, subtree: true });
+
+		await render(GalleryExplorationPage, {
+			room: getGalleryRoom('hot-wall'),
+			roomContent: deferred.promise,
+			roomId: 'hot-wall',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+		deferred.resolve({
+			adultContentEnabled: false,
+			artworks: Array.from({ length: 48 }, (_, index) => ({
+				...baseArtwork,
+				id: `walk-${index}`,
+				title: `Walked Study ${index}`
+			})),
+			discovery: {
+				pageInfo: { hasMore: false, nextCursor: null },
+				request: { authorId: null, limit: 24, sort: 'hot', window: null }
+			},
+			emptyStateMessage: null
+		});
+		await vi.waitFor(() => {
+			expect(document.querySelectorAll('[data-testid="virtualized-row"]').length).toBeGreaterThan(
+				0
+			);
+		});
+
+		// A navigation has nothing server-drawn on screen to hand over from, so
+		// the plain grid holds only the cards it is measured by, not the feed.
+		expect(cardsHandedOver).toBeGreaterThan(0);
+		expect(cardsHandedOver).toBeLessThanOrEqual(6);
+	});
+
 	it('announces the streamed room from a region that outlives the skeleton', async () => {
 		const deferred = createDeferred<{
 			adultContentEnabled: boolean;

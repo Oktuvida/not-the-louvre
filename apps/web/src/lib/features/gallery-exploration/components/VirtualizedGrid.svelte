@@ -10,9 +10,14 @@
 		renderCard: Snippet<[item: T]>;
 		/** The layout this grid had when its room was left (see `snapshotLayout`). */
 		restoredLayout?: GridLayoutSnapshot | null;
+		/**
+		 * Whether the page arrived with this grid drawn by the server, so the
+		 * plain grid has to hold every card the server drew (see below).
+		 */
+		serverRendered?: boolean;
 	}
 
-	let { items, renderCard, restoredLayout = null }: Props = $props();
+	let { items, renderCard, restoredLayout = null, serverRendered = true }: Props = $props();
 
 	/*
 	 * The page arrives with the cards in a plain CSS grid (gallery-grid.css),
@@ -20,7 +25,14 @@
 	 * grid is measured — how many columns the template resolved to, how far one
 	 * row of cards is from the next — and handed to the virtualizer, which takes
 	 * over with rows of exactly that size, so the hand-over moves nothing.
+	 *
+	 * A grid built in the browser (a room walked into) has nothing on screen to
+	 * hand over from, so its plain grid draws only the first cards, enough for
+	 * a row or two to measure. Drawing the whole feed there only to build it
+	 * again in the virtualizer doubled the cost of the room's first frame.
 	 */
+	const MEASURED_CARDS = 6;
+	const plainGridItems = $derived(serverRendered ? items : items.slice(0, MEASURED_CARDS));
 	let probeElement = $state<HTMLDivElement>();
 	let staticGridElement = $state<HTMLDivElement>();
 	let columnCount = $state(0);
@@ -147,7 +159,7 @@
 		</WindowVirtualizer>
 	{:else if !restoring}
 		<div bind:this={staticGridElement} class="gallery-grid gallery-grid-row">
-			{#each items as item (itemKey(item))}
+			{#each plainGridItems as item (itemKey(item))}
 				{@render renderCard(item)}
 			{/each}
 		</div>
