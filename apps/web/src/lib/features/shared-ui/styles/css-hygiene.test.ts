@@ -166,10 +166,15 @@ describe('CSS hygiene', () => {
 
 	it('ties every compositor hint to the state that actually moves', async () => {
 		const offenders: string[] = [];
-		// A state marker in the selector, an explicit release, or the one layer
-		// that animates for as long as it exists (the scroll-driven museum wall,
-		// whose hint sits inside `@supports (animation-timeline: scroll())`).
+		// A state marker in the selector, an explicit release, or a layer that
+		// moves for as long as it exists: the scroll-driven museum wall, whose
+		// hint sits inside `@supports (animation-timeline: scroll())`, and the
+		// polaroids on the gallery wall, which every scroll and every room slide
+		// moves (Safari repainted all of their paper on each frame without one;
+		// `polaroid-layers.e2e.ts` holds them to it). The grid is virtualized, so
+		// only the cards near the screen exist to hold a layer.
 		const stateQualified = /\[data-|:hover|:focus|:active|-hidden|-open|-active|-spinning/;
+		const movesForLife = new Set(['.polaroid-card {', '.lead-polaroid {']);
 
 		for (const { path, source } of await readAll()) {
 			const lines = source.split('\n');
@@ -202,6 +207,7 @@ describe('CSS hygiene', () => {
 					.find((candidate) => candidate.trimEnd().endsWith('{'));
 
 				if (selector && stateQualified.test(selector)) continue;
+				if (selector && movesForLife.has(selector.trim())) continue;
 
 				offenders.push(`${path}:${index + 1} ${selector?.trim() ?? '<no selector>'}`);
 			}
