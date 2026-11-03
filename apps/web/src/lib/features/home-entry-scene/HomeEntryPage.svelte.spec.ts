@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakePage } from '#lib/testing/fake-page-state.svelte.js';
 import { render } from 'vitest-browser-svelte';
 import HomeEntryPage from './HomeEntryPage.svelte';
+import { STUDIO_MODEL_URL } from './scene/studio-model';
 import { takeHandedOverBook } from '#lib/features/shared-ui/studio-handoff.js';
 
 // The scene mounts a Threlte `<Canvas>`, which the headless browser cannot give
@@ -50,7 +51,7 @@ vi.mock('#lib/features/shared-ui/studio-background-warmup.js', () => ({
 }));
 
 const PREFETCHED_HREFS = [
-	'/models/studio-transformed.glb',
+	STUDIO_MODEL_URL,
 	'/draco/draco_wasm_wrapper.js',
 	'/draco/draco_decoder.wasm'
 ];

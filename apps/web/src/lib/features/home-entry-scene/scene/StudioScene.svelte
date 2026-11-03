@@ -17,6 +17,7 @@
 	import type { HomeSceneArtworkSlot } from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
 	import { studioCanvasShadowMap } from '#lib/features/home-entry-scene/scene/studio-renderer-config.js';
 	import { getStudioDracoLoader } from '#lib/features/home-entry-scene/scene/studio-draco-loader.js';
+	import { STUDIO_MODEL_URL } from '#lib/features/home-entry-scene/scene/studio-model.js';
 	import SceneContextRelease from '#lib/features/home-entry-scene/scene/SceneContextRelease.svelte';
 	import SceneFrameInvalidator from '#lib/features/home-entry-scene/scene/SceneFrameInvalidator.svelte';
 	import SceneTextureBindings from '#lib/features/home-entry-scene/scene/SceneTextureBindings.svelte';
@@ -521,7 +522,7 @@
 			bind:nodes={studioNodes}
 			bind:scene={studioSceneRoot}
 			dracoLoader={studioDracoLoader}
-			url="/models/studio-transformed.glb"
+			url={STUDIO_MODEL_URL}
 			scale={5.7}
 			position={[0, -6, 0]}
 			rotation={[initialCamera.rotationX, initialCamera.rotationY, 0]}

@@ -21,6 +21,7 @@
 		warmNavigationTargetWhenIdle
 	} from '#lib/features/home-entry-scene/navigation-warmup.js';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import { STUDIO_MODEL_URL } from '#lib/features/home-entry-scene/scene/studio-model.js';
 	import type { EntryFlowState } from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
@@ -265,7 +266,7 @@
 		requested once the scene chunk executes, and the decoder only once the GLB
 		header has been parsed. Prefetching overlaps both with hydration.
 	-->
-	<link rel="prefetch" href="/models/studio-transformed.glb" />
+	<link rel="prefetch" href={STUDIO_MODEL_URL} />
 	<link rel="prefetch" href="/draco/draco_wasm_wrapper.js" />
 	<link rel="prefetch" href="/draco/draco_decoder.wasm" />
 </svelte:head>

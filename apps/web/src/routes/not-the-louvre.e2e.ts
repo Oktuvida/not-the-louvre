@@ -304,7 +304,7 @@ test.describe('Not the Louvre frontend port', () => {
 	});
 
 	test('home route stays usable while the studio GLB is still loading', async ({ page }) => {
-		await page.route('**/models/studio-transformed.glb', async () => {
+		await page.route('**/studio.*.glb', async () => {
 			await new Promise(() => {});
 		});
 
@@ -341,7 +341,7 @@ test.describe('Not the Louvre frontend port', () => {
 	test('home route keeps the localized scene fallback when the studio GLB fails', async ({
 		page
 	}) => {
-		await page.route('**/models/studio-transformed.glb', async (route) => {
+		await page.route('**/studio.*.glb', async (route) => {
 			await route.abort();
 		});
 
