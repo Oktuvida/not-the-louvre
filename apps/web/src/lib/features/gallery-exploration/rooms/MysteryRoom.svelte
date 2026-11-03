@@ -25,7 +25,7 @@
 		adultContentEnabled?: boolean;
 		artworks: Artwork[];
 		feedCacheKey?: GalleryRoomId | null;
-		/** The seed is the one this room was left with, until the server's fresh page lands. */
+		/** The seed is one the room already had, standing in until the server's fresh page lands. */
 		seedIsRemembered?: boolean;
 		pageInfo: GalleryPageInfo;
 		loadMoreArtworks?: LoadMoreArtworks;

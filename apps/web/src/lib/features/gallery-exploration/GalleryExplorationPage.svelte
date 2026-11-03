@@ -9,7 +9,7 @@
 	import { apiErrorMessage, requestJson } from '#lib/client/api.js';
 	import { setAdultContentEnabled } from '#lib/client/avatar-upload.js';
 	import { getGalleryLayoutContext } from '#lib/features/gallery-exploration/gallery-layout-context.js';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { writable } from 'svelte/store';
 	import {
 		artworkEngagement,
@@ -23,6 +23,7 @@
 	import { createDetailPrefetcher } from '#lib/features/gallery-exploration/detail-prefetch.js';
 	import {
 		galleryRoomDiscoveryRequest,
+		type GalleryArtworkPage,
 		type GalleryDiscovery,
 		type GalleryDiscoveryRequest,
 		type GalleryRoomContent
@@ -225,10 +226,17 @@
 	// graph without tripping `state_referenced_locally`.
 	const { initialRoomContent, rememberedSeed } = (() => ({
 		initialRoomContent: roomContent,
-		// A room the visitor already walked through goes straight back up as it
-		// was left, while its fresh first page streams in behind it.
 		rememberedSeed: roomContent ? (readRoomFeedSnapshot(roomId)?.seed ?? null) : null
 	}))();
+
+	/*
+	 * The first page the room shows while its stream is on the way, when it
+	 * already has one to show: a room the visitor walked through before goes
+	 * straight back up as it was left, and a room handed its own stream again
+	 * (a navigation that lands where the visitor already is) stays as it is.
+	 * Either way the fresh page merges in when it lands.
+	 */
+	let heldSeed = $state<GalleryArtworkPage | null>(rememberedSeed);
 
 	// --- Streamed room content ---------------------------------------------
 	// This seeder is what feeds both the template and the script-level state
@@ -269,36 +277,37 @@
 	const disposeInitialSeed = initialRoomContent ? seedFromStream(initialRoomContent) : null;
 	$effect(() => () => disposeInitialSeed?.());
 
-	// A refresh hands over a new promise; the room goes back to its skeleton
-	// while it settles.
+	// What is on the wall now, read before a new stream replaces it.
+	let seedOnWall: GalleryArtworkPage | null = null;
+
+	// A new promise for this room: a refresh is the visitor asking for fresh
+	// data, and the room goes back to its skeleton while it settles; any other
+	// keeps what is on the wall until the fresh page lands.
 	$effect.pre(() => {
 		const pending = roomContent;
 		if (!pending || pending === initialRoomContent) return;
 
-		streamedContent = null;
-		streamFailed = false;
+		untrack(() => {
+			heldSeed = isRefreshingGallery ? null : seedOnWall;
+			streamedContent = null;
+			streamFailed = false;
+		});
 
 		return seedFromStream(pending);
 	});
 
-	// Only the stream the page arrived with stands in for a remembered room: a
-	// refresh is the visitor asking for fresh data, and waits for it.
-	const isSeedRemembered = $derived(
-		rememberedSeed !== null && roomContent === initialRoomContent && streamedContent === null
-	);
+	const isSeedRemembered = $derived(heldSeed !== null && streamedContent === null);
 
 	const seedArtworks = $derived(
 		roomContent
-			? (streamedContent?.artworks ?? (isSeedRemembered ? rememberedSeed!.artworks : []))
+			? (streamedContent?.artworks ?? (isSeedRemembered ? heldSeed!.artworks : []))
 			: routeArtworks
 	);
 
 	const seedDiscovery = $derived<GalleryDiscovery>(
 		roomContent
 			? (streamedContent?.discovery ?? {
-					pageInfo: isSeedRemembered
-						? rememberedSeed!.pageInfo
-						: { hasMore: false, nextCursor: null },
+					pageInfo: isSeedRemembered ? heldSeed!.pageInfo : { hasMore: false, nextCursor: null },
 					request: galleryRoomDiscoveryRequest(roomId, viewer?.id ?? null)
 				})
 			: routeDiscovery
@@ -316,6 +325,14 @@
 	// Reseeds from route data on navigation; votes and comment counts patch it
 	// locally in between.
 	let artworks = $derived<Artwork[]>(seedArtworks);
+
+	$effect(() => {
+		if (seedArtworks.length === 0) return;
+		seedOnWall = {
+			artworks: $state.snapshot(seedArtworks),
+			pageInfo: $state.snapshot(seedDiscovery.pageInfo)
+		};
+	});
 
 	/*
 	 * What the room tells a screen reader while it streams.
