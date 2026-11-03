@@ -14,27 +14,28 @@ describe('StudioActions', () => {
 		expect(onPublish).toHaveBeenCalledOnce();
 	});
 
-	// Clear sits a thumb away from Publish; one stray tap must not wipe a drawing.
-	it('clears the page only on a second press', async () => {
+	// Tearing the page out sits a thumb away from Publish; one stray tap must
+	// not wipe a drawing.
+	it('tears the page out only on a second press', async () => {
 		const onClear = vi.fn();
 		await render(StudioActions, { onClear, onPublish: vi.fn() });
 
-		await page.getByRole('button', { name: 'Clear page' }).click();
+		await page.getByRole('button', { name: 'Tear out this page' }).click();
 		expect(onClear).not.toHaveBeenCalled();
 
-		await page.getByRole('button', { name: 'Tap again to clear' }).click();
+		await page.getByRole('button', { name: 'Sure? Tap again' }).click();
 		expect(onClear).toHaveBeenCalledOnce();
-		await expect.element(page.getByRole('button', { name: 'Clear page' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Tear out this page' })).toBeVisible();
 	});
 
-	it('forgets a first press on Clear after a moment', async () => {
+	it('forgets a first press after a moment', async () => {
 		const onClear = vi.fn();
 		await render(StudioActions, { confirmClearForMs: 50, onClear, onPublish: vi.fn() });
 
-		await page.getByRole('button', { name: 'Clear page' }).click();
-		await expect.element(page.getByRole('button', { name: 'Clear page' })).toBeVisible();
+		await page.getByRole('button', { name: 'Tear out this page' }).click();
+		await expect.element(page.getByRole('button', { name: 'Tear out this page' })).toBeVisible();
 
-		await page.getByRole('button', { name: 'Clear page' }).click();
+		await page.getByRole('button', { name: 'Tear out this page' }).click();
 		expect(onClear).not.toHaveBeenCalled();
 	});
 
@@ -42,7 +43,7 @@ describe('StudioActions', () => {
 		await render(StudioActions, { isPublishing: true, onClear: vi.fn(), onPublish: vi.fn() });
 
 		await expect.element(page.getByRole('button', { name: 'Publishing…' })).toBeDisabled();
-		await expect.element(page.getByRole('button', { name: 'Clear page' })).toBeDisabled();
+		await expect.element(page.getByRole('button', { name: 'Tear out this page' })).toBeDisabled();
 	});
 
 	it('makes Publish the bigger of the two', async () => {
@@ -50,7 +51,7 @@ describe('StudioActions', () => {
 
 		const publish = page.getByRole('button', { name: 'Publish' }).element().getBoundingClientRect();
 		const clear = page
-			.getByRole('button', { name: 'Clear page' })
+			.getByRole('button', { name: 'Tear out this page' })
 			.element()
 			.getBoundingClientRect();
 		expect(publish.width * publish.height).toBeGreaterThan(clear.width * clear.height);
