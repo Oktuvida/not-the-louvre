@@ -17,8 +17,8 @@ export default class RendererWorker extends WorkerEntrypoint implements Renderer
 		return inProcessRenderer.renderAvatar(document);
 	}
 
-	renderFavicon(avatar: Uint8Array) {
-		return inProcessRenderer.renderFavicon(avatar);
+	renderFavicon(avatar: Uint8Array, size?: number) {
+		return inProcessRenderer.renderFavicon(avatar, size);
 	}
 
 	fetch() {

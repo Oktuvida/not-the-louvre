@@ -37,5 +37,5 @@ export const renderArtworkMedia = async (document: DrawingDocument, backdrop?: U
 export const renderAvatarMedia = async (document: DrawingDocument) =>
 	toMedia(await (await resolveRenderer()).renderAvatar(document), 'avatar.webp');
 
-export const renderAvatarFavicon = async (avatar: Uint8Array) =>
-	(await resolveRenderer()).renderFavicon(avatar);
+export const renderAvatarFavicon = async (avatar: Uint8Array, size?: number) =>
+	(await resolveRenderer()).renderFavicon(avatar, size);

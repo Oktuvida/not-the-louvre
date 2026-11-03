@@ -60,6 +60,14 @@ export const avatarFavicon = (href: string): FaviconState => ({
 	type: 'image/png'
 });
 
+/** The avatar favicon written into the page (server/user/inline-favicon.ts). */
+export const inlineAvatarFavicon = (dataUri: string): FaviconState => ({
+	href: dataUri,
+	kind: 'avatar',
+	sizes: '32x32',
+	type: 'image/png'
+});
+
 export const resolveFaviconState = (user: FaviconUser | null | undefined): FaviconState => {
 	if (!user?.avatarUrl || !user.avatarOnboardingCompletedAt) {
 		return sketchFavicon;

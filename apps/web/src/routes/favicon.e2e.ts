@@ -3,8 +3,9 @@ import { createEmptyDrawingDocument } from '../lib/features/stroke-json/document
 import { deterministicAuthUser, resetDemoState } from './demo/e2e-helpers';
 
 // The tab of a signed-in artist wears their avatar. Safari is the strict one:
-// it takes an icon for what its link says it is, and only reads a page's icon
-// when a link arrives, never when an existing link's address changes.
+// it takes an icon for what its link says it is, only reads a page's icon when
+// a link arrives, and fetches an icon at an address when it gets round to it
+// (never in a private window), so the page carries the avatar inside it.
 
 const iconLinks = (page: import('@playwright/test').Page) =>
 	page.evaluate(() =>
@@ -26,7 +27,7 @@ test.describe('the tab icon', () => {
 		await resetDemoState(request);
 	});
 
-	test('wears a signed-in artist’s avatar, declared as the 64-pixel PNG it is', async ({
+	test('wears a signed-in artist’s avatar, written into the page as a 32-pixel PNG', async ({
 		baseURL,
 		page
 	}) => {
@@ -54,13 +55,15 @@ test.describe('the tab icon', () => {
 		await page.goto('/');
 		const [icon, ...others] = await iconLinks(page);
 		expect(others).toEqual([]);
-		expect(icon).toMatchObject({ sizes: '64x64', type: 'image/png' });
-		expect(new URL(icon!.href, baseURL).pathname).toMatch(/^\/api\/users\/[^/]+\/favicon$/);
+		expect(icon).toMatchObject({ sizes: '32x32', type: 'image/png' });
+		expect(icon!.href).toMatch(/^data:image\/png;base64,/);
+		const png = Buffer.from(icon!.href.slice('data:image/png;base64,'.length), 'base64');
+		expect(pngSize(png)).toEqual({ height: 32, width: 32 });
 
-		const response = await page.request.get(icon!.href);
-		expect(response.status()).toBe(200);
-		expect(response.headers()['content-type']).toBe('image/png');
-		expect(pngSize(await response.body())).toEqual({ height: 64, width: 64 });
+		// The second page is served the same icon, kept from the first.
+		await page.reload();
+		const [again] = await iconLinks(page);
+		expect(again?.href).toBe(icon!.href);
 	});
 
 	test('changes to the avatar the moment it is drawn, with a new icon, not an edited one', async ({
