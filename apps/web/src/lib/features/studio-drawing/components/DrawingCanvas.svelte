@@ -540,18 +540,68 @@
 
 	/*
 	 * On its sheet, clearing the page tears the sheet off: a copy of the
-	 * drawing as it stood is carried off on a sheet of its own, and the clean
-	 * page is left behind under the tape. Without motion it simply goes.
+	 * drawing as it stood, on a sheet of its own, gives at the binding with a
+	 * tug and is slid off the desk towards the artist, over everything, while
+	 * the clean page waits under the tape. It is laid on the document itself,
+	 * because the book clips and perspectives everything inside it. Without
+	 * motion the drawing simply goes.
 	 */
-	let tornSheet = $state<HTMLCanvasElement | null>(null);
+	let sheetRef = $state<HTMLElement | null>(null);
 	const tearOffSheet = () => {
-		if (!sheet || !canvasRef || prefersReducedMotion()) return;
+		if (!sheet || !canvasRef || !sheetRef || !frameRef || prefersReducedMotion()) return;
+		const sheetBox = sheetRef.getBoundingClientRect();
+		const frameBox = frameRef.getBoundingClientRect();
+
+		const torn = document.createElement('div');
+		torn.setAttribute('aria-hidden', 'true');
+		Object.assign(torn.style, {
+			height: `${sheetBox.height}px`,
+			left: `${sheetBox.left}px`,
+			pointerEvents: 'none',
+			position: 'fixed',
+			top: `${sheetBox.top}px`,
+			transformOrigin: '50% 0',
+			width: `${sheetBox.width}px`,
+			zIndex: '60'
+		});
+		const shadow = document.createElement('span');
+		shadow.className = 'deckled-sheet-shadow';
+		const sheetPaper = document.createElement('span');
+		sheetPaper.className = 'deckled-sheet';
+		sheetPaper.style.setProperty('--sheet-paper', paper ?? 'var(--color-paper-bright)');
+		for (const layer of [shadow, sheetPaper]) {
+			Object.assign(layer.style, { inset: '0', position: 'absolute' });
+		}
 		const copy = document.createElement('canvas');
 		copy.width = canvasRef.width;
 		copy.height = canvasRef.height;
 		copy.setAttribute('aria-hidden', 'true');
 		copy.getContext('2d')?.drawImage(canvasRef, 0, 0);
-		tornSheet = copy;
+		Object.assign(copy.style, {
+			height: `${frameBox.height}px`,
+			left: `${frameBox.left - sheetBox.left}px`,
+			position: 'absolute',
+			top: `${frameBox.top - sheetBox.top}px`,
+			width: `${frameBox.width}px`
+		});
+		torn.append(shadow, sheetPaper, copy);
+		document.body.append(torn);
+
+		const sliding = torn.animate(
+			[
+				{ offset: 0, transform: 'none' },
+				// held at the binding, it stretches against it…
+				{ offset: 0.14, transform: 'translateY(-0.8%) rotate(-0.6deg)' },
+				// …gives, and is lifted off the page…
+				{ offset: 0.32, transform: 'translate(-1%, 5%) rotate(2deg) scale(1.03)' },
+				// …and slid off the desk towards the artist.
+				{ offset: 1, transform: 'translate(-10%, 115vh) rotate(9deg) scale(1.04)' }
+			],
+			{ duration: 950, easing: 'cubic-bezier(0.45, 0, 0.75, 0.25)', fill: 'forwards' }
+		);
+		const letGo = () => torn.remove();
+		sliding.addEventListener('finish', letGo);
+		sliding.addEventListener('cancel', letGo);
 	};
 
 	// The parent's image under a fork's strokes, painted once it has loaded.
@@ -678,6 +728,7 @@
 		     drawing, and tape over its corners. Decoration only. -->
 		<span class="canvas-sheet canvas-sheet-shadow deckled-sheet-shadow" aria-hidden="true"></span>
 		<span
+			bind:this={sheetRef}
 			class="canvas-sheet deckled-sheet"
 			style:--sheet-paper={paper ?? 'var(--color-paper-bright)'}
 			aria-hidden="true"
@@ -685,28 +736,6 @@
 		{#each ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as corner (corner)}
 			<span class={`canvas-sheet-tape canvas-sheet-tape-${corner} tape`} aria-hidden="true"></span>
 		{/each}
-		{#if tornSheet}
-			{@const torn = tornSheet}
-			<div
-				class="torn-sheet"
-				aria-hidden="true"
-				onanimationend={(event) => {
-					if (event.target === event.currentTarget) tornSheet = null;
-				}}
-			>
-				<span class="torn-sheet-shadow deckled-sheet-shadow"></span>
-				<span
-					class="torn-sheet-paper deckled-sheet"
-					style:--sheet-paper={paper ?? 'var(--color-paper-bright)'}
-				></span>
-				<div
-					class="torn-sheet-drawing"
-					{@attach (holder: HTMLElement) => {
-						holder.append(torn);
-					}}
-				></div>
-			</div>
-		{/if}
 	{/if}
 
 	<!-- The frame stays put and clips; the view inside it zooms and pans. -->
@@ -807,52 +836,6 @@
 
 	.canvas-sheet-shadow {
 		inset: -0.45rem;
-	}
-
-	/* The torn-off sheet: over the drawing, under the tape that keeps the next
-	 * one down. It is torn from the bottom up: the foot lifts towards the
-	 * artist, folding back over the top edge, and the sheet is gone. It stays
-	 * inside the page, which clips it, so it peels rather than flies. */
-	.torn-sheet {
-		position: absolute;
-		inset: -0.6rem;
-		z-index: 2;
-		pointer-events: none;
-		transform-origin: 50% 0;
-		animation: tear-off 720ms cubic-bezier(0.45, 0, 0.7, 0.3) forwards;
-	}
-
-	.torn-sheet-shadow,
-	.torn-sheet-paper {
-		position: absolute;
-		inset: 0;
-	}
-
-	.torn-sheet-drawing {
-		position: absolute;
-		inset: 0.6rem;
-	}
-
-	.torn-sheet-drawing :global(canvas) {
-		display: block;
-		width: 100%;
-		height: 100%;
-	}
-
-	@keyframes tear-off {
-		0% {
-			transform: perspective(1200px);
-		}
-		18% {
-			transform: perspective(1200px) rotateX(-9deg) translateY(-0.5%) rotate(-0.6deg);
-		}
-		60% {
-			opacity: 1;
-		}
-		100% {
-			transform: perspective(1200px) rotateX(-78deg) translateY(-12%) rotate(-3deg);
-			opacity: 0;
-		}
 	}
 
 	/* Masking tape across each corner, mostly on the sheet's margin. */
