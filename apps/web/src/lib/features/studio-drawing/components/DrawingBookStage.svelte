@@ -506,6 +506,12 @@
 		background: transparent;
 		color: inherit;
 		text-align: center;
+		/* Each face stands a hair off the cover's own plane, on its side of it,
+		 * and holds everything on it in one layer: Safari otherwise sorts the
+		 * faces and the label against the cover's background as the cover
+		 * turns, and the label vanished until it lay flat again. The postcard's
+		 * faces stand off their card the same way. */
+		transform: translateZ(0.1px);
 		backface-visibility: hidden;
 		cursor: pointer;
 		transition: opacity 160ms ease;
@@ -516,7 +522,7 @@
 	}
 
 	.cover-front:active {
-		transform: none;
+		transform: translateZ(0.1px);
 		scale: 1;
 	}
 
@@ -791,7 +797,7 @@
 		border-radius: inherit;
 		background: var(--cover-cloth) 0 0 / 34% auto repeat;
 		backface-visibility: hidden;
-		transform: rotateY(180deg);
+		transform: rotateY(180deg) translateZ(0.1px);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
