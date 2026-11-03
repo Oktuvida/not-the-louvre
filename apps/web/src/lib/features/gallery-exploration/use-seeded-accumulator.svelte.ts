@@ -63,9 +63,10 @@ export type SeededAccumulatorOptions = {
 	/** Reads the room grid's measured rows (VirtualizedGrid's `snapshotLayout`). */
 	getLayout?: () => GridLayoutSnapshot | null;
 	/**
-	 * True while the seed is the one this room showed when it was last left,
-	 * standing in until the server's fresh first page lands. The restored feed
-	 * merges the fresh page, not the remembered one it was built from.
+	 * True while the seed is one the room already had (the one it was left
+	 * with, or the one on the wall when it was handed its stream again),
+	 * standing in until the server's fresh first page lands. The feed merges
+	 * the fresh page rather than reseeding from it.
 	 */
 	getSeedIsRemembered?: () => boolean;
 };
@@ -130,12 +131,18 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Seed
 		const identity = seedIdentity(artworks);
 		const nextPageInfoIdentity = watchPageInfo ? pageInfoIdentity(pageInfo) : lastPageInfoIdentity;
 
+		// A remembered seed stands in for a fresh one on its way: the feed stays
+		// as it is, and the fresh seed merges into it rather than reseeding it.
+		if (options.getSeedIsRemembered?.()) {
+			pendingRestoreMerge = true;
+			return;
+		}
+
 		if (pendingRestoreMerge) {
 			// An empty seed here is the page's state before its own effect has
-			// filled it, not a room that emptied out, and a remembered seed is the
-			// one the restored feed was built from: adopting either as the baseline
+			// filled it, not a room that emptied out: adopting it as the baseline
 			// would hand the reseed branch the fresh seed a flush later.
-			if (artworks.length === 0 || options.getSeedIsRemembered?.()) return;
+			if (artworks.length === 0) return;
 
 			pendingRestoreMerge = false;
 			lastSeedIdentity = identity;

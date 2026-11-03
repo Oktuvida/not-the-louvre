@@ -1755,6 +1755,48 @@ describe('GalleryExplorationPage', () => {
 			expect(document.querySelector('[data-testid="gallery-room-error"]')).toBeNull();
 		});
 
+		// A navigation can hand the room on screen its own stream again, without
+		// the visitor asking for fresh data: turning straight back before a
+		// slide has started does. The room stays as it is and takes the fresh
+		// page in when it lands, instead of starting over at the top.
+		it('stays on the wall when it is handed its own room again', async () => {
+			const first = createDeferred<HotWallContent>();
+			const content = (artworks: Artwork[]): HotWallContent => ({
+				adultContentEnabled: false,
+				artworks,
+				discovery: {
+					pageInfo: { hasMore: false, nextCursor: null },
+					request: { authorId: null, limit: 24, sort: 'hot', window: null }
+				},
+				emptyStateMessage: null
+			});
+			const screen = await render(GalleryExplorationPage, {
+				room: getGalleryRoom('hot-wall'),
+				roomContent: first.promise,
+				roomId: 'hot-wall',
+				viewer: { id: 'user-1', role: 'user' }
+			});
+			first.resolve(content([cachedLead, cachedSecond, cachedDeep]));
+			await expect.element(page.getByRole('button', { name: /Cached Deep/ })).toBeVisible();
+
+			const again = createDeferred<HotWallContent>();
+			await screen.rerender({
+				room: getGalleryRoom('hot-wall'),
+				roomContent: again.promise,
+				roomId: 'hot-wall',
+				viewer: { id: 'user-1', role: 'user' }
+			});
+
+			await expect.element(page.getByRole('button', { name: /Cached Deep/ })).toBeVisible();
+			expect(document.querySelector('[data-testid="room-loading-skeleton"]')).toBeNull();
+
+			again.resolve(
+				content([{ ...baseArtwork, id: 'fresh-1', title: 'Fresh Study' }, cachedLead, cachedSecond])
+			);
+			await expect.element(page.getByText('Fresh Study')).toBeVisible();
+			await expect.element(page.getByRole('button', { name: /Cached Deep/ })).toBeVisible();
+		});
+
 		it('puts the Hall of Fame podium back up at once', async () => {
 			const ranked = [1, 2, 3, 4].map((rank) => ({
 				...baseArtwork,

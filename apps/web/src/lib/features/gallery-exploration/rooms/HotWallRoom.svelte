@@ -20,7 +20,7 @@
 		pageInfo: GalleryPageInfo;
 		adultContentEnabled?: boolean;
 		feedCacheKey?: GalleryRoomId | null;
-		/** The seed is the one this room was left with, until the server's fresh page lands. */
+		/** The seed is one the room already had, standing in until the server's fresh page lands. */
 		seedIsRemembered?: boolean;
 		/** The room came drawn by the server, with the page, rather than built in the browser. */
 		serverRendered?: boolean;

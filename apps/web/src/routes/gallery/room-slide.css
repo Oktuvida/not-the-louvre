@@ -11,6 +11,13 @@
 
 html[data-room-slide] .room-stage {
 	view-transition-name: gallery-room;
+	/* A named element is a stacking context of its own, which sank the room
+	 * under the room's light and drifting dust (z-index 1 and 5). It keeps the
+	 * level the room's content has unnamed instead: Safari takes the slide
+	 * down a frame or two before the name goes, and every artwork flickered
+	 * dull for those frames. */
+	position: relative;
+	z-index: 10;
 }
 
 html[data-room-slide]::view-transition-old(root),
