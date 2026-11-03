@@ -52,6 +52,13 @@
 </script>
 
 <div class="visitor-pass" style={`--pass-rotate: ${rotation}deg; --pass-ink: ${ink};`}>
+	<!-- The pass's shadow on the wall, cut to the ticket's own shape. -->
+	{#each ['pass-shadow-soft', 'pass-shadow-tight'] as layer (layer)}
+		<span class={`pass-shadow ${layer}`} aria-hidden="true">
+			<span class="pass-shadow-body"></span>
+			<span class="pass-shadow-stub" class:is-torn={torn}></span>
+		</span>
+	{/each}
 	<span class="pass-tape tape" aria-hidden="true"></span>
 
 	<button
@@ -106,11 +113,77 @@
 	.visitor-pass {
 		--notch: 0.62em;
 		--pass-height: 8.2em;
+		--body-width: 15em;
+		--stub-width: 4.6em;
+		--stub-tilt: 2deg;
+		/* The perforation's punched notches, cut at the top and bottom of the
+		 * pass's right edge and the stub's left one. */
+		--body-notches:
+			radial-gradient(circle var(--notch) at 100% 0, transparent 98%, #000) top / 100% 51% no-repeat,
+			radial-gradient(circle var(--notch) at 100% 100%, transparent 98%, #000) bottom / 100% 51%
+				no-repeat;
+		--stub-notches:
+			radial-gradient(circle var(--notch) at 0 0, transparent 98%, #000) top / 100% 51% no-repeat,
+			radial-gradient(circle var(--notch) at 0 100%, transparent 98%, #000) bottom / 100% 51%
+				no-repeat;
 		position: relative;
 		display: flex;
 		rotate: var(--pass-rotate, 0deg);
-		filter: drop-shadow(0 0.45em 0.55em rgb(40 25 10 / 0.3))
-			drop-shadow(0 1px 1px rgb(40 25 10 / 0.22));
+	}
+
+	/*
+	 * The shadow is drawn by silhouettes of the two pieces rather than by a
+	 * `drop-shadow` filter over the pass. A piece that lifts or tilts under the
+	 * pointer becomes a compositing layer while it moves, and Safari then drew
+	 * the filtered pass's shadow as the box around it, a pale rectangle behind
+	 * the ticket. The silhouettes never move, so nothing that moves is filtered:
+	 * the ticket lifts off its shadow instead.
+	 */
+	.pass-shadow {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		pointer-events: none;
+	}
+
+	/* Two layers, as on paper: a soft shade a little way down, and the dark
+	 * line right under the edge. A blur's deviation is half a shadow's radius. */
+	.pass-shadow-soft {
+		translate: 0 0.45em;
+		filter: blur(0.275em);
+		--shade: rgb(40 25 10 / 0.3);
+	}
+
+	.pass-shadow-tight {
+		translate: 0 1px;
+		filter: blur(0.5px);
+		--shade: rgb(40 25 10 / 0.22);
+	}
+
+	.pass-shadow-body,
+	.pass-shadow-stub {
+		height: var(--pass-height);
+		flex-shrink: 0;
+		background: var(--shade);
+	}
+
+	.pass-shadow-body {
+		width: var(--body-width);
+		mask: var(--body-notches);
+	}
+
+	.pass-shadow-stub {
+		width: var(--stub-width);
+		margin-left: -1px;
+		transform-origin: 0 100%;
+		rotate: var(--stub-tilt);
+		mask: var(--stub-notches);
+		transition: opacity 320ms ease-in;
+	}
+
+	/* A stub torn off takes its shadow with it. */
+	.pass-shadow-stub.is-torn {
+		opacity: 0;
 	}
 
 	.pass-tape {
@@ -149,12 +222,8 @@
 		background-repeat: no-repeat, repeat;
 	}
 
-	/* The perforation's punched notches, cut at the top and bottom. */
 	.pass-paper-body {
-		mask:
-			radial-gradient(circle var(--notch) at 100% 0, transparent 98%, #000) top / 100% 51% no-repeat,
-			radial-gradient(circle var(--notch) at 100% 100%, transparent 98%, #000) bottom / 100% 51%
-				no-repeat;
+		mask: var(--body-notches);
 	}
 
 	.pass-paper-stub {
@@ -171,10 +240,7 @@
 			0 calc(var(--notch) + 0.2em),
 			0 0;
 		background-repeat: no-repeat, no-repeat, repeat;
-		mask:
-			radial-gradient(circle var(--notch) at 0 0, transparent 98%, #000) top / 100% 51% no-repeat,
-			radial-gradient(circle var(--notch) at 0 100%, transparent 98%, #000) bottom / 100% 51%
-				no-repeat;
+		mask: var(--stub-notches);
 	}
 
 	.pass-body {
@@ -182,7 +248,7 @@
 		display: flex;
 		flex-direction: column;
 		justify-content: space-between;
-		width: 15em;
+		width: var(--body-width);
 		padding: 0.95em 1em 0.9em;
 		transition: translate 180ms ease;
 	}
@@ -288,10 +354,10 @@
 		align-items: center;
 		justify-content: center;
 		gap: 0.35em;
-		width: 4.6em;
+		width: var(--stub-width);
 		color: #b5473c;
 		transform-origin: 0 100%;
-		rotate: 2deg;
+		rotate: var(--stub-tilt);
 		transition:
 			rotate 260ms cubic-bezier(0.3, 1.4, 0.5, 1),
 			translate 320ms ease-in,
