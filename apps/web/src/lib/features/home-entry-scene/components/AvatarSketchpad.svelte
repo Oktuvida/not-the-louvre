@@ -22,6 +22,7 @@
 	import { toInkDocument } from '#lib/features/stroke-json/ink-document.js';
 	import type { AvatarUploadResult } from '#lib/client/avatar-upload.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import InkStamp from '#lib/features/shared-ui/components/InkStamp.svelte';
 
 	const palette = drawingPalette;
 	const BRUSH_SIZES = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
@@ -40,6 +41,8 @@
 	const CANVAS_WIDTH = AVATAR_DRAWING_DIMENSIONS.width;
 	const CANVAS_HEIGHT = AVATAR_DRAWING_DIMENSIONS.height;
 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
+	const AVATAR_UNSAVED_MESSAGE = "Your portrait didn't save. It's still on the easel.";
+	const AVATAR_UNPREPARED_MESSAGE = "Your browser couldn't get the portrait ready.";
 
 	let {
 		clearMode = 'initial',
@@ -270,7 +273,7 @@
 				avatarPayload = await createAvatarPayload(drawingDocument);
 			} catch (error) {
 				console.error('Failed to create avatar payload', error);
-				saveError = 'This browser could not prepare your avatar. Please try again.';
+				saveError = AVATAR_UNPREPARED_MESSAGE;
 				return;
 			}
 
@@ -279,13 +282,17 @@
 					'Failed to create avatar payload',
 					new Error('createAvatarPayload returned no payload')
 				);
-				saveError = 'This browser could not prepare your avatar. Please try again.';
+				saveError = AVATAR_UNPREPARED_MESSAGE;
 				return;
 			}
 
 			const result = await saveAvatar(avatarPayload);
 			if (!result.success) {
-				saveError = result.message;
+				// A lockout keeps its own words; the server's other reasons are for the logs.
+				saveError =
+					result.code === 'RATE_LIMITED' && result.message
+						? result.message
+						: AVATAR_UNSAVED_MESSAGE;
 				return;
 			}
 
@@ -346,10 +353,6 @@
 	<p class="sketch-subtitle">
 		Sketch a quick self-portrait for <span class="sketch-nickname">{nickname}</span>.
 	</p>
-
-	{#if saveError}
-		<div class="sketch-alert">{saveError}</div>
-	{/if}
 
 	{#if draftStatusMessage}
 		<div class="sketch-alert">{draftStatusMessage}</div>
@@ -439,6 +442,14 @@
 					</div>
 					<p class="seal-caption">your wax seal</p>
 				</div>
+				{#if saveError}
+					<InkStamp
+						label="Not saved"
+						message={saveError}
+						onDismiss={() => (saveError = '')}
+						onRetry={() => void handleEnterGallery()}
+					/>
+				{/if}
 			</div>
 			<p class="easel-note">draw inside the lines… or don't.</p>
 		</div>

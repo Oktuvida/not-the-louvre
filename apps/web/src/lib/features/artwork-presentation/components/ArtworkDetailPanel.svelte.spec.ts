@@ -501,26 +501,118 @@ describe('ArtworkDetailPanel', () => {
 		await expect.element(page.getByText('Artwork not found')).not.toBeInTheDocument();
 	});
 
-	it('keeps one notice for both faces of the postcard', async () => {
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async () => new Response(JSON.stringify({ code: 'PUBLISH_FAILED' }), { status: 500 }))
-		);
+	it('stamps a vote that did not go through on the postcard, and Try again sends it once more', async () => {
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ code: 'PUBLISH_FAILED' }), { status: 500 })
+			)
+			.mockResolvedValueOnce(new Response(JSON.stringify({ artwork: { score: 5 } })));
+		vi.stubGlobal('fetch', fetchSpy);
 
 		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
+		const upvote = page.getByRole('button', { name: /^Upvote/ });
+		await upvote.click();
+
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not sent' });
+		await expect
+			.element(stamp.getByText("Your vote didn't make it onto the ledger."))
+			.toBeVisible();
+		// The vote that did not land is not shown as cast.
+		await expect.element(upvote).toHaveAttribute('aria-pressed', 'false');
+
+		// The stamp is on the postcard, not on one face of it: it is still there
+		// once the card turns over.
+		await openCommentsSide();
+		await expect.element(stamp).toBeVisible();
+
+		await page.getByRole('button', { name: 'Try again' }).click();
+
+		await expect.element(stamp).not.toBeInTheDocument();
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		expect(fetchSpy.mock.calls[1]?.[0]).toBe('/api/artworks/artwork-1/vote');
+		expect(fetchSpy.mock.calls[1]?.[1]).toMatchObject({ method: 'POST' });
+	});
+
+	it('stamps the postcard even where the gallery carries the other notices', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify({}), { status: 502 }))
+		);
+		const onNotify = vi.fn();
+
+		await render(ArtworkDetailPanel, {
+			artwork,
+			onNotify,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
 		await page.getByRole('button', { name: /^Upvote/ }).click();
 
-		const notice = page.getByRole('alert');
-		await expect.element(notice).toBeVisible();
-		expect(document.querySelectorAll('.postcard-notice')).toHaveLength(1);
+		await expect.element(page.getByRole('alert').filter({ hasText: 'Not sent' })).toBeVisible();
+		// Said once, where it happened.
+		expect(onNotify).not.toHaveBeenCalledWith(expect.stringContaining('ledger'));
 
-		// The message survives the flip instead of changing face with the card.
+		await page.getByRole('button', { name: 'Put the notice away' }).click();
+		await expect
+			.element(page.getByRole('alert').filter({ hasText: 'Not sent' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('stamps a comment the book did not take, and writes the same words again', async () => {
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 500 }))
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						comment: {
+							author: { nickname: 'journey_artist' },
+							body: 'Lovely lines',
+							createdAt: new Date().toISOString(),
+							id: 'comment-1'
+						}
+					}),
+					{ status: 201 }
+				)
+			);
+		vi.stubGlobal('fetch', fetchSpy);
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const onArtworkChange = vi.fn();
+
+		await render(ArtworkDetailPanel, {
+			artwork,
+			checkTextContent,
+			onArtworkChange,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
 		await openCommentsSide();
-		await expect.element(notice).toBeVisible();
+		await page.getByPlaceholder('Write on the back…').fill('Lovely lines');
+		await page.getByRole('button', { name: 'Send comment' }).click();
+
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not sent' });
+		await expect
+			.element(stamp.getByText("The visitor's book didn't take your entry."))
+			.toBeVisible();
+		// The words are still on the line, ready to go again.
+		await expect.element(page.getByPlaceholder('Write on the back…')).toHaveValue('Lovely lines');
+
+		await page.getByRole('button', { name: 'Try again' }).click();
+
+		await expect.element(stamp).not.toBeInTheDocument();
+		await vi.waitFor(() => {
+			expect(onArtworkChange).toHaveBeenCalledWith(
+				expect.objectContaining({
+					comments: [expect.objectContaining({ id: 'comment-1', text: 'Lovely lines' })]
+				})
+			);
+		});
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
 	});
 
 	it('hands failures to the host status region when one is wired up', async () => {

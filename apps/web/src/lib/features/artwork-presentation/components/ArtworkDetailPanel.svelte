@@ -25,6 +25,7 @@
 	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
 	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import InkStamp from '#lib/features/shared-ui/components/InkStamp.svelte';
 	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
 	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import TimelapsePlayer from '#lib/features/timelapse/TimelapsePlayer.svelte';
@@ -48,8 +49,9 @@
 		UNAUTHENTICATED: 'Sign in to interact with artworks.'
 	};
 
-	const VOTE_FAILED_MESSAGE = 'That vote did not make it onto the ledger. Please try again.';
-	const COMMENT_FAILED_MESSAGE = "The visitor's book would not take that entry. Please try again.";
+	// What the stamp's slip says; its Try again sticker says what to do.
+	const VOTE_FAILED_MESSAGE = "Your vote didn't make it onto the ledger.";
+	const COMMENT_FAILED_MESSAGE = "The visitor's book didn't take your entry.";
 	const DOWNLOAD_FAILED_MESSAGE = 'Artwork could not be downloaded.';
 	const TIMELAPSE_FAILED_MESSAGE = 'The timelapse would not play. Please try again.';
 	const ADULT_PREFERENCE_FAILED_MESSAGE = '18+ artwork preference could not be updated.';
@@ -70,6 +72,18 @@
 
 		return HOUSE_ERROR_MESSAGES[error.code] ?? fallback;
 	};
+
+	/* A failure that doing it again can fix: the answer was not one of the
+	 * API's own explanations (a 500, a proxy's error page, a dropped
+	 * connection). An explanation — sign in, slow down, this piece is gone —
+	 * is a notice instead: trying again would only get it again. */
+	const isWorthRetrying = (error: unknown) =>
+		!(error instanceof ActionFailure) &&
+		!(
+			error instanceof ApiError &&
+			error.code &&
+			(PASS_THROUGH_ERROR_CODES.has(error.code) || error.code in HOUSE_ERROR_MESSAGES)
+		);
 
 	let {
 		artwork,
@@ -111,6 +125,14 @@
 	} = $props();
 
 	let commentBody = $state('');
+	/* A vote or a comment that did not save, stamped on the postcard it was
+	 * for until it is tried again or put away. */
+	let actionFailure = $state<{
+		artworkId: string;
+		label: string;
+		message: string;
+		retry: () => void;
+	} | null>(null);
 	/** Why the comment on the line was not taken, pencilled under it. */
 	let commentError = $state('');
 	let actionError = $state<string | null>(null);
@@ -142,6 +164,21 @@
 		}
 
 		actionError = message;
+	};
+
+	const stampFailure = (artworkId: string, message: string, retry: () => void) => {
+		actionFailure = { artworkId, label: 'Not sent', message, retry };
+	};
+
+	// Another postcard opened in the same panel does not inherit the stamp.
+	const visibleFailure = $derived(
+		actionFailure && artwork && actionFailure.artworkId === artwork.id ? actionFailure : null
+	);
+
+	const retryFailedAction = () => {
+		const retry = visibleFailure?.retry;
+		actionFailure = null;
+		retry?.();
 	};
 
 	// --- Postcard flip + tilt ---
@@ -503,6 +540,7 @@
 		if (!artwork || isSubmittingVote) return;
 
 		notify(null);
+		actionFailure = null;
 		if (!requireViewer()) return;
 
 		isSubmittingVote = true;
@@ -539,7 +577,11 @@
 			}
 		} catch (error) {
 			syncArtwork(previousArtwork);
-			notify(toActionError(error, VOTE_FAILED_MESSAGE));
+			if (isWorthRetrying(error)) {
+				stampFailure(previousArtwork.id, VOTE_FAILED_MESSAGE, () => void submitVote(value));
+			} else {
+				notify(toActionError(error, VOTE_FAILED_MESSAGE));
+			}
 		} finally {
 			isSubmittingVote = false;
 		}
@@ -558,6 +600,7 @@
 
 		notify(null);
 		commentError = '';
+		actionFailure = null;
 		if (!requireViewer()) return;
 
 		const body = commentBody.trim();
@@ -609,7 +652,12 @@
 				void markComment(error.message);
 				return;
 			}
-			notify(toActionError(error, COMMENT_FAILED_MESSAGE));
+			// The words stay on the line, so Try again writes the same comment.
+			if (isWorthRetrying(error)) {
+				stampFailure(artwork.id, COMMENT_FAILED_MESSAGE, () => void submitComment());
+			} else {
+				notify(toActionError(error, COMMENT_FAILED_MESSAGE));
+			}
 		} finally {
 			isSubmittingComment = false;
 		}
@@ -1133,6 +1181,17 @@
 					</div>
 				</div>
 			</div>
+
+			<!-- The stamp lies over the postcard but outside the card, so it stays
+			     put while the card turns over. -->
+			{#if visibleFailure}
+				<InkStamp
+					label={visibleFailure.label}
+					message={visibleFailure.message}
+					onDismiss={() => (actionFailure = null)}
+					onRetry={retryFailedAction}
+				/>
+			{/if}
 
 			<!-- One notice for the whole dialog, outside the card so it neither
 			     changes face with the flip nor pushes the postcard around, and

@@ -563,13 +563,24 @@ describe('StudioDrawingPage', () => {
 		});
 	});
 
-	it('shows a retryable publish error without leaving the draw route', async () => {
+	it('stamps a drawing that did not make it to the wall, and publishes it again from the stamp', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
-		const publishDrawing = vi.fn(async () => ({
-			code: 'INVALID_MEDIA_CONTENT',
-			message: 'Artwork media must decode safely',
-			success: false as const
-		}));
+		const publishDrawing = vi
+			.fn()
+			.mockResolvedValueOnce({
+				code: 'PUBLISH_FAILED',
+				message: 'Artwork publish failed',
+				success: false as const
+			})
+			.mockResolvedValueOnce({
+				action: 'publish' as const,
+				artwork: {
+					id: 'artwork-retried',
+					mediaUrl: '/api/artworks/artwork-retried/media',
+					title: 'Second Try'
+				},
+				success: true as const
+			});
 
 		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
@@ -579,12 +590,22 @@ describe('StudioDrawingPage', () => {
 			user: { nickname: 'journey_artist' }
 		});
 		await openSketchbook();
-		await page.getByPlaceholder('Untitled genius').fill('Problem Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Second Try');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
-		await expect.element(page.getByText('Artwork media must decode safely')).toBeVisible();
-		await expect.element(page.getByText(/Artwork published as/)).not.toBeInTheDocument();
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not published' });
+		await expect
+			.element(stamp.getByText("Your drawing didn't make it to the wall. It's still here."))
+			.toBeVisible();
+		// The server's own wording stays in the logs.
+		await expect.element(page.getByText('Artwork publish failed')).not.toBeInTheDocument();
+
+		await page.getByRole('button', { name: 'Try again' }).click();
+
+		await expect.element(page.getByText('Artwork published as Second Try')).toBeVisible();
+		await expect.element(stamp).not.toBeInTheDocument();
+		expect(publishDrawing).toHaveBeenCalledTimes(2);
 	});
 
 	it('shows a local preparation error when the drawing payload cannot be created', async () => {
@@ -604,7 +625,12 @@ describe('StudioDrawingPage', () => {
 		await page.getByRole('button', { name: 'Publish' }).click();
 
 		await expect
-			.element(page.getByText('This browser could not prepare your drawing. Please try again.'))
+			.element(
+				page
+					.getByRole('alert')
+					.filter({ hasText: 'Not published' })
+					.getByText("Your browser couldn't get the drawing ready.")
+			)
 			.toBeVisible();
 		expect(checkTextContent).toHaveBeenCalledWith('Export Trouble', 'artwork_title');
 		expect(publishDrawing).not.toHaveBeenCalled();

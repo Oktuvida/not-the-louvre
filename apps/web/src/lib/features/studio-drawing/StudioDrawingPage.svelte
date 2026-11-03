@@ -29,6 +29,7 @@
 	import DrawingBookStage from '#lib/features/studio-drawing/components/DrawingBookStage.svelte';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import InkStamp from '#lib/features/shared-ui/components/InkStamp.svelte';
 	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
 	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
@@ -189,6 +190,8 @@
 	let titleInput = $state<HTMLInputElement | null>(null);
 	let isArtworkNsfw = $state(false);
 	let titleError = $state('');
+	/** Why the drawing did not reach the wall, stamped across it until it is published or put away. */
+	let publishFailure = $state<string | null>(null);
 	let isExitingToHome = $state(false);
 	let showExitFade = $state(false);
 	let forkContextHydrated = $state(false);
@@ -558,6 +561,8 @@
 		void goto(resolve('?from=studio'));
 	};
 
+	const PUBLISH_FAILED_MESSAGE = "Your drawing didn't make it to the wall. It's still here.";
+
 	/** The title note is where the cursor goes once it is marked in red pencil. */
 	const markTitle = async () => {
 		await tick();
@@ -580,6 +585,7 @@
 		statusMessage = '';
 		statusTone = 'idle';
 		titleError = '';
+		publishFailure = null;
 		isPublishing = true;
 
 		try {
@@ -594,8 +600,7 @@
 
 			const payload = await createArtworkPayload(drawingDocument);
 			if (!payload) {
-				statusMessage = 'This browser could not prepare your drawing. Please try again.';
-				statusTone = 'error';
+				publishFailure = "Your browser couldn't get the drawing ready.";
 				return;
 			}
 
@@ -634,11 +639,14 @@
 				return;
 			}
 
-			statusMessage = result.message;
-			statusTone = 'error';
-		} catch (error) {
-			statusMessage = error instanceof Error ? error.message : 'Artwork publish failed';
-			statusTone = 'error';
+			// A lockout says how long to wait in its own words; anything else (a
+			// 500, a drawing the server could not read) is the house sentence.
+			publishFailure =
+				'code' in result && result.code === 'RATE_LIMITED' && result.message
+					? result.message
+					: PUBLISH_FAILED_MESSAGE;
+		} catch {
+			publishFailure = PUBLISH_FAILED_MESSAGE;
 		} finally {
 			isPublishing = false;
 		}
@@ -851,7 +859,16 @@
 					onStrokeCommitted={handleStrokeCommitted}
 					{statusMessage}
 					{statusTone}
-				/>
+				>
+					{#if publishFailure}
+						<InkStamp
+							label="Not published"
+							message={publishFailure}
+							onDismiss={() => (publishFailure = null)}
+							onRetry={() => void publishArtwork()}
+						/>
+					{/if}
+				</DrawingCanvas>
 			</DrawingBookStage>
 		</div>
 

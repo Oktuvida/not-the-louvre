@@ -20,6 +20,7 @@
 	import { parseEditableDrawing } from '#lib/features/stroke-json/ink-document.js';
 	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import InkStamp from '#lib/features/shared-ui/components/InkStamp.svelte';
 	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
 	import PaperSheet from '#lib/features/shared-ui/components/PaperSheet.svelte';
 	import PostItNote from '#lib/features/shared-ui/components/PostItNote.svelte';
@@ -56,7 +57,8 @@
 	} = $props();
 
 	let adultContentPreferenceOverride = $state<boolean | null>(null);
-	let adultContentError = $state<string | null>(null);
+	/** The 18+ choice that did not save, stamped on its note until it is tried again or put away. */
+	let adultContentFailure = $state<boolean | null>(null);
 	let isSavingAdultContentPreference = $state(false);
 	let isAvatarEditorOpen = $state(false);
 
@@ -86,20 +88,18 @@
 	);
 
 	const updateAdultContentPreference = async (enabled: boolean) => {
-		if (!user || isSavingAdultContentPreference) {
-			adultContentError = 'Sign in to manage 18+ artwork visibility.';
-			return;
-		}
+		// Only an artist sees the button; a second press while one is saving waits.
+		if (!user || isSavingAdultContentPreference) return;
 
 		isSavingAdultContentPreference = true;
-		adultContentError = null;
+		adultContentFailure = null;
 
 		try {
 			await setAdultContentEnabled(enabled);
 			adultContentPreferenceOverride = enabled;
-		} catch (error) {
-			adultContentError =
-				error instanceof Error ? error.message : '18+ artwork preference could not be updated.';
+		} catch {
+			// What the visitor asked for, so Try again asks for it once more.
+			adultContentFailure = enabled;
 		} finally {
 			isSavingAdultContentPreference = false;
 		}
@@ -265,10 +265,16 @@
 						{:else}
 							<p class="text-xs font-semibold text-rust">Sign in to reveal 18+ artworks.</p>
 						{/if}
-						{#if adultContentError}
-							<p class="mt-2 text-xs font-semibold text-rust">{adultContentError}</p>
-						{/if}
 					</PostItNote>
+					{#if adultContentFailure !== null}
+						{@const wanted = adultContentFailure}
+						<InkStamp
+							label="Not saved"
+							message="Your 18+ setting didn't save."
+							onDismiss={() => (adultContentFailure = null)}
+							onRetry={() => void updateAdultContentPreference(wanted)}
+						/>
+					{/if}
 				</div>
 			{/if}
 		</div>

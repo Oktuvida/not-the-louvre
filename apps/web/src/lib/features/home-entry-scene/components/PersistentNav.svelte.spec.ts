@@ -1,5 +1,5 @@
-import { page } from 'vitest/browser';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { page, userEvent } from 'vitest/browser';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
 	DRAWING_DOCUMENT_V2_VERSION,
@@ -134,6 +134,47 @@ describe('PersistentNav', () => {
 		await expect.element(page.getByText('Sensitive preview', { exact: true })).toBeInTheDocument();
 		await expect.element(page.getByText('18+ artworks', { exact: true })).toBeInTheDocument();
 		await expect.element(page.getByText('Sign in to reveal 18+ artworks.')).toBeInTheDocument();
+	});
+
+	it('stamps the 18+ note when the choice did not save, and saves it again from the stamp', async () => {
+		// The best pieces and their 18+ note hang on a landscape screen only.
+		await page.viewport(1280, 800);
+		onTestFinished(() => page.viewport(414, 896));
+		// Without the front door's own layout around it, the nav's stickers
+		// overlap the note here, so this visitor goes by keyboard.
+		const press = async (name: string) => {
+			(page.getByRole('button', { name }).element() as HTMLElement).focus();
+			await userEvent.keyboard('{Enter}');
+		};
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 500 }))
+			.mockResolvedValueOnce(new Response(JSON.stringify({ adultContentEnabled: true })));
+		vi.stubGlobal('fetch', fetchSpy);
+
+		await render(PersistentNav, {
+			adultContentEnabled: false,
+			previewCards: [{ ...topArtworks[0], isNsfw: true, title: 'Adults only study' }],
+			user: {
+				authUserId: 'auth-user-1',
+				email: 'artist_1@not-the-louvre.local',
+				id: 'product-user-1',
+				nickname: 'artist_1',
+				role: 'user'
+			}
+		});
+
+		await press('Reveal 18+ artworks');
+
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not saved' });
+		await expect.element(stamp.getByText("Your 18+ setting didn't save.")).toBeVisible();
+
+		await press('Try again');
+
+		await expect.element(stamp).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Hide 18+ artworks' })).toBeVisible();
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		vi.unstubAllGlobals();
 	});
 
 	it('decodes the above-the-fold preview imagery without deferring it', async () => {
