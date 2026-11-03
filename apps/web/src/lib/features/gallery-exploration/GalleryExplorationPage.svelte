@@ -931,6 +931,7 @@
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
 			seedIsRemembered={isSeedRemembered}
+			serverRendered={!roomContent}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}
@@ -944,6 +945,7 @@
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
 			seedIsRemembered={isSeedRemembered}
+			serverRendered={!roomContent}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}
@@ -970,6 +972,7 @@
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
 			seedIsRemembered={isSeedRemembered}
+			serverRendered={!roomContent}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}

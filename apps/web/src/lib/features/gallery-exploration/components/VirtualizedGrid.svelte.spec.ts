@@ -36,6 +36,29 @@ describe('VirtualizedGrid', () => {
 		});
 	});
 
+	// A room walked into in the browser has no server-drawn grid to hand over
+	// from. Drawing the whole feed in the plain grid only to measure it, and
+	// then building it all again in the virtual one, doubled the cost of the
+	// room's first frame.
+	it('walked into in the browser, builds only the cards its rows need', async () => {
+		let cardsBuilt = 0;
+		await render(VirtualizedGridHarness, {
+			items: createArtworks(300, 'walk'),
+			onCardBuilt: () => {
+				cardsBuilt += 1;
+			},
+			serverRendered: false
+		});
+		await expect.element(page.getByTestId('grid-card-walk1')).toBeVisible();
+
+		const cardsInRows = document.querySelectorAll(
+			'[data-testid="virtualized-row"] [data-testid^="grid-card-"]'
+		).length;
+		// The rows on screen and in the buffer, and a row of the plain grid to
+		// measure them by.
+		expect(cardsBuilt).toBeLessThanOrEqual(cardsInRows + 6);
+	});
+
 	it('row wrappers do not clip overflow so hover animations are visible', async () => {
 		await render(VirtualizedGridHarness, { items: createArtworks(4, 'b') });
 

@@ -18,6 +18,8 @@
 		feedCacheKey?: GalleryRoomId | null;
 		/** The seed is the one this room was left with, until the server's fresh page lands. */
 		seedIsRemembered?: boolean;
+		/** The room came drawn by the server, with the page, rather than built in the browser. */
+		serverRendered?: boolean;
 		loadMoreArtworks?: LoadMoreArtworks;
 		onPrefetch?: (artworkId: string) => void;
 		onSelect: (artwork: Artwork) => void;
@@ -30,6 +32,7 @@
 		adultContentEnabled = false,
 		feedCacheKey = null,
 		seedIsRemembered = false,
+		serverRendered = true,
 		loadMoreArtworks,
 		onPrefetch,
 		onSelect,
@@ -56,6 +59,7 @@
 		bind:this={grid}
 		items={accumulator.allArtworks}
 		restoredLayout={accumulator.restoredLayout}
+		{serverRendered}
 	>
 		{#snippet renderCard(artwork)}
 			<div data-testid={`virtualized-artwork-card-${artwork.id}`}>
