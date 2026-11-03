@@ -626,7 +626,13 @@ describe('StudioDrawingPage', () => {
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
-		await expect.element(page.getByText('Title is required before publishing')).toBeVisible();
+		// Marked on the title note in red pencil, and the cursor is put there.
+		const titleField = page.getByRole('textbox', { name: 'Title your masterpiece' });
+		await expect.element(titleField).toHaveAttribute('aria-invalid', 'true');
+		await expect
+			.element(titleField)
+			.toHaveAccessibleDescription('Give it a title before you publish.');
+		await expect.element(titleField).toHaveFocus();
 		expect(checkTextContent).not.toHaveBeenCalled();
 		expect(publishDrawing).not.toHaveBeenCalled();
 	});

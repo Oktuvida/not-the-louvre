@@ -20,7 +20,7 @@ test.describe('sign-in lockout', () => {
 		await page.getByPlaceholder('artist_123').fill('nobody_here');
 		await page.getByPlaceholder('Enter your password').fill('not-the-password');
 		const signIn = page.getByRole('button', { name: /^sign in$/i });
-		const wrong = page.getByText('Invalid nickname or password');
+		const wrong = page.getByText("That nickname and password don't match.");
 
 		// Every wrong guess says so, the second as clearly as the first: the same
 		// answer twice is still an answer.

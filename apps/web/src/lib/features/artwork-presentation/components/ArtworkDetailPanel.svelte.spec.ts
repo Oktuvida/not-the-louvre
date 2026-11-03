@@ -252,9 +252,36 @@ describe('ArtworkDetailPanel', () => {
 		await page.getByPlaceholder('Write on the back…').fill('blocked text');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 
-		await expect.element(page.getByText('This comment breaks the gallery rules.')).toBeVisible();
+		// The reason is pencilled under the line the comment was written on.
+		const commentField = page.getByPlaceholder('Write on the back…');
+		await expect.element(commentField).toHaveAttribute('aria-invalid', 'true');
+		await expect
+			.element(commentField)
+			.toHaveAccessibleDescription('This comment breaks the gallery rules.');
 		expect(fetchSpy).not.toHaveBeenCalled();
 		expect(onArtworkChange).not.toHaveBeenCalled();
+	});
+
+	it('asks for words before an empty comment goes in the book', async () => {
+		const fetchSpy = vi.fn();
+		vi.stubGlobal('fetch', fetchSpy);
+		const onNotify = vi.fn();
+
+		await render(ArtworkDetailPanel, {
+			artwork,
+			onNotify,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await openCommentsSide();
+		await page.getByRole('button', { name: 'Send comment' }).click();
+
+		const commentField = page.getByPlaceholder('Write on the back…');
+		await expect.element(commentField).toHaveAccessibleDescription('Write something first.');
+		await expect.element(commentField).toHaveFocus();
+		// It is the field's own note, not a message for the gallery to carry.
+		expect(onNotify).not.toHaveBeenCalledWith('Write something first.');
+		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
 	it('blocks comment submission when the text filter is unavailable', async () => {

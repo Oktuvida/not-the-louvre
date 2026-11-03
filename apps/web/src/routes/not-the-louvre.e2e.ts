@@ -553,7 +553,11 @@ test.describe('Not the Louvre frontend port', () => {
 		await page.getByPlaceholder('artist_123').fill(deterministicAuthUser.nickname);
 		await page.getByPlaceholder('Enter your password').fill(deterministicAuthUser.password);
 		await page.getByRole('button', { name: 'Sign In' }).last().click();
-		await expect(page.getByText('Invalid nickname or password')).toBeVisible();
+		// The old password no longer opens the account, and the sheet says so on
+		// the password itself.
+		await expect(page.getByPlaceholder('Enter your password')).toHaveAccessibleDescription(
+			/That nickname and password don't match/
+		);
 
 		await page
 			.getByPlaceholder('Enter your password')

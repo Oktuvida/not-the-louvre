@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { tick } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import {
@@ -24,6 +25,7 @@
 	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
 	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
 	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import TimelapsePlayer from '#lib/features/timelapse/TimelapsePlayer.svelte';
 	import { decodeDrawingV3, type InkDocument } from '#lib/stroke/v3.js';
@@ -109,6 +111,8 @@
 	} = $props();
 
 	let commentBody = $state('');
+	/** Why the comment on the line was not taken, pencilled under it. */
+	let commentError = $state('');
 	let actionError = $state<string | null>(null);
 	let avatarPreviewArtworkId = $state<string | null>(null);
 	let isUpdatingAdultContentPreference = $state(false);
@@ -541,21 +545,30 @@
 		}
 	};
 
+	/* What is wrong with the comment itself belongs to its line, not to the
+	 * gallery's notices: the cursor goes back there to fix it. */
+	const markComment = async (message: string) => {
+		commentError = message;
+		await tick();
+		commentInput?.focus();
+	};
+
 	const submitComment = async () => {
 		if (!artwork || isSubmittingComment) return;
 
 		notify(null);
+		commentError = '';
 		if (!requireViewer()) return;
 
 		const body = commentBody.trim();
 		if (!body) {
-			notify('Comment cannot be empty.');
+			void markComment('Write something first.');
 			return;
 		}
 
 		const moderationResult = await checkTextContent(body, 'comment');
 		if (moderationResult.status !== 'allowed') {
-			notify(moderationResult.message);
+			void markComment(moderationResult.message);
 			return;
 		}
 
@@ -592,6 +605,10 @@
 			commentBody = '';
 			commentInput?.focus();
 		} catch (error) {
+			if (error instanceof ApiError && error.code === 'INVALID_COMMENT') {
+				void markComment(error.message);
+				return;
+			}
 			notify(toActionError(error, COMMENT_FAILED_MESSAGE));
 		} finally {
 			isSubmittingComment = false;
@@ -1059,6 +1076,8 @@
 											<input
 												bind:this={commentInput}
 												bind:value={commentBody}
+												aria-describedby={commentError ? 'artwork-comment-note' : undefined}
+												aria-invalid={commentError ? 'true' : undefined}
 												id="artwork-comment-body"
 												name="commentBody"
 												type="text"
@@ -1076,6 +1095,11 @@
 										>
 											Send
 										</GameButton>
+										{#if commentError}
+											<div class="guestbook-note">
+												<PencilNote id="artwork-comment-note" message={commentError} />
+											</div>
+										{/if}
 									</form>
 								{/if}
 
@@ -1939,9 +1963,16 @@
 	.guestbook-form {
 		grid-area: form;
 		display: flex;
+		flex-wrap: wrap;
 		align-items: flex-end;
 		gap: 8px;
 		margin-top: 8px;
+	}
+
+	/* The pencil note runs under the line the comment was written on. */
+	.guestbook-note {
+		flex-basis: 100%;
+		margin-top: -6px;
 	}
 
 	/* writing directly on the card, not a UI pill */
