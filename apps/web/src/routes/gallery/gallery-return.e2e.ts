@@ -4,13 +4,8 @@ import { resetDemoState } from '../demo/e2e-helpers';
 // Pinterest's promise: wherever you wander off to, coming back puts you on
 // the same artwork you were looking at.
 
-// The room the visitor is in. One they just left stays on screen for its
-// 225ms slide, inert; a quick return puts a new copy of it beside that one.
-const inTheRoom = (page: Page) =>
-	page.locator('[data-testid="gallery-room-content"]:not([inert] *)');
-
 const scrollUntilVisible = async (page: Page, title: RegExp) => {
-	const card = inTheRoom(page).getByRole('button', { name: title });
+	const card = page.getByRole('button', { name: title });
 	await expect(async () => {
 		await page.mouse.wheel(0, 400);
 		await expect(card).toBeInViewport({ timeout: 500 });
@@ -78,7 +73,7 @@ test.describe('finding your place again', () => {
 		await page.getByRole('link', { name: /The Hot Wall/ }).click();
 
 		await expect(page).toHaveURL(/\/gallery\/hot-wall$/);
-		await expect(inTheRoom(page).getByRole('button', { name: /Hottest right now/ })).toBeVisible();
+		await expect(page.getByRole('button', { name: /Hottest right now/ })).toBeVisible();
 		expect(
 			await page.evaluate(
 				() => (window as unknown as { __roomReturn: { skeleton: boolean } }).__roomReturn.skeleton

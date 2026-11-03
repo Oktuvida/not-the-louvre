@@ -1,0 +1,62 @@
+/*
+ * The slide between gallery rooms, run as a view transition (the gallery
+ * layout starts it). The browser moves a picture of the room being left, and
+ * starts the slide only once the next room has been drawn: building that
+ * room inside the slide used to eat its first frames in Safari, so the
+ * rooms jumped instead of sliding.
+ *
+ * Only the room stage is named, and only while a slide runs, so nothing else
+ * on the page takes part: the header, the wall and the room's light stay put.
+ */
+
+html[data-room-slide] .room-stage {
+	view-transition-name: gallery-room;
+}
+
+html[data-room-slide]::view-transition-old(root),
+html[data-room-slide]::view-transition-new(root) {
+	animation: none;
+}
+
+/* Two rooms, not one room changing shape: nothing morphs between them. */
+html[data-room-slide]::view-transition-group(gallery-room) {
+	animation: none;
+}
+
+/* Laid over each other as the rooms always were, not lightened together. */
+html[data-room-slide]::view-transition-old(gallery-room),
+html[data-room-slide]::view-transition-new(gallery-room) {
+	mix-blend-mode: normal;
+}
+
+/* The next room comes in from the side its tab is on, 300px out, and the
+ * room being left goes the other way, in three quarters of the time. */
+html[data-room-slide='next'] {
+	--room-slide-from: 300px;
+}
+
+html[data-room-slide='previous'] {
+	--room-slide-from: -300px;
+}
+
+html[data-room-slide]::view-transition-new(gallery-room) {
+	animation: gallery-room-arrive 300ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+html[data-room-slide]::view-transition-old(gallery-room) {
+	animation: gallery-room-leave 225ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+@keyframes gallery-room-arrive {
+	from {
+		opacity: 0;
+		transform: translateX(var(--room-slide-from));
+	}
+}
+
+@keyframes gallery-room-leave {
+	to {
+		opacity: 0;
+		transform: translateX(calc(-1 * var(--room-slide-from)));
+	}
+}

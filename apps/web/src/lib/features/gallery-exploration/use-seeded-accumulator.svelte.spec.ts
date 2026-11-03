@@ -67,9 +67,8 @@ describe('createSeededAccumulator feed memory', () => {
 
 		stubScrollY(5200);
 		// The room tab is a push navigation: SvelteKit scrolls the window back to
-		// the top two ticks after the DOM update, while the room itself is only
-		// destroyed once the layout's keyed out-transition has played. The offset
-		// has to be captured here, before either of those.
+		// the top as it lands, and the room is destroyed only once the next one
+		// has replaced it. The offset has to be captured here, before either.
 		navigate();
 		stubScrollY(0);
 

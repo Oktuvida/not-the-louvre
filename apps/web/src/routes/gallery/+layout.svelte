@@ -1,13 +1,15 @@
 <script lang="ts">
+	import { onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
-	import { fly } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { createGalleryLayoutContext } from '#lib/features/gallery-exploration/gallery-layout-context.js';
 	import {
 		galleryRoomIds,
+		roomIdForPath,
 		type GalleryRoomId
 	} from '#lib/features/gallery-exploration/model/rooms.js';
 	import GalleryLayoutFrame from '#lib/features/gallery-exploration/GalleryLayoutFrame.svelte';
+	import './room-slide.css';
 
 	let { children } = $props();
 	const roomId = $derived(page.data.roomId as GalleryRoomId);
@@ -15,35 +17,41 @@
 	const awardStyle = $derived(page.data.awardStyle);
 
 	const galleryLayout = createGalleryLayoutContext();
-	const previousRoomId = galleryLayout.previousRoomId;
 
-	let previousRoomIndex = $state(-1);
+	/*
+	 * Moving between rooms slides the next one in, as a view transition
+	 * (room-slide.css). The browser holds a picture of the room being left
+	 * until the next one has been drawn, then slides the two.
+	 */
+	onNavigate((navigation) => {
+		const from = navigation.from ? roomIdForPath(navigation.from.url.pathname) : null;
+		const to = navigation.to ? roomIdForPath(navigation.to.url.pathname) : null;
+		if (!from || !to || from === to) return;
+		if (!document.startViewTransition || prefersReducedMotion.current) return;
 
-	$effect.pre(() => {
-		const prevId = $previousRoomId;
-		const prevIndex = prevId ? galleryRoomIds.indexOf(prevId as GalleryRoomId) : -1;
-		previousRoomIndex = prevIndex;
-		$previousRoomId = roomId;
-	});
+		const root = document.documentElement;
+		root.dataset.roomSlide =
+			galleryRoomIds.indexOf(to) > galleryRoomIds.indexOf(from) ? 'next' : 'previous';
 
-	const slideDirection = $derived.by(() => {
-		if (previousRoomIndex === -1) return 0;
-		const currentIndex = galleryRoomIds.indexOf(roomId);
-		return currentIndex > previousRoomIndex ? 1 : currentIndex < previousRoomIndex ? -1 : 0;
-	});
-
-	const slideDuration = $derived.by(() => {
-		if (slideDirection === 0 || prefersReducedMotion.current) return 0;
-		return 300;
+		return new Promise<void>((resolve) => {
+			const slide = document.startViewTransition(async () => {
+				resolve();
+				await navigation.complete;
+			});
+			const settle = () => {
+				delete root.dataset.roomSlide;
+			};
+			// A navigation that fails or is cancelled skips the slide.
+			void slide.ready.catch(() => {});
+			void slide.finished.then(settle, settle);
+		});
 	});
 
 	/*
-	 * Every arrival puts a new room on the stage, a return to the room still
-	 * sliding off it included: the copy on its way out keeps going, and the one
-	 * coming in is built from the route and the gallery's memory of the room.
-	 * Keyed on the room id alone, Svelte would pull the outgoing copy back
-	 * instead, holding the stream it was handed as it left and treating the
-	 * return as a refresh, so the room would drop to its loading skeleton.
+	 * Every arrival puts a new room on the stage, a return to the room just
+	 * left included, built from the route and the gallery's memory of the
+	 * room. Keyed on the room id alone, Svelte would bring the copy it had
+	 * just let go back instead.
 	 */
 	const arrival = $derived({ roomId });
 </script>
@@ -51,26 +59,9 @@
 <GalleryLayoutFrame {awardStyle} {roomId} {viewer} context={galleryLayout}>
 	<div class="room-stage">
 		{#key arrival}
-			<div
-				class="room-stage-item relative overflow-visible"
-				in:fly={{ x: slideDirection * 300, duration: slideDuration }}
-				out:fly={{ x: slideDirection * -300, duration: Math.round(slideDuration * 0.75) }}
-			>
+			<div class="room-stage-item relative">
 				{@render children()}
 			</div>
 		{/key}
 	</div>
 </GalleryLayoutFrame>
-
-<style>
-	/* Stack outgoing and incoming rooms in the same cell so the crossfade
-	 * slides overlap instead of pushing the page height around. */
-	.room-stage {
-		display: grid;
-	}
-
-	.room-stage > :global(.room-stage-item) {
-		grid-area: 1 / 1;
-		min-width: 0;
-	}
-</style>
