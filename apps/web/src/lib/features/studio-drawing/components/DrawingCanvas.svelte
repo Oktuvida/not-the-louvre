@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { onMount, untrack, type Snippet } from 'svelte';
 	import { on } from 'svelte/events';
 	import {
 		DEFAULT_DRAWING_DOCUMENT_LIMITS,
@@ -46,6 +46,7 @@
 	let {
 		backdrop = null,
 		canvasRef = $bindable<HTMLCanvasElement | null>(null),
+		children,
 		drawingDocument = $bindable<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork')),
 		clearVersion = 0,
 		decorate,
@@ -67,6 +68,8 @@
 		/** The image a fork is drawn over: its parent's, by URL. */
 		backdrop?: string | null;
 		canvasRef?: HTMLCanvasElement | null;
+		/** Laid over the drawing, covering it: the stamp on a drawing that did not publish. */
+		children?: Snippet;
 		drawingDocument?: DrawingDocumentV2;
 		clearVersion?: number;
 		decorate?: InkSurfaceOptions['decorate'];
@@ -812,6 +815,8 @@
 			{statusMessage}
 		</div>
 	{/if}
+
+	{@render children?.()}
 </div>
 
 <style>

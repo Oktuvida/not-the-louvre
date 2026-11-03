@@ -615,15 +615,18 @@ describe('AvatarSketchpad', () => {
 		});
 	});
 
-	it('shows a retryable save error and stays in the avatar step when persistence fails', async () => {
+	it('stamps a portrait that did not save, keeps it on the easel, and saves it again from the stamp', async () => {
 		const onContinue = vi.fn();
 		const createAvatarPayload = vi.fn(async () =>
 			serializeDrawingDocument(createEmptyDrawingDocument('avatar'))
 		);
-		const saveAvatar = vi.fn(async () => ({
-			message: 'Avatar save requires an avatar drawing document',
-			success: false as const
-		}));
+		const saveAvatar = vi
+			.fn()
+			.mockResolvedValueOnce({
+				message: 'Avatar save requires an avatar drawing document',
+				success: false as const
+			})
+			.mockResolvedValueOnce({ avatarUrl: '/api/users/artist-1/avatar', success: true as const });
 
 		await render(AvatarSketchpad, {
 			createAvatarPayload,
@@ -634,10 +637,19 @@ describe('AvatarSketchpad', () => {
 
 		await enterGalleryButton().click();
 
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not saved' });
+		await expect
+			.element(stamp.getByText("Your portrait didn't save. It's still on the easel."))
+			.toBeVisible();
 		await expect
 			.element(page.getByText('Avatar save requires an avatar drawing document'))
-			.toBeVisible();
+			.not.toBeInTheDocument();
 		expect(onContinue).not.toHaveBeenCalled();
+
+		await page.getByRole('button', { name: 'Try again' }).click();
+
+		await vi.waitFor(() => expect(onContinue).toHaveBeenCalledOnce());
+		expect(saveAvatar).toHaveBeenCalledTimes(2);
 	});
 
 	it('surfaces an unsupported payload error when the browser cannot create a valid avatar payload', async () => {
@@ -656,7 +668,12 @@ describe('AvatarSketchpad', () => {
 		await enterGalleryButton().click();
 
 		await expect
-			.element(page.getByText('This browser could not prepare your avatar. Please try again.'))
+			.element(
+				page
+					.getByRole('alert')
+					.filter({ hasText: 'Not saved' })
+					.getByText("Your browser couldn't get the portrait ready.")
+			)
 			.toBeVisible();
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
 			'Failed to create avatar payload',
@@ -687,7 +704,12 @@ describe('AvatarSketchpad', () => {
 		await enterGalleryButton().click();
 
 		await expect
-			.element(page.getByText('This browser could not prepare your avatar. Please try again.'))
+			.element(
+				page
+					.getByRole('alert')
+					.filter({ hasText: 'Not saved' })
+					.getByText("Your browser couldn't get the portrait ready.")
+			)
 			.toBeVisible();
 		expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to create avatar payload', payloadError);
 		expect(saveAvatar).not.toHaveBeenCalled();

@@ -481,7 +481,7 @@ test.describe('Not the Louvre frontend port', () => {
 		expect(getRenderableDrawingStrokes(published)).toHaveLength(3);
 	});
 
-	test('avatar save failure stays in onboarding and retry can complete the flow', async ({
+	test('avatar save failure is stamped on the easel and retried from the stamp', async ({
 		page
 	}) => {
 		await enableReducedMotion(page);
@@ -510,10 +510,16 @@ test.describe('Not the Louvre frontend port', () => {
 			}
 		);
 		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
-		await expect(page.getByText('Avatar save requires an avatar drawing document')).toBeVisible();
+		// The portrait is stamped on the easel, in the house voice; the server's
+		// reason stays out of it.
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not saved' });
+		await expect(
+			stamp.getByText("Your portrait didn't save. It's still on the easel.")
+		).toBeVisible();
+		await expect(page.getByText('Avatar save requires an avatar drawing document')).toHaveCount(0);
 		await expect(page.getByText('Finish your avatar')).toBeVisible();
 
-		await page.locator('button').filter({ hasText: 'Enter the gallery' }).click();
+		await stamp.getByRole('button', { name: 'Try again' }).click();
 		await expectSignedInHomeChrome(page, deterministicAuthUser.nickname);
 		await expect(page.getByRole('button', { name: 'Studio' })).toBeVisible();
 	});
@@ -791,7 +797,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(page.getByText('Sunset Over Mountains')).not.toBeVisible();
 	});
 
-	test('a publish the server turns down keeps the drawing on the page and can be retried', async ({
+	test('a publish the server turns down is stamped on the drawing and retried from the stamp', async ({
 		page
 	}) => {
 		await page.goto('/demo/better-auth/login');
@@ -820,11 +826,15 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.getByPlaceholder('Untitled genius').fill('Retry Piece');
 		await page.getByRole('button', { name: 'Publish' }).click();
-		await expect(page.getByText('The wall is busy, try again')).toBeVisible();
+		// The drawing is stamped where it lies, in the house voice.
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not published' });
+		await expect(stamp.getByText("Your drawing didn't make it to the wall.")).toBeVisible();
+		await expect(page.getByText('The wall is busy, try again')).toHaveCount(0);
 		await expect(page).toHaveURL(/\/draw$/);
 
-		await page.getByRole('button', { name: 'Publish' }).click();
+		await stamp.getByRole('button', { name: 'Try again' }).click();
 		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+		await expect(stamp).toHaveCount(0);
 	});
 
 	test('gallery detail can fork into the draw studio with the parent artwork preloaded', async ({
