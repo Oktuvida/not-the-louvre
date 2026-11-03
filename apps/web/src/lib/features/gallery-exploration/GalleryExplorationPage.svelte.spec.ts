@@ -1056,7 +1056,7 @@ describe('GalleryExplorationPage', () => {
 		// Error message and retry button should be visible
 		await expect.element(page.getByTestId('scroll-sentinel-error')).toBeVisible();
 		await expect.element(page.getByText('Gallery discovery could not be loaded')).toBeVisible();
-		await expect.element(page.getByRole('button', { name: /retry/i })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 
 		// Click retry — should call loadMoreArtworks again
 		loadMoreArtworks.mockResolvedValueOnce({
@@ -1064,7 +1064,7 @@ describe('GalleryExplorationPage', () => {
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
 
-		await page.getByRole('button', { name: /retry/i }).click();
+		await page.getByRole('button', { name: 'Try again' }).click();
 
 		await vi.waitFor(
 			() => {
@@ -1274,7 +1274,7 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByTestId('scroll-sentinel-error')).toBeVisible();
 		await expect.element(page.getByText('Gallery discovery could not be loaded')).toBeVisible();
-		await expect.element(page.getByRole('button', { name: /retry/i })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 	});
 
 	it('blurs nsfw artworks until the viewer enables 18+ content', async () => {
@@ -1957,7 +1957,7 @@ describe('GalleryExplorationPage', () => {
 
 		await expect.element(page.getByTestId('gallery-room-error')).toBeVisible();
 		// Chalked on an easel by the door, the way a museum closes a room.
-		await expect.element(page.getByText('Closed for re-hanging')).toBeVisible();
+		await expect.element(page.getByText('This room is still being hung.')).toBeVisible();
 		// Not the themed "nothing is heating up" panel, which would tell the
 		// visitor the product is empty rather than broken.
 		expect(document.querySelector('[data-testid="hot-wall-empty"]')).toBeNull();

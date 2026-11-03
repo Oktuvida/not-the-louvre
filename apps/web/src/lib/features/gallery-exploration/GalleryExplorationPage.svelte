@@ -60,7 +60,8 @@
 
 	const LOCAL_GALLERY_DETAIL_SOURCE = 'local-room-selection' as const;
 
-	const ROOM_LOAD_ERROR_MESSAGE = 'The gallery could not load right now — refresh to try again.';
+	// Chalked under "This room is still being hung." on the easel.
+	const ROOM_LOAD_ERROR_MESSAGE = 'Give it a moment, then try again.';
 
 	const ROOM_REFRESH_ERROR_MESSAGE =
 		"Couldn't check this room for new pieces. What's up may be a little old.";
@@ -71,7 +72,7 @@
 	 * explaining itself to a visitor (a rate limit, a rejected cursor) and keeps
 	 * these strings for a 500, a proxy's HTML page or a dropped connection.
 	 */
-	const GALLERY_DISCOVERY_ERROR_MESSAGE = 'Gallery discovery could not be loaded';
+	const GALLERY_DISCOVERY_ERROR_MESSAGE = 'Give it a moment, then try again.';
 	const ARTWORK_DETAIL_ERROR_MESSAGE = "Couldn't open that one. Tap it again?";
 	const GALLERY_REFRESH_ERROR_MESSAGE =
 		"Couldn't check for new pieces just now. Try again in a moment.";
@@ -926,7 +927,7 @@
 	<!-- `role="alert"` on the failure, never on the skeleton: a room that failed
 	     to load is the one room event worth interrupting a reader for. -->
 	<div class="py-6" data-testid="gallery-room-error" role="alert">
-		<ChalkEasel title="Closed for re-hanging" {message}>
+		<ChalkEasel title="This room is still being hung." {message}>
 			<GameButton
 				variant="secondary"
 				size="sm"
