@@ -30,7 +30,8 @@ export type Renderer = {
 	/** `backdrop`: the image a fork was drawn on, which its strokes go over. */
 	renderArtwork(document: DrawingDocument, backdrop?: Uint8Array): Promise<RenderOutcome>;
 	renderAvatar(document: DrawingDocument): Promise<RenderOutcome>;
-	renderFavicon(avatar: Uint8Array): Promise<Uint8Array>;
+	/** `size`: the icon's side in pixels; the linked favicon's by default. */
+	renderFavicon(avatar: Uint8Array, size?: number): Promise<Uint8Array>;
 };
 
 const outcomeOf = async (render: () => Promise<SanitizedMedia>): Promise<RenderOutcome> => {
@@ -58,5 +59,5 @@ export const inProcessRenderer: Renderer = {
 	renderArtwork: (document, backdrop) =>
 		outcomeOf(() => createArtworkDrawingDocumentMedia(document, { backdrop })),
 	renderAvatar: (document) => outcomeOf(() => createAvatarDrawingDocumentMedia(document)),
-	renderFavicon: async (avatar) => new Uint8Array(await renderAvatarFaviconPng(avatar))
+	renderFavicon: async (avatar, size) => new Uint8Array(await renderAvatarFaviconPng(avatar, size))
 };
