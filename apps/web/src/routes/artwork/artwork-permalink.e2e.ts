@@ -58,7 +58,7 @@ test.describe('artwork permalinks', () => {
 		const score = (value: number) =>
 			page
 				.getByRole('dialog', { name: /Artwork details for Live Piece/ })
-				.getByText(new RegExp(`⭐\\s*${value}$`))
+				.getByText(new RegExp(`★\\s*${value}$`))
 				.filter({ visible: true })
 				.first();
 		await expect(score(0)).toBeVisible();

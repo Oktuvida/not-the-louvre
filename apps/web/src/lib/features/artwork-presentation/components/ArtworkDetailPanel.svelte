@@ -2,7 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { fade, scale } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import { Clapperboard, Download, GitFork } from 'lucide-svelte';
+	import { Clapperboard, Download, GitFork, MessageCircle, PenLine } from 'lucide-svelte';
+	import '@fontsource/special-elite/latin-400.css';
 	import { ApiError, requestJson } from '#lib/client/api.js';
 	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 	import ArtworkSafetyActions from '#lib/features/artwork-presentation/components/ArtworkSafetyActions.svelte';
@@ -21,6 +22,7 @@
 	import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
 	import type { Viewer } from '#lib/shared/viewer.js';
 	import AwardMark from '#lib/features/shared-ui/components/AwardMark.svelte';
+	import { hashString } from '#lib/features/artwork-presentation/model/frame.js';
 	import type { AwardStyle } from '#lib/features/shared-ui/award-style.js';
 
 	/* The visitor never reads a stack trace. Codes whose server message is
@@ -164,9 +166,18 @@
 		const date = new Date(artwork.timestamp);
 		return {
 			day: `${MONTH_STAMPS[date.getMonth()]} ${date.getDate()}`,
+			hung: `${date.getDate()} ${MONTH_STAMPS[date.getMonth()]} ${date.getFullYear()}`,
 			year: `${date.getFullYear()}`
 		};
 	});
+	/** The piece's number in the museum's catalogue, the same every time it is opened. */
+	const catalogueNumber = $derived(
+		artwork ? String(hashString(artwork.id) % 10000).padStart(4, '0') : ''
+	);
+	/* Each visitor signs the book in their own pen: blue-black, sepia, black,
+	 * green-black or oxblood, kept by their name. */
+	const GUESTBOOK_INKS = ['#2c4a7a', '#6b4423', '#2a2622', '#3d5e46', '#6a2f3f'];
+	const inkFor = (author: string) => GUESTBOOK_INKS[hashString(author) % GUESTBOOK_INKS.length];
 	const artworkDate = $derived(
 		artwork
 			? new Date(artwork.timestamp).toLocaleDateString('en-US', {
@@ -847,7 +858,8 @@
 									aria-label="Read the comments"
 									onclick={toggleFlip}
 								>
-									💬 <span class="flip-tape-count"
+									<MessageCircle class="flip-tape-icon" aria-hidden="true" />
+									<span class="flip-tape-count"
 										>{artwork.commentCount ?? artwork.comments.length}</span
 									>
 									comments
@@ -880,15 +892,15 @@
 							</header>
 
 							<div class="postcard-back-grid">
-								<!-- Correspondence: the visitor's book -->
-								<div class="flex min-h-0 flex-col">
+								<!-- Correspondence: the visitor's book, each visitor in their own ink -->
+								<div class="guestbook">
 									<p class="guestbook-label">Visitor's Book</p>
 									{#if artwork.comments.length > 0}
 										<div
 											class="guestbook-pages min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
 										>
 											{#each artwork.comments as comment (comment.id)}
-												<p class="guestbook-entry">
+												<p class="guestbook-entry" style={`--entry-ink: ${inkFor(comment.author)}`}>
 													{comment.text}
 													<span class="guestbook-author">— {comment.author}</span>
 												</p>
@@ -901,7 +913,7 @@
 											aria-hidden="true"
 										>
 											{#each [0, 1, 2] as index (index)}
-												<div class="flex h-[26px] items-center">
+												<div class="flex h-[30px] items-center">
 													<div
 														class="h-3 animate-pulse rounded-full bg-[#e3d5bd]"
 														style={`width: ${[78, 58, 66][index]}%;`}
@@ -910,79 +922,60 @@
 											{/each}
 										</div>
 									{:else}
-										<div class="guestbook-pages flex min-h-0 flex-1 items-start">
-											<p class="guestbook-entry guestbook-empty">
-												The visitor's book is empty — be the first to sign it.
-											</p>
+										<div class="guestbook-pages guestbook-blank min-h-0 flex-1">
+											<p class="guestbook-prompt">Nobody has written on the back yet.</p>
+											<p class="guestbook-prompt">Be the first.</p>
+											{#if viewer}
+												<svg
+													class="guestbook-prompt-arrow"
+													viewBox="0 0 60 120"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+												>
+													<path d="M10 4 C 44 26, 52 70, 22 112"></path>
+													<path d="M14 101 22 112l11-6"></path>
+												</svg>
+											{/if}
 										</div>
-									{/if}
-									{#if viewer}
-										<form
-											class="mt-2 flex shrink-0 items-end gap-2"
-											onsubmit={(event) => {
-												event.preventDefault();
-												submitComment();
-											}}
-										>
-											<input
-												bind:this={commentInput}
-												bind:value={commentBody}
-												id="artwork-comment-body"
-												name="commentBody"
-												type="text"
-												placeholder="Write a comment"
-												class="guestbook-input"
-											/>
-											<GameButton
-												type="submit"
-												variant="accent"
-												size="sm"
-												className="guestbook-send"
-												disabled={isSubmittingComment}
-												ariaLabel="Send comment"
-											>
-												Send
-											</GameButton>
-										</form>
 									{/if}
 								</div>
 
 								<div class="postcard-back-divider"></div>
 
-								<!-- Address + franking -->
-								<div class="flex min-h-0 flex-col">
+								<!-- The postage, and the museum's catalogue card for the piece -->
+								<div class="postcard-franking">
 									<div class="postcard-stamp-cluster">
-										<!-- Stamp: the artwork itself -->
-										<div class="postcard-stamp" aria-hidden="true">
-											<img
-												class={isSensitiveBlurred ? 'blur-md saturate-0' : ''}
-												src={artwork.imageUrl}
-												alt=""
-											/>
-											<span class="postcard-stamp-value">{artwork.score}★</span>
+										<div class="postcard-stamp postcard-stamp-back" aria-hidden="true">
+											<div class="postcard-stamp-picture">
+												<img
+													class={isSensitiveBlurred ? 'blur-md saturate-0' : ''}
+													src={artwork.imageUrl}
+													alt=""
+												/>
+												<span class="postcard-stamp-country">Not the Louvre</span>
+											</div>
 										</div>
-										<!-- Postmark + cancellation lines, franked below the stamp -->
-										<svg class="postcard-postmark" viewBox="0 0 220 96" aria-hidden="true">
+										<!-- Struck half over the stamp, half on the card -->
+										<svg class="postcard-postmark" viewBox="0 0 160 84" aria-hidden="true">
 											<defs>
-												<path id="postmark-arc-top" d="M 16 48 A 32 32 0 1 1 80 48"></path>
-
-												<path id="postmark-arc-bottom" d="M 19 48 A 29 29 0 1 0 77 48"></path>
+												<path id="postmark-arc-top" d="M 12 42 A 30 30 0 1 1 72 42"></path>
+												<path id="postmark-arc-bottom" d="M 15 42 A 27 27 0 1 0 69 42"></path>
 											</defs>
-											<g stroke="currentColor" fill="none" opacity="0.62">
-												<circle cx="48" cy="48" r="40" stroke-width="2"></circle>
-												<circle cx="48" cy="48" r="22" stroke-width="1.2"></circle>
-												<path d="M86 30 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0" stroke-width="2.4"
-												></path>
-												<path d="M86 44 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0" stroke-width="2.4"
-												></path>
-												<path d="M86 58 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0" stroke-width="2.4"
-												></path>
-												<path d="M86 72 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0" stroke-width="2.4"
-												></path>
+											<g stroke="currentColor" fill="none">
+												<circle cx="42" cy="42" r="38" stroke-width="2"></circle>
+												<circle cx="42" cy="42" r="21" stroke-width="1.2"></circle>
+												<path d="M84 25 q 9 -6 18 0 t 18 0 t 18 0 t 18 0" stroke-width="2.2"></path>
+												<path d="M84 37 q 9 -6 18 0 t 18 0 t 18 0 t 18 0" stroke-width="2.2"></path>
+												<path d="M84 49 q 9 -6 18 0 t 18 0 t 18 0 t 18 0" stroke-width="2.2"></path>
+												<path d="M84 61 q 9 -6 18 0 t 18 0 t 18 0 t 18 0" stroke-width="2.2"></path>
 											</g>
-											<g fill="currentColor" opacity="0.68">
+											<g fill="currentColor">
 												<text class="postmark-text">
-													<textPath href="#postmark-arc-top" startOffset="8%"
+													<textPath href="#postmark-arc-top" startOffset="7%"
 														>NOT THE LOUVRE</textPath
 													>
 												</text>
@@ -991,58 +984,107 @@
 														>GALLERY POST</textPath
 													>
 												</text>
-												<text x="48" y="46" text-anchor="middle" class="postmark-date"
+												<text x="42" y="40" text-anchor="middle" class="postmark-date"
 													>{postmark?.day}</text
 												>
-												<text x="48" y="57" text-anchor="middle" class="postmark-date"
+												<text x="42" y="51" text-anchor="middle" class="postmark-date"
 													>{postmark?.year}</text
 												>
 											</g>
 										</svg>
 									</div>
 
-									<div class="postcard-address">
-										<p class="postcard-address-line">
-											<span class="postcard-address-field">To:</span> every gallery visitor
+									<div class="catalogue-card">
+										<span class="catalogue-pin" aria-hidden="true"></span>
+										<p class="catalogue-number">Catalogue No. {catalogueNumber}</p>
+										<p class="catalogue-row catalogue-row-title">
+											<span class="catalogue-key">Title</span>
+											<span class="catalogue-hand">{artwork.title}</span>
 										</p>
-										<p class="postcard-address-line">
-											<span class="postcard-address-field">From:</span>
-											<span class="postcard-address-value">{artwork.artist}</span>
+										<p class="catalogue-row">
+											<span class="catalogue-key">Artist</span>
+											<span class="catalogue-hand">{artwork.artist}</span>
 										</p>
-
-										<p class="postcard-address-line postcard-address-blank"></p>
+										<p class="catalogue-row">
+											<span class="catalogue-key">Hung</span>
+											<span class="catalogue-typed">{postmark?.hung}</span>
+										</p>
+										<p class="catalogue-row">
+											<span class="catalogue-key">Votes</span>
+											<span class="catalogue-hand catalogue-votes">
+												<svg viewBox="0 0 24 24" aria-hidden="true"
+													><path
+														d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9z"
+													></path></svg
+												>
+												{artwork.score}
+											</span>
+										</p>
+										<p class="catalogue-row catalogue-row-last">
+											<span class="catalogue-key">Forks</span>
+											<span class="catalogue-hand catalogue-forks">{artwork.forkCount ?? 0}</span>
+										</p>
+										{#if artwork.rank && artwork.rank <= 3}
+											<span class="catalogue-honour" aria-hidden="true">Hall of Fame</span>
+										{/if}
 									</div>
+								</div>
 
-									<div class="postcard-ink-stamps">
-										<span class="postcard-ink-stamp ink-stamp-star">⭐ {artwork.score}</span>
-										<span class="postcard-ink-stamp ink-stamp-forks"
-											>{artwork.forkCount ?? 0} forks</span
+								{#if viewer}
+									<form
+										class="guestbook-form"
+										onsubmit={(event) => {
+											event.preventDefault();
+											submitComment();
+										}}
+									>
+										<label class="guestbook-line" for="artwork-comment-body">
+											<PenLine class="guestbook-pen" aria-hidden="true" />
+											<input
+												bind:this={commentInput}
+												bind:value={commentBody}
+												id="artwork-comment-body"
+												name="commentBody"
+												type="text"
+												placeholder="Write on the back…"
+												class="guestbook-input"
+											/>
+										</label>
+										<GameButton
+											type="submit"
+											variant="accent"
+											size="sm"
+											className="guestbook-send"
+											disabled={isSubmittingComment}
+											ariaLabel="Send comment"
 										>
-									</div>
+											Send
+										</GameButton>
+									</form>
+								{/if}
 
-									<div class="flex justify-end pb-1">
-										<button
-											type="button"
-											class="flip-tape flip-tape-back focus-ring"
-											aria-label="Show the artwork"
-											onclick={toggleFlip}
+								<div class="postcard-back-turn">
+									<button
+										type="button"
+										class="flip-tape flip-tape-back focus-ring"
+										aria-label="Show the artwork"
+										onclick={toggleFlip}
+									>
+										<svg
+											class="doodle-arrow doodle-arrow-mirrored"
+											viewBox="0 0 34 20"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
 										>
-											<svg
-												class="doodle-arrow doodle-arrow-mirrored"
-												viewBox="0 0 34 20"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												aria-hidden="true"
-											>
-												<path d="M2 15 Q 14 2 28 8"></path>
-												<path d="M22 4.5 28 8l-6.5 4"></path>
-											</svg>
-											🖼 the artwork
-										</button>
-									</div>
+											<path d="M2 15 Q 14 2 28 8"></path>
+											<path d="M22 4.5 28 8l-6.5 4"></path>
+										</svg>
+										the artwork
+									</button>
 								</div>
 							</div>
 
@@ -1517,8 +1559,8 @@
 	}
 
 	/* Washi tape with writing on it — the flip affordance. It names WHY you
-		* flip (the comments live on the back) and reuses the 💬 N chip language
-		* of the polaroid cards. In-flow and filter-free on purpose (preserve-3d).
+		* flip (the comments live on the back) and reuses the comment-count chip
+		* language of the polaroid cards. In-flow and filter-free on purpose (preserve-3d).
 		* If the clip-path torn ends ever ghost through the flip, drop the
 		* clip-path line — the rest survives. */
 	.flip-tape {
@@ -1659,15 +1701,41 @@
 		flex: 1;
 		min-height: 0;
 		display: grid;
-		grid-template-columns: minmax(0, 1.55fr) 1px minmax(0, 0.95fr);
-		/* Cap the row at the available space so a long visitor's book
+		grid-template-columns: minmax(0, 1.4fr) 1px minmax(0, 1fr);
+		/* Cap the first row at the available space so a long visitor's book
 		 * scrolls instead of growing past the card. */
-		grid-template-rows: minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr) auto;
+		grid-template-areas:
+			'book rule card'
+			'form rule turn';
 		gap: 0 14px;
 		padding: 2px 18px 12px;
 	}
 
+	.guestbook {
+		grid-area: book;
+		display: flex;
+		min-height: 0;
+		flex-direction: column;
+	}
+
+	.postcard-franking {
+		grid-area: card;
+		display: flex;
+		min-height: 0;
+		flex-direction: column;
+	}
+
+	.postcard-back-turn {
+		grid-area: turn;
+		display: flex;
+		align-items: flex-end;
+		justify-content: flex-end;
+		padding-bottom: 4px;
+	}
+
 	.postcard-back-divider {
+		grid-area: rule;
 		background: linear-gradient(
 			180deg,
 			rgba(141, 110, 78, 0.1),
@@ -1686,59 +1754,6 @@
 		letter-spacing: 0.2em;
 		text-transform: uppercase;
 		color: var(--color-muted-ink);
-	}
-
-	/* Ruled guestbook: 26px line rhythm shared with the entries. The lines
-		* scroll WITH the writing (background-attachment: local). */
-	.guestbook-pages {
-		overflow-y: auto;
-		overscroll-behavior: contain;
-		background-image: repeating-linear-gradient(
-			transparent,
-			transparent 25px,
-			rgba(141, 113, 78, 0.3) 25px,
-			rgba(141, 113, 78, 0.3) 26px
-		);
-		background-attachment: local;
-	}
-
-	.guestbook-entry {
-		margin: 0;
-		font-family: var(--font-hand);
-		font-size: 1.12rem;
-		font-weight: 500;
-		line-height: 26px;
-		color: #3f3329;
-		overflow-wrap: anywhere;
-	}
-
-	.guestbook-author {
-		font-size: 0.95rem;
-		color: var(--color-muted-ink);
-		white-space: nowrap;
-	}
-
-	.guestbook-empty {
-		color: var(--color-muted-ink);
-	}
-
-	/* writing directly on the card, not a UI pill */
-	.guestbook-input {
-		flex: 1;
-		min-width: 0;
-		border: 0;
-		border-bottom: 2px solid rgba(93, 78, 55, 0.4);
-		background: transparent;
-		padding: 2px 2px 3px;
-		font-family: var(--font-hand);
-		font-size: 1.15rem;
-		font-weight: 600;
-		color: var(--color-ink-warm);
-		outline: none;
-	}
-
-	.guestbook-input:focus {
-		border-bottom-color: var(--color-olive);
 	}
 
 	.guestbook-input::placeholder {
@@ -1784,14 +1799,6 @@
 			inset 0 2px 5px rgba(45, 36, 32, 0.28);
 	}
 
-	.postcard-stamp-cluster {
-		flex-shrink: 0;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 12px;
-	}
-
 	/* perforated edge via the scalloped background trick */
 	.postcard-stamp {
 		position: relative;
@@ -1827,14 +1834,6 @@
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 	}
 
-	.postcard-postmark {
-		width: 100%;
-		height: auto;
-		pointer-events: none;
-		color: #4a4663;
-		rotate: -3deg;
-	}
-
 	/* `geometricPrecision` used to sit on `body`, where it softened small text
 	 * across every route. Here it earns its place: 8.4px glyphs with 1.6px
 	 * tracking, laid along a 32px-radius `textPath`, are the one place the hinted
@@ -1856,73 +1855,325 @@
 		text-rendering: geometricPrecision;
 	}
 
-	.postcard-address {
-		margin-block: auto;
-		padding-top: 10px;
+	.flip-tape :global(.flip-tape-icon) {
+		width: 1rem;
+		height: 1rem;
+		flex-shrink: 0;
 	}
 
-	.postcard-address-line {
+	/* The visitor's book: each visitor writes in their own pen, straight on
+	 * the card, with no ruled lines waiting below the last entry. */
+	.guestbook-pages {
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+
+	.guestbook-entry {
 		margin: 0;
-		display: flex;
-		align-items: baseline;
-		gap: 6px;
-		border-bottom: 1.5px dotted rgba(141, 110, 78, 0.55);
-		padding: 3px 2px 1px;
 		font-family: var(--font-hand);
-		font-size: 1.25rem;
+		font-size: 1.18rem;
 		font-weight: 600;
 		line-height: 1.3;
-		color: #3f3329;
-	}
-
-	/* A long nickname breaks rather than running off the card. */
-	.postcard-address-value {
-		min-width: 0;
+		color: var(--entry-ink, #3f3329);
 		overflow-wrap: anywhere;
 	}
 
-	.postcard-address-field {
-		font-family: var(--font-display);
-		font-size: 0.75rem;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-		color: var(--color-muted-ink);
+	.guestbook-entry + .guestbook-entry {
+		margin-top: 9px;
+		padding-top: 9px;
+		border-top: 1px dashed rgb(141 113 78 / 0.32);
 	}
 
-	.postcard-address-blank {
-		height: 34px;
+	.guestbook-author {
+		display: block;
+		text-align: right;
+		font-size: 1rem;
+		font-weight: 500;
 	}
 
-	.postcard-ink-stamps {
+	.guestbook-blank {
+		position: relative;
+	}
+
+	.guestbook-prompt {
+		margin: 0;
+		font-family: var(--font-hand);
+		font-size: 1.22rem;
+		font-weight: 500;
+		line-height: 1.35;
+		color: #66574a;
+	}
+
+	/* A pencil arrow from the empty page down to the line to write on. */
+	.guestbook-prompt-arrow {
+		position: absolute;
+		left: 30%;
+		bottom: 0.25rem;
+		width: 2.6rem;
+		height: min(5.2rem, calc(100% - 4.8rem));
+		color: #8a7660;
+	}
+
+	.guestbook-form {
+		grid-area: form;
+		display: flex;
+		align-items: flex-end;
+		gap: 8px;
+		margin-top: 8px;
+	}
+
+	/* writing directly on the card, not a UI pill */
+	.guestbook-line {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 14px 2px 12px;
+		gap: 6px;
+		border-bottom: 2px solid rgb(93 78 55 / 0.4);
 	}
 
-	/* rubber stamps with uneven inking. If the mask ever ghosts through the
-		* flip, drop the mask-image line — the rest survives. */
-	.postcard-ink-stamp {
+	.guestbook-line:focus-within {
+		border-bottom-color: var(--color-olive);
+	}
+
+	.guestbook-line :global(.guestbook-pen) {
+		width: 1rem;
+		height: 1rem;
+		flex-shrink: 0;
+		color: #7d6a54;
+	}
+
+	.guestbook-input {
+		flex: 1;
+		min-width: 0;
+		border: 0;
+		background: transparent;
+		padding: 2px 2px 3px;
+		font-family: var(--font-hand);
+		font-size: 1.1rem;
+		font-weight: 600;
+		color: var(--color-ink-warm);
+		outline: none;
+	}
+
+	/* The postage: the artwork as a perforated stamp, and the postmark struck
+	 * half over it, half on the card, its waves running across the stamp. */
+	.postcard-stamp-cluster {
+		position: relative;
+		flex-shrink: 0;
+		height: 7.4rem;
+	}
+
+	.postcard-stamp-back {
+		position: absolute;
+		top: 0;
+		right: 4px;
+		width: 5.8rem;
+		padding: 6px;
+	}
+
+	.postcard-stamp-picture {
+		position: relative;
+		padding: 11px 4px 4px;
+		border: 1px solid #ddd0ba;
+		background: #fffdf8;
+	}
+
+	.postcard-stamp-country {
+		position: absolute;
+		inset: 2px 0 auto;
+		text-align: center;
 		font-family: var(--font-display);
+		font-size: 6.5px;
+		font-weight: 700;
+		letter-spacing: 0.2em;
+		text-transform: uppercase;
+		white-space: nowrap;
+		color: #7a5a3a;
+	}
+
+	.postcard-postmark {
+		position: absolute;
+		top: 3.3rem;
+		left: 0;
+		width: min(9.4rem, 100%);
+		height: auto;
+		pointer-events: none;
+		color: #4a4663;
+		opacity: 0.78;
+		rotate: -8deg;
+	}
+
+	/* The museum's catalogue card for the piece, pinned to the postcard:
+	 * typed headings, the details filled in by hand. */
+	.catalogue-card {
+		position: relative;
+		margin-block: auto;
+		padding: 0.85rem 0.75rem 0.55rem;
+		border: 1px solid #d6c6ac;
+		background: #fbf7ee;
+		box-shadow: 0 2px 4px rgb(60 40 20 / 0.12);
+		rotate: -1deg;
+	}
+
+	.catalogue-pin {
+		position: absolute;
+		left: 50%;
+		top: -6px;
+		width: 12px;
+		height: 12px;
+		translate: -50% 0;
+		border-radius: 50%;
+		background: #2a2622;
+		box-shadow:
+			inset 0 0 0 3.5px #fbf7ee,
+			0 0 0 1px #d6c6ac;
+	}
+
+	.catalogue-number,
+	.catalogue-key,
+	.catalogue-typed {
+		font-family: 'Special Elite', 'Courier New', monospace;
+	}
+
+	.catalogue-number {
+		margin: 0 0 0.35rem;
 		font-size: 0.75rem;
+		letter-spacing: 0.06em;
+		white-space: nowrap;
+		text-transform: uppercase;
+		color: #5f4f3e;
+	}
+
+	.catalogue-row {
+		margin: 0;
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+		padding: 0.22rem 0;
+		border-bottom: 1px dotted #b8a68c;
+	}
+
+	.catalogue-row-last {
+		border-bottom: 0;
+	}
+
+	.catalogue-key {
+		flex: none;
+		width: 3.7rem;
+		font-size: 0.75rem;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: #5f4f3e;
+	}
+
+	.catalogue-hand {
+		min-width: 0;
+		font-family: var(--font-hand);
+		font-size: 1.12rem;
+		font-weight: 600;
+		line-height: 1.1;
+		color: #3f3329;
+		/* A name breaks only when it cannot fit at all. */
+		overflow-wrap: break-word;
+	}
+
+	.catalogue-typed {
+		font-size: 0.78rem;
+		white-space: nowrap;
+		color: #3f3329;
+	}
+
+	.catalogue-votes {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		color: #a33a2f;
+	}
+
+	.catalogue-votes svg {
+		width: 0.95rem;
+		height: 0.95rem;
+		fill: currentColor;
+	}
+
+	.catalogue-forks {
+		color: #3f5e8c;
+	}
+
+	/* The trophy room's rubber stamp, with uneven inking. If the mask ever
+	 * ghosts through the flip, drop the mask-image line; the rest survives. */
+	.catalogue-honour {
+		position: absolute;
+		right: -0.4rem;
+		bottom: 0.8rem;
+		rotate: -14deg;
+		padding: 2px 8px;
+		border: 2.4px solid #a33a2f;
+		border-radius: 50%;
+		font-family: var(--font-display);
+		font-size: 0.66rem;
 		font-weight: 700;
 		letter-spacing: 0.14em;
 		text-transform: uppercase;
-		border: 2.5px solid currentColor;
-		border-radius: 5px;
-		padding: 4px 9px;
-		opacity: 0.78;
+		color: #a33a2f;
+		opacity: 0.85;
 		mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='40'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0.55'/%3E%3C/filter%3E%3Crect width='90' height='40' filter='url(%23m)'/%3E%3C/svg%3E");
 	}
 
-	.ink-stamp-star {
-		color: var(--color-danger-deep);
-		rotate: -4deg;
-	}
+	/* On a phone-wide card the line to write on runs the card's whole width,
+	 * and the catalogue card puts each heading over its entry. */
+	@media (max-width: 30rem) {
+		.postcard-back-grid {
+			grid-template-rows: minmax(0, 1fr) auto auto;
+			grid-template-areas:
+				'book rule card'
+				'form form form'
+				'turn turn turn';
+		}
 
-	.ink-stamp-forks {
-		color: #3f5e8c;
-		rotate: 2.5deg;
+		.postcard-back-turn {
+			padding-top: 8px;
+		}
+
+		.catalogue-card {
+			padding: 0.7rem 0.6rem 0.4rem;
+		}
+
+		.catalogue-row {
+			flex-direction: column;
+			gap: 0;
+			padding: 0.1rem 0;
+		}
+
+		.catalogue-key {
+			width: auto;
+		}
+
+		.catalogue-number {
+			letter-spacing: 0;
+			white-space: normal;
+		}
+
+		.postcard-stamp-cluster {
+			height: 6.4rem;
+		}
+
+		.postcard-stamp-back {
+			width: 4.8rem;
+		}
+
+		.postcard-stamp-country {
+			font-size: 5.5px;
+			letter-spacing: 0.08em;
+		}
+
+		.postcard-postmark {
+			top: 2.9rem;
+		}
+
+		.guestbook-form {
+			margin-top: 14px;
+		}
 	}
 </style>

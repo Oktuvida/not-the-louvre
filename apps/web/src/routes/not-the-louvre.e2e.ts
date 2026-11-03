@@ -713,7 +713,7 @@ test.describe('Not the Louvre frontend port', () => {
 			);
 			// The visitor's book is on the back of the postcard.
 			await actorPage.getByRole('button', { name: 'Read the comments' }).click();
-			await actorPage.getByPlaceholder('Write a comment').fill('Realtime hello');
+			await actorPage.getByPlaceholder('Write on the back…').fill('Realtime hello');
 			await actorPage.getByRole('button', { name: 'Send comment' }).click();
 			await commentResponse;
 
@@ -760,7 +760,7 @@ test.describe('Not the Louvre frontend port', () => {
 		);
 		// The visitor's book is on the back of the postcard.
 		await page.getByRole('button', { name: 'Read the comments' }).click();
-		await page.getByPlaceholder('Write a comment').fill('Mystery room comment');
+		await page.getByPlaceholder('Write on the back…').fill('Mystery room comment');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 		await commentResponse;
 		await expect(page.getByText('Mystery room comment')).toBeVisible();

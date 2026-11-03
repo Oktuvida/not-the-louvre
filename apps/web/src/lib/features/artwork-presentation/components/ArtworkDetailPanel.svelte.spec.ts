@@ -84,9 +84,29 @@ describe('ArtworkDetailPanel', () => {
 		await expect.element(page.getByRole('button', { name: 'Download' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Dismiss details' })).toBeVisible();
 
-		// The fork count is franked on the back of the postcard
+		// The fork count is on the catalogue card, on the back of the postcard
 		await page.getByRole('button', { name: 'Read the comments' }).click();
-		await expect.element(page.getByText('2 forks')).toBeVisible();
+		await expect.element(page.getByText('Forks 2')).toBeVisible();
+	});
+
+	// The back of the postcard files the artwork like a museum catalogue card,
+	// and the visitor's book is handwritten: no emoji anywhere on the way there
+	// and back.
+	it('files the artwork on a catalogue card on the back of the postcard', async () => {
+		await render(ArtworkDetailPanel, { artwork, viewer: { id: 'user-1', role: 'user' } });
+
+		const emoji = /\p{Extended_Pictographic}/u;
+		const toComments = page.getByRole('button', { name: 'Read the comments' });
+		expect(toComments.element().textContent).not.toMatch(emoji);
+		await toComments.click();
+
+		await expect.element(page.getByText('Votes 4')).toBeVisible();
+		await expect.element(page.getByText('Forks 2')).toBeVisible();
+		await expect.element(page.getByText(/^Artist journey_artist$/)).toBeVisible();
+		await expect.element(page.getByText('Nobody has written on the back yet.')).toBeVisible();
+		expect(
+			page.getByRole('button', { name: 'Show the artwork' }).element().textContent
+		).not.toMatch(emoji);
 	});
 
 	it('shows fork attribution when the artwork comes from a parent artwork', async () => {
@@ -138,7 +158,7 @@ describe('ArtworkDetailPanel', () => {
 		});
 
 		await expect.element(page.getByRole('button', { name: 'Fork' })).not.toBeInTheDocument();
-		await expect.element(page.getByPlaceholder('Write a comment')).not.toBeInTheDocument();
+		await expect.element(page.getByPlaceholder('Write on the back…')).not.toBeInTheDocument();
 		await expect
 			.element(page.getByText('Sign in to vote, fork, or leave a comment.'))
 			.toBeVisible();
@@ -189,16 +209,16 @@ describe('ArtworkDetailPanel', () => {
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		expect(document.querySelector('input[placeholder="Write a comment"]')?.id).toBe(
+		expect(document.querySelector('input[placeholder="Write on the back…"]')?.id).toBe(
 			'artwork-comment-body'
 		);
 		expect(
-			document.querySelector('input[placeholder="Write a comment"]')?.getAttribute('name')
+			document.querySelector('input[placeholder="Write on the back…"]')?.getAttribute('name')
 		).toBe('commentBody');
 
 		// The comment form lives on the back of the postcard
 		await openCommentsSide();
-		await page.getByPlaceholder('Write a comment').fill('Great work');
+		await page.getByPlaceholder('Write on the back…').fill('Great work');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 
 		await vi.waitFor(() => {
@@ -229,7 +249,7 @@ describe('ArtworkDetailPanel', () => {
 		});
 
 		await openCommentsSide();
-		await page.getByPlaceholder('Write a comment').fill('blocked text');
+		await page.getByPlaceholder('Write on the back…').fill('blocked text');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 
 		await expect.element(page.getByText('This comment breaks the gallery rules.')).toBeVisible();
@@ -254,7 +274,7 @@ describe('ArtworkDetailPanel', () => {
 		});
 
 		await openCommentsSide();
-		await page.getByPlaceholder('Write a comment').fill('retry later');
+		await page.getByPlaceholder('Write on the back…').fill('retry later');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 
 		await expect
@@ -325,7 +345,7 @@ describe('ArtworkDetailPanel', () => {
 
 		await expect.element(page.getByTestId('artwork-comments-loading')).toBeInTheDocument();
 		await expect
-			.element(page.getByText("The visitor's book is empty — be the first to sign it."))
+			.element(page.getByText('Nobody has written on the back yet.'))
 			.not.toBeInTheDocument();
 	});
 
