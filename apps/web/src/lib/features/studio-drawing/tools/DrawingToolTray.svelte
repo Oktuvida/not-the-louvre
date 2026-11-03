@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Eraser, Palette, Redo2, Undo2 } from 'lucide-svelte';
+	import { Palette, Redo2, Undo2 } from 'lucide-svelte';
 	import { INK_SHOWN_LEVEL, INK_WARNING_LEVEL } from '#lib/features/stroke-json/ink.js';
 	import {
 		brushSizeSteps,
@@ -41,7 +41,11 @@
 <!-- How the tray is laid out (a card beside the canvas, a band under it, a
      strip on a phone) is the studio layout's call, through the --tray-* custom
      properties it sets per screen in studio-layout.css. -->
-<div class="tool-tray paper-sheet paper-grain">
+<div class="tool-tray">
+	<!-- A sheet of the same deckled watercolour paper the drawing is on, its
+	     shadow a layer of its own because the deckle clips the sheet. -->
+	<span class="tray-sheet-shadow deckled-sheet-shadow" aria-hidden="true"></span>
+	<span class="tray-sheet deckled-sheet" aria-hidden="true"></span>
 	<span class="tray-tape tray-tape-left tape" aria-hidden="true"></span>
 	<span class="tray-tape tray-tape-right tape" aria-hidden="true"></span>
 	<span class="tray-stain tray-stain-a" aria-hidden="true"></span>
@@ -106,21 +110,21 @@
 		</div>
 	</div>
 
-	<!-- Eraser, and taking lines back -->
+	<!-- A pink rubber to rub out with, and strips of washi tape to take a line
+	     back or put it back. The rubber in hand is picked up off the sheet. -->
 	<div class="tray-tools">
 		<button
 			type="button"
-			class="tray-tool focus-ring"
-			class:tray-tool-active={drawingTools.tool === 'eraser'}
+			class="tray-rubber focus-ring"
+			class:tray-rubber-on={drawingTools.tool === 'eraser'}
 			aria-pressed={drawingTools.tool === 'eraser'}
 			onclick={() => (drawingTools.tool = drawingTools.tool === 'eraser' ? 'brush' : 'eraser')}
 		>
-			<Eraser size={18} aria-hidden="true" />
 			<span class="tray-tool-text">Eraser</span>
 		</button>
 		<button
 			type="button"
-			class="tray-tool focus-ring"
+			class="tray-washi focus-ring"
 			aria-label="Undo"
 			disabled={!canUndo}
 			onclick={onUndo}
@@ -129,7 +133,7 @@
 		</button>
 		<button
 			type="button"
-			class="tray-tool focus-ring"
+			class="tray-washi tray-washi-turned focus-ring"
 			aria-label="Redo"
 			disabled={!canRedo}
 			onclick={onRedo}
@@ -211,27 +215,99 @@
 		margin-top: var(--tray-tools-gap, 14px);
 	}
 
-	.tray-tool {
-		display: inline-flex;
-		flex: 0 0 auto;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		min-width: 44px;
+	/* A block of pink rubber, worn at one end, its name pressed into it. */
+	.tray-rubber {
+		position: relative;
+		flex: var(--tray-eraser-flex, 1 1 auto);
+		min-width: 4rem;
 		min-height: 44px;
-		padding: 0 12px;
-		border: 2px solid rgba(45, 36, 32, 0.35);
-		border-radius: 12px;
-		background: rgba(255, 255, 255, 0.55);
-		color: var(--color-ink-warm, #2d2420);
-		font-family: var(--font-display, inherit);
-		font-size: 0.85rem;
-		font-weight: 600;
+		padding: 0 0.75rem 0.2rem;
+		border: 0;
+		border-radius: 0.5rem;
+		background: linear-gradient(180deg, #f4aab3, #e8909c);
+		box-shadow:
+			inset 0 -0.3rem 0 #c96f7c,
+			0 3px 4px rgb(40 20 10 / 0.35);
+		rotate: -3deg;
+		color: #a54c59;
+		font-family: var(--font-display);
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.2em;
+		text-transform: uppercase;
+		text-shadow: 0 1px 0 rgb(255 255 255 / 0.35);
 		cursor: pointer;
+		transition:
+			rotate 180ms var(--ease-spring, ease),
+			translate 180ms var(--ease-spring, ease),
+			box-shadow 180ms ease;
 	}
 
-	.tray-tool:first-child {
-		flex: var(--tray-eraser-flex, 1 1 auto);
+	.tray-rubber::after {
+		content: '';
+		position: absolute;
+		inset: 0 auto 0 0;
+		width: 1.1rem;
+		border-radius: 0.5rem 0 0 0.5rem;
+		background: linear-gradient(90deg, rgb(80 40 40 / 0.22), transparent);
+		pointer-events: none;
+	}
+
+	.tray-rubber-on {
+		rotate: -11deg;
+		translate: 0 -5px;
+		box-shadow:
+			inset 0 -0.3rem 0 #c96f7c,
+			0 10px 10px rgb(40 20 10 / 0.28);
+	}
+
+	/* A strip of washi tape, torn at both ends, with an arrow drawn on it. */
+	.tray-washi {
+		position: relative;
+		display: inline-grid;
+		flex: 0 0 auto;
+		place-items: center;
+		width: 2.9rem;
+		min-height: 44px;
+		border: 0;
+		background: none;
+		color: #2f4a38;
+		cursor: pointer;
+		rotate: -2deg;
+	}
+
+	.tray-washi::before {
+		content: '';
+		position: absolute;
+		inset: 0.35rem 0;
+		background-color: rgb(214 226 214 / 0.95);
+		background-image: repeating-linear-gradient(
+			45deg,
+			rgb(120 160 135 / 0.35) 0 4px,
+			transparent 4px 9px
+		);
+		clip-path: polygon(
+			3px 0,
+			100% 2px,
+			calc(100% - 3px) 50%,
+			100% 100%,
+			2px calc(100% - 2px),
+			0 50%
+		);
+		box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+	}
+
+	.tray-washi :global(svg) {
+		position: relative;
+	}
+
+	.tray-washi-turned {
+		rotate: 3deg;
+	}
+
+	.tray-washi:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
 	}
 
 	/* Where the row is short (a phone) the layout keeps the word for screen
@@ -244,25 +320,14 @@
 		white-space: nowrap;
 	}
 
-	.tray-tool-active {
-		border-color: var(--color-ink-warm, #2d2420);
-		background: var(--color-ink-warm, #2d2420);
-		color: var(--color-paper-bright, #fdfbf7);
-	}
-
-	.tray-tool:disabled {
-		cursor: not-allowed;
-		opacity: 0.4;
-	}
-
 	/*
-	 * A scrap of studio paper: the paper itself is `.paper-sheet` +
-	 * `.paper-grain`, and how it is torn off and pinned down is here. The tray
-	 * used to carry its own copy of both, with the shadow a shade lighter
-	 * (0.28/0.16) than the auth sheet a click away — an invisible typo that the
-	 * shared class settles.
+	 * A sheet of watercolour paper taped down beside the drawing: the deckle
+	 * comes from `.deckled-sheet`; the cold-press tooth, a spatter of paint and
+	 * a wash where a brush was wiped are its own.
 	 */
 	.tool-tray {
+		position: relative;
+		isolation: isolate;
 		display: grid;
 		grid-template-areas: var(--tray-areas, 'palette' 'brush' 'tools' 'ink' 'print');
 		grid-template-columns: var(--tray-columns, minmax(0, 1fr));
@@ -270,6 +335,25 @@
 		align-items: var(--tray-align, stretch);
 		padding: var(--tray-padding, 20px);
 		transform: rotate(var(--tray-tilt, 1.2deg));
+	}
+
+	.tray-sheet,
+	.tray-sheet-shadow {
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		pointer-events: none;
+	}
+
+	.tray-sheet {
+		--sheet-paper:
+			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='t'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.34 0 0 0 0 0.24 0 0 0 0.2 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23t)'/%3E%3C/svg%3E")
+				0 0 / 180px 180px,
+			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='90'%3E%3Cg fill-opacity='.5'%3E%3Ccircle cx='18' cy='20' r='3' fill='%23d4834a'/%3E%3Ccircle cx='30' cy='12' r='1.6' fill='%23d4834a'/%3E%3Ccircle cx='96' cy='30' r='2.4' fill='%234f72a6'/%3E%3Ccircle cx='104' cy='18' r='1.2' fill='%234f72a6'/%3E%3Ccircle cx='60' cy='70' r='2' fill='%2371917f'/%3E%3Ccircle cx='70' cy='78' r='1.1' fill='%2371917f'/%3E%3C/g%3E%3C/svg%3E")
+				right 6% top 3% / 120px 90px no-repeat,
+			radial-gradient(42% 30% at 82% 88%, rgb(113 145 127 / 0.13), transparent 70%),
+			radial-gradient(36% 26% at 14% 96%, rgb(212 131 74 / 0.1), transparent 70%),
+			linear-gradient(176deg, #fdfaf3, #f5eee0);
 	}
 
 	.tray-palette {
@@ -325,12 +409,15 @@
 	}
 
 	/* How long and how crooked this swipe is; the paint is `.paint-swipe`. */
+	/* One stroke of a dry brush: thick where it lands, frayed where it lifts. */
 	.tray-label-swipe {
 		display: var(--tray-palette-label, block);
-		width: 86px;
-		height: 6px;
+		width: 92px;
+		height: 9px;
 		margin: -4px 0 12px;
 		rotate: -1deg;
+		mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 12' preserveAspectRatio='none'%3E%3Cpath d='M2 6 C 18 2, 46 8, 78 3 S 110 5, 119 4 L 117 7 C 104 7, 108 9, 96 8 C 80 10, 58 7, 36 10 S 10 11, 3 10 Z'/%3E%3C/svg%3E")
+			center / 100% 100% no-repeat;
 	}
 
 	.tray-section {
@@ -393,12 +480,16 @@
 		cursor: pointer;
 	}
 
+	/* A dab of gouache on the paper: matte, a little darker where it pools at
+	 * the edge, over the thin wash it was first brushed out in. */
 	.swatch-paint {
 		position: absolute;
 		inset: 1px;
 		display: block;
 		background: var(--swatch-color);
-		box-shadow: 1px 2px 3px rgba(45, 36, 32, 0.28);
+		box-shadow:
+			inset 0 0 0 1.5px color-mix(in srgb, var(--swatch-color) 78%, black),
+			0.14rem 0.18rem 0 0.1rem color-mix(in srgb, var(--swatch-color) 20%, transparent);
 		transition:
 			scale 130ms var(--ease-spring),
 			rotate 130ms ease;
@@ -435,13 +526,15 @@
 		scale: 0.92;
 	}
 
-	/* gloss — fresh paint catches the studio lights */
+	/* the body of the paint: a soft ridge of light, never a glossy highlight */
 	.swatch-paint::before {
 		content: '';
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
-		background: radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.5), transparent 46%);
+		background:
+			radial-gradient(circle at 34% 30%, rgb(255 255 255 / 0.18), transparent 48%),
+			radial-gradient(circle at 64% 72%, rgb(0 0 0 / 0.1), transparent 58%);
 	}
 
 	.swatch-paint-light {

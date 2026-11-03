@@ -61,25 +61,26 @@ describe('DrawingToolTray', () => {
 		await expect.element(page.getByText('Out of ink')).toBeVisible();
 	});
 
-	it('is cut from the same paper as every other sheet in the museum', async () => {
+	it('is a sheet of the deckled watercolour paper the drawing is made on', async () => {
 		await render(DrawingToolTray, {});
 
 		const tray = document.querySelector<HTMLElement>('.tool-tray');
-		expect(tray).not.toBeNull();
+		const sheet = tray?.querySelector<HTMLElement>('.tray-sheet');
+		expect(sheet).not.toBeNull();
 
-		// The tray used to print its own sheet, and had drifted to a shadow 12%
-		// lighter (0.28/0.16) than the auth sheet a click away. Same numbers as
-		// `PaperSheet.svelte.spec.ts` asserts, on purpose.
-		const styles = getComputedStyle(tray as HTMLElement);
-		expect(styles.backgroundColor).toBe('rgb(251, 247, 240)');
-		expect(styles.borderRadius).toBe('3px');
-		expect(styles.boxShadow).toContain('rgba(0, 0, 0, 0.32) 4px 6px 16px');
-		expect(styles.boxShadow).toContain('rgba(0, 0, 0, 0.18) 1px 2px 4px');
-		// Geometry stays the tray's own business.
-		expect(styles.padding).toBe('20px');
-		expect(getComputedStyle(tray as HTMLElement, '::before').backgroundImage).toContain(
-			'feTurbulence'
+		// The same torn edge as the drawing's sheet (`.deckled-sheet`)…
+		const reference = document.createElement('div');
+		reference.className = 'deckled-sheet';
+		document.body.append(reference);
+		expect(getComputedStyle(sheet as HTMLElement).clipPath).toBe(
+			getComputedStyle(reference).clipPath
 		);
+		expect(getComputedStyle(reference).clipPath).toContain('polygon');
+		reference.remove();
+
+		// …with a cold-press tooth of its own. Geometry stays the tray's business.
+		expect(getComputedStyle(sheet as HTMLElement).backgroundImage).toContain('feTurbulence');
+		expect(getComputedStyle(tray as HTMLElement).padding).toBe('20px');
 
 		// And the swipe under "Paints" is the shared paint, not a fourth alpha.
 		const swipe = document.querySelector<HTMLElement>('.tray-label-swipe');
