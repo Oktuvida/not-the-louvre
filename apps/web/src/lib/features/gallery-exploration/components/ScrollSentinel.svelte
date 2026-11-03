@@ -90,9 +90,9 @@
 -->
 {#if error}
 	<div data-testid="scroll-sentinel-error" class="py-8">
-		<ChalkEasel title="Hold on a moment" message={error}>
+		<ChalkEasel title="The next wall is still being hung." message={error}>
 			<GameButton variant="secondary" size="sm" onclick={() => onRetry?.()}>
-				<span class="font-semibold">Retry</span>
+				<span class="font-semibold">Try again</span>
 			</GameButton>
 		</ChalkEasel>
 	</div>

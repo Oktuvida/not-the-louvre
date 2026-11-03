@@ -1037,7 +1037,7 @@ test.describe('Not the Louvre frontend port', () => {
 	test('unknown routes render the custom not-found page', async ({ page }) => {
 		await page.goto('/totally-made-up-room');
 
-		await expect(page.getByRole('heading', { name: 'Oops! This Canvas is Blank' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Room 404' })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Go Home' })).toBeVisible();
 	});
 });

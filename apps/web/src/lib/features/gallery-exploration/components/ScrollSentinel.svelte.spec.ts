@@ -143,8 +143,10 @@ describe('ScrollSentinel', () => {
 			});
 
 			await expect.element(page.getByTestId('scroll-sentinel-error')).toBeVisible();
+			// Chalked on the easel at the foot of the wall, in the house voice.
+			await expect.element(page.getByText('The next wall is still being hung.')).toBeVisible();
 			await expect.element(page.getByText('Failed to load artworks')).toBeVisible();
-			await expect.element(page.getByRole('button', { name: /retry/i })).toBeVisible();
+			await expect.element(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 		});
 
 		it('calls onRetry when retry button is clicked', async () => {
@@ -158,7 +160,7 @@ describe('ScrollSentinel', () => {
 				error: 'Failed to load artworks'
 			});
 
-			await page.getByRole('button', { name: /retry/i }).click();
+			await page.getByRole('button', { name: 'Try again' }).click();
 
 			expect(onRetry).toHaveBeenCalledOnce();
 		});
