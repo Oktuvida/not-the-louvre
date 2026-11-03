@@ -218,6 +218,9 @@
 		text-align: left;
 		rotate: -1.5deg;
 		transition: translate 300ms ease;
+		/* Painted once onto its own layer, like the polaroids below it
+		 * (PolaroidCard explains why). */
+		will-change: transform;
 	}
 
 	.lead-polaroid:hover {

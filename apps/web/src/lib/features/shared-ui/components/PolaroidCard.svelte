@@ -271,6 +271,12 @@
 		display: block;
 		width: 100%;
 		container-type: inline-size;
+		/* Each card is painted once, onto a layer of its own: scrolling the wall
+		 * and sliding a room in then move the layers. Safari otherwise paints
+		 * the grained paper of every card again on every frame, and a long room
+		 * stutters. The layer goes on the card, not on the paper inside it, so
+		 * the hover's scale is drawn afresh rather than stretched from a bitmap. */
+		will-change: transform;
 	}
 
 	.polaroid {
