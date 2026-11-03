@@ -41,6 +41,40 @@ test.describe('the studio as a visitor first meets it', () => {
 		expect((await response.body()).byteLength).toBeLessThan(400 * 1024);
 		expect(response.headers()['cache-control']).toContain('immutable');
 	});
+
+	// Without an avatar, the frame over the desk shows a drawn placeholder. The
+	// browser refused it as a texture (an SVG with no size of its own), so the
+	// frame stayed empty.
+	test('hangs the placeholder portrait for a visitor with no avatar', async ({ page }) => {
+		const glErrors: string[] = [];
+		page.on('console', (message) => {
+			if (/WebGL: INVALID|GL_INVALID/.test(message.text())) glErrors.push(message.text());
+		});
+
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Come In' }).waitFor();
+		const room = page.locator('.home-entry-page canvas').first();
+		// The room fades in once its model is up; its textures go up with it.
+		await expect
+			.poll(
+				() => room.evaluate((canvas) => Number(getComputedStyle(canvas.parentElement!).opacity)),
+				{
+					timeout: 15_000
+				}
+			)
+			.toBe(1);
+		// A few more drawn frames, for the texture uploads to have happened.
+		await page.evaluate(
+			() =>
+				new Promise((resolve) => {
+					let frames = 0;
+					const next = () => (++frames < 10 ? requestAnimationFrame(next) : resolve(null));
+					requestAnimationFrame(next);
+				})
+		);
+
+		expect(glErrors).toEqual([]);
+	});
 });
 
 test.describe('the studio behind the front door', () => {
