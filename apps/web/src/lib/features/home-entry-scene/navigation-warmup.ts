@@ -11,6 +11,8 @@ import { resolve } from '$app/paths';
  * fade completes.
  */
 export const homeGalleryTarget = `${resolve('/gallery/[[room]]', { room: 'your-studio' })}?from=home`;
+/** Where the front door's best pieces lead: the room they hang in. */
+export const homeHallOfFameTarget = `${resolve('/gallery/[[room]]', {})}?from=home`;
 export const homeStudioTarget = resolve('draw');
 
 const warmedTargets = new Set<string>();

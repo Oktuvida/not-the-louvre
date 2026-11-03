@@ -17,6 +17,7 @@
 	import { browserSupportsWebGL } from '#lib/features/shared-3d-world/webgl-support.js';
 	import {
 		homeGalleryTarget,
+		homeHallOfFameTarget,
 		homeStudioTarget,
 		warmNavigationTargetWhenIdle
 	} from '#lib/features/home-entry-scene/navigation-warmup.js';
@@ -81,6 +82,8 @@
 	let returnVeilVisible = $state(isReturning);
 	let exitVeilVisible = $state(false);
 	let exitTarget = $state<string | null>(null);
+	// The postcard the gallery opens on arrival, when a best piece was picked.
+	let exitState: App.PageState = {};
 
 	/*
 	 * three.js + threlte + GLTF + DRACO are ~344KB gz — three times the rest of
@@ -202,16 +205,17 @@
 	});
 
 	/** Drops the veil over the page; navigation happens when it is down. */
-	const startExitTo = (target: string) => {
+	const startExitTo = (target: string, state: App.PageState = {}) => {
 		exitTarget = target;
+		exitState = state;
 		exitVeilVisible = true;
 	};
 
 	const completeExit = () => {
 		if (!exitTarget) return;
 
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- both targets are resolved routes, extended with query params in navigation-warmup
-		void goto(exitTarget);
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the targets are resolved routes, extended with query params in navigation-warmup
+		void goto(exitTarget, { state: exitState });
 	};
 
 	/** Called by PersistentNav when the GALLERY button is clicked. */
@@ -231,6 +235,25 @@
 
 		exitDelayedCall = gsap.delayedCall(holdSeconds, () => {
 			startExitTo(homeGalleryTarget);
+		});
+	};
+
+	/*
+	 * Called when a best piece on the right wall is picked: the same walk into
+	 * the gallery, into the Hall of Fame those pieces hang in, which opens the
+	 * artwork's postcard on arrival.
+	 */
+	const handleArtworkNavigate = (artworkId: string) => {
+		if (isExiting) return;
+		isExiting = true;
+		scenePose = 'left-wall';
+		warmNavigationTargetWhenIdle(homeHallOfFameTarget);
+
+		const holdSeconds = prefersReducedMotion() ? 0 : GALLERY_EXIT_HOLD;
+		exitDelayedCall = gsap.delayedCall(holdSeconds, () => {
+			startExitTo(homeHallOfFameTarget, {
+				galleryDetail: { artworkId, roomId: 'hall-of-fame', source: 'external' }
+			});
 		});
 	};
 
@@ -319,6 +342,7 @@
 		{adultContentEnabled}
 		{isExiting}
 		{onAvatarSaved}
+		onArtworkNavigate={handleArtworkNavigate}
 		onGalleryNavigate={handleGalleryNavigate}
 		{previewCards}
 		{user}
