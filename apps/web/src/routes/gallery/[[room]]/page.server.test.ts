@@ -100,7 +100,7 @@ describe('gallery route', () => {
 			};
 
 			expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
-				{ cursor: null, limit: 12, sort: 'top', window: 'all' },
+				{ authorId: null, cursor: null, limit: 12, sort: 'top', window: 'all' },
 				{ user: undefined }
 			);
 			expect(roomContent).toMatchObject({
@@ -173,7 +173,7 @@ describe('gallery route', () => {
 			const roomContent = await result.lazy.roomContent;
 
 			expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
-				{ cursor: null, limit: 24, sort: 'hot', window: null },
+				{ authorId: null, cursor: null, limit: 24, sort: 'hot', window: null },
 				{ user: undefined }
 			);
 			expect(roomContent.discovery).toMatchObject({
@@ -204,7 +204,7 @@ describe('gallery route', () => {
 			const roomContent = await result.lazy.roomContent;
 
 			expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
-				{ cursor: null, limit: 24, sort: 'recent', window: null },
+				{ authorId: null, cursor: null, limit: 24, sort: 'recent', window: null },
 				{ user: undefined }
 			);
 			expect(roomContent.discovery).toMatchObject({

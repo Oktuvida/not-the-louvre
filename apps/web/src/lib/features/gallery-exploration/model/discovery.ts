@@ -1,4 +1,5 @@
 import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+import type { GalleryRoomId } from '#lib/shared/gallery/rooms.js';
 
 /*
  * The paging vocabulary of the gallery feed. The `{ hasMore, nextCursor }`
@@ -29,6 +30,32 @@ export type GalleryDiscoveryRequest = {
 export type GalleryDiscovery = {
 	pageInfo: GalleryPageInfo;
 	request: GalleryDiscoveryRequest | null;
+};
+
+const GALLERY_PAGE_SIZE = 24;
+
+/**
+ * What a room asks the feed for. It depends only on the room and on who is
+ * looking, so the server's room loader and the browser read it from here: a
+ * room put back up from memory can page on before its fresh first page lands.
+ */
+export const galleryRoomDiscoveryRequest = (
+	roomId: GalleryRoomId,
+	viewerId: string | null
+): GalleryDiscoveryRequest => {
+	if (roomId === 'hall-of-fame') {
+		return { authorId: null, limit: 12, sort: 'top', window: 'all' };
+	}
+
+	if (roomId === 'hot-wall') {
+		return { authorId: null, limit: GALLERY_PAGE_SIZE, sort: 'hot', window: null };
+	}
+
+	if (roomId === 'your-studio' && viewerId) {
+		return { authorId: viewerId, limit: GALLERY_PAGE_SIZE, sort: 'recent', window: null };
+	}
+
+	return { authorId: null, limit: GALLERY_PAGE_SIZE, sort: 'recent', window: null };
 };
 
 /** The room payload the server streams into the page. */

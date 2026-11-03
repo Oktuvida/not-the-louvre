@@ -78,6 +78,32 @@ describe('createSeededAccumulator feed memory', () => {
 		expect(readRoomFeedSnapshot('hot-wall')?.scrollY).toBe(5200);
 	});
 
+	it('hands over the first page it was drawing along with its feed', async () => {
+		const artworks = makeArtworks(6, { prefix: 'hot-' });
+
+		const room = await render(RoomHarness, {
+			props: {
+				component: HotWallRoom,
+				roomProps: {
+					artworks,
+					feedCacheKey: 'hot-wall',
+					pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
+				}
+			}
+		});
+
+		await expect.element(page.getByTestId('hot-wall-room')).toBeVisible();
+
+		navigate();
+		room.unmount();
+
+		// The room goes back up from this before the server's fresh page lands.
+		expect(readRoomFeedSnapshot('hot-wall')?.seed).toEqual({
+			artworks,
+			pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
+		});
+	});
+
 	it('stores no offset for a room the reader never scrolled', async () => {
 		const artworks = makeArtworks(6, { prefix: 'hot-' });
 

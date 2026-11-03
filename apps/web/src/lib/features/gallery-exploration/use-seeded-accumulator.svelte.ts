@@ -6,6 +6,7 @@ import {
 	type ArtworkAccumulator
 } from '#lib/features/gallery-exploration/artwork-accumulator.svelte.js';
 import type {
+	GalleryArtworkPage,
 	GalleryPageInfo,
 	LoadMoreArtworks
 } from '#lib/features/gallery-exploration/model/discovery.js';
@@ -61,6 +62,12 @@ export type SeededAccumulatorOptions = {
 	restoreScroll?: boolean;
 	/** Reads the room grid's measured rows (VirtualizedGrid's `snapshotLayout`). */
 	getLayout?: () => GridLayoutSnapshot | null;
+	/**
+	 * True while the seed is the one this room showed when it was last left,
+	 * standing in until the server's fresh first page lands. The restored feed
+	 * merges the fresh page, not the remembered one it was built from.
+	 */
+	getSeedIsRemembered?: () => boolean;
 };
 
 export type SeededAccumulator = ArtworkAccumulator & {
@@ -105,13 +112,12 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Seed
 	 * The reconciliation baseline.
 	 *
 	 * A room mounted from the props alone can take it at construction. A
-	 * restored room cannot: the gallery page starts its `artworks` state empty
-	 * and fills it from an effect, while the room itself is built synchronously
-	 * inside the resolved `{#await}` branch — so at construction the seed is
-	 * still `[]`, and one flush later the real seed would look like a fresh
-	 * navigation and reseed the restored pages away. A restored room therefore
-	 * establishes its baseline on the first reactive run and merges the seed
-	 * into the feed it kept.
+	 * restored room cannot: it goes up before the server's fresh first page
+	 * has landed, holding the seed it was left with (or, until the gallery page
+	 * has filled its own `artworks` state from an effect, `[]`). Taking either
+	 * as the baseline would make the fresh page look like a new navigation and
+	 * reseed the restored pages away. A restored room therefore establishes its
+	 * baseline on the fresh seed and merges it into the feed it kept.
 	 */
 	let pendingRestoreMerge = restored !== null;
 	let lastSeedIdentity = seedIdentity(initialArtworks);
@@ -126,9 +132,10 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Seed
 
 		if (pendingRestoreMerge) {
 			// An empty seed here is the page's state before its own effect has
-			// filled it, not a room that emptied out: adopting it as the baseline
-			// would hand the reseed branch the real seed a flush later.
-			if (artworks.length === 0) return;
+			// filled it, not a room that emptied out, and a remembered seed is the
+			// one the restored feed was built from: adopting either as the baseline
+			// would hand the reseed branch the fresh seed a flush later.
+			if (artworks.length === 0 || options.getSeedIsRemembered?.()) return;
 
 			pendingRestoreMerge = false;
 			lastSeedIdentity = identity;
@@ -158,7 +165,7 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Seed
 		/*
 		 * `beforeNavigate` fires while this room still owns the scroll position.
 		 * The teardown below cannot read it: the room sits inside the gallery
-		 * layout's `{#key roomId}` block, so its destroy runs behind the block's
+		 * layout's keyed room stage, so its destroy runs behind the block's
 		 * out-transition (~225ms) — long after SvelteKit has scrolled the window
 		 * back to the top, two ticks after the DOM update of a push navigation.
 		 * Reading `window.scrollY` there always stored 0, and a stored 0 makes
@@ -167,13 +174,22 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Seed
 		let lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
 		// Read with the scroll: by teardown the grid has already gone.
 		let lastLayout: GridLayoutSnapshot | null = null;
+		// And so is the seed: by teardown the route's data belongs to the room
+		// that replaced this one, and reading the seed there stores its page.
+		let lastSeed: GalleryArtworkPage | null = null;
+
+		const readSeed = (): GalleryArtworkPage => ({
+			artworks: $state.snapshot(untrack(() => options.getArtworks())),
+			pageInfo: $state.snapshot(untrack(() => options.getPageInfo()))
+		});
 
 		const handOverFeed = () =>
 			writeRoomFeedSnapshot(feedCacheKey, {
 				artworks: $state.snapshot(accumulator.allArtworks),
 				layout: lastLayout,
 				pageInfo: $state.snapshot(accumulator.pageInfo),
-				scrollY: lastScrollY
+				scrollY: lastScrollY,
+				seed: lastSeed ?? readSeed()
 			});
 
 		beforeNavigate(({ from, shallow, type }) => {
@@ -185,6 +201,7 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Seed
 
 			lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
 			lastLayout = options.getLayout?.() ?? null;
+			lastSeed = readSeed();
 			// Handed over now as well as at teardown: that same out-transition
 			// delay means a quick Back mounts the next copy of this room before
 			// this one is destroyed, and it would find nothing to restore.

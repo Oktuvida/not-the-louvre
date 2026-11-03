@@ -4,8 +4,13 @@ import { resetDemoState } from '../demo/e2e-helpers';
 // Pinterest's promise: wherever you wander off to, coming back puts you on
 // the same artwork you were looking at.
 
+// The room the visitor is in. One they just left stays on screen for its
+// 225ms slide, inert; a quick return puts a new copy of it beside that one.
+const inTheRoom = (page: Page) =>
+	page.locator('[data-testid="gallery-room-content"]:not([inert] *)');
+
 const scrollUntilVisible = async (page: Page, title: RegExp) => {
-	const card = page.getByRole('button', { name: title });
+	const card = inTheRoom(page).getByRole('button', { name: title });
 	await expect(async () => {
 		await page.mouse.wheel(0, 400);
 		await expect(card).toBeInViewport({ timeout: 500 });
@@ -41,6 +46,44 @@ test.describe('finding your place again', () => {
 		await expect(page).toHaveURL(/\/gallery\/hot-wall$/);
 		await expect(deepCard).toBeInViewport();
 		expect(Math.abs((await screenTop(deepCard)) - leftAt)).toBeLessThan(40);
+	});
+
+	test('a room walked through before goes straight back up, with no loading wall', async ({
+		page
+	}) => {
+		await page.goto('/gallery/hot-wall');
+		await expect(page.getByRole('button', { name: /Hottest right now/ })).toBeVisible();
+
+		// Through two more rooms, each seen whole, so the way back is not just
+		// the last room left.
+		await page.getByRole('link', { name: /Hall of Fame/ }).click();
+		await expect(page.getByTestId('podium-artwork-1')).toBeVisible();
+		await page.getByRole('link', { name: /Mystery Room/ }).click();
+		await expect(page.getByTestId('mystery-room')).toBeVisible();
+
+		// From the click on, note any loading wall that goes up.
+		await page.evaluate(() => {
+			const seen = { skeleton: false };
+			Object.assign(window, { __roomReturn: seen });
+			new MutationObserver((records) => {
+				for (const { addedNodes } of records) {
+					for (const node of addedNodes) {
+						if (!(node instanceof Element)) continue;
+						const skeleton = '[data-testid="room-loading-skeleton"]';
+						if (node.matches(skeleton) || node.querySelector(skeleton)) seen.skeleton = true;
+					}
+				}
+			}).observe(document.body, { childList: true, subtree: true });
+		});
+		await page.getByRole('link', { name: /The Hot Wall/ }).click();
+
+		await expect(page).toHaveURL(/\/gallery\/hot-wall$/);
+		await expect(inTheRoom(page).getByRole('button', { name: /Hottest right now/ })).toBeVisible();
+		expect(
+			await page.evaluate(
+				() => (window as unknown as { __roomReturn: { skeleton: boolean } }).__roomReturn.skeleton
+			)
+		).toBe(false);
 	});
 
 	test('closing an artwork opened deep in the wall leaves the wall where it was', async ({

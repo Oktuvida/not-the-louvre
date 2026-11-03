@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakePage } from '#lib/testing/fake-page-state.svelte.js';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
@@ -8,10 +8,23 @@ type HarnessPageData = {
 	viewer: { id: string; role: 'user' } | null;
 };
 
-const { refreshAll, goto } = vi.hoisted(() => ({
-	goto: vi.fn(),
-	refreshAll: vi.fn(async () => {})
-}));
+const { beforeNavigate, goto, leavingFor, refreshAll } = vi.hoisted(() => {
+	type Navigation = { from: { url: URL }; shallow: boolean; type: string };
+	const callbacks = new Set<(navigation: Navigation) => void>();
+
+	return {
+		beforeNavigate: (callback: (navigation: Navigation) => void) => {
+			callbacks.add(callback);
+		},
+		goto: vi.fn(),
+		// A room tab is a link navigation away from the page the visitor is on.
+		leavingFor: (from: URL) => {
+			for (const callback of callbacks)
+				callback({ from: { url: from }, shallow: false, type: 'link' });
+		},
+		refreshAll: vi.fn(async () => {})
+	};
+});
 
 type GalleryPageData = {
 	roomId: string;
@@ -30,6 +43,7 @@ vi.mock(
 
 vi.mock('$app/navigation', async () => ({
 	...(await import('#lib/testing/fake-navigation.js')).fakeNavigation,
+	beforeNavigate,
 	goto,
 	refreshAll
 }));
@@ -39,6 +53,8 @@ vi.mock('#lib/features/home-entry-scene/canvas/museum-canvas.js', () => ({
 	museumWindowAspectRatio: '16/9'
 }));
 
+import { makeArtwork, makeArtworks } from '#lib/features/gallery-exploration/fixtures/artworks.js';
+import { clearRoomFeedCache } from '#lib/features/gallery-exploration/model/feed-cache.js';
 import GalleryRoomSwitchHarness from './GalleryRoomSwitchHarness.svelte';
 import GalleryRouteLayoutHarness from './GalleryRouteLayoutHarness.svelte';
 
@@ -133,6 +149,62 @@ describe('gallery route layout', () => {
 
 		await vi.waitFor(() => {
 			expect(refreshAll).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	describe('walking back into a room', () => {
+		const viewer = { id: 'user-1', role: 'user' as const };
+		const roomUrl = (roomId: string) =>
+			new URL(roomId === 'hall-of-fame' ? '/gallery' : `/gallery/${roomId}`, 'http://localhost');
+		// A navigation streams the room it lands on; these never land, so what
+		// is on the wall can only have come from the gallery's memory.
+		const streaming = () => new Promise<never>(() => {});
+		const walkInto = (roomId: string) => {
+			leavingFor(fakePage.page.url);
+			fakePage.set({
+				data: { roomContent: streaming(), roomId, viewer },
+				url: roomUrl(roomId)
+			});
+		};
+		const firstVisit = (roomId: string, artworks: ReturnType<typeof makeArtworks>) =>
+			fakePage.set({ data: { artworks, roomId, viewer }, url: roomUrl(roomId) });
+
+		beforeEach(() => {
+			clearRoomFeedCache();
+		});
+
+		it('puts it back up whole when the visitor turns back before its slide is over', async () => {
+			firstVisit('hot-wall', makeArtworks(6, { prefix: 'hot-' }));
+			await render(GalleryRoomSwitchHarness, {});
+			await expect.element(page.getByRole('button', { name: /Artwork hot-1/ })).toBeVisible();
+
+			walkInto('hall-of-fame');
+			await new Promise((resolve) => setTimeout(resolve, 60));
+			// The Hot Wall is still sliding out (225ms) when the visitor turns back.
+			walkInto('hot-wall');
+
+			await expect.element(page.getByRole('button', { name: /Artwork hot-2/ })).toBeVisible();
+			expect(document.querySelector('[data-room-skeleton="hot-wall"]')).toBeNull();
+		});
+
+		it('puts the Hall of Fame podium back up with it', async () => {
+			firstVisit(
+				'hall-of-fame',
+				[1, 2, 3, 4, 5].map((rank) =>
+					makeArtwork({ id: `ranked-${rank}`, rank, title: `Ranked Piece ${rank}` })
+				)
+			);
+			await render(GalleryRoomSwitchHarness, {});
+			await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
+
+			walkInto('hot-wall');
+			// Long enough for the Hall of Fame to finish sliding out and be torn down.
+			await new Promise((resolve) => setTimeout(resolve, 500));
+			walkInto('hall-of-fame');
+
+			await expect.element(page.getByText('Ranked Piece 1')).toBeVisible();
+			await expect.element(page.getByText('Ranked Piece 5')).toBeVisible();
+			expect(document.querySelector('[data-room-skeleton="hall-of-fame"]')).toBeNull();
 		});
 	});
 });
