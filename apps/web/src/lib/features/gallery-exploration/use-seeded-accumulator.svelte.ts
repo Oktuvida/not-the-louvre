@@ -164,12 +164,9 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Seed
 	if (feedCacheKey) {
 		/*
 		 * `beforeNavigate` fires while this room still owns the scroll position.
-		 * The teardown below cannot read it: the room sits inside the gallery
-		 * layout's keyed room stage, so its destroy runs behind the block's
-		 * out-transition (~225ms) — long after SvelteKit has scrolled the window
-		 * back to the top, two ticks after the DOM update of a push navigation.
-		 * Reading `window.scrollY` there always stored 0, and a stored 0 makes
-		 * the restore a no-op.
+		 * The teardown below cannot be trusted with it: by then SvelteKit may
+		 * have scrolled the window back to the top for the next room, and a
+		 * stored 0 makes the restore a no-op.
 		 */
 		let lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
 		// Read with the scroll: by teardown the grid has already gone.
@@ -194,17 +191,15 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Seed
 
 		beforeNavigate(({ from, shallow, type }) => {
 			if (shallow && type === 'goto') return;
-			// A copy of this room that is still sliding out hears the next
-			// navigation too, from whatever room replaced it; its scroll is not
-			// this room's, and writing it would clobber the snapshot.
+			// Only a navigation away from this room is this room's to record.
 			if (from && roomIdForPath(from.url.pathname) !== feedCacheKey) return;
 
 			lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
 			lastLayout = options.getLayout?.() ?? null;
 			lastSeed = readSeed();
-			// Handed over now as well as at teardown: that same out-transition
-			// delay means a quick Back mounts the next copy of this room before
-			// this one is destroyed, and it would find nothing to restore.
+			// Handed over now as well as at teardown: the stage builds the next
+			// room before it tears this one down, so a quick Back would build
+			// the next copy of this room with nothing yet to restore.
 			handOverFeed();
 		});
 

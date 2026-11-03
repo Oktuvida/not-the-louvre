@@ -141,8 +141,8 @@ describe('gallery route layout', () => {
 		setRoom({ roomId: 'hot-wall', viewer: { id: 'user-1', role: 'user' } });
 		setRoom({ roomId: 'your-studio', viewer: { id: 'user-1', role: 'user' } });
 
-		// The outgoing room's effect teardown is deferred until the 225ms slide
-		// outro finishes — long after the incoming room published its bindings.
+		// The outgoing room is torn down after the incoming room has published
+		// its bindings.
 		await new Promise((resolve) => setTimeout(resolve, 500));
 
 		await page.getByRole('button', { name: /2 new pieces/ }).click();
@@ -173,14 +173,14 @@ describe('gallery route layout', () => {
 			clearRoomFeedCache();
 		});
 
-		it('puts it back up whole when the visitor turns back before its slide is over', async () => {
+		it('puts it back up whole when the visitor turns straight back', async () => {
 			firstVisit('hot-wall', makeArtworks(6, { prefix: 'hot-' }));
 			await render(GalleryRoomSwitchHarness, {});
 			await expect.element(page.getByRole('button', { name: /Artwork hot-1/ })).toBeVisible();
 
 			walkInto('hall-of-fame');
 			await new Promise((resolve) => setTimeout(resolve, 60));
-			// The Hot Wall is still sliding out (225ms) when the visitor turns back.
+			// Straight back, a moment after leaving.
 			walkInto('hot-wall');
 
 			await expect.element(page.getByRole('button', { name: /Artwork hot-2/ })).toBeVisible();

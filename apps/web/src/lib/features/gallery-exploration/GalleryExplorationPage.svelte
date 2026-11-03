@@ -844,12 +844,12 @@
 		if (!galleryLayout) return;
 
 		/*
-		 * Ownership, not lifecycle. The room lives inside the layout's
-		 * keyed room stage, whose out-transition defers this teardown ~225ms
-		 * — long after the incoming room has published its own handlers into the
-		 * same stores. Clearing unconditionally therefore erased the live room's
-		 * bindings: Refresh became a no-op that still looked enabled, Back lost
-		 * its fade to the home page, and the detail panel unmounted entirely.
+		 * Ownership, not lifecycle. The room lives inside the layout's keyed
+		 * room stage, and the room that replaces it publishes its own handlers
+		 * into the same stores. Clearing unconditionally therefore erased the
+		 * live room's bindings: Refresh became a no-op that still looked
+		 * enabled, Back lost its fade to the home page, and the detail panel
+		 * unmounted entirely.
 		 */
 		const actions = {
 			newPieces: newPieces
@@ -880,8 +880,14 @@
 		galleryLayout.panelBindings.set(panel);
 
 		return () => {
-			if (get(galleryLayout.actionBindings) === actions) galleryLayout.actionBindings.set(null);
-			if (get(galleryLayout.panelBindings) === panel) galleryLayout.panelBindings.set(null);
+			// Let go only once the room replacing this one has had its turn: the
+			// stage builds the next room before it tears this one down, and
+			// letting go at once left the stores empty in between, while the
+			// header and the detail panel were still reading them.
+			queueMicrotask(() => {
+				if (get(galleryLayout.actionBindings) === actions) galleryLayout.actionBindings.set(null);
+				if (get(galleryLayout.panelBindings) === panel) galleryLayout.panelBindings.set(null);
+			});
 		};
 	});
 </script>

@@ -41,7 +41,6 @@ export type GalleryLayoutContext = {
 	panelBindings: Writable<GalleryPanelBindings | null>;
 	actionBindings: Writable<GalleryActionBindings | null>;
 	revealedArtworkIds: Writable<Set<string>>;
-	previousRoomId: Writable<string | null>;
 };
 
 const KEY = Symbol('gallery-layout-context');
@@ -49,8 +48,7 @@ const KEY = Symbol('gallery-layout-context');
 export const createGalleryLayoutContext = (): GalleryLayoutContext => ({
 	panelBindings: writable<GalleryPanelBindings | null>(null),
 	actionBindings: writable<GalleryActionBindings | null>(null),
-	revealedArtworkIds: writable<Set<string>>(new Set()),
-	previousRoomId: writable<string | null>(null)
+	revealedArtworkIds: writable<Set<string>>(new Set())
 });
 
 export const setGalleryLayoutContext = (value: GalleryLayoutContext) => setContext(KEY, value);
