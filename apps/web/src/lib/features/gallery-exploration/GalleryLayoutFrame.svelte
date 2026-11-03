@@ -149,9 +149,9 @@
 
 <style>
 	/* Tiles that miss the rasterizer during fast scroll are filled with the
-	 * document canvas color (the body background). The site-wide cream would
-	 * flash bright against the dark museum wall, so while a gallery shell is
-	 * mounted the canvas matches the wall and late tiles become invisible. */
+	 * shell's colour, and past it with the document canvas colour (the body
+	 * background). Both are the bricks' own average colour, so a late tile
+	 * reads as a stretch of plain wall for a moment instead of a hole. */
 	:global(body:has([data-testid='gallery-room-shell'])) {
 		background: var(--color-wall);
 	}
