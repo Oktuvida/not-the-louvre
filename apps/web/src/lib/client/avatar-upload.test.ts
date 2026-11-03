@@ -109,7 +109,7 @@ describe('setAdultContentEnabled', () => {
 		);
 
 		await expect(setAdultContentEnabled(false)).rejects.toThrow(
-			'18+ artwork preference could not be updated.'
+			"Your 18+ setting didn't save. Try again in a moment."
 		);
 	});
 });

@@ -63,6 +63,27 @@ describe('GalleryStatusRegion', () => {
 		expect(Number.parseFloat(styles.bottom)).toBeGreaterThanOrEqual(64);
 	});
 
+	it('is a note from the guard, taped up, that comes off at a tap anywhere on it', async () => {
+		const onDismiss = vi.fn();
+		await render(GalleryStatusRegion, {
+			message: "Couldn't check for new pieces just now. Try again in a moment.",
+			onDismiss
+		});
+
+		const words = page.getByText("Couldn't check for new pieces just now. Try again in a moment.");
+		await expect.element(words).toBeVisible();
+		await expect.element(page.getByText('the guard')).toBeVisible();
+
+		// A tap on the words lands on the note's own dismiss button: there is
+		// no small cross to find.
+		const box = words.element().getBoundingClientRect();
+		const tapped = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+		expect(tapped).toBe(page.getByRole('button', { name: 'Dismiss message' }).element());
+
+		(tapped as HTMLElement).click();
+		expect(onDismiss).toHaveBeenCalledTimes(1);
+	});
+
 	it('hands the message back on dismiss', async () => {
 		const onDismiss = vi.fn();
 		await render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss });

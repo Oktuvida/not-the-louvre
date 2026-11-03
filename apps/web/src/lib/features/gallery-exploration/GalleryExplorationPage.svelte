@@ -63,7 +63,7 @@
 	const ROOM_LOAD_ERROR_MESSAGE = 'The gallery could not load right now — refresh to try again.';
 
 	const ROOM_REFRESH_ERROR_MESSAGE =
-		'The gallery could not refresh this room right now — what is on the wall may be out of date.';
+		"Couldn't check this room for new pieces. What's up may be a little old.";
 
 	/*
 	 * The house copy for a failed API call. `apiErrorMessage` prefers the
@@ -72,7 +72,10 @@
 	 * these strings for a 500, a proxy's HTML page or a dropped connection.
 	 */
 	const GALLERY_DISCOVERY_ERROR_MESSAGE = 'Gallery discovery could not be loaded';
-	const ARTWORK_DETAIL_ERROR_MESSAGE = 'Artwork details could not be loaded';
+	const ARTWORK_DETAIL_ERROR_MESSAGE = "Couldn't open that one. Tap it again?";
+	const GALLERY_REFRESH_ERROR_MESSAGE =
+		"Couldn't check for new pieces just now. Try again in a moment.";
+	const ADULT_PREFERENCE_ERROR_MESSAGE = "Your 18+ setting didn't save. Try again in a moment.";
 
 	const isGalleryDetailHistoryState = (
 		value: App.PageState['galleryDetail'] | null | undefined
@@ -590,8 +593,7 @@
 			await setAdultContentEnabled(enabled);
 			adultContentPreferenceOverride = enabled;
 		} catch (error) {
-			detailErrorMessage =
-				error instanceof Error ? error.message : '18+ artwork preference could not be updated.';
+			detailErrorMessage = error instanceof Error ? error.message : ADULT_PREFERENCE_ERROR_MESSAGE;
 		} finally {
 			isSavingAdultContentPreference = false;
 		}
@@ -727,8 +729,7 @@
 		try {
 			await refreshAll();
 		} catch (error) {
-			detailErrorMessage =
-				error instanceof Error ? error.message : 'Gallery could not be refreshed.';
+			detailErrorMessage = error instanceof Error ? error.message : GALLERY_REFRESH_ERROR_MESSAGE;
 		} finally {
 			isRefreshingGallery = false;
 		}

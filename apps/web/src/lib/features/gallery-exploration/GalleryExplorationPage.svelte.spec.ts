@@ -1750,7 +1750,7 @@ describe('GalleryExplorationPage', () => {
 
 			await expect
 				.element(page.getByTestId('gallery-status-region'))
-				.toMatchTextContent('could not refresh');
+				.toMatchTextContent("Couldn't check this room for new pieces.");
 			await expect.element(page.getByRole('button', { name: /Cached Deep/ })).toBeVisible();
 			expect(document.querySelector('[data-testid="gallery-room-error"]')).toBeNull();
 		});
