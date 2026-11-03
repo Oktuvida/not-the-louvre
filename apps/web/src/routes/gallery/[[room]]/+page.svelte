@@ -13,7 +13,7 @@
 	a skeleton belonging to the instance that was about to be discarded.
 -->
 <GalleryExplorationPage
-	adultContentEnabled={data.initialRoomContent?.adultContentEnabled}
+	adultContentEnabled={data.initialRoomContent?.adultContentEnabled ?? data.adultContentEnabled}
 	artworks={data.initialRoomContent?.artworks}
 	awardStyle={data.awardStyle}
 	discovery={data.initialRoomContent?.discovery}

@@ -2,7 +2,10 @@ import { error, redirect } from '@sveltejs/kit';
 import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
 import { getViewerContentPreferences } from '#lib/server/moderation/service.js';
 import { toGalleryArtwork } from '#lib/features/gallery-exploration/gallery-adapter.js';
-import type { GalleryRoomContent } from '#lib/features/gallery-exploration/model/discovery.js';
+import {
+	galleryRoomDiscoveryRequest,
+	type GalleryRoomContent
+} from '#lib/features/gallery-exploration/model/discovery.js';
 import {
 	getGalleryRoom,
 	isGalleryRoomId,
@@ -14,30 +17,6 @@ type ProductUser = Viewer;
 
 // The room payload shape is shared with the page component that consumes it.
 export type { GalleryRoomContent };
-
-const SCALABLE_GALLERY_PAGE_SIZE = 24;
-
-const roomDiscoveryRequest = (roomId: GalleryRoomId, user?: ProductUser) => {
-	if (roomId === 'hall-of-fame') {
-		return { cursor: null, limit: 12, sort: 'top' as const, window: 'all' as const };
-	}
-
-	if (roomId === 'hot-wall') {
-		return { cursor: null, limit: SCALABLE_GALLERY_PAGE_SIZE, sort: 'hot' as const, window: null };
-	}
-
-	if (roomId === 'your-studio' && user) {
-		return {
-			authorId: user.id,
-			cursor: null,
-			limit: SCALABLE_GALLERY_PAGE_SIZE,
-			sort: 'recent' as const,
-			window: null
-		};
-	}
-
-	return { cursor: null, limit: SCALABLE_GALLERY_PAGE_SIZE, sort: 'recent' as const, window: null };
-};
 
 // The Hot Wall is deliberately absent: it renders its own two-line empty state
 // (`HotWallRoom.svelte`) and the page never falls back to this copy for it, so a
@@ -74,9 +53,9 @@ export const loadGalleryRoomContent = async (
 	// connection). Omitting it falls back to reading the row here.
 	options: { adultContentEnabled?: boolean } = {}
 ): Promise<GalleryRoomContent> => {
-	const discoveryRequest = roomDiscoveryRequest(roomId, user);
+	const discoveryRequest = galleryRoomDiscoveryRequest(roomId, user?.id ?? null);
 	const [discovery, viewerContentPreferences] = await Promise.all([
-		listArtworkDiscovery(discoveryRequest, { user }),
+		listArtworkDiscovery({ ...discoveryRequest, cursor: null }, { user }),
 		options.adultContentEnabled !== undefined
 			? Promise.resolve({ adultContentEnabled: options.adultContentEnabled })
 			: user
@@ -94,15 +73,7 @@ export const loadGalleryRoomContent = async (
 		artworks: visibleItems.map((item, index) =>
 			toGalleryArtwork(item, roomId === 'hall-of-fame' ? index + 1 : undefined)
 		),
-		discovery: {
-			pageInfo: discovery.pageInfo,
-			request: {
-				authorId: (roomId === 'your-studio' && user?.id) || null,
-				limit: discoveryRequest.limit,
-				sort: discoveryRequest.sort,
-				window: discoveryRequest.window
-			}
-		},
+		discovery: { pageInfo: discovery.pageInfo, request: discoveryRequest },
 		emptyStateMessage: visibleItems.length === 0 ? emptyStateMessageForRoom(roomId) : null,
 		adultContentEnabled: viewerContentPreferences.adultContentEnabled
 	};

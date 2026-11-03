@@ -21,13 +21,15 @@
 		toGalleryComments
 	} from '#lib/features/gallery-exploration/gallery-adapter.js';
 	import { createDetailPrefetcher } from '#lib/features/gallery-exploration/detail-prefetch.js';
-	import type {
-		GalleryDiscovery,
-		GalleryDiscoveryRequest,
-		GalleryRoomContent
+	import {
+		galleryRoomDiscoveryRequest,
+		type GalleryDiscovery,
+		type GalleryDiscoveryRequest,
+		type GalleryRoomContent
 	} from '#lib/features/gallery-exploration/model/discovery.js';
 	import {
 		patchCachedArtwork,
+		readRoomFeedSnapshot,
 		suppressNextRoomFeedSnapshot
 	} from '#lib/features/gallery-exploration/model/feed-cache.js';
 	import {
@@ -58,6 +60,9 @@
 	const LOCAL_GALLERY_DETAIL_SOURCE = 'local-room-selection' as const;
 
 	const ROOM_LOAD_ERROR_MESSAGE = 'The gallery could not load right now — refresh to try again.';
+
+	const ROOM_REFRESH_ERROR_MESSAGE =
+		'The gallery could not refresh this room right now — what is on the wall may be out of date.';
 
 	/*
 	 * The house copy for a failed API call. `apiErrorMessage` prefers the
@@ -218,14 +223,20 @@
 
 	// Deliberately frozen at construction; the IIFE keeps it out of the reactive
 	// graph without tripping `state_referenced_locally`.
-	const { initialRoomContent } = (() => ({ initialRoomContent: roomContent }))();
+	const { initialRoomContent, rememberedSeed } = (() => ({
+		initialRoomContent: roomContent,
+		// A room the visitor already walked through goes straight back up as it
+		// was left, while its fresh first page streams in behind it.
+		rememberedSeed: roomContent ? (readRoomFeedSnapshot(roomId)?.seed ?? null) : null
+	}))();
 
 	// --- Streamed room content ---------------------------------------------
-	// The template awaits the same promise so SvelteKit still streams the room
-	// HTML; this seeder is what feeds the script-level state (notes, panel
-	// bindings, the seed each room reconciles against). The rejection handler is
-	// attached at init, not in onMount: without the route's `{:catch}` a streamed
-	// failure would otherwise surface as an unhandled rejection.
+	// This seeder is what feeds both the template and the script-level state
+	// (notes, panel bindings, the seed each room reconciles against). The
+	// template draws from that state rather than awaiting the promise itself,
+	// so a remembered room stays in one branch across its fresh page landing.
+	// The rejection handler is attached at init, not in onMount, so a streamed
+	// failure never surfaces as an unhandled rejection.
 	let streamedContent = $state<GalleryRoomContent | null>(null);
 	let streamFailed = $state(false);
 
@@ -241,6 +252,9 @@
 			() => {
 				if (!isCurrent) return;
 				streamFailed = true;
+				// The room stays up as it was left; the visitor is told it may
+				// be stale rather than having it taken off the wall.
+				if (isSeedRemembered) detailErrorMessage = ROOM_REFRESH_ERROR_MESSAGE;
 			}
 		);
 
@@ -256,7 +270,7 @@
 	$effect(() => () => disposeInitialSeed?.());
 
 	// A refresh hands over a new promise; the room goes back to its skeleton
-	// while it settles, exactly as the template's await block does.
+	// while it settles.
 	$effect.pre(() => {
 		const pending = roomContent;
 		if (!pending || pending === initialRoomContent) return;
@@ -267,13 +281,25 @@
 		return seedFromStream(pending);
 	});
 
-	const seedArtworks = $derived(roomContent ? (streamedContent?.artworks ?? []) : routeArtworks);
+	// Only the stream the page arrived with stands in for a remembered room: a
+	// refresh is the visitor asking for fresh data, and waits for it.
+	const isSeedRemembered = $derived(
+		rememberedSeed !== null && roomContent === initialRoomContent && streamedContent === null
+	);
+
+	const seedArtworks = $derived(
+		roomContent
+			? (streamedContent?.artworks ?? (isSeedRemembered ? rememberedSeed!.artworks : []))
+			: routeArtworks
+	);
 
 	const seedDiscovery = $derived<GalleryDiscovery>(
 		roomContent
 			? (streamedContent?.discovery ?? {
-					pageInfo: { hasMore: false, nextCursor: null },
-					request: null
+					pageInfo: isSeedRemembered
+						? rememberedSeed!.pageInfo
+						: { hasMore: false, nextCursor: null },
+					request: galleryRoomDiscoveryRequest(roomId, viewer?.id ?? null)
 				})
 			: routeDiscovery
 	);
@@ -282,8 +308,9 @@
 		roomContent ? (streamedContent?.emptyStateMessage ?? null) : emptyStateMessage
 	);
 
+	// A room on the wall is not loading, even while its fresh page streams.
 	const isRoomBusy = $derived(
-		roomContent ? streamedContent === null && !streamFailed : isRoomLoading
+		roomContent ? streamedContent === null && !streamFailed && !isSeedRemembered : isRoomLoading
 	);
 
 	// Reseeds from route data on navigation; votes and comment counts patch it
@@ -347,9 +374,13 @@
 
 	const selectedArtworkId = $derived(selectedArtwork?.id ?? null);
 
+	// Until the stream lands, the preference the page was handed (the root
+	// layout reads it for every request) stands in for the stream's copy.
 	const adultContentAllowed = $derived(
 		adultContentPreferenceOverride ??
-			(roomContent ? (streamedContent?.adultContentEnabled ?? false) : adultContentEnabled)
+			(roomContent
+				? (streamedContent?.adultContentEnabled ?? adultContentEnabled)
+				: adultContentEnabled)
 	);
 
 	const hasSensitiveArtwork = $derived(
@@ -814,7 +845,7 @@
 
 		/*
 		 * Ownership, not lifecycle. The room lives inside the layout's
-		 * `{#key roomId}` block, whose out-transition defers this teardown ~225ms
+		 * keyed room stage, whose out-transition defers this teardown ~225ms
 		 * — long after the incoming room has published its own handlers into the
 		 * same stores. Clearing unconditionally therefore erased the live room's
 		 * bindings: Refresh became a no-op that still looked enabled, Back lost
@@ -899,6 +930,7 @@
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
+			seedIsRemembered={isSeedRemembered}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}
@@ -911,6 +943,7 @@
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
+			seedIsRemembered={isSeedRemembered}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}
@@ -923,6 +956,7 @@
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
+			seedIsRemembered={isSeedRemembered}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			{fetchRandomArtwork}
 			onSelect={openArtwork}
@@ -935,6 +969,7 @@
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
+			seedIsRemembered={isSeedRemembered}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}
@@ -1011,13 +1046,15 @@
 
 		<div aria-busy={isRoomBusy} class="space-y-5 md:space-y-6">
 			{#if roomContent}
-				{#await roomContent}
-					<RoomLoadingSkeleton {roomId} />
-				{:then}
+				<!-- One branch for the room whether it streamed or was remembered, so
+				     a remembered room is not rebuilt when its fresh page lands. -->
+				{#if streamedContent || isSeedRemembered}
 					{@render roomBody()}
-				{:catch}
+				{:else if streamFailed}
 					{@render roomLoadFailure(ROOM_LOAD_ERROR_MESSAGE)}
-				{/await}
+				{:else}
+					<RoomLoadingSkeleton {roomId} />
+				{/if}
 			{:else if loadError}
 				{@render roomLoadFailure(loadError)}
 			{:else if isRoomLoading}

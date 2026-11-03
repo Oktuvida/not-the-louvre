@@ -36,11 +36,21 @@
 		if (slideDirection === 0 || prefersReducedMotion.current) return 0;
 		return 300;
 	});
+
+	/*
+	 * Every arrival puts a new room on the stage, a return to the room still
+	 * sliding off it included: the copy on its way out keeps going, and the one
+	 * coming in is built from the route and the gallery's memory of the room.
+	 * Keyed on the room id alone, Svelte would pull the outgoing copy back
+	 * instead, holding the stream it was handed as it left and treating the
+	 * return as a refresh, so the room would drop to its loading skeleton.
+	 */
+	const arrival = $derived({ roomId });
 </script>
 
 <GalleryLayoutFrame {awardStyle} {roomId} {viewer} context={galleryLayout}>
 	<div class="room-stage">
-		{#key roomId}
+		{#key arrival}
 			<div
 				class="room-stage-item relative overflow-visible"
 				in:fly={{ x: slideDirection * 300, duration: slideDuration }}

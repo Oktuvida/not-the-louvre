@@ -1602,7 +1602,11 @@ describe('GalleryExplorationPage', () => {
 				{ ...baseArtwork, id: 'cached-3', title: 'Cached Third' }
 			],
 			pageInfo: { hasMore: true, nextCursor: 'cursor-9' },
-			scrollY: 0
+			scrollY: 0,
+			seed: {
+				artworks: [{ ...baseArtwork, id: 'cached-1', title: 'Cached Lead' }],
+				pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
+			}
 		});
 
 		const deferred = createDeferred<{
@@ -1632,13 +1636,149 @@ describe('GalleryExplorationPage', () => {
 			emptyStateMessage: null
 		});
 
-		// The room is built inside the resolved `{#await}` branch, before the page
-		// has filled its own `artworks` state — so the seed lands one flush after
-		// the restore. It must merge into the restored feed, not replace it.
+		// The room went up from memory before its fresh seed landed, so the seed
+		// arrives after the restore. It must merge into the restored feed, not
+		// replace it.
 		await expect.element(page.getByText('Fresh Study')).toBeVisible();
 		await vi.waitFor(() => {
 			expect(document.querySelector('[data-testid="hot-wall-card-cached-1"]')).not.toBeNull();
 			expect(document.querySelector('[data-testid="hot-wall-card-cached-3"]')).not.toBeNull();
+		});
+	});
+
+	describe('a room the visitor already walked through', () => {
+		type HotWallContent = {
+			adultContentEnabled: boolean;
+			artworks: Artwork[];
+			discovery: {
+				pageInfo: { hasMore: boolean; nextCursor: string | null };
+				request: { authorId: string | null; limit: number; sort: 'hot'; window: null };
+			};
+			emptyStateMessage: string | null;
+		};
+
+		const cachedLead = { ...baseArtwork, id: 'cached-1', title: 'Cached Lead' };
+		const cachedSecond = { ...baseArtwork, id: 'cached-2', title: 'Cached Second' };
+		const cachedDeep = { ...baseArtwork, id: 'cached-3', title: 'Cached Deep' };
+
+		// The Hot Wall as the visitor left it: its first page, plus a page that
+		// infinite scroll fetched below it.
+		const rememberHotWall = () =>
+			writeRoomFeedSnapshot('hot-wall', {
+				artworks: [cachedLead, cachedSecond, cachedDeep],
+				pageInfo: { hasMore: true, nextCursor: 'cursor-9' },
+				scrollY: 0,
+				seed: {
+					artworks: [cachedLead, cachedSecond],
+					pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
+				}
+			});
+
+		it('is on the wall at once, as it was left, while its fresh page streams', async () => {
+			rememberHotWall();
+			const deferred = createDeferred<HotWallContent>();
+
+			await render(GalleryExplorationPage, {
+				room: getGalleryRoom('hot-wall'),
+				roomContent: deferred.promise,
+				roomId: 'hot-wall',
+				viewer: { id: 'user-1', role: 'user' }
+			});
+
+			await expect.element(page.getByRole('button', { name: /Cached Lead/ })).toBeVisible();
+			await expect.element(page.getByRole('button', { name: /Cached Deep/ })).toBeVisible();
+			expect(document.querySelector('[data-testid="room-loading-skeleton"]')).toBeNull();
+			// Nothing on screen is loading, so nothing says so.
+			await expect.element(page.getByTestId('gallery-room-status')).toHaveTextContent('');
+
+			deferred.resolve({
+				adultContentEnabled: false,
+				artworks: [{ ...baseArtwork, id: 'fresh-1', title: 'Fresh Study' }, cachedLead],
+				discovery: {
+					pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
+					request: { authorId: null, limit: 24, sort: 'hot', window: null }
+				},
+				emptyStateMessage: null
+			});
+
+			// The news joins the wall; the pages already hanging stay where they are.
+			await expect.element(page.getByText('Fresh Study')).toBeVisible();
+			await expect.element(page.getByRole('button', { name: /Cached Deep/ })).toBeVisible();
+		});
+
+		it('keeps paging from where it was while its fresh page streams', async () => {
+			rememberHotWall();
+			const loadMoreArtworks = vi.fn(async () => ({
+				artworks: [{ ...baseArtwork, id: 'next-1', title: 'Next Page Study' }],
+				pageInfo: { hasMore: false, nextCursor: null }
+			}));
+
+			await render(GalleryExplorationPage, {
+				loadMoreArtworks,
+				room: getGalleryRoom('hot-wall'),
+				roomContent: createDeferred<HotWallContent>().promise,
+				roomId: 'hot-wall',
+				viewer: { id: 'user-1', role: 'user' }
+			});
+
+			await expect.element(page.getByRole('button', { name: /Cached Deep/ })).toBeVisible();
+			revealScrollSentinel();
+
+			await expect.element(page.getByText('Next Page Study')).toBeVisible();
+			expect(loadMoreArtworks).toHaveBeenCalledWith({
+				authorId: null,
+				cursor: 'cursor-9',
+				limit: 24,
+				sort: 'hot',
+				window: null
+			});
+		});
+
+		it('stays on the wall when its fresh page cannot be fetched, and says so', async () => {
+			rememberHotWall();
+			const deferred = createDeferred<never>();
+			deferred.promise.catch(() => {});
+
+			await render(GalleryExplorationPage, {
+				room: getGalleryRoom('hot-wall'),
+				roomContent: deferred.promise,
+				roomId: 'hot-wall',
+				viewer: { id: 'user-1', role: 'user' }
+			});
+
+			deferred.reject(new Error('stream failed'));
+
+			await expect
+				.element(page.getByTestId('gallery-status-region'))
+				.toMatchTextContent('could not refresh');
+			await expect.element(page.getByRole('button', { name: /Cached Deep/ })).toBeVisible();
+			expect(document.querySelector('[data-testid="gallery-room-error"]')).toBeNull();
+		});
+
+		it('puts the Hall of Fame podium back up at once', async () => {
+			const ranked = [1, 2, 3, 4].map((rank) => ({
+				...baseArtwork,
+				id: `ranked-${rank}`,
+				rank,
+				title: `Ranked Piece ${rank}`
+			}));
+			writeRoomFeedSnapshot('hall-of-fame', {
+				artworks: ranked.slice(3),
+				pageInfo: { hasMore: false, nextCursor: null },
+				scrollY: 0,
+				seed: { artworks: ranked, pageInfo: { hasMore: false, nextCursor: null } }
+			});
+
+			await render(GalleryExplorationPage, {
+				room: getGalleryRoom('hall-of-fame'),
+				roomContent: createDeferred<never>().promise,
+				roomId: 'hall-of-fame'
+			});
+
+			await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
+			await expect.element(page.getByText('Ranked Piece 1')).toBeVisible();
+			await expect.element(page.getByText('Ranked Piece 4')).toBeVisible();
+			expect(document.querySelector('[data-testid="room-loading-skeleton"]')).toBeNull();
 		});
 	});
 

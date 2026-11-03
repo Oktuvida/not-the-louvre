@@ -9,6 +9,12 @@ import {
 	writeRoomFeedSnapshot
 } from './feed-cache';
 
+/** The server's first page, as a room hands it over with its feed. */
+const firstPageOf = (artworks: ReturnType<typeof makeArtworks>) => ({
+	artworks: artworks.slice(0, 24),
+	pageInfo: { hasMore: artworks.length > 24, nextCursor: artworks.length > 24 ? 'cursor-1' : null }
+});
+
 describe('room feed cache', () => {
 	beforeEach(() => {
 		clearRoomFeedCache();
@@ -18,7 +24,8 @@ describe('room feed cache', () => {
 		writeRoomFeedSnapshot('hot-wall', {
 			artworks: makeArtworks(48, { prefix: 'hot-' }),
 			pageInfo: { hasMore: true, nextCursor: 'cursor-3' },
-			scrollY: 4200
+			scrollY: 4200,
+			seed: firstPageOf(makeArtworks(48, { prefix: 'hot-' }))
 		});
 
 		const restored = readRoomFeedSnapshot('hot-wall');
@@ -33,12 +40,14 @@ describe('room feed cache', () => {
 		writeRoomFeedSnapshot('hall-of-fame', {
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-2' },
-			scrollY: 900
+			scrollY: 900,
+			seed: firstPageOf(artworks)
 		});
 		writeRoomFeedSnapshot('hot-wall', {
 			artworks: makeArtworks(30, { prefix: 'hot-' }),
 			pageInfo: { hasMore: true, nextCursor: 'cursor-9' },
-			scrollY: 300
+			scrollY: 300,
+			seed: firstPageOf(makeArtworks(30, { prefix: 'hot-' }))
 		});
 		const deep = artworks[40]!;
 
@@ -54,37 +63,63 @@ describe('room feed cache', () => {
 		expect(readRoomFeedSnapshot('hot-wall')?.artworks).toHaveLength(30);
 	});
 
+	it('carries the vote into the first page a room goes back up with', () => {
+		const artworks = makeArtworks(30, { prefix: 'hall-' });
+		writeRoomFeedSnapshot('hall-of-fame', {
+			artworks: artworks.slice(3),
+			pageInfo: { hasMore: true, nextCursor: 'cursor-2' },
+			scrollY: 0,
+			seed: firstPageOf(artworks)
+		});
+		const champion = artworks[0]!;
+
+		patchCachedArtwork(champion.id, { score: champion.score + 1, viewerVote: 'up' });
+
+		// The podium is drawn from the seed, not from the feed below it.
+		expect(readRoomFeedSnapshot('hall-of-fame')?.seed.artworks[0]).toMatchObject({
+			id: champion.id,
+			score: champion.score + 1,
+			viewerVote: 'up'
+		});
+	});
+
 	it('does not remember a room that never paged past its first screen', () => {
 		writeRoomFeedSnapshot('mystery', {
 			artworks: [],
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
-			scrollY: 0
+			scrollY: 0,
+			seed: firstPageOf([])
 		});
 
 		expect(readRoomFeedSnapshot('mystery')).toBeNull();
 	});
 
-	it('keeps only the two most recently left rooms', () => {
+	it('remembers every room the visitor walked through', () => {
 		const snapshot = (id: string) => ({
 			artworks: [makeArtwork({ id })],
 			pageInfo: { hasMore: false, nextCursor: null },
-			scrollY: 10
+			scrollY: 10,
+			seed: { artworks: [makeArtwork({ id })], pageInfo: { hasMore: false, nextCursor: null } }
 		});
 
 		writeRoomFeedSnapshot('hall-of-fame', snapshot('a'));
 		writeRoomFeedSnapshot('hot-wall', snapshot('b'));
-		writeRoomFeedSnapshot('your-studio', snapshot('c'));
+		writeRoomFeedSnapshot('mystery', snapshot('c'));
+		writeRoomFeedSnapshot('your-studio', snapshot('d'));
 
-		expect(readRoomFeedSnapshot('hall-of-fame')).toBeNull();
-		expect(readRoomFeedSnapshot('hot-wall')).not.toBeNull();
-		expect(readRoomFeedSnapshot('your-studio')).not.toBeNull();
+		// Any of them can be walked back into, and each goes straight back up.
+		expect(readRoomFeedSnapshot('hall-of-fame')?.seed.artworks[0]?.id).toBe('a');
+		expect(readRoomFeedSnapshot('hot-wall')?.seed.artworks[0]?.id).toBe('b');
+		expect(readRoomFeedSnapshot('mystery')?.seed.artworks[0]?.id).toBe('c');
+		expect(readRoomFeedSnapshot('your-studio')?.seed.artworks[0]?.id).toBe('d');
 	});
 
 	it('forgets a runaway feed rather than restoring one that can never grow', () => {
 		writeRoomFeedSnapshot('hot-wall', {
 			artworks: makeArtworks(300, { prefix: 'hot-' }),
 			pageInfo: { hasMore: true, nextCursor: 'cursor-12' },
-			scrollY: 90_000
+			scrollY: 90_000,
+			seed: firstPageOf(makeArtworks(300, { prefix: 'hot-' }))
 		});
 
 		// Truncating the tail would restore pages whose cursor is gone: the room
@@ -97,7 +132,8 @@ describe('room feed cache', () => {
 		writeRoomFeedSnapshot('hot-wall', {
 			artworks: makeArtworks(240, { prefix: 'hot-' }),
 			pageInfo: { hasMore: true, nextCursor: 'cursor-10' },
-			scrollY: 72_000
+			scrollY: 72_000,
+			seed: firstPageOf(makeArtworks(240, { prefix: 'hot-' }))
 		});
 
 		const restored = readRoomFeedSnapshot('hot-wall');
@@ -110,7 +146,8 @@ describe('room feed cache', () => {
 		writeRoomFeedSnapshot('hot-wall', {
 			artworks: makeArtworks(48, { prefix: 'hot-' }),
 			pageInfo: { hasMore: true, nextCursor: 'cursor-3' },
-			scrollY: 4200
+			scrollY: 4200,
+			seed: firstPageOf(makeArtworks(48, { prefix: 'hot-' }))
 		});
 
 		// Refreshing re-streams the room, so it unmounts and hands its feed over
@@ -121,7 +158,8 @@ describe('room feed cache', () => {
 		writeRoomFeedSnapshot('hot-wall', {
 			artworks: makeArtworks(48, { prefix: 'hot-' }),
 			pageInfo: { hasMore: true, nextCursor: 'cursor-3' },
-			scrollY: 4200
+			scrollY: 4200,
+			seed: firstPageOf(makeArtworks(48, { prefix: 'hot-' }))
 		});
 
 		expect(readRoomFeedSnapshot('hot-wall')).toBeNull();

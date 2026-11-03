@@ -14,6 +14,7 @@
 		adultContentEnabled = false,
 		artworks,
 		feedCacheKey = null,
+		seedIsRemembered = false,
 		pageInfo,
 		loadMoreArtworks,
 		fetchRandomArtwork,
@@ -24,6 +25,8 @@
 		adultContentEnabled?: boolean;
 		artworks: Artwork[];
 		feedCacheKey?: GalleryRoomId | null;
+		/** The seed is the one this room was left with, until the server's fresh page lands. */
+		seedIsRemembered?: boolean;
 		pageInfo: GalleryPageInfo;
 		loadMoreArtworks?: LoadMoreArtworks;
 		fetchRandomArtwork?: () => Promise<Artwork>;
@@ -37,6 +40,7 @@
 		// mid-cycle.
 		emptyPageWhenUnavailable: true,
 		getFeedCacheKey: () => feedCacheKey,
+		getSeedIsRemembered: () => seedIsRemembered,
 		getArtworks: () => artworks,
 		getLoadMoreArtworks: () => loadMoreArtworks,
 		getPageInfo: () => pageInfo,

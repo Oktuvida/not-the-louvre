@@ -20,6 +20,8 @@
 		pageInfo: GalleryPageInfo;
 		adultContentEnabled?: boolean;
 		feedCacheKey?: GalleryRoomId | null;
+		/** The seed is the one this room was left with, until the server's fresh page lands. */
+		seedIsRemembered?: boolean;
 		loadMoreArtworks?: LoadMoreArtworks;
 		onPrefetch?: (artworkId: string) => void;
 		onSelect?: (artwork: Artwork) => void;
@@ -32,6 +34,7 @@
 		pageInfo,
 		adultContentEnabled = false,
 		feedCacheKey = null,
+		seedIsRemembered = false,
 		loadMoreArtworks,
 		onPrefetch,
 		onSelect = () => {},
@@ -45,6 +48,7 @@
 
 	const accumulator = createSeededAccumulator({
 		getFeedCacheKey: () => feedCacheKey,
+		getSeedIsRemembered: () => seedIsRemembered,
 		getArtworks: () => artworks,
 		getLayout: () => grid?.snapshotLayout() ?? null,
 		getLoadMoreArtworks: () => loadMoreArtworks,
