@@ -6,6 +6,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { gsap } from '#lib/client/gsap.js';
+	import { reloadIntoNewRelease } from '#lib/client/new-release.js';
 	import type { HomeAuthUser } from '#lib/features/home-entry-scene/auth-contract.js';
 	import type {
 		HomePreviewCard,
@@ -100,6 +101,16 @@
 	const sceneReady = $derived(sceneMediaState === 'loaded');
 	const sceneFailed = $derived(sceneMediaState === 'error');
 
+	/*
+	 * The scene's code and model are hashed files, and a tab opened before a
+	 * release asks for ones the server no longer has. The card stays on loading
+	 * while that is checked; when a release is out, the page reloads into it.
+	 */
+	const sceneFailedToLoad = async () => {
+		if (await reloadIntoNewRelease()) return;
+		sceneMediaState = 'error';
+	};
+
 	let exitDelayedCall: gsap.core.Tween | null = null;
 	let returnFadeSafetyHandle: ReturnType<typeof setTimeout> | null = null;
 	let returnFadeStarted = false;
@@ -136,7 +147,7 @@
 			})
 			.catch(() => {
 				if (!cancelled) {
-					sceneMediaState = 'error';
+					void sceneFailedToLoad();
 				}
 			});
 
@@ -318,7 +329,7 @@
 					-->
 					<svelte:boundary
 						onerror={() => {
-							sceneMediaState = 'error';
+							void sceneFailedToLoad();
 						}}
 					>
 						<SceneComponent
@@ -328,7 +339,8 @@
 							avatarUrl={user?.avatarUrl ?? null}
 							artworkSlots={sceneArtworks}
 							onMediaStateChange={(state) => {
-								sceneMediaState = state;
+								if (state === 'error') void sceneFailedToLoad();
+								else sceneMediaState = state;
 							}}
 						/>
 						{#snippet failed()}{/snippet}
