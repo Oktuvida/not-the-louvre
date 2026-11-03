@@ -23,5 +23,5 @@ test('the Hot Wall’s lead shows its drawing uncovered, its caption written und
 	expect(title).not.toBeNull();
 	// By the title's middle: the polaroid hangs a little askew, which tilts both boxes.
 	expect(title!.y + title!.height / 2).toBeGreaterThan(picture!.y + picture!.height);
-	await expect(lead.getByText(/★\s*\d+/)).toBeVisible();
+	await expect(lead.getByText(/^-?\d+ votes?$/)).toBeVisible();
 });

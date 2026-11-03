@@ -368,8 +368,8 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByText('Loaded Mine 2')).toBeVisible();
-		await expect.element(page.getByText('⭐ 999')).toBeVisible();
-		await expect.element(page.getByText('💬 7')).toBeVisible();
+		await expect.element(page.getByText('999 votes')).toBeVisible();
+		await expect.element(page.getByText('7 comments')).toBeVisible();
 	});
 
 	it('prioritizes the hall-of-fame podium and lets the virtualizer drive ranked card loading', async () => {
@@ -792,8 +792,8 @@ describe('GalleryExplorationPage', () => {
 				page.getByRole('dialog', { name: 'Artwork details for Deterministic Gallery Study' })
 			)
 			.toBeVisible();
-		await expect.element(roomCard.getByText('⭐ 0')).toBeVisible();
-		await expect.element(roomCard.getByText('💬 0')).toBeVisible();
+		await expect.element(roomCard.getByText('0 votes')).toBeVisible();
+		await expect.element(roomCard.getByText('0 comments')).toBeVisible();
 
 		const socket = await connectedSocket('/api/artworks/artwork-1/live');
 		socket.receive(JSON.stringify({ artworkId: 'artwork-1', change: 'votes' }));
@@ -802,9 +802,9 @@ describe('GalleryExplorationPage', () => {
 			expect(loadArtworkDetail).toHaveBeenCalledTimes(2);
 		});
 
-		await expect.element(page.getByRole('button', { name: /👍\s*1/ })).toBeVisible();
-		await expect.element(roomCard.getByText('⭐ 1')).toBeVisible();
-		await expect.element(roomCard.getByText('💬 1')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Upvote 1' })).toBeVisible();
+		await expect.element(roomCard.getByText('1 vote', { exact: true })).toBeVisible();
+		await expect.element(roomCard.getByText('1 comment', { exact: true })).toBeVisible();
 		// The visitor's book is on the back of the postcard, inert until it turns.
 		await page.getByRole('button', { name: 'Read the comments' }).click();
 		await expect.element(page.getByText('Realtime hello', { exact: false })).toBeVisible();
@@ -832,7 +832,7 @@ describe('GalleryExplorationPage', () => {
 
 		const roomCard = page.getByTestId('virtualized-artwork-card-artwork-1');
 		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
-		await expect.element(page.getByRole('button', { name: /👍\s*0/ })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Upvote 0' })).toBeVisible();
 
 		const socket = await connectedSocket('/api/artworks/artwork-1/live');
 		socket.receive(
@@ -843,8 +843,8 @@ describe('GalleryExplorationPage', () => {
 			})
 		);
 
-		await expect.element(page.getByRole('button', { name: /👍\s*1/ })).toBeVisible();
-		await expect.element(roomCard.getByText('⭐ 1')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Upvote 1' })).toBeVisible();
+		await expect.element(roomCard.getByText('1 vote', { exact: true })).toBeVisible();
 		expect(loadArtworkDetail).toHaveBeenCalledTimes(1);
 	});
 
@@ -866,7 +866,7 @@ describe('GalleryExplorationPage', () => {
 
 		const roomCard = page.getByTestId('virtualized-artwork-card-artwork-1');
 		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
-		await expect.element(roomCard.getByText('💬 0')).toBeVisible();
+		await expect.element(roomCard.getByText('0 comments')).toBeVisible();
 
 		const socket = await connectedSocket('/api/artworks/artwork-1/live');
 		const pushed = JSON.stringify({
@@ -877,7 +877,7 @@ describe('GalleryExplorationPage', () => {
 		socket.receive(pushed);
 		socket.receive(pushed);
 
-		await expect.element(roomCard.getByText('💬 1')).toBeVisible();
+		await expect.element(roomCard.getByText('1 comment', { exact: true })).toBeVisible();
 		await page.getByRole('button', { name: 'Read the comments' }).click();
 		await expect.element(page.getByText('Realtime hello', { exact: false })).toBeVisible();
 		expect(loadArtworkDetail).toHaveBeenCalledTimes(1);

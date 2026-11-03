@@ -2,7 +2,15 @@
 	import { goto } from '$app/navigation';
 	import { fade, scale } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import { Clapperboard, Download, GitFork, MessageCircle, PenLine } from 'lucide-svelte';
+	import {
+		Clapperboard,
+		Download,
+		GitFork,
+		MessageCircle,
+		PenLine,
+		ThumbsDown,
+		ThumbsUp
+	} from 'lucide-svelte';
 	import '@fontsource/special-elite/latin-400.css';
 	import { ApiError, requestJson } from '#lib/client/api.js';
 	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
@@ -806,7 +814,11 @@
 										ariaPressed={artwork.viewerVote === 'up'}
 										className={artwork.viewerVote === 'up' ? 'vote-cast' : ''}
 										disabled={isSubmittingVote}
-										onclick={() => submitVote('up')}>👍 {artwork.upvotes}</GameButton
+										onclick={() => submitVote('up')}
+										><ThumbsUp class="vote-icon" aria-hidden="true" /><span class="sr-only"
+											>Upvote</span
+										>
+										{artwork.upvotes}</GameButton
 									>
 									<GameButton
 										variant="danger"
@@ -814,7 +826,11 @@
 										ariaPressed={artwork.viewerVote === 'down'}
 										className={artwork.viewerVote === 'down' ? 'vote-cast' : ''}
 										disabled={isSubmittingVote}
-										onclick={() => submitVote('down')}>👎 {artwork.downvotes}</GameButton
+										onclick={() => submitVote('down')}
+										><ThumbsDown class="vote-icon" aria-hidden="true" /><span class="sr-only"
+											>Downvote</span
+										>
+										{artwork.downvotes}</GameButton
 									>
 									<span class="postcard-actions-spacer"></span>
 									<GameButton variant="primary" size="sm" onclick={goToFork}>
@@ -1454,6 +1470,12 @@
 
 	.postcard-actions-spacer {
 		flex: 1;
+	}
+
+	.postcard-actions :global(.vote-icon) {
+		width: 1rem;
+		height: 1rem;
+		flex-shrink: 0;
 	}
 
 	.postcard-actions :global(.sticker-btn) {

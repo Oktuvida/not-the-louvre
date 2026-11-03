@@ -672,8 +672,8 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(
 			page.getByRole('dialog', { name: /Artwork details for Realtime Product Piece/ })
 		).toBeVisible();
-		await expect(page.getByRole('button', { name: /👍\s*0/ })).toBeVisible();
-		await expect(page.getByRole('button', { name: /👎\s*0/ })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Upvote 0' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Downvote 0' })).toBeVisible();
 
 		const actorContext = await browser.newContext();
 		const actorPage = await actorContext.newPage();
@@ -693,16 +693,18 @@ test.describe('Not the Louvre frontend port', () => {
 					response.request().method() === 'POST' &&
 					response.ok()
 			);
-			await actorPage.getByRole('button', { name: /👍\s*0/ }).click();
+			await actorPage.getByRole('button', { name: 'Upvote 0' }).click();
 			await voteResponse;
 
 			await expect
-				.poll(async () => await page.getByRole('button', { name: /👍\s*1/ }).count(), {
+				.poll(async () => await page.getByRole('button', { name: 'Upvote 1' }).count(), {
 					timeout: 10000
 				})
 				.toBeGreaterThan(0);
 			await expect
-				.poll(async () => await page.getByText('⭐ 1').count(), { timeout: 10000 })
+				.poll(async () => await page.getByText('1 vote', { exact: true }).count(), {
+					timeout: 10000
+				})
 				.toBeGreaterThan(0);
 
 			const commentResponse = actorPage.waitForResponse(
@@ -731,8 +733,8 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(
 			page.getByRole('dialog', { name: /Artwork details for Realtime Product Piece/ })
 		).toBeVisible();
-		await expect(page.getByRole('button', { name: /👍\s*1/ })).toBeVisible();
-		await expect(page.getByRole('button', { name: /👎\s*0/ })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Upvote 1' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Downvote 0' })).toBeVisible();
 		await expect(page.getByText('Realtime hello')).toBeVisible();
 	});
 
