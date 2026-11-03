@@ -246,9 +246,27 @@
 	let toolsVisible = $derived(
 		draftHydrated && (!coverShown || (sceneState !== 'closed' && sceneState !== 'closing'))
 	);
-	// The notes lie on the inside of the cover, so they arrive once it has
-	// finished turning open; the supplies on the desk come in as it turns.
-	let notesVisible = $derived(draftHydrated && (!coverShown || sceneState === 'open'));
+	/*
+	 * Where the layout lays the notes on the open cover (studio-layout.css sets
+	 * --studio-notes-on-cover), they are drawn on the inside of the cover, so
+	 * they turn open and shut with it; elsewhere they have their own place on
+	 * the desk and come in as the cover turns.
+	 */
+	let pageElement = $state<HTMLElement | null>(null);
+	let layoutPutsNotesOnCover = $state(false);
+	const notesOnCover = $derived(coverShown && layoutPutsNotesOnCover);
+
+	$effect(() => {
+		const studio = pageElement;
+		if (!studio) return;
+		const read = () => {
+			layoutPutsNotesOnCover =
+				getComputedStyle(studio).getPropertyValue('--studio-notes-on-cover').trim() === '1';
+		};
+		read();
+		window.addEventListener('resize', read);
+		return () => window.removeEventListener('resize', read);
+	});
 	let hasForkParent = $derived(Boolean(currentForkParent?.mediaUrl));
 
 	const createDraftSession = (
@@ -623,6 +641,102 @@
 	};
 </script>
 
+<!-- The drawing's title, its 18+ mark and a fork's change of plan: on the
+     inside of the cover where the layout lays them there, else on the desk. -->
+{#snippet drawingNotes(onCover: boolean)}
+	<section
+		class={`studio-notes ${
+			onCover ? 'studio-notes-on-cover' : toolsVisible ? 'studio-notes-open' : 'studio-notes-hidden'
+		}`}
+		aria-label="About this drawing"
+		aria-hidden={onCover ? !studioUnlocked : !toolsVisible}
+		inert={onCover ? !studioUnlocked : !toolsVisible}
+	>
+		{#if user}
+			<!-- Where the notes lie on the open cover, its inside is the artist's
+			     own: a bookplate, signed. -->
+			<aside class="studio-bookplate" aria-label="Ex libris">
+				<p class="bookplate-heading">Ex libris</p>
+				<svg class="bookplate-mark" viewBox="0 0 60 44" aria-hidden="true">
+					<path d="M30 3 L56 41 H4 Z" stroke-width="2.6" stroke-linejoin="round"></path>
+					<path d="M30 3 L22 41 M30 3 L38 41 M12 29 H48 M18 22 H42" stroke-width="1.2"></path>
+				</svg>
+				<p class="bookplate-owner">
+					this sketchbook belongs to
+					<span class="bookplate-name">{user.nickname}</span>
+				</p>
+			</aside>
+		{/if}
+
+		<div class="cover-postit cover-postit-title sticky-note">
+			<label class="postit-label" for="studio-artwork-title">Title your masterpiece</label>
+			<input
+				id="studio-artwork-title"
+				bind:value={artworkTitle}
+				type="text"
+				maxlength="80"
+				placeholder="Untitled genius"
+				disabled={!studioUnlocked}
+				class="postit-input"
+			/>
+			<span class="postit-rule" aria-hidden="true"></span>
+			{#if titleError}
+				<p class="postit-error">{titleError}</p>
+			{/if}
+		</div>
+
+		<div class="cover-postit cover-postit-nsfw sticky-note sticky-note-curl-left">
+			<button
+				type="button"
+				role="checkbox"
+				aria-checked={isArtworkNsfw}
+				disabled={!studioUnlocked}
+				onclick={() => {
+					if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
+				}}
+				class="postit-nsfw-btn"
+			>
+				<!-- A box drawn on the note, ticked in red when it is checked. -->
+				<svg class="nsfw-box" viewBox="0 0 26 26" aria-hidden="true">
+					<path
+						class="nsfw-box-frame"
+						d="M4 5 C 10 3.5, 17 4.5, 22 4 C 22.5 10, 21.5 16, 22 22 C 15 22.5, 9 21.5, 4 22 C 3.5 16, 4.5 10, 4 5 Z"
+					></path>
+					{#if isArtworkNsfw}
+						<path class="nsfw-box-tick" d="M7 13.5 L11.5 18.5 L22 5"></path>
+					{/if}
+				</svg>
+				<span class={isArtworkNsfw ? 'font-semibold text-danger-bright' : ''}
+					>Not safe for the Louvre</span
+				>
+			</button>
+		</div>
+
+		{#if currentForkParent}
+			<div class="cover-postit cover-postit-cancel sticky-note">
+				<p class="postit-label">Change of plan</p>
+				<p class="postit-fork-note postit-fork-note-compact">
+					Forking <span class="postit-fork-name">{currentForkParent.title}</span>
+				</p>
+				<GameButton
+					type="button"
+					variant="ghost"
+					size="sm"
+					disabled={!studioUnlocked}
+					onclick={cancelFork}
+					className="postit-cancel-btn"
+				>
+					<span>Cancel fork</span>
+				</GameButton>
+			</div>
+		{/if}
+	</section>
+{/snippet}
+
+{#snippet notesOnTheCover()}
+	{@render drawingNotes(true)}
+{/snippet}
+
 <svelte:window onkeydown={handleHistoryShortcut} />
 
 <svelte:head>
@@ -639,6 +753,7 @@
 </svelte:head>
 
 <div
+	bind:this={pageElement}
 	class="studio-page"
 	data-arrival={arrivedFromRoom ? 'room' : undefined}
 	data-book-state={sceneState}
@@ -699,6 +814,7 @@
 				onOpenRequest={startOpeningBook}
 				onOpened={unlockStudio}
 				{openingDurationMs}
+				coverBack={notesOnCover ? notesOnTheCover : undefined}
 			>
 				<DrawingCanvas
 					sheet
@@ -719,91 +835,9 @@
 			</DrawingBookStage>
 		</div>
 
-		<section
-			class={`studio-notes ${notesVisible ? 'studio-notes-open' : 'studio-notes-hidden'}`}
-			aria-label="About this drawing"
-			aria-hidden={!notesVisible}
-			inert={!notesVisible}
-		>
-			{#if user}
-				<!-- Where the notes lie on the open cover, its inside is the artist's
-				     own: a bookplate, signed. -->
-				<aside class="studio-bookplate" aria-label="Ex libris">
-					<p class="bookplate-heading">Ex libris</p>
-					<svg class="bookplate-mark" viewBox="0 0 60 44" aria-hidden="true">
-						<path d="M30 3 L56 41 H4 Z" stroke-width="2.6" stroke-linejoin="round"></path>
-						<path d="M30 3 L22 41 M30 3 L38 41 M12 29 H48 M18 22 H42" stroke-width="1.2"></path>
-					</svg>
-					<p class="bookplate-owner">
-						this sketchbook belongs to
-						<span class="bookplate-name">{user.nickname}</span>
-					</p>
-				</aside>
-			{/if}
-
-			<div class="cover-postit cover-postit-title sticky-note">
-				<label class="postit-label" for="studio-artwork-title">Title your masterpiece</label>
-				<input
-					id="studio-artwork-title"
-					bind:value={artworkTitle}
-					type="text"
-					maxlength="80"
-					placeholder="Untitled genius"
-					disabled={!studioUnlocked}
-					class="postit-input"
-				/>
-				<span class="postit-rule" aria-hidden="true"></span>
-				{#if titleError}
-					<p class="postit-error">{titleError}</p>
-				{/if}
-			</div>
-
-			<div class="cover-postit cover-postit-nsfw sticky-note sticky-note-curl-left">
-				<button
-					type="button"
-					role="checkbox"
-					aria-checked={isArtworkNsfw}
-					disabled={!studioUnlocked}
-					onclick={() => {
-						if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
-					}}
-					class="postit-nsfw-btn"
-				>
-					<!-- A box drawn on the note, ticked in red when it is checked. -->
-					<svg class="nsfw-box" viewBox="0 0 26 26" aria-hidden="true">
-						<path
-							class="nsfw-box-frame"
-							d="M4 5 C 10 3.5, 17 4.5, 22 4 C 22.5 10, 21.5 16, 22 22 C 15 22.5, 9 21.5, 4 22 C 3.5 16, 4.5 10, 4 5 Z"
-						></path>
-						{#if isArtworkNsfw}
-							<path class="nsfw-box-tick" d="M7 13.5 L11.5 18.5 L22 5"></path>
-						{/if}
-					</svg>
-					<span class={isArtworkNsfw ? 'font-semibold text-danger-bright' : ''}
-						>Not safe for the Louvre</span
-					>
-				</button>
-			</div>
-
-			{#if currentForkParent}
-				<div class="cover-postit cover-postit-cancel sticky-note">
-					<p class="postit-label">Change of plan</p>
-					<p class="postit-fork-note postit-fork-note-compact">
-						Forking <span class="postit-fork-name">{currentForkParent.title}</span>
-					</p>
-					<GameButton
-						type="button"
-						variant="ghost"
-						size="sm"
-						disabled={!studioUnlocked}
-						onclick={cancelFork}
-						className="postit-cancel-btn"
-					>
-						<span>Cancel fork</span>
-					</GameButton>
-				</div>
-			{/if}
-		</section>
+		{#if !notesOnCover}
+			{@render drawingNotes(false)}
+		{/if}
 
 		<div
 			class={`studio-tools tools-stage ${toolsVisible ? 'tools-stage-open' : 'tools-stage-hidden'}`}
@@ -862,7 +896,18 @@
 		animation: toolTrayCrashIn 210ms cubic-bezier(0.2, 0.9, 0.24, 1.12) both;
 	}
 
-	/* The notes lie on the opened cover, so they arrive once it has opened. */
+	/* On the inside of the cover they keep to the strip beside the spine, the
+	 * width of the desk layout's notes column. */
+	.studio-notes-on-cover {
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		width: var(--studio-notes-w, 19rem);
+		z-index: 1;
+	}
+
+	/* On the desk, the notes arrive as the cover opens. */
 	.studio-notes-hidden {
 		opacity: 0;
 		pointer-events: none;
