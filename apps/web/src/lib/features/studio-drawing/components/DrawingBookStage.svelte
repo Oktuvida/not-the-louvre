@@ -32,6 +32,7 @@
 	let {
 		arriving = false,
 		children,
+		coverBack,
 		coverElement = $bindable(null),
 		coverShown = $bindable(true),
 		onClosed,
@@ -46,6 +47,8 @@
 		 */
 		arriving?: boolean;
 		children?: Snippet;
+		/** What lies on the inside of the cover, turning open and shut with it. */
+		coverBack?: Snippet;
 		/** The closed cover, for the page to lay the book by. */
 		coverElement?: HTMLElement | null;
 		/**
@@ -176,9 +179,9 @@
 					</div>
 					<span class="cover-invite">Tap the cover to begin</span>
 				</button>
-				<!-- The drawing's notes lie on this side once it opens; they are the
-				     studio's own piece, placed over it by the layout. -->
-				<div class="cover-back-face"></div>
+				<!-- The inside of the cover: the endpaper, and whatever the page lays
+				     on it (the drawing's notes, on a desk-shaped screen). -->
+				<div class="cover-back-face">{@render coverBack?.()}</div>
 			</div>
 		</div>
 	</div>
