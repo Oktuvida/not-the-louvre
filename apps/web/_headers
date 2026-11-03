@@ -7,7 +7,7 @@
 #
 # Verify after a build with:
 #   bun run build && cat .svelte-kit/cloudflare/_headers
-# and after a deploy with `curl -I https://not-the-louvre.art/models/studio-transformed.glb`.
+# and after a deploy with `curl -I https://not-the-louvre.art/draco/draco_decoder.wasm`.
 
 # Content-addressed filenames: scripts/generate-static-art.ts names every file
 # after a digest of the artwork it holds (GENERATED_ART_VERSION in
@@ -26,10 +26,3 @@
 # same name, so revalidate weekly rather than never.
 /draco/*
   Cache-Control: public, max-age=604800, stale-while-revalidate=2592000
-
-# scripts/transform-studio-model.ts overwrites studio-transformed.glb in place,
-# so a year-long immutable lifetime would freeze a new model on returning
-# visitors. A day, with a week of stale-while-revalidate, keeps repeat visits
-# free without that risk. Hash the filename if you ever want `immutable` here.
-/models/*
-  Cache-Control: public, max-age=86400, stale-while-revalidate=604800

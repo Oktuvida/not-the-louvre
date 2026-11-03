@@ -26,6 +26,23 @@ const colourAt = async (page: Page, x: number, y: number) => {
 	}, png.toString('base64'));
 };
 
+test.describe('the studio as a visitor first meets it', () => {
+	test.beforeEach(async ({ request }) => {
+		await resetDemoState(request);
+	});
+
+	// The floor's parquet was a 362 KB PNG inside a 578 KB model that a returning
+	// visitor downloaded again every day.
+	test('arrives in under 400 KB, and is kept for good', async ({ page }) => {
+		const model = page.waitForResponse((response) => /\.glb(\?|$)/.test(response.url()));
+		await page.goto('/');
+		const response = await model;
+
+		expect((await response.body()).byteLength).toBeLessThan(400 * 1024);
+		expect(response.headers()['cache-control']).toContain('immutable');
+	});
+});
+
 test.describe('the studio behind the front door', () => {
 	test.beforeEach(async ({ baseURL, page, request }) => {
 		await resetDemoState(request);

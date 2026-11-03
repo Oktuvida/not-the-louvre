@@ -8,7 +8,7 @@ import process from 'node:process';
  * static/draco/, so it is served from our own origin and edge instead of
  * www.gstatic.com. The GLB declares `extensionsRequired:
  * ['KHR_draco_mesh_compression']`, so this download is mandatory for every
- * visitor and it is discovered late — only after the 578KB model header is
+ * visitor and it is discovered late — only after the model header is
  * parsed. A third-party DNS + TLS handshake at that point is the worst place
  * for one, and it made the 3D studio depend on gstatic staying reachable.
  *
