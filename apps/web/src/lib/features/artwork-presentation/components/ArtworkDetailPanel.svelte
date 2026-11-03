@@ -52,9 +52,9 @@
 	// What the stamp's slip says; its Try again sticker says what to do.
 	const VOTE_FAILED_MESSAGE = "Your vote didn't make it onto the ledger.";
 	const COMMENT_FAILED_MESSAGE = "The visitor's book didn't take your entry.";
-	const DOWNLOAD_FAILED_MESSAGE = 'Artwork could not be downloaded.';
-	const TIMELAPSE_FAILED_MESSAGE = 'The timelapse would not play. Please try again.';
-	const ADULT_PREFERENCE_FAILED_MESSAGE = '18+ artwork preference could not be updated.';
+	const DOWNLOAD_FAILED_MESSAGE = "The download didn't start. Try again in a moment.";
+	const TIMELAPSE_FAILED_MESSAGE = "The timelapse wouldn't play. Try again in a moment.";
+	const ADULT_PREFERENCE_FAILED_MESSAGE = "Your 18+ setting didn't save. Try again in a moment.";
 
 	/* Thrown with copy that is already safe to show; anything else that reaches
 	 * a catch block (a dropped connection, a parser blow-up) gets the fallback
