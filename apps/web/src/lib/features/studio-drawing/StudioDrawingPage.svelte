@@ -2,7 +2,7 @@
 	import { deserialize } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
@@ -29,6 +29,7 @@
 	import DrawingBookStage from '#lib/features/studio-drawing/components/DrawingBookStage.svelte';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
 	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
 	import DrawingCanvas from '#lib/features/studio-drawing/components/DrawingCanvas.svelte';
@@ -185,6 +186,7 @@
 	let statusMessage = $state('');
 	let statusTone = $state<'error' | 'success' | 'idle'>('idle');
 	let artworkTitle = $state('');
+	let titleInput = $state<HTMLInputElement | null>(null);
 	let isArtworkNsfw = $state(false);
 	let titleError = $state('');
 	let isExitingToHome = $state(false);
@@ -556,14 +558,21 @@
 		void goto(resolve('?from=studio'));
 	};
 
+	/** The title note is where the cursor goes once it is marked in red pencil. */
+	const markTitle = async () => {
+		await tick();
+		titleInput?.focus();
+	};
+
 	const publishArtwork = async () => {
 		if (!canvasRef || isPublishing || !studioUnlocked) return;
 
 		artworkTitle = artworkTitle.trim();
 		if (!artworkTitle) {
-			titleError = 'Title is required before publishing';
+			titleError = 'Give it a title before you publish.';
 			statusMessage = '';
 			statusTone = 'idle';
+			void markTitle();
 			return;
 		}
 
@@ -579,6 +588,7 @@
 				titleError = titleModeration.message;
 				statusMessage = '';
 				statusTone = 'idle';
+				void markTitle();
 				return;
 			}
 
@@ -614,6 +624,13 @@
 					isArtworkNsfw = false;
 					titleError = '';
 				}
+				return;
+			}
+
+			// The server's moderation can still refuse the title the browser let through.
+			if ('code' in result && result.code === 'INVALID_TITLE') {
+				titleError = result.message;
+				void markTitle();
 				return;
 			}
 
@@ -672,7 +689,10 @@
 			<label class="postit-label" for="studio-artwork-title">Title your masterpiece</label>
 			<input
 				id="studio-artwork-title"
+				bind:this={titleInput}
 				bind:value={artworkTitle}
+				aria-describedby={titleError ? 'studio-artwork-title-note' : undefined}
+				aria-invalid={titleError ? 'true' : undefined}
 				type="text"
 				maxlength="80"
 				placeholder="Untitled genius"
@@ -681,7 +701,7 @@
 			/>
 			<span class="postit-rule" aria-hidden="true"></span>
 			{#if titleError}
-				<p class="postit-error">{titleError}</p>
+				<PencilNote id="studio-artwork-title-note" message={titleError} />
 			{/if}
 		</div>
 
@@ -1010,13 +1030,6 @@
 
 	.postit-input:disabled {
 		opacity: 0.5;
-	}
-
-	.postit-error {
-		font-family: var(--font-hand);
-		font-size: 1rem;
-		color: var(--color-danger-bright);
-		margin-top: 2px;
 	}
 
 	:global(.postit-cancel-btn) {

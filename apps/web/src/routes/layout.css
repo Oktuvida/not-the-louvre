@@ -77,6 +77,10 @@
 	--color-danger: #a24d49;
 	--color-danger-deep: #a8403a;
 	--color-rust: #8f3720;
+	/* What a mistake is marked in: a red pencil on a field (5.4:1 on the
+	 * paper), and the red ink of the rubber stamp on an action that failed. */
+	--color-pencil: #b8362a;
+	--color-stamp: #b23a2e;
 	/* The veil that covers a page while the next one is fetched. */
 	--color-scrim: #6e6e6e;
 

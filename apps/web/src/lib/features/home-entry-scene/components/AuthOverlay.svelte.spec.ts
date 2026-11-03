@@ -89,8 +89,33 @@ describe('AuthOverlay', () => {
 
 		await expect.element(page.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
 		await submitButton('Sign in').click();
-		await expect.element(page.getByText('Nickname is required')).toBeInTheDocument();
-		await expect.element(page.getByText('Password is required')).toBeInTheDocument();
+
+		// Each field carries its own red-pencil note, and the visitor lands on
+		// the first one to fix.
+		const nicknameField = page.getByRole('textbox', { name: 'Nickname' });
+		const passwordField = page.getByLabelText('Password', { exact: true });
+		await expect.element(nicknameField).toHaveAttribute('aria-invalid', 'true');
+		await expect.element(nicknameField).toHaveAccessibleDescription('Write a nickname first.');
+		await expect.element(passwordField).toHaveAccessibleDescription('Write a password first.');
+		await expect.element(nicknameField).toHaveFocus();
+	});
+
+	it('says how long a password has to be, on the password itself', async () => {
+		await render(AuthOverlay, { dispatch: vi.fn(), entryState: 'auth-login', form: undefined });
+
+		await page.getByRole('textbox', { name: 'Nickname' }).fill('journey_artist');
+		await page.getByLabelText('Password', { exact: true }).fill('short');
+		await submitButton('Sign in').click();
+
+		const passwordField = page.getByLabelText('Password', { exact: true });
+		await expect.element(passwordField).toHaveAttribute('aria-invalid', 'true');
+		await expect
+			.element(passwordField)
+			.toHaveAccessibleDescription(/^Make it at least \d+ characters\.$/);
+		await expect.element(passwordField).toHaveFocus();
+		await expect
+			.element(page.getByRole('textbox', { name: 'Nickname' }))
+			.not.toHaveAttribute('aria-invalid');
 	});
 
 	it('shows backend-driven sign-in failures without leaving the login context', async () => {
@@ -106,8 +131,64 @@ describe('AuthOverlay', () => {
 		});
 
 		await expect.element(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
-		await expect.element(page.getByText('Invalid nickname or password')).toBeVisible();
+		// A wrong password is marked on the password, not in a box above the
+		// form that looks like one more field, and the server's wording stays
+		// out of it.
+		const passwordField = page.getByLabelText('Password', { exact: true });
+		await expect.element(passwordField).toHaveAttribute('aria-invalid', 'true');
+		await expect
+			.element(passwordField)
+			.toHaveAccessibleDescription(
+				"That nickname and password don't match. Once more? Lost it? Use your recovery key."
+			);
+		await expect.element(page.getByText('Invalid nickname or password')).not.toBeInTheDocument();
 		expect(dispatch).not.toHaveBeenCalledWith('AUTH_SUCCESS');
+	});
+
+	it('keeps a lockout by the sign-in button, as a note on the whole form', async () => {
+		await render(AuthOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'auth-login',
+			form: {
+				action: 'signIn',
+				code: 'RATE_LIMITED',
+				message: 'Too many sign-in attempts. Please wait a few minutes and try again.'
+			}
+		});
+
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent('Too many sign-in attempts. Please wait a few minutes and try again.');
+		// Neither field is to blame.
+		await expect
+			.element(page.getByLabelText('Password', { exact: true }))
+			.not.toHaveAttribute('aria-invalid');
+	});
+
+	it('marks a recovery key that does not open the nickname on the key itself', async () => {
+		const { rerender } = await render(AuthOverlay, {
+			dispatch: vi.fn(),
+			entryState: 'auth-recovery',
+			form: undefined
+		});
+
+		await submitButton('Recover access').click();
+		const keyField = page.getByRole('textbox', { name: 'Recovery Key' });
+		await expect.element(keyField).toHaveAccessibleDescription('Paste your recovery key first.');
+
+		await rerender({
+			form: {
+				action: 'recover',
+				code: 'RECOVERY_FAILED',
+				message: 'Recovery failed'
+			}
+		});
+		await expect
+			.element(keyField)
+			.toHaveAccessibleDescription(
+				"That key doesn't open this nickname. Check both and try again."
+			);
+		await expect.element(keyField).toHaveFocus();
 	});
 
 	it('shows duplicate nickname failures in the signup context', async () => {
@@ -123,7 +204,9 @@ describe('AuthOverlay', () => {
 		});
 
 		await expect.element(page.getByRole('heading', { name: 'Draw yourself' })).toBeInTheDocument();
-		await expect.element(page.getByText('That nickname is already taken')).toBeVisible();
+		const nicknameField = page.getByRole('textbox', { name: 'Nickname' });
+		await expect.element(nicknameField).toHaveAttribute('aria-invalid', 'true');
+		await expect.element(nicknameField).toHaveAccessibleDescription('Taken! Try another nickname.');
 	});
 
 	it('uses semantic autocomplete tokens for sign-in fields', async () => {
