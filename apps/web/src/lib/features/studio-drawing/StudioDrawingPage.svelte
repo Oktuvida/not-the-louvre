@@ -45,6 +45,9 @@
 		takeHandedOverBook
 	} from '#lib/features/shared-ui/studio-handoff.js';
 	import { layBookOnSpot, liftBookOffSpot } from '#lib/features/studio-drawing/book-on-spot.js';
+	// The bookplate's printed heading and its typed line.
+	import '@fontsource/playfair-display/latin-700.css';
+	import '@fontsource/special-elite/latin-400.css';
 
 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
@@ -719,8 +722,23 @@
 			aria-hidden={!toolsVisible}
 			inert={!toolsVisible}
 		>
+			{#if user}
+				<!-- Where the notes lie on the open cover, its inside is the artist's
+				     own: a bookplate, signed. -->
+				<aside class="studio-bookplate" aria-label="Ex libris">
+					<p class="bookplate-heading">Ex libris</p>
+					<svg class="bookplate-mark" viewBox="0 0 60 44" aria-hidden="true">
+						<path d="M30 3 L56 41 H4 Z" stroke-width="2.6" stroke-linejoin="round"></path>
+						<path d="M30 3 L22 41 M30 3 L38 41 M12 29 H48 M18 22 H42" stroke-width="1.2"></path>
+					</svg>
+					<p class="bookplate-owner">
+						this sketchbook belongs to
+						<span class="bookplate-name">{user.nickname}</span>
+					</p>
+				</aside>
+			{/if}
+
 			<div class="cover-postit cover-postit-title sticky-note">
-				<span class="postit-tape tape tape-washi" aria-hidden="true"></span>
 				<label class="postit-label" for="studio-artwork-title">Title your masterpiece</label>
 				<input
 					id="studio-artwork-title"
@@ -731,13 +749,13 @@
 					disabled={!studioUnlocked}
 					class="postit-input"
 				/>
+				<span class="postit-rule" aria-hidden="true"></span>
 				{#if titleError}
 					<p class="postit-error">{titleError}</p>
 				{/if}
 			</div>
 
 			<div class="cover-postit cover-postit-nsfw sticky-note sticky-note-curl-left">
-				<span class="postit-tape tape" aria-hidden="true"></span>
 				<button
 					type="button"
 					role="checkbox"
@@ -748,15 +766,16 @@
 					}}
 					class="postit-nsfw-btn"
 				>
-					<span
-						class="nsfw-track"
-						style={`background: ${isArtworkNsfw ? 'var(--color-danger-bright)' : 'rgb(60 50 40 / 0.15)'};`}
-					>
-						<span
-							class="nsfw-dot"
-							style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
-						></span>
-					</span>
+					<!-- A box drawn on the note, ticked in red when it is checked. -->
+					<svg class="nsfw-box" viewBox="0 0 26 26" aria-hidden="true">
+						<path
+							class="nsfw-box-frame"
+							d="M4 5 C 10 3.5, 17 4.5, 22 4 C 22.5 10, 21.5 16, 22 22 C 15 22.5, 9 21.5, 4 22 C 3.5 16, 4.5 10, 4 5 Z"
+						></path>
+						{#if isArtworkNsfw}
+							<path class="nsfw-box-tick" d="M7 13.5 L11.5 18.5 L22 5"></path>
+						{/if}
+					</svg>
 					<span class={isArtworkNsfw ? 'font-semibold text-danger-bright' : ''}
 						>Not safe for the Louvre</span
 					>
@@ -765,7 +784,6 @@
 
 			{#if currentForkParent}
 				<div class="cover-postit cover-postit-cancel sticky-note">
-					<span class="postit-tape postit-tape-corner tape" aria-hidden="true"></span>
 					<p class="postit-label">Change of plan</p>
 					<p class="postit-fork-note postit-fork-note-compact">
 						Forking <span class="postit-fork-name">{currentForkParent.title}</span>
@@ -883,13 +901,6 @@
 		z-index: 3;
 	}
 
-	/* Stuck across the top left corner. */
-	.postit-tape-corner {
-		top: 2px;
-		left: -14px;
-		transform: rotate(-38deg);
-	}
-
 	.postit-label {
 		display: block;
 		font-family: var(--font-display);
@@ -933,6 +944,16 @@
 	.postit-input::placeholder {
 		color: rgb(61 53 48 / 0.55);
 		font-style: italic;
+	}
+
+	/* A second ruled line, so the note is the square pad it is cut from. Only
+	 * where the notes lie on the open cover, with the bookplate, is there room
+	 * for it; in a column it would push Publish off a short screen. */
+	.postit-rule {
+		display: var(--studio-bookplate-display, none);
+		height: 1.5px;
+		margin-top: 1.9rem;
+		background: rgb(61 53 48 / 0.2);
 	}
 
 	.postit-input:focus {
@@ -983,24 +1004,86 @@
 		cursor: not-allowed;
 	}
 
-	.nsfw-track {
-		position: relative;
-		display: inline-flex;
-		width: 28px;
-		height: 16px;
-		border-radius: var(--radius-panel);
-		transition: background var(--duration-ui);
+	.nsfw-box {
+		width: 1.6rem;
+		height: 1.6rem;
 		flex-shrink: 0;
+		fill: none;
+		stroke-linecap: round;
+		stroke-linejoin: round;
 	}
 
-	.nsfw-dot {
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: var(--color-paper);
-		border: 1.5px solid rgb(47 36 28 / 0.25);
-		box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
-		transition: transform var(--duration-ui);
+	.nsfw-box-frame {
+		stroke: rgb(74 47 54 / 0.85);
+		stroke-width: 2;
+	}
+
+	.nsfw-box-tick {
+		stroke: var(--color-danger-bright);
+		stroke-width: 2.8;
+	}
+
+	/* The bookplate glued inside the cover: printed heading and border, the
+	 * owner's name in ink. Shown only where the notes lie on the open cover
+	 * (studio-layout.css sets --studio-bookplate-display). */
+	.studio-bookplate {
+		display: var(--studio-bookplate-display, none);
+		position: relative;
+		align-self: center;
+		width: 13rem;
+		margin-bottom: 0.75rem;
+		padding: 0.85rem 0.9rem 0.8rem;
+		rotate: -1.2deg;
+		background: #fbf6ea;
+		box-shadow: 0 1px 1px rgb(40 25 10 / 0.2);
+		text-align: center;
+		color: #4a3524;
+	}
+
+	.studio-bookplate::before {
+		content: '';
+		position: absolute;
+		inset: 0.3rem;
+		border: 1.5px solid #8c6a46;
+		outline: 1px solid #8c6a46;
+		outline-offset: -0.3rem;
+		pointer-events: none;
+	}
+
+	.bookplate-heading {
+		margin: 0.3rem 0 0.15rem;
+		font-family: 'Playfair Display', serif;
+		font-size: 0.85rem;
+		font-weight: 700;
+		letter-spacing: 0.3em;
+		text-transform: uppercase;
+	}
+
+	.bookplate-mark {
+		display: block;
+		width: 2.4rem;
+		height: auto;
+		margin: 0.2rem auto;
+		fill: none;
+		stroke: #6b4a30;
+	}
+
+	.bookplate-owner {
+		margin: 0;
+		font-family: 'Special Elite', 'Courier New', monospace;
+		font-size: 0.75rem;
+		line-height: 1.3;
+	}
+
+	.bookplate-name {
+		display: block;
+		margin-top: 0.1rem;
+		font-family: var(--font-hand);
+		font-size: 1.75rem;
+		font-weight: 700;
+		line-height: 1.1;
+		color: #2c4a7a;
+		overflow-wrap: anywhere;
 	}
 
 	/* --- Publish notification post-it --- */

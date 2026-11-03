@@ -191,6 +191,7 @@
 		 * `.paper-grain` utility, so it stays local.
 		 */
 		--book-endpaper-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+		--book-endpaper-print: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'%3E%3Cg fill='none' stroke='%23a9825c' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round' opacity='.36'%3E%3Cpath d='M8 14c4-6 14-6 16 0c2 5-4 7-8 6c-3 0-2 3-4 4c-3 1-6-5-4-10z'/%3E%3Ccircle cx='13' cy='12' r='1.2'/%3E%3Ccircle cx='18' cy='11' r='1.2'/%3E%3Cpath d='M44 44l14-14M56 29l3-3c1-1 3 1 2 2l-3 3'/%3E%3Crect x='40' y='6' width='14' height='11' rx='1'/%3E%3Crect x='43' y='9' width='8' height='5'/%3E%3Cpath d='M16 50l2 4 4 .6-3 3 .8 4-3.8-2-3.8 2 .8-4-3-3 4-.6z'/%3E%3C/g%3E%3C/svg%3E");
 
 		display: inline-flex;
 	}
@@ -798,10 +799,18 @@
 		position: absolute;
 		inset: 1.6%;
 		border-radius: 1px;
-		background-color: #e4d9c6;
+		background-color: #e9dfca;
+		/* A printed endpaper: palettes, brushes, frames and stars in faded
+		 * sienna, under the grain and the shade of the hinge. */
 		background-image:
 			var(--book-endpaper-grain), linear-gradient(270deg, rgb(70 50 30 / 0.12), transparent 9%),
-			radial-gradient(120% 90% at 40% 30%, rgb(255 250 240 / 0.35), transparent 70%);
+			radial-gradient(120% 90% at 40% 30%, rgb(255 250 240 / 0.35), transparent 70%),
+			var(--book-endpaper-print);
+		background-size:
+			auto,
+			auto,
+			auto,
+			4.5rem 4.5rem;
 		box-shadow:
 			0 0 0 1px rgb(60 44 28 / 0.18),
 			0 1px 2px rgb(40 28 16 / 0.2);
