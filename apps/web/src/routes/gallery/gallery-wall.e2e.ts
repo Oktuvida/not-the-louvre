@@ -2,8 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { resetDemoState } from '../demo/e2e-helpers';
 
 // The museum wall behind the artworks is part of the room: it travels with
-// the artworks as the visitor scrolls, and on a sharp screen its bricks are as
-// crisp as the pattern they are drawn from.
+// the artworks as the visitor scrolls, on a sharp screen its bricks are as
+// crisp as the pattern they are drawn from, and where a fast scroll outruns
+// the painting the gap is the wall's own colour, not a dark hole.
 
 test.use({ deviceScaleFactor: 2, viewport: { height: 800, width: 1280 } });
 
@@ -122,5 +123,49 @@ test.describe('the gallery wall', () => {
 		const pattern = await luminance(page, await wallPatch(page));
 
 		expect(sharpness(scrolled) / sharpness(pattern)).toBeGreaterThan(0.85);
+	});
+
+	test('fills what a fast scroll has not painted yet with the wall’s own colour', async ({
+		page
+	}) => {
+		await page.goto('/gallery/hot-wall');
+		await expect(page.getByRole('button', { name: /Seeded Piece/ }).first()).toBeVisible();
+
+		// The browser fills a tile it has not painted with the shell's colour,
+		// and beyond the shell with the page's.
+		const fills = await page.evaluate(() =>
+			[document.querySelector("[data-testid='gallery-room-shell']")!, document.body].map(
+				(element) =>
+					getComputedStyle(element).backgroundColor.match(/\d+/g)!.slice(0, 3).map(Number)
+			)
+		);
+
+		// The bricks' own average colour, drawn from the pattern itself.
+		const brick = await page.evaluate(async () => {
+			const image = [...document.querySelectorAll('*')]
+				.map((element) => getComputedStyle(element).backgroundImage)
+				.find((value) => value.includes('museum-wall'))!;
+			const url = image.match(/url\("?([^")]+)"?\)/)![1]!;
+			const picture = new Image();
+			picture.src = url;
+			await picture.decode();
+			const canvas = document.createElement('canvas');
+			canvas.width = 64;
+			canvas.height = 64;
+			const context = canvas.getContext('2d')!;
+			context.drawImage(picture, 0, 0, 64, 64);
+			const pixels = context.getImageData(0, 0, 64, 64).data;
+			const sum = [0, 0, 0];
+			for (let i = 0; i < pixels.length; i += 4) {
+				for (let channel = 0; channel < 3; channel += 1) sum[channel] += pixels[i + channel]!;
+			}
+			return sum.map((total) => total / (pixels.length / 4));
+		});
+
+		for (const fill of fills) {
+			fill.forEach((channel, index) => {
+				expect(Math.abs(channel - brick[index]!)).toBeLessThan(24);
+			});
+		}
 	});
 });

@@ -50,10 +50,12 @@
 	--color-frame-line: #e5dfd5;
 	--color-hairline: #d6cfc5;
 	--color-clay: #c4b5a6;
+	/* The brick wall's own average colour: what fills a stretch of it the
+	 * browser has not painted yet (generated/museum-wall.svg). */
+	--color-wall: #b8a98d;
 	--color-panel: rgb(251 247 240 / 0.92);
 
 	/* ---- Ink (dark surfaces and text, darkest first) ---------------------- */
-	--color-wall: #252018;
 	--color-ink-warm: #2d2420;
 	--color-ink: #2f241c;
 	--color-note-ink: #3d3530;
