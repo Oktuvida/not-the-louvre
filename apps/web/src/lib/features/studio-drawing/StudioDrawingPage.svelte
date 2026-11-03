@@ -246,6 +246,9 @@
 	let toolsVisible = $derived(
 		draftHydrated && (!coverShown || (sceneState !== 'closed' && sceneState !== 'closing'))
 	);
+	// The notes lie on the inside of the cover, so they arrive once it has
+	// finished turning open; the supplies on the desk come in as it turns.
+	let notesVisible = $derived(draftHydrated && (!coverShown || sceneState === 'open'));
 	let hasForkParent = $derived(Boolean(currentForkParent?.mediaUrl));
 
 	const createDraftSession = (
@@ -717,10 +720,10 @@
 		</div>
 
 		<section
-			class={`studio-notes ${toolsVisible ? 'studio-notes-open' : 'studio-notes-hidden'}`}
+			class={`studio-notes ${notesVisible ? 'studio-notes-open' : 'studio-notes-hidden'}`}
 			aria-label="About this drawing"
-			aria-hidden={!toolsVisible}
-			inert={!toolsVisible}
+			aria-hidden={!notesVisible}
+			inert={!notesVisible}
 		>
 			{#if user}
 				<!-- Where the notes lie on the open cover, its inside is the artist's

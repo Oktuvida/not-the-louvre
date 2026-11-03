@@ -248,6 +248,24 @@ describe('StudioDrawingPage', () => {
 		await expect.element(page.getByPlaceholder('Untitled genius')).toBeVisible();
 	});
 
+	// The notes and the bookplate lie on the inside of the cover, so they are
+	// there once the cover has finished turning open, not while it turns.
+	it('lays the notes on the cover only once it has finished turning open', async () => {
+		vi.stubGlobal(
+			'matchMedia',
+			vi.fn((query: string) => createMediaQueryListWithMotion(query, false))
+		);
+		await render(StudioDrawingPage, { openingDurationMs: 400 });
+		const notes = page.getByRole('region', { name: 'About this drawing' });
+
+		await page.getByRole('button', { name: 'Open sketchbook' }).click();
+		await new Promise((resolve) => setTimeout(resolve, 150));
+		expect(notes.query()).toBeNull();
+
+		await expect.element(notes).toBeVisible();
+		await expect.element(page.getByPlaceholder('Untitled genius')).toBeEnabled();
+	});
+
 	it('opens the page straight away on a screen with no room for the open book', async () => {
 		document
 			.querySelectorAll('style[data-spec="show-the-cover"]')
