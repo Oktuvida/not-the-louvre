@@ -39,6 +39,7 @@
 	let {
 		adultContentEnabled = false,
 		isExiting = false,
+		onArtworkNavigate,
 		onAvatarSaved,
 		onGalleryNavigate,
 		previewCards = [],
@@ -46,6 +47,8 @@
 	}: {
 		adultContentEnabled?: boolean;
 		isExiting?: boolean;
+		/** A best piece picked from the wall: the page walks into the gallery with it open. */
+		onArtworkNavigate?: (artworkId: string) => void;
 		onAvatarSaved?: (payload: AvatarSavedPayload) => void;
 		onGalleryNavigate?: () => void;
 		previewCards?: HomePreviewCard[];
@@ -104,6 +107,16 @@
 
 	const handleGalleryClick = () => {
 		onGalleryNavigate?.();
+	};
+
+	// Each best piece is a link to its own page, so it can be opened in a new
+	// tab, copied or shared; a plain click walks into the gallery with it.
+	const openBestPiece = (event: MouseEvent, artworkId: string) => {
+		if (!onArtworkNavigate) return;
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+			return;
+		event.preventDefault();
+		onArtworkNavigate(artworkId);
 	};
 
 	const openAvatarEditor = () => {
@@ -177,9 +190,10 @@
 				{@const frame = resolveArtworkFrame({ artworkId: card.id, podiumPosition: card.rank })}
 				{@const blurred = isArtworkBlurred(card, { adultContentEnabled: adultContentAllowed })}
 				<a
-					href={resolve('/gallery/[[room]]', {})}
+					href={resolve('/artwork/[artworkId]', { artworkId: card.id })}
 					class="group relative block cursor-pointer"
 					style={`transform: rotate(${card.rotation}deg);`}
+					onclick={(event) => openBestPiece(event, card.id)}
 				>
 					<div
 						class="relative transition-all duration-200 group-hover:-translate-x-[10px] group-hover:scale-110 group-hover:rotate-0"

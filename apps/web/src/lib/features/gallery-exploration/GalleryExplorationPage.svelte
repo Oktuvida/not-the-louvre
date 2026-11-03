@@ -798,6 +798,18 @@
 	onMount(() => {
 		if (!enteredFromHome) return;
 
+		// A best piece picked on the front door arrives open: the address is
+		// its own, as for an artwork opened from the wall.
+		const arrivingWith = historyDetailState;
+		if (arrivingWith?.source === 'external') {
+			goto(resolve('/artwork/[artworkId]', { artworkId: arrivingWith.artworkId }), {
+				shallow: true,
+				replace: true,
+				state: page.state
+			});
+			return;
+		}
+
 		if (roomId === 'hall-of-fame') {
 			goto(resolve('/gallery/[[room]]', {}), {
 				shallow: true,
