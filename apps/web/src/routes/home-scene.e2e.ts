@@ -38,7 +38,10 @@ test.describe('the studio as a visitor first meets it', () => {
 		await page.goto('/');
 		const response = await model;
 
-		expect((await response.body()).byteLength).toBeLessThan(400 * 1024);
+		// Asked for again rather than read back from the page: the browser may
+		// already have dropped the body of what it fetched for the scene.
+		const file = await page.request.get(response.url());
+		expect((await file.body()).byteLength).toBeLessThan(400 * 1024);
 		expect(response.headers()['cache-control']).toContain('immutable');
 	});
 
