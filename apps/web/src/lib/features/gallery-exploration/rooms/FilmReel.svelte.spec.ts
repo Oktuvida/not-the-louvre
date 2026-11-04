@@ -55,6 +55,17 @@ const renderReel = async (props: Partial<FilmReelProps> = {}) => {
 
 const line = () => page.getByTestId('film-reel-track').element();
 const photos = () => [...document.querySelectorAll('[data-testid="film-reel"] img')];
+const reelState = () => page.getByTestId('film-reel');
+
+/** The slow drift at rest is the stylesheet's; what a spin runs is the script's. */
+const drift = () =>
+	line()
+		.getAnimations()
+		.find((motion) => motion instanceof CSSAnimation);
+const spinMotions = () =>
+	line()
+		.getAnimations()
+		.filter((motion) => !(motion instanceof CSSAnimation));
 
 /** Plays every motion with an end to its finish; the steady spin has none. */
 const finishMotions = () => {
@@ -76,6 +87,43 @@ describe('FilmReel', () => {
 		expect(photos()).toHaveLength(0);
 	});
 
+	// It never stands dead on the wall, and that costs nothing either: the
+	// stylesheet sets it drifting and the browser does the rest, with no script.
+	it('drifts slowly at rest, with nothing on the page changing as it does', async () => {
+		await renderReel();
+		const changes: MutationRecord[] = [];
+		const watcher = new MutationObserver((records) => changes.push(...records));
+		watcher.observe(page.getByTestId('film-reel').element(), {
+			attributes: true,
+			childList: true,
+			subtree: true
+		});
+
+		expect(drift()?.playState).toBe('running');
+		expect(drift()?.effect?.getComputedTiming().iterations).toBe(Infinity);
+		await new Promise((resolve) => setTimeout(resolve, 150));
+		watcher.disconnect();
+
+		expect(changes).toEqual([]);
+	});
+
+	it('holds still while the room asks it to', async () => {
+		await renderReel({ held: true });
+
+		await vi.waitFor(() => expect(drift()?.playState).toBe('paused'));
+	});
+
+	it('picks a spin up from wherever the drift had reached', async () => {
+		const reel = await renderReel();
+		drift()!.currentTime = 6000;
+		const before = line().getBoundingClientRect().x;
+
+		reel.startFreeSpin();
+
+		await vi.waitFor(() => expect(drift()).toBeUndefined());
+		expect(Math.abs(line().getBoundingClientRect().x - before)).toBeLessThan(40);
+	});
+
 	// The reel was the heaviest thing in the gallery because every frame was
 	// recalculated on every tick. Now the line is one piece and the browser
 	// moves it: nothing on the page changes while it runs.
@@ -92,7 +140,7 @@ describe('FilmReel', () => {
 		watcher.disconnect();
 
 		expect(changes).toEqual([]);
-		const moved = line().getAnimations()[0]!.effect as KeyframeEffect;
+		const moved = spinMotions()[0]!.effect as KeyframeEffect;
 		expect(moved.getKeyframes().every((keyframe) => 'transform' in keyframe)).toBe(true);
 	});
 
@@ -105,14 +153,13 @@ describe('FilmReel', () => {
 		reel.startFreeSpin();
 		await vi.waitFor(() => {
 			finishMotions();
-			const running = line().getAnimations()[0];
-			expect(running?.effect?.getComputedTiming().iterations).toBe(Infinity);
+			expect(spinMotions()[0]?.effect?.getComputedTiming().iterations).toBe(Infinity);
 		});
 		expect(onLand).not.toHaveBeenCalled();
 
 		expect(reel.spinToArtwork(artwork)).toBe(true);
 		await vi.waitFor(() => {
-			expect(line().getAnimations()[0]?.effect?.getComputedTiming().iterations).toBe(1);
+			expect(spinMotions()[0]?.effect?.getComputedTiming().iterations).toBe(1);
 		});
 		expect(onLand).not.toHaveBeenCalled();
 
@@ -124,8 +171,31 @@ describe('FilmReel', () => {
 			finishMotions();
 			expect(onDeveloped).toHaveBeenCalledWith(artwork);
 		});
-		expect(line().getAnimations()).toHaveLength(0);
+		expect(spinMotions()).toHaveLength(0);
 		await expect.element(page.getByRole('img', { name: 'Chosen Piece' })).toBeVisible();
+	});
+
+	it('lets the line carry the piece away, once the room stops holding it', async () => {
+		const reel = await renderReel({ held: false });
+
+		reel.startFreeSpin();
+		await vi.waitFor(() => {
+			finishMotions();
+			expect(reel.spinToArtwork(piece('chosen', 'Chosen Piece'))).toBe(true);
+		});
+		const chosen = page.getByRole('img', { name: 'Chosen Piece' });
+		await vi.waitFor(() => {
+			for (const motion of spinMotions()) motion.finish();
+			for (const motion of document.querySelector('img')?.getAnimations() ?? []) motion.finish();
+			expect(reelState().element().getAttribute('data-reel-state')).toBe('developed');
+		});
+		await expect.element(chosen).toBeInTheDocument();
+
+		const leaving = document.querySelector('.reel-reveal')!.getAnimations();
+		for (const motion of leaving) motion.finish();
+
+		await vi.waitFor(() => expect(chosen.query()).toBeNull());
+		await expect.element(reelState()).toHaveAttribute('data-reel-state', 'resting');
 	});
 
 	it('writes the piece on the polaroid once it has developed', async () => {
@@ -152,7 +222,7 @@ describe('FilmReel', () => {
 		});
 		const open = page.getByRole('button', { name: 'Open Chosen Piece' });
 		await vi.waitFor(() => {
-			for (const motion of line().getAnimations()) {
+			for (const motion of spinMotions()) {
 				if (motion.effect?.getComputedTiming().iterations !== Infinity) motion.finish();
 			}
 			expect(open.element()).toBeVisible();
@@ -192,18 +262,18 @@ describe('FilmReel', () => {
 		const reel = await renderReel({ onLand });
 
 		reel.startFreeSpin();
-		await vi.waitFor(() => expect(line().getAnimations()).toHaveLength(1));
+		await vi.waitFor(() => expect(spinMotions()).toHaveLength(1));
 		reel.cancelFreeSpin();
 
 		await vi.waitFor(() => {
-			finishMotions();
-			expect(line().getAnimations()).toHaveLength(0);
+			for (const motion of spinMotions()) {
+				if (motion.effect?.getComputedTiming().iterations !== Infinity) motion.finish();
+			}
+			expect(spinMotions()).toHaveLength(0);
 		});
 		expect(onLand).not.toHaveBeenCalled();
 		expect(photos()).toHaveLength(0);
-		await expect
-			.element(page.getByTestId('film-reel'))
-			.toHaveAttribute('data-reel-state', 'resting');
+		await expect.element(reelState()).toHaveAttribute('data-reel-state', 'resting');
 	});
 
 	it('refuses an artwork when no spin is under way', async () => {
@@ -219,11 +289,11 @@ describe('FilmReel', () => {
 		const artwork = piece('chosen', 'Chosen Piece');
 
 		reel.startFreeSpin();
-		expect(line().getAnimations()).toHaveLength(0);
+		expect(spinMotions()).toHaveLength(0);
 		reel.spinToArtwork(artwork);
 
 		await vi.waitFor(() => expect(onDeveloped).toHaveBeenCalledWith(artwork));
-		expect(line().getAnimations()).toHaveLength(0);
+		expect(spinMotions()).toHaveLength(0);
 		expect(photos()[0]!.getAnimations()).toHaveLength(0);
 	});
 
