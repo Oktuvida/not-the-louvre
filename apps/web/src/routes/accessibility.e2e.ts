@@ -60,6 +60,13 @@ const VISITOR: Surface[] = [
 		}
 	},
 	{
+		name: 'the museum staff',
+		open: async (page) => {
+			await page.goto('/gallery/staff');
+			await page.getByRole('heading', { name: 'Museum staff' }).waitFor();
+		}
+	},
+	{
 		name: 'the Mystery room',
 		open: async (page) => {
 			await page.goto('/gallery/mystery');
