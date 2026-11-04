@@ -77,6 +77,18 @@ describe('NsfwImage', () => {
 		expect(document.querySelector('.nsfw-scrim')).toBeNull();
 	});
 
+	// A photo that never arrived used to leave the browser's broken-image icon
+	// and the bare title on the polaroid.
+	it('shows a calm pencil note instead of a broken picture when the photo will not come', async () => {
+		await render(NsfwImage, { alt: 'Ocean Breeze', src: '/no-such-artwork.webp' });
+
+		await expect.element(page.getByText(/didn.t develop/i)).toBeVisible();
+		// Not drawn, so no broken picture shows; still named for a screen reader.
+		await expect
+			.element(page.getByRole('img', { name: 'Ocean Breeze' }))
+			.toHaveStyle({ opacity: '0' });
+	});
+
 	it('re-shows a recycled card instantly instead of replaying the fade', async () => {
 		const first = await render(NsfwImage, { src: PIXEL, alt: 'First mount' });
 
