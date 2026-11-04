@@ -488,14 +488,15 @@
 		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
 	}
 
+	/* Faded in its colour, not with opacity: Safari clips an element with
+	 * opacity to its box, and this hand's question mark leans out of it. */
 	.reel-frame-mark {
 		margin-top: calc(var(--reel-frame-size) * 0.012);
-		color: var(--color-pencil);
+		color: color-mix(in srgb, var(--color-pencil) 80%, transparent);
 		font-family: var(--font-hand);
 		font-size: calc(var(--reel-frame-size) * 0.1);
 		font-weight: 700;
 		line-height: 1;
-		opacity: 0.8;
 	}
 
 	/* The photo that came, lying exactly over the frame in the ring. It is off
