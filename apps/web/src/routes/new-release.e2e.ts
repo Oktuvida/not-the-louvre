@@ -23,12 +23,21 @@ const countDocuments = (page: Page) => {
 	return loaded;
 };
 
-/** How visible the studio's canvas is: it fades in once its model is up. */
+/**
+ * How visible the studio's canvas is, all its ancestors' opacity included: the
+ * scene fades in once its model is up, a few elements above the canvas.
+ */
 const studioOpacity = (page: Page) =>
 	page
 		.locator('.home-entry-page canvas')
 		.first()
-		.evaluate((canvas) => Number(getComputedStyle(canvas.parentElement!).opacity))
+		.evaluate((canvas) => {
+			let opacity = 1;
+			for (let element: Element | null = canvas; element; element = element.parentElement) {
+				opacity *= Number(getComputedStyle(element).opacity);
+			}
+			return opacity;
+		})
 		.catch(() => 0);
 
 test.describe('a tab opened before a release', () => {
