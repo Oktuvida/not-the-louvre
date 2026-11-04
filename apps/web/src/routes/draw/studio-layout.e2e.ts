@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { deterministicAuthUser, resetDemoState } from '../demo/e2e-helpers';
+import {
+	deterministicArtwork,
+	deterministicAuthUser,
+	publishArtworkThroughActions,
+	resetDemoState
+} from '../demo/e2e-helpers';
 
 // The studio is one page that has to fit every screen an artist draws on: a
 // desktop, a laptop, a tablet either way up, a phone either way up. On each of
@@ -225,6 +230,85 @@ test.describe('the studio fits the screen it is on', () => {
 			await expect.poll(() => inkAtTheCentre(page)).toBe(true);
 			const canvas = await canvasBox(page);
 			expect(Math.abs(canvas.width - canvas.height)).toBeLessThanOrEqual(1);
+		});
+	}
+});
+
+// The label of shortcuts lies at the foot of the open cover, under the notes.
+// It is the first thing to go: where the cover has no room for it, or the note
+// about a fork takes that room, the notes keep the cover to themselves.
+test.describe('the shortcuts inside the cover', () => {
+	test.beforeEach(async ({ baseURL, page, request }) => {
+		await resetDemoState(request);
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await signIn(page, baseURL);
+	});
+
+	const shortcuts = (page: Page) => page.getByRole('complementary', { name: 'Shortcuts' });
+
+	/** Wherever the label shows, it lies whole on the cover and on none of the notes. */
+	const expectClearOfTheNotes = async (page: Page) => {
+		const label = await shortcuts(page).boundingBox();
+		const cover = await shortcuts(page).locator('..').boundingBox();
+		if (!label || !cover) throw new Error('The shortcuts are not on the cover');
+		expect(label.y + label.height, 'the label ends on the cover').toBeLessThanOrEqual(
+			cover.y + cover.height
+		);
+
+		const notes = [
+			page.getByPlaceholder('Untitled genius'),
+			page.getByRole('checkbox', { name: /Not safe for the Louvre/ }),
+			page.getByRole('button', { name: 'Cancel fork' })
+		];
+		for (const note of notes) {
+			if (!(await note.isVisible())) continue;
+			const box = await note.boundingBox();
+			expect(box && overlaps(box, label), 'the label lies on a note').toBe(false);
+		}
+	};
+
+	for (const { width, height } of [
+		{ width: 1920, height: 1080 },
+		{ width: 1512, height: 860 },
+		{ width: 1366, height: 768 },
+		{ width: 1280, height: 720 }
+	]) {
+		test(`lie whole at the foot of the cover at ${width}×${height}`, async ({ page }) => {
+			await page.setViewportSize({ width, height });
+			await openStudio(page);
+
+			await expect(shortcuts(page)).toBeVisible();
+			await expectClearOfTheNotes(page);
+		});
+	}
+
+	test('step aside where the cover is too short for them', async ({ page }) => {
+		await page.setViewportSize({ width: 1024, height: 640 });
+		await openStudio(page);
+
+		await expect(shortcuts(page)).toBeHidden();
+	});
+
+	for (const { width, height } of [
+		{ width: 1512, height: 860 },
+		{ width: 1280, height: 720 }
+	]) {
+		test(`leave the note about a fork its room at ${width}×${height}`, async ({
+			baseURL,
+			page
+		}) => {
+			const parent = await publishArtworkThroughActions(
+				page.request,
+				baseURL,
+				deterministicArtwork
+			);
+			await page.setViewportSize({ width, height });
+			// A fork opens the sketchbook on its own.
+			await page.goto(`/draw?fork=${parent}`);
+			await expect(page.getByPlaceholder('Untitled genius')).toBeEnabled();
+			await expect(page.getByRole('button', { name: 'Cancel fork' })).toBeVisible();
+
+			if (await shortcuts(page).isVisible()) await expectClearOfTheNotes(page);
 		});
 	}
 });

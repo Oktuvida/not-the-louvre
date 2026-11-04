@@ -204,6 +204,61 @@ describe('StudioDrawingPage', () => {
 		await expect.element(bookplate.getByText('journey_artist', { exact: true })).toBeVisible();
 	});
 
+	// Below the notes, the inside of the cover carries a printed label with the
+	// studio's shortcuts, in the keys of the computer the artist is drawing on.
+	describe('the shortcuts inside the cover', () => {
+		const pretendToRunOn = (platform: string, hints?: string) => {
+			Object.defineProperty(navigator, 'platform', { configurable: true, value: platform });
+			Object.defineProperty(navigator, 'userAgentData', {
+				configurable: true,
+				value: hints ? { platform: hints } : undefined
+			});
+		};
+
+		const openTheStudio = async () => {
+			const style = document.createElement('style');
+			style.dataset.spec = 'show-the-cover';
+			style.textContent = 'html .studio-page { --studio-shortcuts-display: block; }';
+			document.head.append(style);
+
+			await render(StudioDrawingPage, {
+				openingDurationMs: 1,
+				user: { nickname: 'journey_artist' }
+			});
+			await openSketchbook();
+			return page.getByRole('complementary', { name: 'Shortcuts' });
+		};
+
+		afterEach(() => {
+			Reflect.deleteProperty(navigator, 'platform');
+			Reflect.deleteProperty(navigator, 'userAgentData');
+		});
+
+		it('gives an artist on Windows the Ctrl keys, and Ctrl + Y to redo', async () => {
+			pretendToRunOn('Win32', 'Windows');
+
+			const shortcuts = await openTheStudio();
+
+			await expect.element(shortcuts).toBeVisible();
+			await expect.element(shortcuts.getByText('pinch, or Ctrl + scroll')).toBeVisible();
+			await expect.element(shortcuts.getByText('Ctrl + Z')).toBeVisible();
+			await expect.element(shortcuts.getByText('Ctrl + Y')).toBeVisible();
+			await expect.element(shortcuts.getByText(/⌘/)).not.toBeInTheDocument();
+		});
+
+		it('gives an artist on a Mac the ⌘ keys', async () => {
+			pretendToRunOn('MacIntel');
+
+			const shortcuts = await openTheStudio();
+
+			await expect.element(shortcuts).toBeVisible();
+			await expect.element(shortcuts.getByText('pinch, or ⌘ + scroll')).toBeVisible();
+			await expect.element(shortcuts.getByText('⌘ Z', { exact: true })).toBeVisible();
+			await expect.element(shortcuts.getByText('⌘ ⇧ Z')).toBeVisible();
+			await expect.element(shortcuts.getByText(/Ctrl/)).not.toBeInTheDocument();
+		});
+	});
+
 	it('preloads the desk, at the size it is drawn', async () => {
 		await render(StudioDrawingPage, { openingDurationMs: 1 });
 

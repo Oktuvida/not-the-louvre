@@ -231,9 +231,11 @@ body:has(.studio-page) .record-player-shell {
 
 @media (min-aspect-ratio: 8/5) and (min-height: 30rem) {
 	.studio-page {
-		/* The notes lie on the open cover here, under its bookplate. */
+		/* The notes lie on the open cover here, under its bookplate, with the
+		 * shortcuts' label at its foot. */
 		--studio-notes-on-cover: 1;
 		--studio-bookplate-display: block;
+		--studio-shortcuts-display: block;
 		--studio-canvas: min(
 			var(--studio-from-height),
 			100vw - 2 * var(--studio-margin) - var(--studio-notes-w) - var(--studio-book-x) -
