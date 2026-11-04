@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { roomHref, roomIdForPath } from './rooms';
+import { galleryRoomIds, roomHref, roomIdForPath } from './rooms';
 
 describe('the room a gallery address names', () => {
 	it('reads every room back from its own href', () => {
-		for (const roomId of ['hall-of-fame', 'hot-wall', 'mystery', 'your-studio'] as const) {
+		for (const roomId of galleryRoomIds) {
 			expect(roomIdForPath(roomHref(roomId))).toBe(roomId);
 		}
+	});
+
+	it('knows Wet Paint by its own address', () => {
+		expect(roomIdForPath('/gallery/wet-paint')).toBe('wet-paint');
 	});
 
 	it('takes the spelled-out hall of fame address too', () => {

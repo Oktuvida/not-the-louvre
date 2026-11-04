@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { navigating } from '$app/state';
-	import { Flame, Route, Trophy, UserRound } from 'lucide-svelte';
+	import { Flame, PaintRoller, Route, Trophy, UserRound } from 'lucide-svelte';
 	import {
 		galleryRooms,
 		roomHref,
@@ -13,6 +13,7 @@
 	const roomIcons = {
 		'hall-of-fame': Trophy,
 		'hot-wall': Flame,
+		'wet-paint': PaintRoller,
 		mystery: Route,
 		'your-studio': UserRound
 	} as const;
@@ -28,6 +29,7 @@
 	const roomVariants: Record<GalleryRoomId, 'accent' | 'danger' | 'primary' | 'secondary'> = {
 		'hall-of-fame': 'accent',
 		'hot-wall': 'danger',
+		'wet-paint': 'accent',
 		mystery: 'secondary',
 		'your-studio': 'primary'
 	};
@@ -43,11 +45,13 @@
 	);
 
 	/*
-	 * On a narrow screen the tabs scroll sideways, and the room the visitor is
-	 * in may be past the edge (the Hot Wall on a phone was cut in half). The
-	 * strip is scrolled to centre it whenever the room changes. Only the strip
-	 * moves, never the page. Its padding leaves room for the active tab's 105%
-	 * scale, which the scrolling strip would otherwise clip.
+	 * All the rooms fit on every screen from a small phone up: below a laptop
+	 * only the room the visitor is in has its name, and the others are a
+	 * picture. On a screen narrower still the tabs scroll sideways, and the
+	 * room the visitor is in may be past the edge, so the strip is scrolled to
+	 * centre it whenever the room changes. Only the strip moves, never the
+	 * page. Its padding leaves room for the active tab's 105% scale, which the
+	 * scrolling strip would otherwise clip.
 	 */
 	let navElement = $state<HTMLElement>();
 	$effect(() => {
@@ -67,7 +71,7 @@
 
 <nav
 	bind:this={navElement}
-	class="flex w-full max-w-full gap-2 overflow-x-auto px-3 py-2 md:gap-4 md:p-2"
+	class="flex w-full max-w-full justify-center-safe gap-1 overflow-x-auto p-1.5 sm:gap-2 lg:p-2"
 >
 	{#each visibleRooms as room (room.id)}
 		{@const isActive = room.id === activeRoomId}
@@ -77,17 +81,24 @@
 			{href}
 			variant={isActive ? roomVariants[room.id] : 'ghost'}
 			size="md"
-			className={`relative shrink-0 ${isActive ? 'scale-105' : 'opacity-80'}`}
-			contentClassName="px-1 text-xs md:px-0 md:text-sm"
+			className={`relative min-h-12 min-w-0 shrink-0 ${isActive ? 'scale-105 px-3' : 'w-12 px-0 lg:w-auto lg:px-3'}`}
+			contentClassName="gap-1.5 px-0 text-xs tracking-[0.06em] lg:text-[0.8rem]"
 			data-sveltekit-preload-data="hover"
 			data-room={room.id}
 			aria-current={isActive ? 'page' : undefined}
+			aria-label={room.name}
+			title={room.name}
 		>
 			<!-- The wiggle is decoration: reduced-motion visitors get the sticker, not the shake. -->
 			<Icon
-				class={`h-6 w-6 shrink-0 ${isActive ? 'animate-[wiggle_0.5s_ease-in-out_0.3s] motion-reduce:animate-none' : ''}`}
+				class={`h-5 w-5 shrink-0 ${isActive ? 'animate-[wiggle_0.5s_ease-in-out_0.3s] motion-reduce:animate-none' : ''}`}
 			/>
-			<span>{room.name}</span>
+			{#if isActive}
+				<span class="sm:hidden">{room.shortName}</span>
+				<span class="hidden sm:inline-flex">{room.name}</span>
+			{:else}
+				<span class="hidden lg:inline-flex">{room.name}</span>
+			{/if}
 		</GameLink>
 	{/each}
 </nav>

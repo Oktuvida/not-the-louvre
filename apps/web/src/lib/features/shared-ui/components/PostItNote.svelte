@@ -25,6 +25,7 @@
 	const ROOM_PAPER: Record<string, string> = {
 		'hall-of-fame': 'linear-gradient(172deg, #fff3a8 0%, #fbe57e 60%, #f2d65e 100%)',
 		'hot-wall': 'linear-gradient(172deg, #ffd6de 0%, #f8b9c7 55%, #f0a5b6 100%)',
+		'wet-paint': 'linear-gradient(172deg, #ffe3c2 0%, #fbcf9c 55%, #f5bb7e 100%)',
 		mystery: 'linear-gradient(172deg, #d6ecff 0%, #b9dbfb 60%, #a3cdf5 100%)',
 		'your-studio': 'linear-gradient(172deg, #dcf2d4 0%, #c3e6bb 60%, #a9d6a0 100%)'
 	};

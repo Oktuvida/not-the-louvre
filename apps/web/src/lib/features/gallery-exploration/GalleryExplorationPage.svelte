@@ -52,6 +52,7 @@
 	import type { AwardStyle } from '#lib/features/shared-ui/award-style.js';
 	import HotWallRoom from '#lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
 	import MysteryRoom from '#lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
+	import WetPaintRoom from '#lib/features/gallery-exploration/rooms/WetPaintRoom.svelte';
 	import YourStudioRoom from '#lib/features/gallery-exploration/rooms/YourStudioRoom.svelte';
 
 	type GalleryDetailHistoryState = NonNullable<App.PageState['galleryDetail']>;
@@ -867,6 +868,7 @@
 	const roomNoteClassNames: Record<GalleryRoomId, string> = {
 		'hall-of-fame': '',
 		'hot-wall': '',
+		'wet-paint': '',
 		mystery: '',
 		'your-studio': ''
 	};
@@ -1001,6 +1003,20 @@
 			{revealedArtworkIds}
 			viewerId={viewer?.id ?? null}
 		/>
+	{:else if roomId === 'wet-paint'}
+		<WetPaintRoom
+			{artworks}
+			pageInfo={seedDiscovery.pageInfo}
+			adultContentEnabled={adultContentAllowed}
+			feedCacheKey={roomId}
+			seedIsRemembered={isSeedRemembered}
+			serverRendered={!roomContent}
+			loadMoreArtworks={roomLoadMoreArtworks}
+			onPrefetch={prefetchArtworkDetail}
+			onSelect={openArtwork}
+			{revealedArtworkIds}
+			viewerId={viewer?.id ?? null}
+		/>
 	{:else if roomId === 'mystery' && artworks.length > 0}
 		<MysteryRoom
 			{artworks}
@@ -1035,8 +1051,10 @@
 	<div
 		class="relative z-10 mx-auto flex max-w-[160rem] flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8"
 	>
-		{#if roomId === 'your-studio'}
-			<div class="mb-4 flex justify-start md:mb-6" data-testid="your-studio-room-note-flow">
+		{#if roomId === 'your-studio' || roomId === 'wet-paint'}
+			<!-- A plain wall of polaroids starts at the top left, right where the note
+			     would be stuck, so here the note takes a line of its own. -->
+			<div class="mb-4 flex justify-start md:mb-6" data-testid={`${roomId}-room-note-flow`}>
 				<PostItNote
 					attachment={room.postItAttachment}
 					className={roomNoteClassNames[roomId]}

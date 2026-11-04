@@ -7,7 +7,7 @@ import { deterministicAuthUser, resetDemoState } from '../demo/e2e-helpers';
 
 type Box = { bottom: number; left: number; right: number; top: number };
 
-const WIDTHS = [390, 768, 1024, 1280, 1440, 1920, 2560];
+const WIDTHS = [360, 390, 768, 1024, 1280, 1440, 1920, 2560];
 
 const boxOf = (page: Page, locator: Locator) =>
 	locator.evaluate((element): Box => {
@@ -39,13 +39,16 @@ const headerControls = async (page: Page, signedIn: boolean) => {
 	const tabs = header.getByRole('navigation').getByRole('link');
 	for (let index = 0; index < (await tabs.count()); index += 1) {
 		const tab = tabs.nth(index);
-		controls.push({ box: await boxOf(page, tab), name: `tab "${await tab.innerText()}"` });
+		// A tab may show only its picture; its name is still what it answers to.
+		const name = await tab.getAttribute('aria-label');
+		controls.push({ box: await boxOf(page, tab), name: `tab "${name}"` });
 	}
 	return controls;
 };
 
 const ROOMS = [
 	{ note: 'Fresh pieces rising fast', path: '/gallery/hot-wall', tab: /the hot wall/i },
+	{ note: 'newest first', path: '/gallery/wet-paint', tab: /wet paint/i },
 	{ note: 'Trophy room for the top-ranked', path: '/gallery', tab: /hall of fame/i }
 ] as const;
 
@@ -67,11 +70,11 @@ const checkHeader = async (
 		}
 	}
 
-	// The tab strip may scroll sideways on a phone, but the room the visitor is
-	// in is always shown whole.
-	const active = controls.find((control) => room.tab.test(control.name))!;
-	expect.soft(active.box.left, `the active tab at ${width}px`).toBeGreaterThanOrEqual(nav.left - 1);
-	expect.soft(active.box.right, `the active tab at ${width}px`).toBeLessThanOrEqual(nav.right + 1);
+	// Every room's tab is on screen whole: nothing to scroll sideways to find.
+	for (const tab of controls.filter((control) => control.name.startsWith('tab'))) {
+		expect.soft(tab.box.left, `${tab.name} at ${width}px`).toBeGreaterThanOrEqual(nav.left - 1);
+		expect.soft(tab.box.right, `${tab.name} at ${width}px`).toBeLessThanOrEqual(nav.right + 1);
+	}
 
 	const note = await boxOf(page, page.getByText(room.note));
 	expect.soft(note.left, `the room note at ${width}px`).toBeGreaterThanOrEqual(0);
@@ -101,6 +104,17 @@ const checkHeader = async (
 	}
 };
 
+/** What each tab shows in words, by the room it answers to. */
+const tabWords = async (page: Page) => {
+	const tabs = page.getByTestId('gallery-room-header').getByRole('navigation').getByRole('link');
+	const words: Record<string, string> = {};
+	for (let index = 0; index < (await tabs.count()); index += 1) {
+		const tab = tabs.nth(index);
+		words[(await tab.getAttribute('aria-label')) ?? ''] = (await tab.innerText()).trim();
+	}
+	return words;
+};
+
 test.describe('the gallery header on every screen', () => {
 	test.beforeEach(async ({ request }) => {
 		await resetDemoState(request);
@@ -126,5 +140,26 @@ test.describe('the gallery header on every screen', () => {
 
 		for (const room of ROOMS)
 			for (const width of WIDTHS) await checkHeader(page, width, true, room);
+	});
+
+	test('names the room the visitor is in, and every room once there is width for it', async ({
+		page
+	}) => {
+		const unnamed = { 'Hall of Fame': '', 'Mystery Room': '', 'The Hot Wall': '' };
+
+		await page.setViewportSize({ height: 844, width: 390 });
+		await page.goto('/gallery/wet-paint');
+		expect(await tabWords(page)).toEqual({ ...unnamed, 'Wet Paint': 'WET' });
+
+		await page.setViewportSize({ height: 1180, width: 820 });
+		expect(await tabWords(page)).toEqual({ ...unnamed, 'Wet Paint': 'WET PAINT' });
+
+		await page.setViewportSize({ height: 800, width: 1280 });
+		expect(await tabWords(page)).toEqual({
+			'Hall of Fame': 'HALL OF FAME',
+			'Mystery Room': 'MYSTERY ROOM',
+			'The Hot Wall': 'THE HOT WALL',
+			'Wet Paint': 'WET PAINT'
+		});
 	});
 });
