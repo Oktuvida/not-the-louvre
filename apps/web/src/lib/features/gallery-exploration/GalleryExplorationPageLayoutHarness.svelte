@@ -10,7 +10,9 @@
 </script>
 
 <GalleryLayoutFrame
-	roomId={props.roomId === 'artist-studio' ? null : props.roomId}
+	roomId={props.roomId === 'artist-studio' || props.roomId === 'artwork-forks'
+		? null
+		: props.roomId}
 	viewer={props.viewer ?? null}
 >
 	<GalleryExplorationPage {...props} />

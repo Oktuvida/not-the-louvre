@@ -105,6 +105,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
   - Era lo más pesado de la galería y dejó de serlo: la fila es una sola tira sin fotos que anima el compositor, sin JavaScript por fotograma. En reposo no se pide ninguna foto, y la deriva también la anima el compositor, así que el hilo principal baja de 60 a unos 2 ms por segundo; gsap sale de la galería. Medido: en Chromium el peor fotograma del giro baja de 250 a 17 ms, y en Safari van 60 fps durante el giro y el revelado.
   - Lo gris del cordel no sale de las obras: está dibujado, para que no cueste nada.
 - [x] Visitar el estudio de cualquier artista, en `/gallery/artist/<nombre>`: su muro con lo más nuevo primero, bajo un Ex libris con su cara y sus cifras (obras, estrellas y desde cuándo cuelga, contando solo lo visible). Si la moderación ocultó el avatar, la etiqueta sale sin él. Se entra por la firma de la postal. No es una sala, así que no se ilumina ninguna pestaña. Un nombre que no existe o un artista baneado da 404, y quien visita su propio nombre va a Your Studio.
+- [x] El hilo de forks, en `/gallery/forks/<obra>`: la obra original arriba y debajo sus forks en un muro de polaroids, de lo más nuevo a lo más viejo. Se baja por «Forks 3 →» en la ficha de la postal y se sube por «Forked from…» en el frente, así que se recorre todo el hilo sin dibujar un árbol. El feed filtra por obra original y pagina como cualquier sala.
 
 ### 4. Estudio v3 y timelapse
 

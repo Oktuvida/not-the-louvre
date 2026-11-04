@@ -23,6 +23,8 @@ export type LoadMoreArtworks = (request: { cursor: string }) => Promise<GalleryA
 export type GalleryDiscoveryRequest = {
 	authorId: string | null;
 	limit: number;
+	/** Only the forks of this artwork. */
+	parentId?: string | null;
 	sort: 'hot' | 'recent' | 'top';
 	window: 'all' | null;
 };
@@ -68,6 +70,15 @@ export const galleryRoomDiscoveryRequest = (
 export const artistDiscoveryRequest = (artistId: string): GalleryDiscoveryRequest => ({
 	authorId: artistId,
 	limit: GALLERY_PAGE_SIZE,
+	sort: 'recent',
+	window: null
+});
+
+/** What the wall of an artwork's forks asks the feed for. */
+export const forksDiscoveryRequest = (artworkId: string): GalleryDiscoveryRequest => ({
+	authorId: null,
+	limit: GALLERY_PAGE_SIZE,
+	parentId: artworkId,
 	sort: 'recent',
 	window: null
 });

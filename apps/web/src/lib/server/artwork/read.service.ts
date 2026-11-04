@@ -27,6 +27,8 @@ type ListArtworkDiscoveryInput = {
 	authorId?: string | null;
 	cursor?: string | null;
 	limit?: number;
+	/** Only the forks of this artwork; the recent feed is the one that reads it. */
+	parentId?: string | null;
 	sort: ArtworkDiscoverySort;
 	window?: string | null;
 };
@@ -292,6 +294,7 @@ export const listArtworkDiscovery = async (
 					authorId: input.authorId,
 					cursor: cursor?.sort === 'recent' ? cursor : null,
 					limit: limit + 1,
+					parentId: input.parentId,
 					viewer
 				})
 			: sort === 'hot'

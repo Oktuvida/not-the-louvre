@@ -350,6 +350,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 					// An author's own studio keeps their hidden work, so they can find it.
 					input.authorId && input.authorId === viewer.userId ? undefined : artworkVisibilityWhere(),
 					input.authorId ? eq(artworks.authorId, input.authorId) : undefined,
+					input.parentId ? eq(artworks.parentId, input.parentId) : undefined,
 					recentCursorWhere(input.cursor) ?? undefined
 				)
 			)

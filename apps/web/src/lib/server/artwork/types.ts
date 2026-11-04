@@ -235,6 +235,7 @@ export type ListRecentArtworksInput = {
 	authorId?: string | null;
 	cursor: ArtworkRecentDiscoveryCursor | null;
 	limit: number;
+	parentId?: string | null;
 	viewer?: ArtworkVisibilityActor;
 };
 

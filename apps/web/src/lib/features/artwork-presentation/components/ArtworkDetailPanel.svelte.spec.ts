@@ -86,7 +86,7 @@ describe('ArtworkDetailPanel', () => {
 
 		// The fork count is on the catalogue card, on the back of the postcard
 		await page.getByRole('button', { name: 'Read the comments' }).click();
-		await expect.element(page.getByText('Forks 2')).toBeVisible();
+		await expect.element(page.getByText(/^Forks 2/)).toBeVisible();
 	});
 
 	// The back of the postcard files the artwork like a museum catalogue card,
@@ -101,7 +101,7 @@ describe('ArtworkDetailPanel', () => {
 		await toComments.click();
 
 		await expect.element(page.getByText('Votes 4')).toBeVisible();
-		await expect.element(page.getByText('Forks 2')).toBeVisible();
+		await expect.element(page.getByText(/^Forks 2/)).toBeVisible();
 		await expect.element(page.getByText(/^Artist journey_artist$/)).toBeVisible();
 		await expect.element(page.getByText('Nobody has written on the back yet.')).toBeVisible();
 		expect(

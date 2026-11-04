@@ -49,6 +49,7 @@
 	import GalleryStatusRegion from '#lib/features/gallery-exploration/components/GalleryStatusRegion.svelte';
 	import RoomLoadingSkeleton from '#lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
 	import ArtistBookplate from '#lib/features/gallery-exploration/components/ArtistBookplate.svelte';
+	import ForksHead from '#lib/features/gallery-exploration/components/ForksHead.svelte';
 	import type { ArtistStudio } from '#lib/features/gallery-exploration/model/artist-studio.js';
 	import HallOfFameRoom from '#lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
 	import type { AwardStyle } from '#lib/features/shared-ui/award-style.js';
@@ -129,6 +130,10 @@
 				query.push(`authorId=${encodeURIComponent(request.authorId)}`);
 			}
 
+			if (request.parentId) {
+				query.push(`parentId=${encodeURIComponent(request.parentId)}`);
+			}
+
 			if (request.window) {
 				query.push(`window=${encodeURIComponent(request.window)}`);
 			}
@@ -185,6 +190,7 @@
 			}
 		},
 		artist = null,
+		forksOf = null,
 		room,
 		roomId,
 		viewer = null,
@@ -215,6 +221,8 @@
 		loadArtworkDetail?: (artworkId: string) => Promise<Artwork>;
 		/** Whose studio this wall is, on a visit to one. */
 		artist?: ArtistStudio | null;
+		/** The piece this wall hangs the forks of. */
+		forksOf?: Artwork | null;
 		room: GalleryRoomConfig;
 		roomId: GalleryWallId;
 		viewer?: Viewer | null;
@@ -416,6 +424,7 @@
 	const showSensitiveArtworkNote = $derived(hasSensitiveArtwork && roomId !== 'your-studio');
 	const currentGalleryUrl = $derived.by(() => {
 		if (artist) return resolve('/gallery/artist/[nickname]', { nickname: artist.nickname });
+		if (forksOf) return resolve('/gallery/forks/[artworkId]', { artworkId: forksOf.id });
 		return roomId === 'hall-of-fame'
 			? resolve('/gallery/[[room]]', {})
 			: resolve('/gallery/[[room]]', { room: roomId });
@@ -768,6 +777,7 @@
 			`sort=${encodeURIComponent(request.sort)}`
 		];
 		if (request.authorId) query.push(`authorId=${encodeURIComponent(request.authorId)}`);
+		if (request.parentId) query.push(`parentId=${encodeURIComponent(request.parentId)}`);
 		if (request.window) query.push(`window=${encodeURIComponent(request.window)}`);
 
 		const payload = await requestJson<{ items: Parameters<typeof toGalleryArtwork>[0][] }>(
@@ -873,6 +883,7 @@
 	// --- Empty state ---
 	const roomNoteClassNames: Record<GalleryWallId, string> = {
 		'artist-studio': '',
+		'artwork-forks': '',
 		'hall-of-fame': '',
 		'hot-wall': '',
 		'wet-paint': '',
@@ -881,6 +892,7 @@
 	};
 	const showEmptyState = $derived(Boolean(roomEmptyStateMessage) && roomId !== 'hot-wall');
 	const emptyStateSupportMessage = $derived.by(() => {
+		if (forksOf) return 'Forks of this piece will appear here as they are hung.';
 		if (artist) return 'New pieces will appear here as they are hung.';
 
 		if (viewer && roomId === 'your-studio') {
@@ -1012,12 +1024,12 @@
 			{revealedArtworkIds}
 			viewerId={viewer?.id ?? null}
 		/>
-	{:else if roomId === 'wet-paint' || roomId === 'artist-studio'}
+	{:else if roomId === 'wet-paint' || roomId === 'artist-studio' || roomId === 'artwork-forks'}
 		<NewestFirstRoom
 			{artworks}
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
-			feedCacheKey={roomId === 'artist-studio' ? null : roomId}
+			feedCacheKey={roomId === 'wet-paint' ? roomId : null}
 			seedIsRemembered={isSeedRemembered}
 			serverRendered={!roomContent}
 			loadMoreArtworks={roomLoadMoreArtworks}
@@ -1060,6 +1072,16 @@
 		{#if artist}
 			<div class="mb-6 flex justify-center md:mb-8">
 				<ArtistBookplate {artist} />
+			</div>
+		{:else if forksOf}
+			<div class="mb-6 flex justify-center md:mb-8">
+				<ForksHead
+					adultContentEnabled={adultContentAllowed}
+					artwork={forksOf}
+					onPrefetch={prefetchArtworkDetail}
+					onSelect={openArtwork}
+					viewerId={viewer?.id ?? null}
+				/>
 			</div>
 		{:else if roomId === 'your-studio' || roomId === 'wet-paint'}
 			<!-- A plain wall of polaroids starts at the top left, right where the note

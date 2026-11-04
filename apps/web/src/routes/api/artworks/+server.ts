@@ -31,6 +31,7 @@ export const GET: RequestHandler = async (event) => {
 	}
 
 	const authorId = event.url.searchParams.get('authorId');
+	const parentId = event.url.searchParams.get('parentId');
 	const sort = event.url.searchParams.get('sort') ?? 'recent';
 	const window = event.url.searchParams.get('window');
 	const cursor = event.url.searchParams.get('cursor');
@@ -43,7 +44,8 @@ export const GET: RequestHandler = async (event) => {
 			limit,
 			sort: sort as never,
 			window,
-			...(authorId ? { authorId } : {})
+			...(authorId ? { authorId } : {}),
+			...(parentId ? { parentId } : {})
 		};
 
 		const discovery = await listArtworkDiscovery(discoveryRequest, { user: event.locals.user });
