@@ -652,47 +652,59 @@
 		};
 	});
 
+	/*
+	 * The panel follows the history entry, and only the history entry: a
+	 * navigation opens and closes it. What the page itself has on screen is
+	 * read here, never tracked. Tracked, putting a piece away re-ran this
+	 * before the shallow goto retiring its entry had landed (SvelteKit 3
+	 * resolves the route first), so the entry still named the piece and it
+	 * was opened again: the postcard blinked back, a second request went out,
+	 * and the guard's note about the failure was wiped before anyone read it.
+	 */
 	$effect(() => {
 		const currentHistoryState = historyDetailState;
 		const galleryUrl = currentGalleryUrl;
+		const currentRoomId = roomId;
 
 		if (!browser) return;
 
-		if (currentHistoryState && currentHistoryState.roomId !== roomId) {
-			detailLoadSequence += 1;
-			isHydratingDetail = false;
-			didCreateLocalDetailHistoryEntry = false;
-			selectedArtwork = null;
-			detailOrigin = null;
-
-			goto(galleryUrl, {
-				shallow: true,
-				replace: true,
-				state: clearGalleryDetailHistoryState(page.state)
-			});
-
-			return;
-		}
-
-		if (!currentHistoryState) {
-			detailLoadSequence += 1;
-			isHydratingDetail = false;
-			didCreateLocalDetailHistoryEntry = false;
-
-			if (selectedArtwork || detailOrigin) {
+		untrack(() => {
+			if (currentHistoryState && currentHistoryState.roomId !== currentRoomId) {
+				detailLoadSequence += 1;
+				isHydratingDetail = false;
+				didCreateLocalDetailHistoryEntry = false;
 				selectedArtwork = null;
 				detailOrigin = null;
+
+				goto(galleryUrl, {
+					shallow: true,
+					replace: true,
+					state: clearGalleryDetailHistoryState(page.state)
+				});
+
+				return;
 			}
 
-			return;
-		}
+			if (!currentHistoryState) {
+				detailLoadSequence += 1;
+				isHydratingDetail = false;
+				didCreateLocalDetailHistoryEntry = false;
 
-		if (selectedArtwork?.id === currentHistoryState.artworkId) {
-			detailOrigin = currentHistoryState.source;
-			return;
-		}
+				if (selectedArtwork || detailOrigin) {
+					selectedArtwork = null;
+					detailOrigin = null;
+				}
 
-		void loadArtworkFromHistoryState(currentHistoryState);
+				return;
+			}
+
+			if (selectedArtwork?.id === currentHistoryState.artworkId) {
+				detailOrigin = currentHistoryState.source;
+				return;
+			}
+
+			void loadArtworkFromHistoryState(currentHistoryState);
+		});
 	});
 
 	// --- Transitions ---

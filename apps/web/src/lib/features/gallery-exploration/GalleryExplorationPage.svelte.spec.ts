@@ -1594,6 +1594,55 @@ describe('GalleryExplorationPage', () => {
 		expect(statusRegion.element().className).toContain('fixed');
 	});
 
+	it("puts a piece that will not open away and leaves the guard's note up", async () => {
+		// SvelteKit 3 moves the page a moment after a shallow goto, once it has
+		// resolved the route. The fake does the same, so the moment in between —
+		// the postcard put away while the address still names the piece — is
+		// part of the scenario, as it is in the browser.
+		goto.mockImplementation(async (url, options = {}) => {
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			if (options.shallow) fakePage.set({ state: options.state ?? {}, url });
+		});
+		const detailRequests: ReturnType<typeof createDeferred<Artwork>>[] = [];
+		const loadArtworkDetail = vi.fn(() => {
+			const request = createDeferred<Artwork>();
+			detailRequests.push(request);
+			return request.promise;
+		});
+		setPageValue('/gallery/your-studio');
+
+		await render(GalleryExplorationPage, {
+			artworks: [{ ...baseArtwork, id: 'artwork-1', title: 'Deterministic Gallery Study' }],
+			emptyStateMessage: null,
+			loadArtworkDetail,
+			room: getGalleryRoom('your-studio'),
+			roomId: 'your-studio',
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByRole('button', { name: /Deterministic Gallery Study/ }).click();
+		// The postcard opens at once from the card's own copy...
+		const postcard = page.getByRole('dialog', { name: /Deterministic Gallery Study/ });
+		await expect.element(postcard).toBeVisible();
+
+		// ...and the full record never comes.
+		detailRequests[0].reject(new Error("Couldn't open that one. Tap it again?"));
+
+		await expect.element(postcard).not.toBeInTheDocument();
+		await vi.waitFor(() => {
+			expect(fakePage.page.url.pathname).toBe('/gallery/your-studio');
+			expect(fakePage.page.state).not.toHaveProperty('galleryDetail');
+		});
+		// With the address back on the room, the note is still there to be read
+		// a moment later: longer than a note takes to peel off the wall, which
+		// keeps its words on screen while it goes, and well short of its 8 s.
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+		await expect
+			.element(page.getByTestId('gallery-status-region'))
+			.toMatchTextContent("Couldn't open that one. Tap it again?");
+		await expect.element(postcard).not.toBeInTheDocument();
+	});
+
 	it('keeps the pages a room paged in when its streamed seed lands', async () => {
 		writeRoomFeedSnapshot('hot-wall', {
 			artworks: [
