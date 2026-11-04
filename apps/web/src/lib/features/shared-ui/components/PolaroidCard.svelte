@@ -19,7 +19,8 @@
 		adultContentEnabled = false,
 		revealed = false,
 		onReveal,
-		imageLoading = 'lazy'
+		imageLoading = 'lazy',
+		pencilNote
 	}: {
 		artwork: Artwork;
 		className?: string;
@@ -31,6 +32,8 @@
 		revealed?: boolean;
 		onReveal?: () => void;
 		imageLoading?: 'eager' | 'lazy';
+		/** A line pencilled under the artist's name, for what a room wants said of the card. */
+		pencilNote?: string;
 	} = $props();
 
 	// Fallback for callers that don't own the reveal state; controlled `revealed`
@@ -211,6 +214,14 @@
 						class="truncate font-display text-[max(0.7em,0.75rem)] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
 					>
 						{forkParentTitle ? `From ${forkParentTitle}` : 'Forked artwork'}
+					</p>
+				{/if}
+				{#if pencilNote}
+					<p
+						class="truncate text-[max(0.82em,0.75rem)] text-muted-ink"
+						style="font-family: var(--font-hand);"
+					>
+						{pencilNote}
 					</p>
 				{/if}
 			</div>

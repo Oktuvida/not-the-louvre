@@ -46,6 +46,13 @@ const VISITOR: Surface[] = [
 		}
 	},
 	{
+		name: 'Wet Paint',
+		open: async (page) => {
+			await page.goto('/gallery/wet-paint');
+			await card(page).waitFor();
+		}
+	},
+	{
 		name: 'the Mystery room',
 		open: async (page) => {
 			await page.goto('/gallery/mystery');

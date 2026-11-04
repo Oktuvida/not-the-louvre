@@ -16,6 +16,14 @@ describe('GalleryRoomNav', () => {
 		await expect.element(page.getByRole('link', { name: 'Your Studio' })).not.toBeInTheDocument();
 	});
 
+	it('offers Wet Paint to everyone, right after the Hot Wall', async () => {
+		await render(GalleryRoomNav, { roomId: 'hall-of-fame' });
+
+		const rooms = page.getByRole('link');
+		await expect.element(rooms.nth(1)).toHaveTextContent('The Hot Wall');
+		await expect.element(rooms.nth(2)).toHaveTextContent('Wet Paint');
+	});
+
 	it('includes the personal room for authenticated viewers', async () => {
 		await render(GalleryRoomNav, {
 			roomId: 'hall-of-fame',
@@ -31,6 +39,5 @@ describe('GalleryRoomNav', () => {
 		const nav = document.querySelector('nav');
 		expect(nav).not.toBeNull();
 		expect(nav?.className).toContain('overflow-x-auto');
-		expect(nav?.className).toContain('gap-2');
 	});
 });

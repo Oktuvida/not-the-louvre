@@ -1,0 +1,104 @@
+<script lang="ts">
+	import { writable, type Writable } from 'svelte/store';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import ScrollSentinel from '#lib/features/gallery-exploration/components/ScrollSentinel.svelte';
+	import VirtualizedGrid from '#lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
+	import type {
+		GalleryPageInfo,
+		LoadMoreArtworks
+	} from '#lib/features/gallery-exploration/model/discovery.js';
+	import { hungAgo } from '#lib/features/gallery-exploration/model/hung-ago.js';
+	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
+	import { createSeededAccumulator } from '#lib/features/gallery-exploration/use-seeded-accumulator.svelte.js';
+	import PolaroidCard from '#lib/features/shared-ui/components/PolaroidCard.svelte';
+
+	interface Props {
+		artworks: Artwork[];
+		pageInfo: GalleryPageInfo;
+		adultContentEnabled?: boolean;
+		feedCacheKey?: GalleryRoomId | null;
+		/** The seed is one the room already had, standing in until the server's fresh page lands. */
+		seedIsRemembered?: boolean;
+		/** The room came drawn by the server, with the page, rather than built in the browser. */
+		serverRendered?: boolean;
+		loadMoreArtworks?: LoadMoreArtworks;
+		onPrefetch?: (artworkId: string) => void;
+		onSelect: (artwork: Artwork) => void;
+		revealedArtworkIds?: Writable<Set<string>>;
+		viewerId?: string | null;
+	}
+
+	let {
+		artworks,
+		pageInfo,
+		adultContentEnabled = false,
+		feedCacheKey = null,
+		seedIsRemembered = false,
+		serverRendered = true,
+		loadMoreArtworks,
+		onPrefetch,
+		onSelect,
+		revealedArtworkIds,
+		viewerId = null
+	}: Props = $props();
+
+	// The grid's measured rows travel with the feed, so coming back lands on
+	// the same card rather than on the same pixel of an estimated layout.
+	let grid = $state<{ snapshotLayout(): GridLayoutSnapshot | null }>();
+
+	const accumulator = createSeededAccumulator({
+		getFeedCacheKey: () => feedCacheKey,
+		getSeedIsRemembered: () => seedIsRemembered,
+		getArtworks: () => artworks,
+		getLayout: () => grid?.snapshotLayout() ?? null,
+		getLoadMoreArtworks: () => loadMoreArtworks,
+		getPageInfo: () => pageInfo
+	});
+
+	const fallbackRevealedIds = writable<Set<string>>(new Set());
+	const revealedIds = $derived(revealedArtworkIds ?? fallbackRevealedIds);
+
+	const revealArtwork = (artworkId: string) => {
+		revealedIds.update((ids) => new Set([...ids, artworkId]));
+	};
+
+	// One clock for the whole wall, so cards hung together read alike.
+	const now = Date.now();
+</script>
+
+<!-- The newest piece first and no piece above another, whatever its votes: the
+     order is the room. Each polaroid has a note of when it went up. -->
+<div class="w-full" data-testid="wet-paint-room">
+	<VirtualizedGrid
+		bind:this={grid}
+		items={accumulator.allArtworks}
+		restoredLayout={accumulator.restoredLayout}
+		{serverRendered}
+	>
+		{#snippet renderCard(artwork)}
+			<div data-testid={`wet-paint-card-${artwork.id}`}>
+				<PolaroidCard
+					{artwork}
+					{viewerId}
+					{adultContentEnabled}
+					pencilNote={hungAgo(artwork.timestamp, now)}
+					revealed={$revealedIds.has(artwork.id)}
+					onReveal={() => revealArtwork(artwork.id)}
+					imageLoading="eager"
+					onclick={() => onSelect(artwork)}
+					onPointerIntent={() => onPrefetch?.(artwork.id)}
+				/>
+			</div>
+		{/snippet}
+	</VirtualizedGrid>
+	<ScrollSentinel
+		disabled={false}
+		error={accumulator.error}
+		hasMore={accumulator.hasMore}
+		isLoading={accumulator.isLoading}
+		onRetry={() => accumulator.retry()}
+		skeletonCount={3}
+		onTrigger={() => accumulator.loadMore()}
+	/>
+</div>

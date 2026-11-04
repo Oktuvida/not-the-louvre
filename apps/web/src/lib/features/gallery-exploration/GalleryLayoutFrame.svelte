@@ -121,9 +121,9 @@
 		</div>
 
 		<!-- The tabs share the top line with Back and the actions only from xl:
-		     narrower, the four of them plus a signed-in artist's two actions
-		     ran into each other, so they sit on a line of their own. -->
-		<div class="pointer-events-auto mx-auto max-w-full px-12 pt-15 xl:w-fit xl:px-0 xl:pt-1">
+		     narrower, the five of them plus a signed-in artist's two actions
+		     would run into each other, so they sit on a line of their own. -->
+		<div class="pointer-events-auto mx-auto max-w-full pt-15 xl:w-fit xl:pt-1">
 			<GalleryRoomNav {roomId} {viewer} />
 		</div>
 	</div>

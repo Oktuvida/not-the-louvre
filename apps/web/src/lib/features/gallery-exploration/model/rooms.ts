@@ -41,6 +41,15 @@ export const galleryRooms: GalleryRoomConfig[] = [
 		color: '#c84f4f'
 	},
 	{
+		id: 'wet-paint',
+		name: 'Wet Paint',
+		shortName: 'Wet',
+		postItAttachment: 'tape',
+		postItColor: '#fbcf9c',
+		description: 'Just hung, newest first: no votes needed to make it onto this wall.',
+		color: '#e0913f'
+	},
+	{
 		id: 'mystery',
 		name: 'Mystery Room',
 		shortName: 'Mystery',

@@ -1,6 +1,12 @@
 // Room identity and the URLs that address it: the gallery loaders resolve a
 // route parameter with this, and the nav builds its hrefs from it.
-export const galleryRoomIds = ['hall-of-fame', 'hot-wall', 'mystery', 'your-studio'] as const;
+export const galleryRoomIds = [
+	'hall-of-fame',
+	'hot-wall',
+	'wet-paint',
+	'mystery',
+	'your-studio'
+] as const;
 
 export type GalleryRoomId = (typeof galleryRoomIds)[number];
 
