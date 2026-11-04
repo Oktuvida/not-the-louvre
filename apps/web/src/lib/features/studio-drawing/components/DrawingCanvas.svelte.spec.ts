@@ -597,20 +597,35 @@ describe('DrawingCanvas', () => {
 			]);
 		});
 
-		it('fills the frame again when pinched in past the fit, or with Fit canvas', async () => {
+		it('fills the frame again when pinched in past the fit, or from the zoom stamp', async () => {
 			const { canvas } = await renderCanvas();
 			pinch(canvas, { centre: [192, 192], spread: 100 }, { centre: [192, 192], spread: 250 });
-			await expect.element(page.getByRole('button', { name: 'Fit canvas' })).toBeVisible();
+			await expect.element(page.getByRole('button', { name: /fit canvas/i })).toBeVisible();
 
 			pinch(canvas, { centre: [192, 192], spread: 250 }, { centre: [192, 192], spread: 40 });
 			await vi.waitFor(() => expect(canvas.getBoundingClientRect().width).toBeCloseTo(384, 0));
 
 			pinch(canvas, { centre: [100, 100], spread: 100 }, { centre: [100, 100], spread: 250 });
-			await page.getByRole('button', { name: 'Fit canvas' }).click();
+			await page.getByRole('button', { name: /fit canvas/i }).click();
 			await vi.waitFor(() => expect(canvas.getBoundingClientRect().width).toBeCloseTo(384, 0));
 			await expect
-				.element(page.getByRole('button', { name: 'Fit canvas' }))
+				.element(page.getByRole('button', { name: /fit canvas/i }))
 				.not.toBeInTheDocument();
+		});
+
+		it('stamps on the drawing how far in it is zoomed, and fits the canvas from the stamp', async () => {
+			const { canvas } = await renderCanvas();
+			pinch(canvas, { centre: [192, 192], spread: 100 }, { centre: [192, 192], spread: 250 });
+
+			const stamp = page.getByRole('button', { name: /fit canvas/i });
+			await expect.element(stamp).toHaveTextContent('250%');
+
+			pinch(canvas, { centre: [192, 192], spread: 250 }, { centre: [192, 192], spread: 300 });
+			await expect.element(stamp).toHaveTextContent('300%');
+
+			await stamp.click();
+			await vi.waitFor(() => expect(canvas.getBoundingClientRect().width).toBeCloseTo(384, 0));
+			await expect.element(stamp).not.toBeInTheDocument();
 		});
 
 		it('paints the extra pixels a zoomed-in canvas covers', async () => {

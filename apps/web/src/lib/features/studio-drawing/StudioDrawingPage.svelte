@@ -42,6 +42,10 @@
 	import './studio-layout.css';
 	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
 	import { keepTheRestingHandOff } from '#lib/features/studio-drawing/resting-hand.js';
+	import {
+		studioShortcuts,
+		type StudioShortcut
+	} from '#lib/features/studio-drawing/shortcut-keys.js';
 	import { STUDIO_DESK_IMAGE } from '#lib/features/shared-ui/studio-background-warmup.js';
 	import {
 		HANDOFF_CSS_VARIABLES,
@@ -279,6 +283,12 @@
 		read();
 		window.addEventListener('resize', read);
 		return () => window.removeEventListener('resize', read);
+	});
+	// Which keys the label inside the cover prints is the browser's to say, so
+	// it is printed once the page is in one.
+	let shortcuts = $state<StudioShortcut[] | null>(null);
+	onMount(() => {
+		shortcuts = studioShortcuts();
 	});
 	let hasForkParent = $derived(Boolean(currentForkParent?.mediaUrl));
 
@@ -766,6 +776,22 @@
 				</GameButton>
 			</div>
 		{/if}
+
+		{#if shortcuts}
+			<!-- Printed inside the cover under the notes, like the bookplate, and
+			     shown only where the notes lie there. -->
+			<aside class="studio-shortcuts" aria-label="Shortcuts">
+				<p class="shortcuts-heading">Shortcuts</p>
+				<dl class="shortcuts-list">
+					{#each shortcuts as shortcut (shortcut.action)}
+						<div class="shortcuts-row">
+							<dt>{shortcut.action}</dt>
+							<dd>{shortcut.keys}</dd>
+						</div>
+					{/each}
+				</dl>
+			</aside>
+		{/if}
 	</section>
 {/snippet}
 
@@ -968,6 +994,7 @@
 		bottom: 0;
 		width: var(--studio-notes-w, 19rem);
 		z-index: 1;
+		container: cover-notes / size;
 	}
 
 	/* On the desk, the notes arrive as the cover opens. */
@@ -1170,6 +1197,83 @@
 		margin: 0.2rem auto;
 		fill: none;
 		stroke: #6b4a30;
+	}
+
+	/* The shortcuts' label, printed by the same press as the bookplate: a
+	 * single frame, the heading in capitals, each key set off by a dotted
+	 * leader. It sits at the foot of the cover, under the notes. */
+	.studio-shortcuts {
+		display: var(--studio-shortcuts-display, none);
+		position: relative;
+		align-self: center;
+		width: 14.5rem;
+		margin: auto 0 3.25rem;
+		padding: 0.85rem 1rem 0.8rem;
+		rotate: 0.8deg;
+		background: #fbf6ea;
+		box-shadow: 0 1px 1px rgb(40 25 10 / 0.2);
+		color: #4a3524;
+	}
+
+	/* The first thing to go where the cover is short: the notes above it come
+	 * first, and the note about a fork needs room of its own. The heights are
+	 * of the notes' content box, below the padding that clears the header. */
+	@container cover-notes (height < 31rem) {
+		.studio-shortcuts {
+			display: none;
+		}
+	}
+
+	@container cover-notes (height < 39.5rem) {
+		.studio-notes:has(.cover-postit-cancel) .studio-shortcuts {
+			display: none;
+		}
+	}
+
+	.studio-shortcuts::before {
+		content: '';
+		position: absolute;
+		inset: 0.3rem;
+		border: 1px solid #8c6a46;
+		pointer-events: none;
+	}
+
+	.shortcuts-heading {
+		margin: 0.15rem 0 0.45rem;
+		font-family: 'Playfair Display', serif;
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.28em;
+		text-align: center;
+		text-transform: uppercase;
+	}
+
+	.shortcuts-list {
+		margin: 0;
+	}
+
+	.shortcuts-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.35rem;
+		margin: 0.12rem 0;
+		font-family: 'Special Elite', 'Courier New', monospace;
+		font-size: 0.75rem;
+		line-height: 1.35;
+	}
+
+	.shortcuts-row::after {
+		content: '';
+		order: 1;
+		flex: 1;
+		border-bottom: 1px dotted rgb(74 53 36 / 0.45);
+		translate: 0 -0.2rem;
+	}
+
+	.shortcuts-row dd {
+		order: 2;
+		margin: 0;
+		text-align: right;
 	}
 
 	.bookplate-owner {

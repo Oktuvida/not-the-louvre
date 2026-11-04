@@ -175,6 +175,7 @@
 		view = FIT_VIEW;
 		refitSoon();
 	};
+	const zoomLevel = $derived(`${Math.round(view.scale * 100)}%`);
 	// Laid out once per stroke: reading the box on every sample forces layout.
 	let strokeRect: ReturnType<typeof getCanvasContentRect> | null = null;
 
@@ -788,9 +789,22 @@
 		</div>
 	</div>
 
+	<!-- Zoomed in, the level is stamped on the corner of the drawing; pressing
+	     the stamp fits the whole canvas in the frame again. -->
 	{#if view.scale !== 1}
-		<button type="button" class="canvas-chip canvas-fit focus-ring" onclick={fitCanvas}>
-			Fit canvas
+		<button
+			type="button"
+			class="canvas-zoom-stamp focus-ring"
+			aria-label={`Zoomed to ${zoomLevel}. Fit canvas`}
+			title="Fit canvas"
+			onclick={fitCanvas}
+		>
+			<span class="canvas-zoom-ink">
+				<svg viewBox="0 0 24 24" aria-hidden="true">
+					<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path>
+				</svg>
+				{zoomLevel}
+			</span>
 		</button>
 	{/if}
 
@@ -885,8 +899,60 @@
 		transform-origin: 0 0;
 	}
 
-	.canvas-fit {
-		right: 8px;
+	.canvas-zoom-stamp {
+		position: absolute;
+		top: 14px;
+		right: 16px;
+		padding: 0;
+		border: 0;
+		border-radius: 5px;
+		background: none;
+		cursor: pointer;
+		rotate: -5deg;
+	}
+
+	/* The stamp is smaller than a fingertip; its pressable area is not. */
+	.canvas-zoom-stamp::after {
+		content: '';
+		position: absolute;
+		inset: -6px;
+	}
+
+	/* The studio's rubber-stamp ink (as on a drawing that did not publish),
+	 * pressed small and a little crooked: a frame drawn twice, and a mottled
+	 * mask where the ink did not take. A wash of paper behind it keeps the
+	 * level legible over the lines it lands on. The ink is a layer of its own
+	 * so the mask leaves the button's focus ring whole. */
+	.canvas-zoom-ink {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 2.1rem;
+		padding: 0 0.7rem;
+		border: 2.5px solid currentColor;
+		border-radius: 5px;
+		outline: 1px solid currentColor;
+		outline-offset: -5px;
+		background: rgb(253 251 247 / 0.55);
+		color: color-mix(in srgb, var(--color-stamp) 90%, transparent);
+		font-family: var(--font-display);
+		font-size: 0.95rem;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.08em;
+		mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='60'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.2 2.05'/%3E%3C/filter%3E%3Crect width='140' height='60' filter='url(%23f)'/%3E%3C/svg%3E")
+			0 0 / 140px 60px;
+	}
+
+	.canvas-zoom-ink svg {
+		width: 0.95rem;
+		height: 0.95rem;
+		flex: none;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 2.6;
+		stroke-linecap: round;
+		stroke-linejoin: round;
 	}
 
 	.pen-only-toggle {
