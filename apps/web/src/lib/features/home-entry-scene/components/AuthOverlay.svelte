@@ -803,7 +803,7 @@
 											name="nickname"
 											type="text"
 											placeholder="artist_123"
-											class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+											class="sheet-field"
 										/>
 									</label>
 									{#if nicknameError}
@@ -826,7 +826,7 @@
 											name="password"
 											type="password"
 											placeholder="Enter your password"
-											class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+											class="sheet-field"
 										/>
 									</label>
 									{#if passwordError}
@@ -882,7 +882,8 @@
 											>
 											{#if !signupNicknameNote && availabilityMessage}
 												<p
-													class={`text-right text-xs ${availabilityState === 'available' ? 'text-secondary' : 'text-muted'}`}
+													class="availability-note"
+													class:is-available={availabilityState === 'available'}
 												>
 													{availabilityMessage}
 												</p>
@@ -897,7 +898,7 @@
 											name="nickname"
 											type="text"
 											placeholder="artist_123"
-											class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+											class="sheet-field"
 										/>
 									</label>
 									{#if signupNicknameNote}
@@ -920,7 +921,7 @@
 											name="password"
 											type="password"
 											placeholder="Enter your password"
-											class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+											class="sheet-field"
 										/>
 									</label>
 									{#if passwordError}
@@ -972,7 +973,7 @@
 											name="nickname"
 											type="text"
 											placeholder="artist_123"
-											class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+											class="sheet-field"
 										/>
 									</label>
 									{#if nicknameError}
@@ -995,7 +996,7 @@
 											name="recoveryKey"
 											type="text"
 											placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-											class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+											class="sheet-field"
 										/>
 									</label>
 									{#if recoveryKeyError}
@@ -1018,7 +1019,7 @@
 											name="newPassword"
 											type="password"
 											placeholder="Choose a new password"
-											class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
+											class="sheet-field"
 										/>
 									</label>
 									{#if newPasswordError}
@@ -1117,6 +1118,66 @@
 </div>
 
 <style>
+	/*
+	 * The sheet takes focus so the keyboard starts inside it; it is paper, not
+	 * a control, so it draws no browser ring round itself. Its fields do.
+	 */
+	.paper-sheet:focus {
+		outline: none;
+	}
+
+	/*
+	 * A strip of the sheet's own paper, a shade deeper, with a pencil line
+	 * along its foot that darkens while the visitor writes. A wrong field gets
+	 * PencilNote's red wave under it.
+	 */
+	.sheet-field {
+		width: 100%;
+		padding: 0.75rem 1rem 0.65rem;
+		border: 0;
+		border-radius: 0.4rem 0.55rem 0.35rem 0.5rem;
+		background-color: var(--color-paper-deep);
+		box-shadow:
+			inset 0 1px 2px rgb(45 36 32 / 0.12),
+			inset 0 -2px 0 rgb(74 69 64 / 0.3);
+		color: var(--color-ink);
+		font-family: var(--font-body);
+		font-size: 1rem;
+		outline: none;
+		transition: box-shadow 150ms ease;
+	}
+
+	.sheet-field::placeholder {
+		color: var(--color-muted);
+		font-family: var(--font-hand);
+		font-size: 1.15rem;
+	}
+
+	.sheet-field:focus {
+		box-shadow:
+			inset 0 1px 2px rgb(45 36 32 / 0.12),
+			inset 0 -3px 0 var(--color-ink-warm),
+			0 0 0 3px rgb(212 131 74 / 0.22);
+	}
+
+	/* What the gallery says of a nickname while it is typed, pencilled beside its label. */
+	.availability-note {
+		color: var(--color-muted-ink);
+		font-family: var(--font-hand);
+		font-size: 1.05rem;
+		line-height: 1;
+		text-align: right;
+		rotate: -1.5deg;
+	}
+
+	.availability-note.is-available {
+		color: #3f7a52;
+	}
+
+	.availability-note.is-available::before {
+		content: '✓ ';
+	}
+
 	/* torn-out spiral perforations along the left edge */
 	.auth-sheet-inner::after {
 		content: '';
