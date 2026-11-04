@@ -170,10 +170,12 @@
 
 	const drawGhostSilhouette = (ctx: CanvasRenderingContext2D) => {
 		ctx.save();
-		ctx.globalAlpha = 0.17;
-		ctx.strokeStyle = '#2d2a26';
-		ctx.lineWidth = 3;
-		ctx.setLineDash([8, 6]);
+		// Soft graphite, dotted: a guide to draw over, not a line of the drawing.
+		ctx.globalAlpha = 0.2;
+		ctx.strokeStyle = '#6b6258';
+		ctx.lineWidth = 3.5;
+		ctx.lineCap = 'round';
+		ctx.setLineDash([0.5, 8]);
 
 		const centerX = CANVAS_WIDTH / 2;
 		const centerY = CANVAS_HEIGHT / 2 - 8;
@@ -396,6 +398,7 @@
 						step="1"
 						class="brush-slider focus-ring"
 						aria-label="Brush size"
+						style={`--slider-pct: ${(brushStep / (BRUSH_SIZES.length - 1)) * 100}%`}
 					/>
 					<div class="test-scrap-stack">
 						<div class="test-scrap">
@@ -580,12 +583,16 @@
 		}
 	}
 
+	/* A dab of gouache, as on the studio's tray: matte, a little darker where it
+	 * pools at the edge, over the thin wash it was first brushed out in. */
 	.dab-paint {
 		position: absolute;
 		inset: 0;
 		display: block;
 		background: var(--dab-color);
-		box-shadow: 1px 2px 3px rgba(45, 36, 32, 0.28);
+		box-shadow:
+			inset 0 0 0 1.5px color-mix(in srgb, var(--dab-color) 78%, black),
+			0.14rem 0.18rem 0 0.1rem color-mix(in srgb, var(--dab-color) 20%, transparent);
 		transition:
 			scale 130ms var(--ease-spring),
 			rotate 130ms ease;
@@ -618,13 +625,15 @@
 		rotate: 5deg;
 	}
 
-	/* gloss — fresh paint catches the gallery lights */
+	/* the body of the paint: a soft ridge of light, never a glossy highlight */
 	.dab-paint::before {
 		content: '';
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
-		background: radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.5), transparent 46%);
+		background:
+			radial-gradient(circle at 34% 30%, rgb(255 255 255 / 0.18), transparent 48%),
+			radial-gradient(circle at 64% 72%, rgb(0 0 0 / 0.1), transparent 58%);
 	}
 
 	.dab-paint-light {
@@ -670,15 +679,23 @@
 		min-width: 0;
 	}
 
+	/* The studio's track: a drying brushstroke, thick where it starts, thin where it lifts. */
 	.brush-slider::-webkit-slider-runnable-track {
-		height: 3px;
-		border-radius: var(--radius-pill);
-		background: rgba(107, 74, 46, 0.4);
+		height: 7px;
+		rotate: -0.8deg;
+		border-radius: 4px 12px 10px 6px / 6px 8px 12px 4px;
+		background: linear-gradient(
+			90deg,
+			#d9a468 0%,
+			var(--color-primary) var(--slider-pct, 50%),
+			rgba(107, 74, 46, 0.18) var(--slider-pct, 50%),
+			rgba(107, 74, 46, 0.12) 100%
+		);
 	}
 
 	.brush-slider::-webkit-slider-thumb {
 		-webkit-appearance: none;
-		margin-top: -8.5px;
+		margin-top: -6.5px;
 		height: 20px;
 		width: 20px;
 		border: 2px solid var(--color-paper-bright);
@@ -688,10 +705,16 @@
 	}
 
 	.brush-slider::-moz-range-track {
-		height: 3px;
+		height: 7px;
 		border: none;
-		border-radius: var(--radius-pill);
-		background: rgba(107, 74, 46, 0.4);
+		border-radius: 4px 12px 10px 6px / 6px 8px 12px 4px;
+		background: linear-gradient(
+			90deg,
+			#d9a468 0%,
+			var(--color-primary) var(--slider-pct, 50%),
+			rgba(107, 74, 46, 0.18) var(--slider-pct, 50%),
+			rgba(107, 74, 46, 0.12) 100%
+		);
 	}
 
 	.brush-slider::-moz-range-thumb {
