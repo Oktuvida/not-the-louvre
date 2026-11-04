@@ -55,7 +55,7 @@ export const galleryRooms: GalleryRoomConfig[] = [
 		shortName: 'Mystery',
 		postItAttachment: 'tape',
 		postItColor: '#9bd3f7',
-		description: 'Spin through a shuffled set of real gallery discoveries.',
+		description: 'Nothing on this line has developed yet. Spin, and one comes up.',
 		color: '#8b9d91'
 	},
 	{

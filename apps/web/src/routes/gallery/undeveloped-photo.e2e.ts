@@ -2,8 +2,8 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { resetDemoState } from '../demo/e2e-helpers';
 
 // A photo that did not come the first time used to stay a broken-image icon
-// until the visitor reloaded the page. Now the empty polaroid, or the empty
-// frame on the Mystery Room's reel, says so in pencil and fetches the photo
+// until the visitor reloaded the page. Now the empty polaroid, or the one a
+// spin landed on in the Mystery Room, says so in pencil and fetches the photo
 // again by itself.
 
 /** Seeds a small gallery whose every photo fails the first time it is asked for. */
@@ -40,28 +40,26 @@ test('a photo that fails once develops on its own, with no reload', async ({ pag
 	await expect(lead.getByText(/didn.t develop/i)).toBeHidden();
 });
 
-test('a film reel frame whose photo fails once develops on its own, with no reload', async ({
+test('the photo a spin lands on, if it fails once, develops on its own', async ({
 	page,
 	request
 }) => {
 	await seedPhotosThatFailOnce(page, request);
+	await page.emulateMedia({ reducedMotion: 'reduce' });
 
 	await page.goto('/gallery/mystery');
+	await page.getByRole('button', { name: /spin/i }).click();
+
 	const reel = page.getByTestId('film-reel');
+	await expect(reel.getByText(/didn.t develop/i)).toBeVisible();
 
-	await expect(reel.getByText(/didn.t develop/i).first()).toBeVisible();
-
-	// Every frame on the turning reel, the ones that failed and the ones that
-	// joined since, shows its photo, and none of them still says it did not come.
 	await expect
 		.poll(
 			() =>
 				reel.evaluate((element) => {
-					const images = [...element.querySelectorAll('img')];
+					const image = element.querySelector('img');
 					return (
-						images.length > 0 &&
-						images.every((image) => image.naturalWidth > 0) &&
-						!/didn.t develop/i.test(element.textContent ?? '')
+						(image?.naturalWidth ?? 0) > 0 && !/didn.t develop/i.test(element.textContent ?? '')
 					);
 				}),
 			{ timeout: 15_000 }

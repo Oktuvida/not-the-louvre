@@ -49,6 +49,7 @@ const headerControls = async (page: Page, signedIn: boolean) => {
 const ROOMS = [
 	{ note: 'Fresh pieces rising fast', path: '/gallery/hot-wall', tab: /the hot wall/i },
 	{ note: 'newest first', path: '/gallery/wet-paint', tab: /wet paint/i },
+	{ note: 'Spin, and one comes up', path: '/gallery/mystery', tab: /mystery room/i },
 	{ note: 'Trophy room for the top-ranked', path: '/gallery', tab: /hall of fame/i }
 ] as const;
 

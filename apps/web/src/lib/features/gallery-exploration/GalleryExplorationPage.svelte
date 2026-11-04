@@ -1019,12 +1019,7 @@
 		/>
 	{:else if roomId === 'mystery' && artworks.length > 0}
 		<MysteryRoom
-			{artworks}
-			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
-			feedCacheKey={roomId}
-			seedIsRemembered={isSeedRemembered}
-			loadMoreArtworks={roomLoadMoreArtworks}
 			{fetchRandomArtwork}
 			onSelect={openArtwork}
 			{revealedArtworkIds}
@@ -1068,9 +1063,14 @@
 			<!-- The room's note is stuck on the wall over the top left, taking no room
 			     from the room (on a phone it sits above it). It stays inside the window,
 			     low enough to clear the room tabs and, until 2xl, a little smaller to
-			     keep off the champion's medal. -->
+			     keep off the champion's medal. The Mystery Room's big polaroid reaches
+			     that corner on a tablet, so there it stays above the room for longer. -->
 			<div
-				class="room-note pointer-events-none mb-4 flex justify-center md:absolute md:top-14 md:left-4 md:z-25 md:mb-0 md:origin-top-left md:-rotate-12 md:scale-80 md:justify-start 2xl:scale-100"
+				class={`room-note pointer-events-none mb-4 flex justify-center 2xl:scale-100 ${
+					roomId === 'mystery'
+						? 'lg:absolute lg:top-14 lg:left-4 lg:z-25 lg:mb-0 lg:origin-top-left lg:-rotate-12 lg:scale-80 lg:justify-start'
+						: 'md:absolute md:top-14 md:left-4 md:z-25 md:mb-0 md:origin-top-left md:-rotate-12 md:scale-80 md:justify-start'
+				}`}
 				data-testid="gallery-room-note"
 			>
 				<PostItNote

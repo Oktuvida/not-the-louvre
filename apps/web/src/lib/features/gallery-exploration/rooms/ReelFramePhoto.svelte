@@ -3,21 +3,18 @@
 	import { createDevelopingPhoto } from '#lib/features/gallery-exploration/components/developing-photo.svelte.js';
 
 	/*
-	 * One frame's photo on the Mystery Room's reel. The reel cannot use
-	 * <NsfwImage> — its frames are recycled mid-spin and the per-src fade would
-	 * blank them — but a photo that did not come is handled the same way here:
-	 * the frame stays empty with a pencilled note and asks again by itself.
+	 * The photo a spin landed on in the Mystery Room. The reel brings it up
+	 * itself, so it cannot use <NsfwImage> and its own fade, but a photo that
+	 * did not come is handled the same way here: the polaroid stays empty with
+	 * a pencilled note and asks again by itself.
 	 */
 	let {
 		alt,
 		blurred,
-		size,
 		src
 	}: {
 		alt: string;
 		blurred: boolean;
-		/** The frame's side in pixels, as the reel resolved it. */
-		size: number;
 		src: string;
 	} = $props();
 
@@ -31,8 +28,9 @@
 		class="reel-frame-image"
 		class:nsfw-blurred={blurred}
 		class:is-undeveloped={photo.undeveloped}
-		width={size}
-		height={size}
+		width="768"
+		height="768"
+		decoding="async"
 		onload={photo.developed}
 		onerror={(event) => photo.failed(event.currentTarget)}
 	/>
@@ -75,7 +73,6 @@
 		align-items: center;
 		justify-content: center;
 		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
-		border-radius: var(--radius-panel);
 	}
 
 	.nsfw-badge {

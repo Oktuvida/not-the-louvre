@@ -1,80 +1,56 @@
 <script lang="ts">
 	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
-	import type {
-		GalleryPageInfo,
-		LoadMoreArtworks
-	} from '#lib/features/gallery-exploration/model/discovery.js';
-	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
-	import { createSeededAccumulator } from '#lib/features/gallery-exploration/use-seeded-accumulator.svelte.js';
 	import type { Writable } from 'svelte/store';
 	import FilmReel from './FilmReel.svelte';
 
 	let {
 		adultContentEnabled = false,
-		artworks,
-		feedCacheKey = null,
-		seedIsRemembered = false,
-		pageInfo,
-		loadMoreArtworks,
 		fetchRandomArtwork,
 		onSelect,
 		revealedArtworkIds,
 		viewerId = null
 	}: {
 		adultContentEnabled?: boolean;
-		artworks: Artwork[];
-		feedCacheKey?: GalleryRoomId | null;
-		/** The seed is one the room already had, standing in until the server's fresh page lands. */
-		seedIsRemembered?: boolean;
-		pageInfo: GalleryPageInfo;
-		loadMoreArtworks?: LoadMoreArtworks;
 		fetchRandomArtwork?: () => Promise<Artwork>;
 		onSelect?: (artwork: Artwork) => void;
 		revealedArtworkIds?: Writable<Set<string>>;
 		viewerId?: string | null;
 	} = $props();
 
-	const accumulator = createSeededAccumulator({
-		// A cursor-only change must not reseed the pool: the reel would restart
-		// mid-cycle.
-		emptyPageWhenUnavailable: true,
-		getFeedCacheKey: () => feedCacheKey,
-		getSeedIsRemembered: () => seedIsRemembered,
-		getArtworks: () => artworks,
-		getLoadMoreArtworks: () => loadMoreArtworks,
-		getPageInfo: () => pageInfo,
-		// The reel is centred in its own shell; there is nothing to scroll back to.
-		restoreScroll: false,
-		watchPageInfo: false
-	});
-
 	let filmReel: ReturnType<typeof FilmReel> | undefined = $state();
 	let isSpinning = $state(false);
 	let spinErrorMessage = $state<string | null>(null);
-	let resetToIdleTimer: ReturnType<typeof setTimeout> | null = null;
+	let openTimer: ReturnType<typeof setTimeout> | null = null;
 
-	const LOAD_MORE_THRESHOLD = 0.8;
+	// Long enough to look at what came up before the postcard covers it.
+	const OPEN_AFTER_MS = 900;
 	// The room's own voice: the visitor does not care that a fetch rejected.
 	const SPIN_FAILURE_MESSAGE = 'That spin came up empty — give it another go.';
 
+	const stopWaitingToOpen = () => {
+		if (openTimer !== null) clearTimeout(openTimer);
+		openTimer = null;
+	};
+
 	const handleSpin = async () => {
 		if (isSpinning || !fetchRandomArtwork) return;
+		stopWaitingToOpen();
 		isSpinning = true;
 		spinErrorMessage = null;
 
 		/*
-		 * The reel leaves on the click and the fetch retargets it when it
+		 * The line leaves on the click and the fetch brings it down when it
 		 * lands. Waiting for the round trip first left the button disabled over
-		 * a completely still reel, which reads as a broken control on any
+		 * a completely still line, which reads as a broken control on any
 		 * connection slower than localhost.
 		 */
-		void filmReel?.startFreeSpin();
+		filmReel?.startFreeSpin();
 
 		try {
 			const artwork = await fetchRandomArtwork();
-			// The reel refuses an artwork it cannot place; without this the room
-			// would sit disabled over a run-up that never lands.
+			// The line refuses an artwork when no spin is under way; without this
+			// the room would sit disabled over a spin that never lands.
 			if (filmReel?.spinToArtwork(artwork) === false) {
 				throw new Error(SPIN_FAILURE_MESSAGE);
 			}
@@ -85,60 +61,43 @@
 		}
 	};
 
-	const handleLand = (artwork: Artwork) => {
-		isSpinning = false;
+	const handleDeveloped = (artwork: Artwork) => {
+		stopWaitingToOpen();
+		openTimer = setTimeout(() => {
+			openTimer = null;
+			onSelect?.(artwork);
+		}, OPEN_AFTER_MS);
+	};
 
+	const handleOpen = (artwork: Artwork) => {
+		stopWaitingToOpen();
 		onSelect?.(artwork);
-		if (resetToIdleTimer !== null) clearTimeout(resetToIdleTimer);
-		resetToIdleTimer = setTimeout(() => {
-			resetToIdleTimer = null;
-			filmReel?.resetToIdle();
-		}, 500);
 	};
 
-	const handleIdleProgress = (fraction: number) => {
-		if (fraction >= LOAD_MORE_THRESHOLD && accumulator.hasMore && !accumulator.isLoading) {
-			accumulator.loadMore();
-		}
-	};
-
-	const handleIdleCycleComplete = () => {
-		// Cycle completed — load more if available
-		if (accumulator.hasMore && !accumulator.isLoading) {
-			accumulator.loadMore();
-		}
-	};
-
-	// Destroy-only: nothing should still be waiting to touch the reel after the
-	// room is gone.
-	$effect(() => () => {
-		if (resetToIdleTimer !== null) {
-			clearTimeout(resetToIdleTimer);
-			resetToIdleTimer = null;
-		}
-	});
+	// Destroy-only: no postcard should open after the room is gone.
+	$effect(() => stopWaitingToOpen);
 </script>
 
-<div
-	class="relative flex min-h-[320px] flex-col items-center justify-center gap-8 px-2 py-6 pt-28 md:min-h-[400px] md:gap-16 md:px-0 md:py-8 md:pt-55"
-	data-testid="mystery-room"
->
-	<FilmReel
-		bind:this={filmReel}
-		{adultContentEnabled}
-		artworks={accumulator.allArtworks}
-		onLand={handleLand}
-		onIdleProgress={handleIdleProgress}
-		onIdleCycleComplete={handleIdleCycleComplete}
-		{revealedArtworkIds}
-		{viewerId}
-	/>
+<div class="relative flex flex-col items-center gap-5 md:gap-6" data-testid="mystery-room">
+	<!-- From one edge of the window to the other: the room's padding is the
+	     gallery's, so the line takes it back. -->
+	<div class="-mx-4 self-stretch md:-mx-8">
+		<FilmReel
+			bind:this={filmReel}
+			{adultContentEnabled}
+			onDeveloped={handleDeveloped}
+			onLand={() => (isSpinning = false)}
+			onOpen={handleOpen}
+			{revealedArtworkIds}
+			{viewerId}
+		/>
+	</div>
 
 	<GameButton
 		type="button"
 		variant="danger"
 		size="hero"
-		className="w-full max-w-[16rem] justify-center shadow-2xl md:max-w-[22rem]"
+		className="justify-center shadow-2xl"
 		disabled={isSpinning}
 		onclick={handleSpin}
 	>
@@ -151,12 +110,7 @@
 		</p>
 	{/if}
 
-	<div
-		class="pointer-events-none absolute -bottom-4 left-1/2 z-20 w-full max-w-[16rem] -translate-x-1/2 text-center text-xs text-wall-text italic transition-all duration-700 ease-in md:-bottom-7 md:max-w-[28rem] md:text-sm"
-		style="font-family: var(--font-body); letter-spacing: 0.01em; text-shadow: 0 1px 1px rgba(45,36,32,.7), 0 2px 8px rgba(45,36,32,.35);"
-	>
-		Discover a random masterpiece… hopefully
-	</div>
+	<p class="mystery-slip">Discover a random masterpiece… hopefully</p>
 </div>
 
 <style>
@@ -169,5 +123,30 @@
 		font-weight: 600;
 		color: #f7c8b8;
 		text-shadow: 0 1px 2px rgba(45, 36, 32, 0.6);
+	}
+
+	/* Pencilled on a slip of paper, as the studio's Tear out is. On a phone it
+	 * takes two lines, to stay clear of the record player in the corner. */
+	.mystery-slip {
+		max-width: min(13rem, 100%);
+		margin: 0;
+		padding: 0.3rem 0.85rem 0.35rem;
+		rotate: -1deg;
+		background: #fffdf8;
+		box-shadow:
+			0 1px 1px rgb(0 0 0 / 0.1),
+			0 4px 10px rgb(40 25 10 / 0.25);
+		color: #5a4a3c;
+		font-family: var(--font-hand);
+		font-size: 1.15rem;
+		font-weight: 500;
+		line-height: 1.2;
+		text-align: center;
+	}
+
+	@media (min-width: 40rem) {
+		.mystery-slip {
+			max-width: none;
+		}
 	}
 </style>

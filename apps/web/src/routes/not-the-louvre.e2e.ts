@@ -782,7 +782,7 @@ test.describe('Not the Louvre frontend port', () => {
 		await expect(
 			page.getByRole('dialog', { name: /Artwork details for Mystery Comment Piece/ })
 		).toBeVisible({
-			timeout: 8000
+			timeout: 12_000
 		});
 		await page.getByRole('button', { name: 'Read the comments' }).click();
 		await expect(page.getByText('Mystery room comment')).toBeVisible();
