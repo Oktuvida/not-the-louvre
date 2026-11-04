@@ -8,12 +8,14 @@
 		adultContentEnabled = false,
 		fetchRandomArtwork,
 		onSelect,
+		postcardOpen = false,
 		revealedArtworkIds,
 		viewerId = null
 	}: {
 		adultContentEnabled?: boolean;
 		fetchRandomArtwork?: () => Promise<Artwork>;
 		onSelect?: (artwork: Artwork) => void;
+		postcardOpen?: boolean;
 		revealedArtworkIds?: Writable<Set<string>>;
 		viewerId?: string | null;
 	} = $props();
@@ -22,15 +24,17 @@
 	let isSpinning = $state(false);
 	let spinErrorMessage = $state<string | null>(null);
 	let openTimer: ReturnType<typeof setTimeout> | null = null;
+	let waitingToOpen = $state(false);
 
 	// Long enough to look at what came up before the postcard covers it.
-	const OPEN_AFTER_MS = 900;
+	const OPEN_AFTER_MS = 600;
 	// The room's own voice: the visitor does not care that a fetch rejected.
 	const SPIN_FAILURE_MESSAGE = 'That spin came up empty — give it another go.';
 
 	const stopWaitingToOpen = () => {
 		if (openTimer !== null) clearTimeout(openTimer);
 		openTimer = null;
+		waitingToOpen = false;
 	};
 
 	const handleSpin = async () => {
@@ -63,9 +67,11 @@
 
 	const handleDeveloped = (artwork: Artwork) => {
 		stopWaitingToOpen();
+		waitingToOpen = true;
 		openTimer = setTimeout(() => {
-			openTimer = null;
 			onSelect?.(artwork);
+			openTimer = null;
+			waitingToOpen = false;
 		}, OPEN_AFTER_MS);
 	};
 
@@ -85,6 +91,7 @@
 		<FilmReel
 			bind:this={filmReel}
 			{adultContentEnabled}
+			held={waitingToOpen || postcardOpen}
 			onDeveloped={handleDeveloped}
 			onLand={() => (isSpinning = false)}
 			onOpen={handleOpen}

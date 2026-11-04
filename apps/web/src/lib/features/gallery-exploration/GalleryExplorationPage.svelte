@@ -1022,6 +1022,7 @@
 			adultContentEnabled={adultContentAllowed}
 			{fetchRandomArtwork}
 			onSelect={openArtwork}
+			postcardOpen={selectedArtwork !== null}
 			{revealedArtworkIds}
 			viewerId={viewer?.id ?? null}
 		/>

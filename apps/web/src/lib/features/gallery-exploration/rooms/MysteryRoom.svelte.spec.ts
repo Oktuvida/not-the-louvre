@@ -93,6 +93,21 @@ describe('MysteryRoom', () => {
 		expect(onSelect).toHaveBeenCalledOnce();
 	});
 
+	it('holds the line while the postcard is open, and lets it go after', async () => {
+		const screen = await renderRoom({ postcardOpen: true });
+		const drift = () => page.getByTestId('film-reel-track').element().getAnimations()[0];
+
+		await vi.waitFor(() => expect(drift()?.playState).toBe('paused'));
+
+		await screen.rerender({
+			component: MysteryRoom,
+			roomProps: { postcardOpen: false },
+			style: 'width: 800px; height: 600px;'
+		});
+
+		await vi.waitFor(() => expect(drift()?.playState).toBe('running'));
+	});
+
 	it('gives Spin back as soon as the line has stopped', async () => {
 		motion.reduced = true;
 		await renderRoom({ fetchRandomArtwork: vi.fn().mockResolvedValue(chosen) });

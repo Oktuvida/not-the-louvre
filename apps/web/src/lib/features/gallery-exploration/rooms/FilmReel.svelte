@@ -8,6 +8,7 @@
 
 	let {
 		adultContentEnabled = false,
+		held = false,
 		onDeveloped,
 		onLand,
 		onOpen,
@@ -15,6 +16,8 @@
 		viewerId = null
 	}: {
 		adultContentEnabled?: boolean;
+		/** Keeps the line where it is, for as long as the postcard is what is being looked at. */
+		held?: boolean;
 		/** The photo has come up all the way. */
 		onDeveloped: (artwork: Artwork) => void;
 		/** The line has stopped, with the artwork in the ring. */
@@ -34,9 +37,9 @@
 	 * the frames are one still strip with no photos in it, painted once, and
 	 * spinning is a transform on that strip, which the compositor animates on
 	 * its own: no script and no style run while it moves, whatever the main
-	 * thread is doing. Nothing is fetched until the spin has an artwork, and
-	 * that one photo lies over the strip instead of in it, so the strip is
-	 * never painted again.
+	 * thread is doing. At rest the stylesheet keeps it drifting the same way.
+	 * Nothing is fetched until the spin has an artwork, and that one photo lies
+	 * over the strip instead of in it, so the strip is never painted again.
 	 *
 	 * The frames repeat every PATTERN, and the strip is long enough for the
 	 * line to stop TRAVEL frames on. That is a whole number of patterns, so a
@@ -58,9 +61,9 @@
 	const LANDING_EASING = 'cubic-bezier(0.15, 0.6, 0.1, 1)';
 	const LANDING_SLOPE = 4;
 	const WIND_DOWN_MS = 700;
-	const DEVELOP_MS = 2400;
+	const DEVELOP_MS = 1000;
 
-	type ReelState = 'resting' | 'spinning' | 'landing' | 'developing' | 'developed';
+	type ReelState = 'resting' | 'spinning' | 'landing' | 'developing' | 'developed' | 'stopping';
 	let reelState = $state<ReelState>('resting');
 
 	let stripElement = $state<HTMLDivElement>();
@@ -89,9 +92,11 @@
 		transform: `translate3d(${-(FRAMES_BESIDE + frames) * frameStep}px, 0, 0)`
 	});
 
-	/** How far on the line is, in frames. One style read, only at a hand-over. */
-	const framesRun = (strip: HTMLElement) =>
-		-new DOMMatrix(getComputedStyle(strip).transform).m41 / frameStep - FRAMES_BESIDE;
+	/** Where the line is within its pattern. One style read, only at a hand-over. */
+	const framesRun = (strip: HTMLElement) => {
+		const run = -new DOMMatrix(getComputedStyle(strip).transform).m41 / frameStep - FRAMES_BESIDE;
+		return ((run % PATTERN) + PATTERN) % PATTERN;
+	};
 
 	const land = (landed: Artwork) => {
 		movement = null;
@@ -122,25 +127,34 @@
 		const strip = stripElement;
 		if (!strip || reelState === 'spinning' || reelState === 'landing') return;
 
-		reelState = 'spinning';
+		const reveal = revealElement;
 		arrival = null;
 		photoElement = null;
 
-		// The strip and the last photo keep the same keyframes, so it leaves
-		// with the line. Less motion: the line stays still and the photo goes.
+		// Less motion: the line stays still and the photo simply goes.
 		if (prefersReducedMotion.current) {
+			reelState = 'spinning';
 			artwork = null;
 			return;
 		}
 
-		movement?.cancel();
 		const [first, second] = strip.children as unknown as [HTMLElement, HTMLElement];
 		frameStep = second.offsetLeft - first.offsetLeft;
 
-		const runUp = { duration: RUN_UP_MS, easing: RUN_UP_EASING };
-		const rising = strip.animate([at(0), at(PATTERN)], runUp);
-		revealElement?.animate(
-			[{ transform: 'none' }, { transform: `translate3d(${-PATTERN * frameStep}px, 0, 0)` }],
+		// Read while the drift still holds them: it stops with the state.
+		const from = framesRun(strip);
+		const carried = reveal ? new DOMMatrix(getComputedStyle(reveal).transform).m41 : 0;
+		movement?.cancel();
+		reelState = 'spinning';
+
+		// The last photo keeps the strip's pace, so it leaves with the line.
+		const runUp = { duration: RUN_UP_MS, easing: RUN_UP_EASING, fill: 'forwards' } as const;
+		const rising = strip.animate([at(from), at(from + PATTERN)], runUp);
+		reveal?.animate(
+			[
+				{ transform: `translate3d(${carried}px, 0, 0)` },
+				{ transform: `translate3d(${carried - PATTERN * frameStep}px, 0, 0)` }
+			],
 			runUp
 		);
 		movement = rising;
@@ -151,7 +165,8 @@
 				startLanding(strip, arrival);
 				return;
 			}
-			movement = strip.animate([at(0), at(PATTERN)], {
+			rising.cancel();
+			movement = strip.animate([at(from), at(from + PATTERN)], {
 				duration: LAP_MS,
 				iterations: Infinity
 			});
@@ -185,18 +200,25 @@
 		const strip = stripElement;
 		if (!strip || reelState !== 'spinning') return;
 
-		reelState = 'resting';
 		arrival = null;
 		artwork = null;
-		if (!movement) return;
+		if (!movement) {
+			reelState = 'resting';
+			return;
+		}
 
 		const from = framesRun(strip);
 		movement.cancel();
-		const to = PATTERN * (Math.floor(from / PATTERN) + 2);
-		const easing = LANDING_EASING;
-		const stopping = strip.animate([at(from), at(to)], { duration: WIND_DOWN_MS, easing });
+		reelState = 'stopping';
+		const stopping = strip.animate([at(from), at(TRAVEL)], {
+			duration: WIND_DOWN_MS,
+			easing: LANDING_EASING
+		});
 		movement = stopping;
-		after(stopping, () => (movement = null));
+		after(stopping, () => {
+			movement = null;
+			reelState = 'resting';
+		});
 	};
 
 	// Decoded before it counts as here, off the main thread: the one moment the
@@ -213,6 +235,14 @@
 		if (!artwork) return;
 		if (reelState === 'developing') reelState = 'developed';
 		onOpen?.(artwork);
+	};
+
+	// The drift has carried the photo off the far side of the window.
+	const carriedAway = (event: AnimationEvent) => {
+		if (event.target !== event.currentTarget) return;
+		artwork = null;
+		photoElement = null;
+		reelState = 'resting';
 	};
 
 	// The photo comes up in front of the visitor once the line has stopped and
@@ -233,7 +263,7 @@
 
 		const comingUp = photo.animate(
 			{ opacity: [0, 1] },
-			{ duration: DEVELOP_MS, easing: 'ease-in', fill: 'forwards' }
+			{ duration: DEVELOP_MS, easing: 'ease-out', fill: 'forwards' }
 		);
 		after(comingUp, developed);
 		return () => comingUp.cancel();
@@ -245,12 +275,16 @@
 	});
 </script>
 
-<div class="reel-container" data-reel-state={reelState} data-testid="film-reel">
-	<div class="reel-viewport">
+<div
+	class="reel-container"
+	data-reel-held={held || undefined}
+	data-reel-state={reelState}
+	data-testid="film-reel"
+>
+	<div class="reel-viewport" style:--reel-lap={PATTERN} style:--reel-rest={FRAMES_BESIDE}>
 		<div
 			bind:this={stripElement}
 			class="reel-strip"
-			style:--reel-rest={FRAMES_BESIDE}
 			aria-hidden="true"
 			data-testid="film-reel-track"
 		>
@@ -273,6 +307,7 @@
 				type="button"
 				class="reel-reveal focus-ring"
 				aria-label={`Open ${artwork.title}`}
+				onanimationend={carriedAway}
 				onclick={open}
 				onloadcapture={photoArrived}
 			>
@@ -306,6 +341,7 @@
 	.reel-viewport {
 		--reel-frame-size: clamp(11rem, min(46dvh, 64cqw), 30rem);
 		--reel-gap: clamp(1.1rem, 3cqw, 2.25rem);
+		--reel-step: calc(var(--reel-frame-size) + var(--reel-gap));
 		--reel-card-height: calc(var(--reel-frame-size) * 1.16);
 		--reel-inset: calc(var(--reel-frame-size) * 0.035);
 		--reel-card-top: 1.75rem;
@@ -332,16 +368,55 @@
 		left: calc(50% - var(--reel-frame-size) / 2);
 		display: flex;
 		gap: var(--reel-gap);
-		transform: translate3d(
-			calc((var(--reel-frame-size) + var(--reel-gap)) * var(--reel-rest) * -1),
-			0,
-			0
-		);
+		transform: translate3d(calc(var(--reel-step) * var(--reel-rest) * -1), 0, 0);
+	}
+
+	/* At rest the line drifts, a pattern of frames at a time and for ever: it
+	 * looks the same where it ends as where it began. A running CSS animation of
+	 * a transform needs no script, so standing idle costs nothing but the
+	 * compositor's frames. A photo that is up goes with it, off the far side. */
+	.reel-container[data-reel-state='resting'] .reel-strip,
+	.reel-container[data-reel-state='developed'] .reel-strip {
+		animation: reel-drift 16s linear infinite;
+	}
+
+	.reel-container[data-reel-state='developed'] .reel-reveal {
+		animation: reel-photo-drift 16s linear forwards;
+	}
+
+	.reel-container[data-reel-held] .reel-strip,
+	.reel-container[data-reel-held] .reel-reveal {
+		animation-play-state: paused;
+	}
+
+	@keyframes reel-drift {
+		to {
+			transform: translate3d(
+				calc(var(--reel-step) * (var(--reel-rest) + var(--reel-lap)) * -1),
+				0,
+				0
+			);
+		}
+	}
+
+	@keyframes reel-photo-drift {
+		to {
+			transform: translate3d(calc(var(--reel-step) * var(--reel-lap) * -1), 0, 0);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.reel-container[data-reel-state='resting'] .reel-strip,
+		.reel-container[data-reel-state='developed'] .reel-strip,
+		.reel-container[data-reel-state='developed'] .reel-reveal {
+			animation: none;
+		}
 	}
 
 	/* A layer only while it moves: at rest the strip is part of the page. */
 	.reel-container[data-reel-state='spinning'] .reel-strip,
-	.reel-container[data-reel-state='landing'] .reel-strip {
+	.reel-container[data-reel-state='landing'] .reel-strip,
+	.reel-container[data-reel-state='stopping'] .reel-strip {
 		will-change: transform;
 	}
 

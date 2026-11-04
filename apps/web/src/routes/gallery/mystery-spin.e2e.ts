@@ -47,6 +47,19 @@ test.describe('the Mystery Room', () => {
 		expect(new Set(asked.map(artworkOf)).size).toBe(1);
 	});
 
+	test('the line drifts on its own, slowly, before anyone spins it', async ({ page }) => {
+		await page.goto('/gallery/mystery');
+		const line = page.getByTestId('film-reel-track');
+		await expect(page.getByRole('button', { name: /spin/i })).toBeVisible();
+
+		const before = (await line.boundingBox())!.x;
+		await page.waitForTimeout(600);
+		const after = (await line.boundingBox())!.x;
+
+		expect(after).toBeLessThan(before);
+		expect(before - after, 'slowly').toBeLessThan(120);
+	});
+
 	test('leaves the piece up on the line after its postcard closes', async ({ page }) => {
 		await page.emulateMedia({ reducedMotion: 'reduce' });
 		await page.goto('/gallery/mystery');
@@ -67,6 +80,8 @@ test.describe('the Mystery Room', () => {
 		{ height: 844, width: 390 }
 	]) {
 		test(`fits ${width}×${height} with a big photo and Spin on screen`, async ({ page }) => {
+			// Measured held still: the line otherwise drifts out from under the ring.
+			await page.emulateMedia({ reducedMotion: 'reduce' });
 			await page.setViewportSize({ height, width });
 			await page.goto('/gallery/mystery');
 			const spin = page.getByRole('button', { name: /spin/i });
