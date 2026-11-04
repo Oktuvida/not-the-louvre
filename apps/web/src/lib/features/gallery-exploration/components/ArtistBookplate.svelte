@@ -2,7 +2,6 @@
 	import '@fontsource/playfair-display/latin-700.css';
 	import '@fontsource/special-elite/latin-400.css';
 	import type { ArtistStudio } from '#lib/features/gallery-exploration/model/artist-studio.js';
-	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
 
 	let { artist }: { artist: ArtistStudio } = $props();
 
@@ -29,14 +28,14 @@
 	<span class="artist-plate-tape tape" aria-hidden="true"></span>
 	<p class="artist-plate-heading">Ex libris</p>
 	{#if artist.avatarUrl}
-		<div class="artist-plate-seal">
-			<WaxSealAvatar
-				alt={artist.nickname}
-				loading="eager"
-				seed={artist.id}
-				src={artist.avatarUrl}
-			/>
-		</div>
+		<img
+			class="artist-plate-face"
+			src={artist.avatarUrl}
+			alt={`Portrait of ${artist.nickname}`}
+			width="340"
+			height="340"
+			decoding="async"
+		/>
 	{/if}
 	<p class="artist-plate-owner">this studio belongs to</p>
 	<p class="artist-plate-name">{artist.nickname}</p>
@@ -86,10 +85,17 @@
 		text-transform: uppercase;
 	}
 
-	.artist-plate-seal {
-		display: flex;
-		justify-content: center;
-		margin: 0.15rem 0 0.35rem;
+	/* The artist's face, in the label's own printed rule: it leads the plate. */
+	.artist-plate-face {
+		display: block;
+		width: 8rem;
+		height: 8rem;
+		margin: 0.5rem auto 0.6rem;
+		border: 1.5px solid #8c6a46;
+		border-radius: 50%;
+		outline: 1px solid #8c6a46;
+		outline-offset: 3px;
+		background: #fffdf9;
 	}
 
 	.artist-plate-owner {

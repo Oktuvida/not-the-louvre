@@ -28,6 +28,27 @@ describe('ArtistBookplate', () => {
 			.toBeVisible();
 	});
 
+	it('leads with the artist’s portrait', async () => {
+		await render(ArtistBookplate, {
+			artist: {
+				...artist({ hangingSince: null, pieces: 0, stars: 0 }),
+				avatarUrl: '/no-such-avatar.webp'
+			}
+		});
+
+		await expect
+			.element(page.getByRole('img', { name: 'Portrait of coral_brush' }))
+			.toHaveAttribute('src', '/no-such-avatar.webp');
+	});
+
+	it('hangs no empty frame for an artist with no portrait', async () => {
+		await render(ArtistBookplate, {
+			artist: artist({ hangingSince: null, pieces: 0, stars: 0 })
+		});
+
+		expect(page.getByRole('img').query()).toBeNull();
+	});
+
 	it('counts one of a thing as one', async () => {
 		await render(ArtistBookplate, {
 			artist: artist({ hangingSince: '2026-10-02T10:00:00.000Z', pieces: 1, stars: 1 })

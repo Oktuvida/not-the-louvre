@@ -320,6 +320,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 	async findArtistStudio(nickname: string) {
 		const [row] = await db
 			.select({
+				avatarIsHidden: users.avatarIsHidden,
 				avatarUrl: users.avatarUrl,
 				hangingSince: min(artworks.createdAt),
 				id: users.id,
