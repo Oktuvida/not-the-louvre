@@ -101,6 +101,9 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [ ] Contar cuántas obras superan ~300 KB y decidir la política para esas imágenes. El informe de `bun run cutover` ya las lista (`heavyImages`, de la más pesada a la más ligera), así que la cifra real sale del corte; la decisión queda para entonces.
 - [x] Sala nueva, Wet Paint: lo último que se colgó, lo más nuevo primero y sin que cuenten los votos. En The Hot Wall una obra sin votos queda detrás de cualquiera que tenga alguno, así que quien empieza casi no se veía. Cada polaroid lleva a lápiz cuándo se colgó.
 - [x] Las cinco salas caben en cualquier pantalla sin scroll desde un móvil de 360 px: por debajo de 1024 px solo la sala actual lleva nombre (el corto en el móvil, el completo en tablet) y las demás son su dibujo. Desde 1024 px, todas con nombre, en stickers más estrechos.
+- [x] Mystery Room de nuevo: se llamaba Mystery y enseñaba todas las obras antes de girar, a 256 px en cualquier pantalla. Ahora es un cordel de polaroids grandes sin revelar; al girar, la fila frena dentro de un círculo de lápiz rojo y la foto elegida sube del gris delante de ti, se escribe su título y se abre la postal. Se puede pulsar antes para no esperar, y se queda en el cordel hasta el siguiente giro.
+  - Era lo más pesado de la galería y dejó de serlo: la fila es una sola tira sin fotos que anima el compositor, sin JavaScript por fotograma. En reposo no se pide ninguna foto y la sala ya no consume CPU (de 60 a 1 ms por segundo); gsap sale de la galería. Medido: en Chromium el peor fotograma del giro baja de 250 a 17 ms, y en Safari van 60 fps durante el giro y el revelado.
+  - Lo gris del cordel no sale de las obras: está dibujado, para que no cueste nada.
 
 ### 4. Estudio v3 y timelapse
 

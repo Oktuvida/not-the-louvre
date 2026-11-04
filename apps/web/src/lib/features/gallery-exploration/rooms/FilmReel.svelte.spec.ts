@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'svelte';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
@@ -7,8 +7,8 @@ vi.mock('$app/environment', () => ({
 	browser: true
 }));
 
-// A visitor who asked for less motion sees a still reel. Specs that need every
-// frame to stay where it is opt in; the rest keep the moving reel.
+// A visitor who asked for less motion gets a still line: specs of what comes up
+// on it use that path, and the ones about the movement keep it moving.
 const motion = vi.hoisted(() => ({ reduced: false }));
 
 vi.mock('svelte/motion', async (importOriginal) => ({
@@ -20,258 +20,273 @@ vi.mock('svelte/motion', async (importOriginal) => ({
 	}
 }));
 
-vi.mock('#lib/client/gsap.js', () => {
-	return {
-		gsap: {
-			to: (proxy: Record<string, number>, config: Record<string, unknown>) => {
-				const targetValue =
-					typeof config.value === 'string' && (config.value as string).startsWith('+=')
-						? proxy.value + parseFloat((config.value as string).slice(2))
-						: (config.value as number);
-
-				const tween = {
-					proxy,
-					target: targetValue,
-					onUpdate: config.onUpdate as (() => void) | undefined,
-					onComplete: config.onComplete as (() => void) | undefined,
-					kill: vi.fn()
-				};
-
-				// Immediately complete the tween for testing
-				proxy.value = targetValue;
-				tween.onUpdate?.();
-				tween.onComplete?.();
-
-				return tween;
-			}
-		}
-	};
-});
-
 import { makeArtwork } from '#lib/features/gallery-exploration/fixtures/artworks.js';
-import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 import FilmReel from './FilmReel.svelte';
 import RoomHarness from './RoomHarness.svelte';
 
-const createArtwork = (id: string): Artwork =>
-	makeArtwork({ id, score: 50, upvotes: 50, imageUrl: `https://example.com/${id}.avif` });
+// A one-pixel GIF that really resolves.
+const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+const piece = (id: string, title: string, imageUrl = PIXEL, overrides = {}) =>
+	makeArtwork({ id, imageUrl, title, ...overrides });
 
 type FilmReelProps = ComponentProps<typeof FilmReel>;
+type Reel = {
+	cancelFreeSpin(): void;
+	spinToArtwork(artwork: ReturnType<typeof makeArtwork>): boolean;
+	startFreeSpin(): void;
+};
 
-const renderReel = (
-	props: Partial<FilmReelProps> & Pick<FilmReelProps, 'artworks'>,
-	onInstance?: (instance: Record<string, unknown> | undefined) => void
-) =>
-	render(RoomHarness, {
+const renderReel = async (props: Partial<FilmReelProps> = {}) => {
+	let reel: Reel | undefined;
+	await render(RoomHarness, {
 		props: {
 			component: FilmReel,
-			onInstance,
-			roomProps: { onLand: () => {}, ...props },
-			style: 'width: 800px; height: 400px;'
+			onInstance: (instance: Record<string, unknown> | undefined) => {
+				if (instance) reel = instance as unknown as Reel;
+			},
+			roomProps: { onDeveloped: () => {}, ...props },
+			style: 'width: 800px; height: 600px;'
 		}
 	});
+	await vi.waitFor(() => expect(reel).toBeDefined());
+	return reel!;
+};
+
+const line = () => page.getByTestId('film-reel-track').element();
+const photos = () => [...document.querySelectorAll('[data-testid="film-reel"] img')];
+
+/** Plays every motion with an end to its finish; the steady spin has none. */
+const finishMotions = () => {
+	for (const motion of document.getAnimations()) {
+		if (motion.effect?.getComputedTiming().iterations !== Infinity) motion.finish();
+	}
+};
 
 describe('FilmReel', () => {
-	it('renders frame images with width and height attributes matching frameSize', async () => {
-		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
-
-		await renderReel({ artworks });
-
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-
-		// Check that reel frame images have width and height attributes
-		const images = document.querySelectorAll('.reel-frame-image');
-		expect(images.length).toBeGreaterThan(0);
-
-		for (const img of images) {
-			const htmlImg = img as HTMLImageElement;
-			expect(htmlImg.hasAttribute('width')).toBe(true);
-			expect(htmlImg.hasAttribute('height')).toBe(true);
-			// Width and height should match (square frames)
-			expect(htmlImg.getAttribute('width')).toBe(htmlImg.getAttribute('height'));
-			// Every rendered frame is in or next to the viewport: lazy loading only
-			// buys intersection bookkeeping and a late decode mid-spin.
-			expect(htmlImg.hasAttribute('loading')).toBe(false);
-		}
+	afterEach(() => {
+		motion.reduced = false;
 	});
 
-	it('keeps only transform and opacity in the per-tick inline style', async () => {
-		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
-
-		await renderReel({ artworks });
+	it('hangs nothing but undeveloped photos until a spin lands on one', async () => {
+		await renderReel();
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-
-		const frame = document.querySelector<HTMLElement>('.reel-frame');
-		expect(frame).not.toBeNull();
-
-		const inlineProperties = Array.from(frame!.style);
-		expect(inlineProperties.toSorted()).toEqual(['opacity', 'transform']);
+		expect(line().children.length).toBeGreaterThan(10);
+		expect(photos()).toHaveLength(0);
 	});
 
-	it('accepts onIdleProgress callback prop', async () => {
-		const onIdleProgress = vi.fn();
-		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
+	// The reel was the heaviest thing in the gallery because every frame was
+	// recalculated on every tick. Now the line is one piece and the browser
+	// moves it: nothing on the page changes while it runs.
+	it('moves as one piece, with nothing on the page changing as it runs', async () => {
+		const reel = await renderReel();
+		const changes: MutationRecord[] = [];
+		const watcher = new MutationObserver((records) => changes.push(...records));
+		watcher.observe(line(), { attributes: true, childList: true, subtree: true });
 
-		await renderReel({ artworks, onIdleProgress });
+		reel.startFreeSpin();
 
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+		await vi.waitFor(() => expect(line().getAnimations()).toHaveLength(1));
+		await new Promise((resolve) => setTimeout(resolve, 150));
+		watcher.disconnect();
 
-		// The onIdleProgress callback should exist as a valid prop
-		// It will be called during idle scrolling with a fraction value
-		expect(onIdleProgress).toBeDefined();
-		expect(typeof onIdleProgress).toBe('function');
+		expect(changes).toEqual([]);
+		const moved = line().getAnimations()[0]!.effect as KeyframeEffect;
+		expect(moved.getKeyframes().every((keyframe) => 'transform' in keyframe)).toBe(true);
 	});
 
-	it('exports the spin API the mystery room drives it with', async () => {
-		const artworks = [createArtwork('f1'), createArtwork('f2'), createArtwork('f3')];
-		let reel: Record<string, unknown> | undefined;
+	it('runs until the artwork is known, then slows down and develops it', async () => {
+		const onDeveloped = vi.fn();
+		const onLand = vi.fn();
+		const reel = await renderReel({ onDeveloped, onLand });
+		const artwork = piece('chosen', 'Chosen Piece');
 
-		await renderReel({ artworks }, (instance) => {
-			reel = instance;
+		reel.startFreeSpin();
+		await vi.waitFor(() => {
+			finishMotions();
+			const running = line().getAnimations()[0];
+			expect(running?.effect?.getComputedTiming().iterations).toBe(Infinity);
 		});
+		expect(onLand).not.toHaveBeenCalled();
 
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+		expect(reel.spinToArtwork(artwork)).toBe(true);
+		await vi.waitFor(() => {
+			expect(line().getAnimations()[0]?.effect?.getComputedTiming().iterations).toBe(1);
+		});
+		expect(onLand).not.toHaveBeenCalled();
 
 		await vi.waitFor(() => {
-			expect(reel).toBeDefined();
+			finishMotions();
+			expect(onLand).toHaveBeenCalledWith(artwork);
+		});
+		await vi.waitFor(() => {
+			finishMotions();
+			expect(onDeveloped).toHaveBeenCalledWith(artwork);
+		});
+		expect(line().getAnimations()).toHaveLength(0);
+		await expect.element(page.getByRole('img', { name: 'Chosen Piece' })).toBeVisible();
+	});
+
+	it('writes the piece on the polaroid once it has developed', async () => {
+		motion.reduced = true;
+		const reel = await renderReel();
+
+		reel.startFreeSpin();
+		reel.spinToArtwork(piece('chosen', 'Chosen Piece', PIXEL, { artist: 'night_painter' }));
+
+		await expect.element(page.getByText('Chosen Piece', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('night_painter')).toBeVisible();
+	});
+
+	it('lets the visitor open the piece without waiting for it to develop', async () => {
+		const onOpen = vi.fn();
+		const onDeveloped = vi.fn();
+		const reel = await renderReel({ onDeveloped, onOpen });
+		const artwork = piece('chosen', 'Chosen Piece');
+
+		reel.startFreeSpin();
+		await vi.waitFor(() => {
+			finishMotions();
+			expect(reel.spinToArtwork(artwork)).toBe(true);
+		});
+		const open = page.getByRole('button', { name: 'Open Chosen Piece' });
+		await vi.waitFor(() => {
+			for (const motion of line().getAnimations()) {
+				if (motion.effect?.getComputedTiming().iterations !== Infinity) motion.finish();
+			}
+			expect(open.element()).toBeVisible();
 		});
 
-		expect(typeof reel?.spin).toBe('function');
-		expect(typeof reel?.spinToArtwork).toBe('function');
-		expect(typeof reel?.resetToIdle).toBe('function');
-		expect(typeof reel?.isSpinning).toBe('function');
+		await open.click();
+
+		expect(onOpen).toHaveBeenCalledWith(artwork);
+		expect(onDeveloped).not.toHaveBeenCalled();
 	});
 
-	it('does not blur an author’s own sensitive artwork on the reel', async () => {
-		const artworks = [
-			makeArtwork({ authorId: 'user-1', id: 'own', isNsfw: true }),
-			createArtwork('f2'),
-			createArtwork('f3')
-		];
+	it('takes the last piece away with the line when it spins again', async () => {
+		motion.reduced = false;
+		const reel = await renderReel();
 
-		await renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
+		reel.startFreeSpin();
+		await vi.waitFor(() => {
+			finishMotions();
+			expect(reel.spinToArtwork(piece('first', 'First Piece'))).toBe(true);
+		});
+		const first = page.getByRole('img', { name: 'First Piece' });
+		await vi.waitFor(() => {
+			finishMotions();
+			expect(first.element()).toBeVisible();
+		});
 
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
+		reel.startFreeSpin();
 
-		expect(document.querySelectorAll('.nsfw-badge').length).toBe(0);
+		await vi.waitFor(() => {
+			finishMotions();
+			expect(first.query()).toBeNull();
+		});
 	});
 
-	it('blurs a sensitive artwork the viewer does not own', async () => {
-		const artworks = [
-			makeArtwork({ authorId: 'user-2', id: 'theirs', isNsfw: true }),
-			createArtwork('f2'),
-			createArtwork('f3')
-		];
+	it('stops and puts nothing up when the artwork never comes', async () => {
+		const onLand = vi.fn();
+		const reel = await renderReel({ onLand });
 
-		await renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
+		reel.startFreeSpin();
+		await vi.waitFor(() => expect(line().getAnimations()).toHaveLength(1));
+		reel.cancelFreeSpin();
 
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-
-		expect(document.querySelectorAll('.nsfw-badge').length).toBeGreaterThan(0);
+		await vi.waitFor(() => {
+			finishMotions();
+			expect(line().getAnimations()).toHaveLength(0);
+		});
+		expect(onLand).not.toHaveBeenCalled();
+		expect(photos()).toHaveLength(0);
+		await expect
+			.element(page.getByTestId('film-reel'))
+			.toHaveAttribute('data-reel-state', 'resting');
 	});
 
-	it('censors at the shared --nsfw-* strength instead of its own hardcoded blur and scrim', async () => {
-		// The reel cannot use <NsfwImage>, so the only thing keeping it at the
-		// gallery-wide strength is that it reads the two custom properties.
-		document.documentElement.style.setProperty('--nsfw-blur', '7px');
-		document.documentElement.style.setProperty('--nsfw-scrim', 'rgb(1, 2, 3)');
+	it('refuses an artwork when no spin is under way', async () => {
+		const reel = await renderReel();
 
-		try {
-			const artworks = [
-				makeArtwork({ authorId: 'user-2', id: 'theirs', isNsfw: true }),
-				createArtwork('f2'),
-				createArtwork('f3')
-			];
+		expect(reel.spinToArtwork(piece('chosen', 'Chosen Piece'))).toBe(false);
+	});
 
-			await renderReel({ adultContentEnabled: false, artworks, viewerId: 'user-1' });
+	it('keeps the line still for a visitor who asked for less motion', async () => {
+		motion.reduced = true;
+		const onDeveloped = vi.fn();
+		const reel = await renderReel({ onDeveloped });
+		const artwork = piece('chosen', 'Chosen Piece');
 
-			await expect.element(page.getByTestId('film-reel')).toBeVisible();
+		reel.startFreeSpin();
+		expect(line().getAnimations()).toHaveLength(0);
+		reel.spinToArtwork(artwork);
 
-			const blurred = document.querySelector('.nsfw-blurred');
-			expect(blurred).not.toBeNull();
-			const filter = getComputedStyle(blurred!).filter;
-			expect(filter).toContain('blur(7px)');
-			expect(filter).toContain('saturate(0)');
+		await vi.waitFor(() => expect(onDeveloped).toHaveBeenCalledWith(artwork));
+		expect(line().getAnimations()).toHaveLength(0);
+		expect(photos()[0]!.getAnimations()).toHaveLength(0);
+	});
 
-			const overlay = document.querySelector('.nsfw-overlay');
-			expect(overlay).not.toBeNull();
-			expect(getComputedStyle(overlay!).backgroundColor).toBe('rgb(1, 2, 3)');
-		} finally {
-			document.documentElement.style.removeProperty('--nsfw-blur');
-			document.documentElement.style.removeProperty('--nsfw-scrim');
-		}
+	describe('a sensitive piece', () => {
+		it('stays covered for a viewer who has not opted in', async () => {
+			motion.reduced = true;
+			const reel = await renderReel({ viewerId: 'viewer-1' });
+
+			reel.startFreeSpin();
+			reel.spinToArtwork(piece('nsfw', 'Sensitive', PIXEL, { authorId: 'other', isNsfw: true }));
+
+			await expect.element(page.getByText('18+')).toBeVisible();
+		});
+
+		it('is not covered for its own author', async () => {
+			motion.reduced = true;
+			const onDeveloped = vi.fn();
+			const reel = await renderReel({ onDeveloped, viewerId: 'viewer-1' });
+
+			reel.startFreeSpin();
+			reel.spinToArtwork(piece('nsfw', 'Sensitive', PIXEL, { authorId: 'viewer-1', isNsfw: true }));
+
+			await vi.waitFor(() => expect(onDeveloped).toHaveBeenCalled());
+			expect(page.getByText('18+').query()).toBeNull();
+		});
+
+		it('censors at the shared --nsfw-* strength instead of its own', async () => {
+			motion.reduced = true;
+			document.documentElement.style.setProperty('--nsfw-blur', '7px');
+			document.documentElement.style.setProperty('--nsfw-scrim', 'rgba(1, 2, 3, 0.4)');
+			try {
+				const reel = await renderReel({ viewerId: 'viewer-1' });
+
+				reel.startFreeSpin();
+				reel.spinToArtwork(piece('nsfw', 'Sensitive', PIXEL, { authorId: 'other', isNsfw: true }));
+
+				const image = page.getByRole('img', { name: 'Sensitive' });
+				await expect.element(image).toBeInTheDocument();
+				expect(getComputedStyle(image.element()).filter).toContain('blur(7px)');
+				expect(
+					getComputedStyle(page.getByText('18+').element().parentElement!).backgroundColor
+				).toBe('rgba(1, 2, 3, 0.4)');
+			} finally {
+				document.documentElement.style.removeProperty('--nsfw-blur');
+				document.documentElement.style.removeProperty('--nsfw-scrim');
+			}
+		});
 	});
 
 	describe('a photo that will not come', () => {
-		// A one-pixel GIF that really resolves, for the frames whose photo does come.
-		const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-		const piece = (id: string, title: string, imageUrl = PIXEL) =>
-			makeArtwork({ id, imageUrl, title });
-		const notes = () => page.getByText(/didn.t develop/i);
-
-		beforeEach(() => {
+		it('leaves a pencilled note on the polaroid, and does not claim it developed', async () => {
 			motion.reduced = true;
-		});
+			const onDeveloped = vi.fn();
+			const reel = await renderReel({ onDeveloped });
 
-		afterEach(() => {
-			motion.reduced = false;
-		});
+			reel.startFreeSpin();
+			reel.spinToArtwork(piece('lost', 'Lost Piece', '/no-such-artwork.webp'));
 
-		// A frame whose photo never arrived showed the browser's broken-image icon
-		// and the bare title, spinning past like any other.
-		it('leaves the frame empty with a pencilled note instead of a broken picture', async () => {
-			await renderReel({
-				artworks: [
-					piece('lost', 'Lost Piece', '/no-such-artwork.webp'),
-					piece('calm', 'Calm Piece'),
-					piece('quiet', 'Quiet Piece')
-				]
-			});
-
-			await expect.element(notes().first()).toBeVisible();
-
-			const lost = page.getByRole('img', { name: 'Lost Piece' }).all();
-			expect(lost.length).toBeGreaterThan(0);
-			// Not drawn, so no broken picture shows; still named for a screen reader.
-			for (const image of lost) await expect.element(image).toHaveStyle({ opacity: '0' });
-			// Only the frames showing that artwork say so.
-			await expect.poll(() => notes().all().length).toBe(lost.length);
-		});
-
-		// The reel reuses its frames: when the pool grows, a frame that showed one
-		// artwork goes on to show another.
-		it('judges a reused frame by the artwork it shows now', async () => {
-			const calm = piece('calm', 'Calm Piece');
-			const quiet = piece('quiet', 'Quiet Piece');
-			const screen = await renderReel({
-				artworks: [piece('lost', 'Lost Piece', '/no-such-artwork.webp'), calm, quiet]
-			});
-			await expect.element(notes().first()).toBeVisible();
-
-			// Of the frames that showed the lost photo, some now show a photo that is
-			// fine and one shows another that will not come either.
-			await screen.rerender({
-				roomProps: {
-					artworks: [
-						piece('gone', 'Gone Piece', '/another-missing-artwork.webp'),
-						piece('fresh', 'Fresh Piece'),
-						calm,
-						quiet
-					],
-					onLand: () => {}
-				}
-			});
-
-			const gone = page.getByRole('img', { name: 'Gone Piece' });
-			await expect.poll(() => gone.all().length).toBeGreaterThan(0);
-			await expect.poll(() => notes().all().length).toBe(gone.all().length);
-			for (const image of gone.all()) await expect.element(image).toHaveStyle({ opacity: '0' });
-			for (const name of ['Fresh Piece', 'Calm Piece', 'Quiet Piece']) {
-				for (const image of page.getByRole('img', { name }).all()) {
-					await expect.element(image).toHaveStyle({ opacity: '1' });
-				}
-			}
+			await expect.element(page.getByText(/didn.t develop/i)).toBeVisible();
+			await expect
+				.element(page.getByRole('img', { name: 'Lost Piece' }))
+				.toHaveStyle({ opacity: '0' });
+			expect(onDeveloped).not.toHaveBeenCalled();
 		});
 	});
 });

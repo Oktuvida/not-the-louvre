@@ -51,6 +51,12 @@ export const galleryRoomDiscoveryRequest = (
 		return { authorId: null, limit: GALLERY_PAGE_SIZE, sort: 'hot', window: null };
 	}
 
+	// The Mystery Room shows nothing of the feed: it only needs to know the
+	// gallery is not empty, and each spin asks for its own artwork.
+	if (roomId === 'mystery') {
+		return { authorId: null, limit: 1, sort: 'recent', window: null };
+	}
+
 	if (roomId === 'your-studio' && viewerId) {
 		return { authorId: viewerId, limit: GALLERY_PAGE_SIZE, sort: 'recent', window: null };
 	}

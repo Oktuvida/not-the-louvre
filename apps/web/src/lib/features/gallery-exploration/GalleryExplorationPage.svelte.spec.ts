@@ -203,7 +203,7 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByTestId('podium-artwork-1')).not.toBeInTheDocument();
 	});
 
-	it('reseeds mystery from mystery data after navigating from your-studio', async () => {
+	it('leaves the last room behind on its way to the mystery room', async () => {
 		const screen = await render(GalleryExplorationPage, {
 			artworks: [{ ...baseArtwork, id: 'studio-1', title: 'My Studio Piece' }],
 			discovery: {
@@ -230,7 +230,6 @@ describe('GalleryExplorationPage', () => {
 		});
 
 		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-		expect(document.querySelectorAll('img[alt="Mystery Arrival"]').length).toBeGreaterThan(0);
 		expect(document.querySelectorAll('img[alt="My Studio Piece"]').length).toBe(0);
 	});
 
@@ -1355,56 +1354,14 @@ describe('GalleryExplorationPage', () => {
 		await expect.element(page.getByTestId('ranked-frame-artwork-4')).not.toBeInTheDocument();
 	});
 
-	it('passes continuation props to the mystery room so it can request more artworks', async () => {
-		// MysteryRoom owns its StreamingAccumulator and calls loadMore internally
-		// during idle progress. The parent binds discovery request context via roomLoadMoreArtworks.
-		const mysteryArtworks = [
-			{ ...baseArtwork, id: 'mystery-0', title: 'Mystery Art 0' },
-			{ ...baseArtwork, id: 'mystery-1', title: 'Mystery Art 1' }
-		];
-
-		const loadMoreArtworks = vi.fn(async () => ({
-			artworks: Array.from({ length: 12 }, (_, i) => ({
-				...baseArtwork,
-				id: `mystery-next-${i}`,
-				title: `Mystery Next ${i}`
-			})),
-			pageInfo: { hasMore: false, nextCursor: null }
-		}));
-
-		await render(GalleryExplorationPage, {
-			artworks: mysteryArtworks,
-			discovery: {
-				pageInfo: { hasMore: true, nextCursor: 'mystery-cursor-1' },
-				request: { authorId: null, limit: 12, sort: 'recent', window: null }
-			},
-			emptyStateMessage: null,
-			loadMoreArtworks,
-			room: getGalleryRoom('mystery'),
-			roomId: 'mystery'
-		});
-
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-
-		// Wait for the idle cycle to trigger loadMoreArtworks via the room's StreamingAccumulator
-		await vi.waitFor(
-			() => {
-				expect(loadMoreArtworks).toHaveBeenCalledOnce();
-			},
-			{ timeout: 15000 }
-		);
-
-		expect(loadMoreArtworks).toHaveBeenCalledWith({
-			authorId: null,
-			cursor: 'mystery-cursor-1',
-			limit: 12,
-			sort: 'recent',
-			window: null
-		});
-	});
-
 	it('opens artwork detail when the mystery reel spin lands', async () => {
-		const landedArtwork = { ...baseArtwork, id: 'mystery-landed', title: 'Landed Artwork' };
+		// A one-pixel GIF that really resolves: the piece comes up before it opens.
+		const landedArtwork = {
+			...baseArtwork,
+			id: 'mystery-landed',
+			imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+			title: 'Landed Artwork'
+		};
 		const fetchRandomArtwork = vi.fn(async () => landedArtwork);
 		const loadArtworkDetail = vi.fn(async () => landedArtwork);
 
@@ -1436,9 +1393,12 @@ describe('GalleryExplorationPage', () => {
 			{ timeout: 6000 }
 		);
 
-		// After landing, onSelect fires which calls loadArtworkDetail
+		// The spin plays through, and the piece that came up opens as a postcard.
 		await vi.waitFor(
 			() => {
+				for (const motion of document.getAnimations()) {
+					if (motion.effect?.getComputedTiming().iterations !== Infinity) motion.finish();
+				}
 				expect(loadArtworkDetail).toHaveBeenCalledWith('mystery-landed');
 			},
 			{ timeout: 6000 }
@@ -1449,53 +1409,6 @@ describe('GalleryExplorationPage', () => {
 			.toBeVisible();
 	});
 
-	it('continues cycling the reel after full catalog traversal (hasMore becomes false)', async () => {
-		// MysteryRoom's StreamingAccumulator calls loadMore during idle progress.
-		// After catalog exhaustion (hasMore: false), the reel remains functional.
-		const mysteryArtworks = [
-			{ ...baseArtwork, id: 'mystery-0', title: 'Mystery Art 0' },
-			{ ...baseArtwork, id: 'mystery-1', title: 'Mystery Art 1' }
-		];
-
-		const loadMoreArtworks = vi.fn(async () => ({
-			artworks: Array.from({ length: 6 }, (_, i) => ({
-				...baseArtwork,
-				id: `mystery-last-${i}`,
-				title: `Mystery Last ${i}`
-			})),
-			pageInfo: { hasMore: false, nextCursor: null }
-		}));
-
-		await render(GalleryExplorationPage, {
-			artworks: mysteryArtworks,
-			discovery: {
-				pageInfo: { hasMore: true, nextCursor: 'mystery-cursor-1' },
-				request: { authorId: null, limit: 12, sort: 'recent', window: null }
-			},
-			emptyStateMessage: null,
-			loadMoreArtworks,
-			room: getGalleryRoom('mystery'),
-			roomId: 'mystery'
-		});
-
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-
-		// Wait for the idle cycle to trigger loadMoreArtworks via StreamingAccumulator
-		await vi.waitFor(
-			() => {
-				expect(loadMoreArtworks).toHaveBeenCalledOnce();
-			},
-			{ timeout: 15000 }
-		);
-
-		// After catalog exhausted, reel should still be functional
-		const spinButton = page.getByRole('button', { name: /spin/i });
-		await expect.element(spinButton).toBeVisible();
-		// No additional fetch should have been made (hasMore was false)
-		expect(loadMoreArtworks).toHaveBeenCalledTimes(1);
-		// Reel is still visible and interactive
-		await expect.element(page.getByTestId('film-reel')).toBeVisible();
-	});
 	it('reserves the podium shape while the hall of fame room streams', async () => {
 		const pending = createDeferred<never>();
 

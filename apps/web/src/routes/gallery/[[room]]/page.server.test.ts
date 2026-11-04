@@ -187,7 +187,7 @@ describe('gallery route', () => {
 			});
 		});
 
-		it('loads the mystery room with continuation metadata', async () => {
+		it('asks the feed only whether the mystery room has anything to spin', async () => {
 			const { load } = await import('./+page.server');
 			const result = (await load({
 				isDataRequest: true,
@@ -201,6 +201,26 @@ describe('gallery route', () => {
 
 			expect(result).toMatchObject({ roomId: 'mystery' });
 
+			await result.lazy.roomContent;
+
+			expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
+				{ authorId: null, cursor: null, limit: 1, sort: 'recent', window: null },
+				{ user: undefined }
+			);
+		});
+
+		it('loads Wet Paint newest first, a page at a time', async () => {
+			const { load } = await import('./+page.server');
+			const result = (await load({
+				isDataRequest: true,
+				locals: {},
+				params: { room: 'wet-paint' },
+				parent: async () => ({ adultContentEnabled: false })
+			} as never)) as {
+				lazy: { roomContent: Promise<{ discovery: Record<string, unknown> }> };
+				roomId: string;
+			};
+
 			const roomContent = await result.lazy.roomContent;
 
 			expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
@@ -209,12 +229,7 @@ describe('gallery route', () => {
 			);
 			expect(roomContent.discovery).toMatchObject({
 				pageInfo: { hasMore: false, nextCursor: null },
-				request: {
-					authorId: null,
-					limit: 24,
-					sort: 'recent',
-					window: null
-				}
+				request: { authorId: null, limit: 24, sort: 'recent', window: null }
 			});
 		});
 
