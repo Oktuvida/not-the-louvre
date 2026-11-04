@@ -1,6 +1,6 @@
 <script lang="ts">
 	import PolaroidSkeletonGrid from '#lib/features/gallery-exploration/components/PolaroidSkeletonGrid.svelte';
-	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
+	import type { GalleryWallId } from '#lib/features/gallery-exploration/model/rooms.js';
 
 	/*
 	 * A placeholder shaped like the room it precedes.
@@ -21,7 +21,7 @@
 		roomId = 'hall-of-fame'
 	}: {
 		cardCount?: number;
-		roomId?: GalleryRoomId;
+		roomId?: GalleryWallId;
 	} = $props();
 
 	// Mirrors HallOfFameRoom's podiumMeta width/height classes.

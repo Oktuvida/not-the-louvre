@@ -14,18 +14,18 @@ vi.mock('$app/environment', () => ({
 
 import { makeArtwork } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import RoomHarness from './RoomHarness.svelte';
-import WetPaintRoom from './WetPaintRoom.svelte';
+import NewestFirstRoom from './NewestFirstRoom.svelte';
 
-type WetPaintProps = ComponentProps<typeof WetPaintRoom>;
+type RoomProps = ComponentProps<typeof NewestFirstRoom>;
 
-const renderRoom = (props: Partial<WetPaintProps> & Pick<WetPaintProps, 'artworks' | 'pageInfo'>) =>
+const renderRoom = (props: Partial<RoomProps> & Pick<RoomProps, 'artworks' | 'pageInfo'>) =>
 	render(RoomHarness, {
-		props: { component: WetPaintRoom, roomProps: { onSelect: () => {}, ...props } }
+		props: { component: NewestFirstRoom, roomProps: { onSelect: () => {}, ...props } }
 	});
 
 const NO_MORE = { hasMore: false, nextCursor: null };
 
-describe('WetPaintRoom', () => {
+describe('NewestFirstRoom', () => {
 	it('notes on every polaroid when it went up', async () => {
 		await renderRoom({
 			artworks: [

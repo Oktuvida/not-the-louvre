@@ -4,7 +4,7 @@ import type {
 	GalleryPageInfo
 } from '#lib/features/gallery-exploration/model/discovery.js';
 import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
-import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
+import type { GalleryWallId } from '#lib/features/gallery-exploration/model/rooms.js';
 
 /*
  * Per-room feed memory.
@@ -42,7 +42,7 @@ export type RoomFeedSnapshot = {
 /** Ten pages of 24. Beyond that, restoring costs more than refetching. */
 const MAX_CACHED_ARTWORKS = 240;
 
-const snapshots = new Map<GalleryRoomId, RoomFeedSnapshot>();
+const snapshots = new Map<GalleryWallId, RoomFeedSnapshot>();
 
 /*
  * A refresh re-streams the room, which unmounts and remounts it — and an
@@ -50,17 +50,17 @@ const snapshots = new Map<GalleryRoomId, RoomFeedSnapshot>();
  * quietly restore the feed the visitor just asked to replace, and Refresh would
  * look like it did nothing.
  */
-const suppressed = new Set<GalleryRoomId>();
+const suppressed = new Set<GalleryWallId>();
 
-export const suppressNextRoomFeedSnapshot = (roomId: GalleryRoomId): void => {
+export const suppressNextRoomFeedSnapshot = (roomId: GalleryWallId): void => {
 	suppressed.add(roomId);
 	snapshots.delete(roomId);
 };
 
-export const readRoomFeedSnapshot = (roomId: GalleryRoomId): RoomFeedSnapshot | null =>
+export const readRoomFeedSnapshot = (roomId: GalleryWallId): RoomFeedSnapshot | null =>
 	snapshots.get(roomId) ?? null;
 
-export const writeRoomFeedSnapshot = (roomId: GalleryRoomId, snapshot: RoomFeedSnapshot): void => {
+export const writeRoomFeedSnapshot = (roomId: GalleryWallId, snapshot: RoomFeedSnapshot): void => {
 	if (suppressed.delete(roomId)) {
 		snapshots.delete(roomId);
 		return;

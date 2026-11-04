@@ -1,5 +1,5 @@
 import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
-import type { GalleryRoomId } from '#lib/shared/gallery/rooms.js';
+import type { GalleryWallId } from '#lib/shared/gallery/rooms.js';
 
 /*
  * The paging vocabulary of the gallery feed. The `{ hasMore, nextCursor }`
@@ -40,7 +40,7 @@ const GALLERY_PAGE_SIZE = 24;
  * room put back up from memory can page on before its fresh first page lands.
  */
 export const galleryRoomDiscoveryRequest = (
-	roomId: GalleryRoomId,
+	roomId: GalleryWallId,
 	viewerId: string | null
 ): GalleryDiscoveryRequest => {
 	if (roomId === 'hall-of-fame') {
@@ -63,6 +63,14 @@ export const galleryRoomDiscoveryRequest = (
 
 	return { authorId: null, limit: GALLERY_PAGE_SIZE, sort: 'recent', window: null };
 };
+
+/** What a visit to an artist's studio asks the feed for. */
+export const artistDiscoveryRequest = (artistId: string): GalleryDiscoveryRequest => ({
+	authorId: artistId,
+	limit: GALLERY_PAGE_SIZE,
+	sort: 'recent',
+	window: null
+});
 
 /** The room payload the server streams into the page. */
 export type GalleryRoomContent = {

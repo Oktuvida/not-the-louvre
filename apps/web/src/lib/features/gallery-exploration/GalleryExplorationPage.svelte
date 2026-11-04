@@ -35,7 +35,7 @@
 	} from '#lib/features/gallery-exploration/model/feed-cache.js';
 	import {
 		type GalleryRoomConfig,
-		type GalleryRoomId
+		type GalleryWallId
 	} from '#lib/features/gallery-exploration/model/rooms.js';
 	import { applyArtworkLiveChange } from '#lib/features/gallery-exploration/artwork-live-change.js';
 	import { createArtworkLiveUpdates } from '#lib/features/gallery-exploration/artwork-live-updates.js';
@@ -48,11 +48,13 @@
 	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
 	import GalleryStatusRegion from '#lib/features/gallery-exploration/components/GalleryStatusRegion.svelte';
 	import RoomLoadingSkeleton from '#lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
+	import ArtistBookplate from '#lib/features/gallery-exploration/components/ArtistBookplate.svelte';
+	import type { ArtistStudio } from '#lib/features/gallery-exploration/model/artist-studio.js';
 	import HallOfFameRoom from '#lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
 	import type { AwardStyle } from '#lib/features/shared-ui/award-style.js';
 	import HotWallRoom from '#lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
 	import MysteryRoom from '#lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
-	import WetPaintRoom from '#lib/features/gallery-exploration/rooms/WetPaintRoom.svelte';
+	import NewestFirstRoom from '#lib/features/gallery-exploration/rooms/NewestFirstRoom.svelte';
 	import YourStudioRoom from '#lib/features/gallery-exploration/rooms/YourStudioRoom.svelte';
 
 	type GalleryDetailHistoryState = NonNullable<App.PageState['galleryDetail']>;
@@ -182,6 +184,7 @@
 				});
 			}
 		},
+		artist = null,
 		room,
 		roomId,
 		viewer = null,
@@ -210,8 +213,10 @@
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
 		loadArtworkDetail?: (artworkId: string) => Promise<Artwork>;
+		/** Whose studio this wall is, on a visit to one. */
+		artist?: ArtistStudio | null;
 		room: GalleryRoomConfig;
-		roomId: GalleryRoomId;
+		roomId: GalleryWallId;
 		viewer?: Viewer | null;
 		/** The Hall of Fame's award style, drawn once per visit to the gallery. */
 		awardStyle?: AwardStyle;
@@ -409,11 +414,12 @@
 		artworks.some((artwork) => artwork.isNsfw) || Boolean(selectedArtwork?.isNsfw)
 	);
 	const showSensitiveArtworkNote = $derived(hasSensitiveArtwork && roomId !== 'your-studio');
-	const currentGalleryUrl = $derived(
-		roomId === 'hall-of-fame'
+	const currentGalleryUrl = $derived.by(() => {
+		if (artist) return resolve('/gallery/artist/[nickname]', { nickname: artist.nickname });
+		return roomId === 'hall-of-fame'
 			? resolve('/gallery/[[room]]', {})
-			: resolve('/gallery/[[room]]', { room: roomId })
-	);
+			: resolve('/gallery/[[room]]', { room: roomId });
+	});
 
 	const historyDetailState = $derived(readGalleryDetailHistoryState(page.state));
 
@@ -865,7 +871,8 @@
 	});
 
 	// --- Empty state ---
-	const roomNoteClassNames: Record<GalleryRoomId, string> = {
+	const roomNoteClassNames: Record<GalleryWallId, string> = {
+		'artist-studio': '',
 		'hall-of-fame': '',
 		'hot-wall': '',
 		'wet-paint': '',
@@ -874,6 +881,8 @@
 	};
 	const showEmptyState = $derived(Boolean(roomEmptyStateMessage) && roomId !== 'hot-wall');
 	const emptyStateSupportMessage = $derived.by(() => {
+		if (artist) return 'New pieces will appear here as they are hung.';
+
 		if (viewer && roomId === 'your-studio') {
 			return 'Publish a new piece from the studio and it will show up here.';
 		}
@@ -1003,18 +1012,19 @@
 			{revealedArtworkIds}
 			viewerId={viewer?.id ?? null}
 		/>
-	{:else if roomId === 'wet-paint'}
-		<WetPaintRoom
+	{:else if roomId === 'wet-paint' || roomId === 'artist-studio'}
+		<NewestFirstRoom
 			{artworks}
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
-			feedCacheKey={roomId}
+			feedCacheKey={roomId === 'artist-studio' ? null : roomId}
 			seedIsRemembered={isSeedRemembered}
 			serverRendered={!roomContent}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}
 			{revealedArtworkIds}
+			testId={roomId}
 			viewerId={viewer?.id ?? null}
 		/>
 	{:else if roomId === 'mystery' && artworks.length > 0}
@@ -1047,7 +1057,11 @@
 	<div
 		class="relative z-10 mx-auto flex max-w-[160rem] flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8"
 	>
-		{#if roomId === 'your-studio' || roomId === 'wet-paint'}
+		{#if artist}
+			<div class="mb-6 flex justify-center md:mb-8">
+				<ArtistBookplate {artist} />
+			</div>
+		{:else if roomId === 'your-studio' || roomId === 'wet-paint'}
 			<!-- A plain wall of polaroids starts at the top left, right where the note
 			     would be stuck, so here the note takes a line of its own. -->
 			<div class="mb-4 flex justify-start md:mb-6" data-testid={`${roomId}-room-note-flow`}>
