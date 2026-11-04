@@ -490,7 +490,8 @@ export const getArtistStudio = async (
 	}
 
 	return {
-		avatarUrl: resolveUserAvatarUrl(record.id, record.avatarUrl),
+		// The avatar route answers 404 for one moderation took down.
+		avatarUrl: record.avatarIsHidden ? null : resolveUserAvatarUrl(record.id, record.avatarUrl),
 		id: record.id,
 		nickname: record.nickname,
 		stats: { hangingSince: record.hangingSince, pieces: record.pieces, stars: record.stars }

@@ -432,6 +432,7 @@ export type ArtworkReadRepository = {
 };
 
 export type ArtistStudioRecord = {
+	avatarIsHidden: boolean;
 	avatarUrl: string | null;
 	hangingSince: Date | null;
 	id: string;

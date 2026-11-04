@@ -68,6 +68,25 @@ test.describe('an artist’s studio', () => {
 		await expect(page.getByTestId('artist-studio-room')).toBeVisible();
 	});
 
+	for (const { height, least, width } of [
+		{ height: 860, least: 120, width: 1512 },
+		{ height: 844, least: 120, width: 390 }
+	]) {
+		test(`puts the artist’s face first at ${width}×${height}`, async ({ page }) => {
+			await page.setViewportSize({ height, width });
+			await page.goto(STUDIO);
+
+			const portrait = page.getByRole('img', { name: 'Portrait of seed_painter' });
+			await expect(portrait).toBeVisible();
+			await expect
+				.poll(() => portrait.evaluate((image: HTMLImageElement) => image.naturalWidth))
+				.toBeGreaterThan(0);
+			expect((await portrait.boundingBox())!.width, 'the face is big').toBeGreaterThanOrEqual(
+				least
+			);
+		});
+	}
+
 	test('fits a phone, with the plate whole on screen', async ({ page }) => {
 		await page.setViewportSize({ height: 844, width: 390 });
 		await page.goto(STUDIO);

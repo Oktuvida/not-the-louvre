@@ -931,6 +931,22 @@ describeWithDatabase('artwork DB contract', () => {
 		await expect(getArtistStudio('nobody_here')).rejects.toMatchObject({ status: 404 });
 	});
 
+	it('shows no portrait of an artist whose avatar moderation took down', async () => {
+		const { getArtistStudio } = await import('./read.service');
+
+		await sql`
+			update app.users set avatar_url = 'avatars/author-1/0123456789abcdef.webp'
+			where id = 'author-1'
+		`;
+		await expect(getArtistStudio('author-1_nick')).resolves.toMatchObject({
+			avatarUrl: '/api/users/author-1/avatar?v=0123456789abcdef'
+		});
+
+		await sql`update app.users set avatar_is_hidden = true where id = 'author-1'`;
+
+		await expect(getArtistStudio('author-1_nick')).resolves.toMatchObject({ avatarUrl: null });
+	});
+
 	it('keeps a banned artist out of the gallery', async () => {
 		const { getArtistStudio } = await import('./read.service');
 
