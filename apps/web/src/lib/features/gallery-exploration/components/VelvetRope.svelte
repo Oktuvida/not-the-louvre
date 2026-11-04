@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+
 	/*
 	 * The end of the wall: a velvet rope slung between two brass posts, and the
-	 * museum's label hung on it.
+	 * museum's label hung on it, which is also the way to who keeps the place.
 	 */
 </script>
 
@@ -63,6 +65,7 @@
 	<div class="velvet-rope-label">
 		<p class="velvet-rope-title">End of the collection</p>
 		<p class="velvet-rope-note">The rest is still being drawn</p>
+		<a class="velvet-rope-staff focus-ring" href={resolve('/gallery/staff')}>meet the staff →</a>
 	</div>
 </div>
 
@@ -106,6 +109,15 @@
 		letter-spacing: 0.2em;
 		text-transform: uppercase;
 		color: #8f2a22;
+	}
+
+	.velvet-rope-staff {
+		display: inline-block;
+		margin-top: 0.25rem;
+		color: var(--color-pencil);
+		font-family: var(--font-hand);
+		font-size: 1rem;
+		line-height: 1.2;
 	}
 
 	.velvet-rope-note {
