@@ -1127,37 +1127,58 @@
 	}
 
 	/*
-	 * A strip of the sheet's own paper, a shade deeper, with a pencil line
-	 * along its foot that darkens while the visitor writes. A wrong field gets
-	 * PencilNote's red wave under it.
+	 * Written on the sheet, not boxed in: the words go down in the blue ink
+	 * of the studio's bookplate, by hand, on a pencilled line. While the
+	 * visitor writes, the line is inked in and a stroke of highlighter marks
+	 * the place. A wrong field gets PencilNote's red wave under the line.
 	 */
 	.sheet-field {
 		width: 100%;
-		padding: 0.75rem 1rem 0.65rem;
+		padding: 0.3rem 0.2rem 0.35rem;
 		border: 0;
-		border-radius: 0.4rem 0.55rem 0.35rem 0.5rem;
-		background-color: var(--color-paper-deep);
-		box-shadow:
-			inset 0 1px 2px rgb(45 36 32 / 0.12),
-			inset 0 -2px 0 rgb(74 69 64 / 0.3);
-		color: var(--color-ink);
-		font-family: var(--font-body);
-		font-size: 1rem;
+		border-radius: 0;
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 8' preserveAspectRatio='none'%3E%3Cpath d='M1 4.6 C 38 3.4, 76 5.2, 120 4 S 206 3.2, 244 4.4 S 284 4.9, 299 3.8' fill='none' stroke='%234a4540' stroke-opacity='0.5' stroke-width='1.4' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E")
+			left bottom / 100% 0.5rem no-repeat;
+		color: #2c4a7a;
+		font-family: var(--font-hand);
+		font-size: 1.6rem;
+		font-weight: 600;
+		line-height: 1.25;
 		outline: none;
-		transition: box-shadow 150ms ease;
+		/* Holds off the browser's autofill tint, which would box the line in again. */
+		transition: background-color 600000s 0s;
+	}
+
+	/* Dots in the hand font are uneven; a secret reads better as even beads. */
+	.sheet-field[type='password'] {
+		font-family: var(--font-body);
+		font-size: 1.1rem;
+		letter-spacing: 0.25em;
+		padding-block: 0.65rem 0.55rem;
 	}
 
 	.sheet-field::placeholder {
-		color: var(--color-muted);
+		color: rgb(107 95 84 / 0.5);
 		font-family: var(--font-hand);
-		font-size: 1.15rem;
+		font-size: 1.45rem;
+		font-weight: 500;
+		letter-spacing: 0;
 	}
 
 	.sheet-field:focus {
-		box-shadow:
-			inset 0 1px 2px rgb(45 36 32 / 0.12),
-			inset 0 -3px 0 var(--color-ink-warm),
-			0 0 0 3px rgb(212 131 74 / 0.22);
+		background:
+			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 8' preserveAspectRatio='none'%3E%3Cpath d='M1 4.6 C 38 3.4, 76 5.2, 120 4 S 206 3.2, 244 4.4 S 284 4.9, 299 3.8' fill='none' stroke='%232d2420' stroke-opacity='0.9' stroke-width='2.2' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E")
+				left bottom / 100% 0.5rem no-repeat,
+			linear-gradient(
+				transparent 40%,
+				rgb(244 212 99 / 0.32) 40%,
+				rgb(244 212 99 / 0.32) 88%,
+				transparent 88%
+			);
+	}
+
+	.sheet-field:-webkit-autofill {
+		-webkit-text-fill-color: #2c4a7a;
 	}
 
 	/* What the gallery says of a nickname while it is typed, pencilled beside its label. */
