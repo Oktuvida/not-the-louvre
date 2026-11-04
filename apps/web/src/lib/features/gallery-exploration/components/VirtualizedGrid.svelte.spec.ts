@@ -4,9 +4,16 @@ import { page } from 'vitest/browser';
 import { makeArtworks } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import VirtualizedGridHarness from './VirtualizedGridHarness.svelte';
 import VirtualizedGridRestoreHarness from './VirtualizedGridRestoreHarness.svelte';
+import VirtualizedGridReturnHarness from './VirtualizedGridReturnHarness.svelte';
 import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
 
 const createArtworks = (count: number, prefix: string) => makeArtworks(count, { prefix });
+
+const nextFrames = async (count: number) => {
+	for (let frame = 0; frame < count; frame += 1) {
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+	}
+};
 
 describe('VirtualizedGrid', () => {
 	it('renders rows using WindowVirtualizer with the provided items', async () => {
@@ -134,6 +141,50 @@ describe('VirtualizedGrid', () => {
 		});
 
 		await vi.waitFor(() => {
+			expect(Math.abs(card()!.getBoundingClientRect().top - leftAt.top)).toBeLessThan(2);
+		});
+	});
+
+	// A visitor who turns back before the room they picked has been drawn
+	// finds the window still where they left it: nothing scrolled it to the
+	// top on the way out, so the scrolls that put a Back in its place have
+	// nothing to move. The wall put back up there has to draw its rows there,
+	// with no scroll to tell it where the window is.
+	it('put back up under a window already where it was left, shows the same card there', async () => {
+		const items = createArtworks(120, 'w');
+		let grid: { snapshotLayout(): GridLayoutSnapshot | null } | undefined;
+		const card = () => document.querySelector<HTMLElement>('[data-testid="grid-card-w100"]');
+
+		// The visitor walks in at the top of the wall.
+		window.scrollTo(0, 0);
+		const view = await render(VirtualizedGridReturnHarness, {
+			items,
+			onGrid: (handle: NonNullable<typeof grid>) => (grid = handle),
+			visit: 1
+		});
+		await vi.waitFor(
+			() => {
+				window.scrollBy(0, 300);
+				const top = card()?.getBoundingClientRect().top;
+				expect(top !== undefined && top > 0 && top < window.innerHeight / 2).toBe(true);
+			},
+			{ interval: 30, timeout: 10_000 }
+		);
+		// The visitor stops there, and the page has heard the last of the scroll.
+		await nextFrames(2);
+		const leftAt = { scrollY: window.scrollY, top: card()!.getBoundingClientRect().top };
+
+		// Out and straight back: the next copy of the grid goes up with the
+		// layout this one had, and nothing has moved the window.
+		await view.rerender({
+			pageHeight: document.documentElement.scrollHeight,
+			restoredLayout: grid!.snapshotLayout(),
+			visit: 2
+		});
+
+		expect(window.scrollY).toBe(leftAt.scrollY);
+		await vi.waitFor(() => {
+			expect(card()).not.toBeNull();
 			expect(Math.abs(card()!.getBoundingClientRect().top - leftAt.top)).toBeLessThan(2);
 		});
 	});

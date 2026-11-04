@@ -62,12 +62,6 @@
 			slideOn = entry;
 
 			const settle = () => {
-				// A scroll made while the browser drew nothing (SvelteKit
-				// putting a Back where it was) does not reach the page when the
-				// slide is cut short, and the wall's virtualizer stayed on the
-				// rows at the top. Whatever follows the scroll hears where the
-				// page is now.
-				dispatchEvent(new Event('scroll'));
 				if (slideOn === entry) slideOn = null;
 				// The room keeps its mark while a newer slide is on.
 				if (slideOn === null) delete root.dataset.roomSlide;

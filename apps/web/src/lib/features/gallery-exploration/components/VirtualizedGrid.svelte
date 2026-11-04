@@ -127,6 +127,22 @@
 			: undefined
 	);
 
+	/*
+	 * The virtualizer starts out taking the window to be at the top of the
+	 * page, and learns where it is only from the window's scroll events. A
+	 * grid put up under a window that is already further down hears none
+	 * unless something moves the window afterwards. Turning back before the
+	 * next room had been drawn did exactly that: nothing took the window to
+	 * the top on the way out, so it was still where the visitor left it, the
+	 * scrolls that put a Back in its place had nothing to move, and the grid
+	 * drew the rows at the top of its wall while the visitor looked at an
+	 * empty stretch further down. Once it is listening, it is told where the
+	 * window is.
+	 */
+	$effect(() => {
+		if (virtualizer && window.scrollY > 0) dispatchEvent(new Event('scroll'));
+	});
+
 	/** The measured rows, for the room to keep while the visitor is away. */
 	export const snapshotLayout = (): GridLayoutSnapshot | null =>
 		virtualizer && isMeasured
