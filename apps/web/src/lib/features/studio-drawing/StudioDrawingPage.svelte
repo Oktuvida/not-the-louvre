@@ -41,6 +41,7 @@
 	// Every screen's layout of the studio lives in this one sheet.
 	import './studio-layout.css';
 	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
+	import { keepTheRestingHandOff } from '#lib/features/studio-drawing/resting-hand.js';
 	import { STUDIO_DESK_IMAGE } from '#lib/features/shared-ui/studio-background-warmup.js';
 	import {
 		HANDOFF_CSS_VARIABLES,
@@ -260,6 +261,13 @@
 	let pageElement = $state<HTMLElement | null>(null);
 	let layoutPutsNotesOnCover = $state(false);
 	const notesOnCover = $derived(coverShown && layoutPutsNotesOnCover);
+
+	// The hand that rests on the glass while the pen draws presses nothing
+	// around the page (resting-hand.ts).
+	$effect(() => {
+		if (!pageElement) return;
+		return keepTheRestingHandOff(pageElement, (target) => target !== null && target === canvasRef);
+	});
 
 	$effect(() => {
 		const studio = pageElement;
@@ -913,6 +921,24 @@
 <PageFadeOverlay direction="in" onComplete={completeExitToHome} visible={showExitFade} />
 
 <style>
+	/*
+	 * Nothing in the studio is text to pick up: a pen or finger that slips off
+	 * the canvas onto the page, the notes or the supplies selects nothing and
+	 * opens no long-press menu. The fields stay text, or iPad would not let
+	 * the artist type in them.
+	 */
+	.studio-page {
+		-webkit-user-select: none;
+		user-select: none;
+		-webkit-touch-callout: none;
+	}
+
+	.studio-page :global(:is(input, textarea, [contenteditable])) {
+		-webkit-user-select: text;
+		user-select: text;
+		-webkit-touch-callout: default;
+	}
+
 	/*
 	 * The compositor hint belongs to the state that is ABOUT to move, not to the
 	 * tray forever: `.tools-stage` used to carry `will-change: opacity,

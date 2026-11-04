@@ -78,3 +78,17 @@ export const attachPointerReleaseSafetyNet = (onRelease: (event?: PointerEvent) 
 		window.removeEventListener('blur', handleBlur);
 	};
 };
+
+/** A field a visitor types into, as opposed to a slider, a box to tick or a button. */
+const TEXT_FIELD =
+	'textarea, [contenteditable]:not([contenteditable="false"]), input:not([type="range"], [type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"])';
+
+/**
+ * Lets go of a text field when a line starts. The canvas takes no focus of its
+ * own and prevents the touch that would move it, so a title being typed would
+ * keep the keyboard up over the drawing and Scribble writing into it.
+ */
+export const releaseTextField = () => {
+	const focused = document.activeElement;
+	if (focused instanceof HTMLElement && focused.matches(TEXT_FIELD)) focused.blur();
+};
