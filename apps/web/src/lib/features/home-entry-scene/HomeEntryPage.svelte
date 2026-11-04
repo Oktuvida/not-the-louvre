@@ -90,8 +90,8 @@
 	 * three.js + threlte + GLTF + DRACO are ~344KB gz — three times the rest of
 	 * the app — and none of it is needed for the controls the visitor actually
 	 * clicks first. The scene is imported after mount so Come In and the nav
-	 * hydrate ahead of it; the loading card below is rendered from first paint so
-	 * the frame is never an empty hole while the chunk is in flight.
+	 * hydrate ahead of it; the room's pencil sketch below is there from first
+	 * paint, so the frame is never an empty hole while the chunk is in flight.
 	 */
 	let SceneComponent = $state<
 		typeof import('#lib/features/home-entry-scene/scene/StudioScene.svelte').default | null
@@ -100,15 +100,41 @@
 	let sceneMediaState = $state<'error' | 'loaded' | 'pending'>('pending');
 	const sceneReady = $derived(sceneMediaState === 'loaded');
 	const sceneFailed = $derived(sceneMediaState === 'error');
+	/** Each try at the real room mounts the scene afresh, with its own loader cache. */
+	let sceneAttempt = $state(0);
+	/** Without WebGL another try could only fail again. */
+	let sceneCanRetry = $state(true);
+	let sceneLoadAbandoned = false;
 
 	/*
 	 * The scene's code and model are hashed files, and a tab opened before a
-	 * release asks for ones the server no longer has. The card stays on loading
-	 * while that is checked; when a release is out, the page reloads into it.
+	 * release asks for ones the server no longer has. The sketch stays on
+	 * loading while that is checked; when a release is out, the page reloads
+	 * into it.
 	 */
 	const sceneFailedToLoad = async () => {
 		if (await reloadIntoNewRelease()) return;
 		sceneMediaState = 'error';
+	};
+
+	const loadSceneCode = () => {
+		void import('#lib/features/home-entry-scene/scene/StudioScene.svelte')
+			.then((module) => {
+				if (!sceneLoadAbandoned) {
+					SceneComponent = module.default;
+				}
+			})
+			.catch(() => {
+				if (!sceneLoadAbandoned) {
+					void sceneFailedToLoad();
+				}
+			});
+	};
+
+	const retryScene = () => {
+		sceneMediaState = 'pending';
+		sceneAttempt += 1;
+		if (!SceneComponent) loadSceneCode();
 	};
 
 	let exitDelayedCall: gsap.core.Tween | null = null;
@@ -121,8 +147,6 @@
 	}
 
 	onMount(() => {
-		let cancelled = false;
-
 		/*
 		 * The /draw desk used to be warmed by the root layout, so /gallery and
 		 * /admin paid for it too. The Studio button below is the primary path
@@ -133,26 +157,17 @@
 		const cancelStudioBackgroundWarmup = scheduleStudioBackgroundWarmup();
 
 		// Without WebGL the scene could only fail, after downloading three.js to
-		// find out; the paused card is the whole answer.
+		// find out; the sketch is the whole answer.
 		if (!browserSupportsWebGL()) {
+			sceneCanRetry = false;
 			sceneMediaState = 'error';
 			return cancelStudioBackgroundWarmup;
 		}
 
-		void import('#lib/features/home-entry-scene/scene/StudioScene.svelte')
-			.then((module) => {
-				if (!cancelled) {
-					SceneComponent = module.default;
-				}
-			})
-			.catch(() => {
-				if (!cancelled) {
-					void sceneFailedToLoad();
-				}
-			});
+		loadSceneCode();
 
 		return () => {
-			cancelled = true;
+			sceneLoadAbandoned = true;
 			cancelStudioBackgroundWarmup();
 		};
 	});
@@ -314,37 +329,43 @@
 			<div
 				class="relative h-full w-full overflow-hidden border-[var(--border-frame)] bg-[radial-gradient(circle_at_50%_18%,_rgba(255,255,255,0.44),_transparent_30%),linear-gradient(180deg,_#ccb194_0%,_#8b6f57_100%)] shadow-strong"
 			>
+				<!-- The sketch fades out as the room fades in over it, then leaves the page. -->
 				<div
 					aria-hidden={sceneReady}
-					class={`absolute inset-0 z-10 transition-opacity duration-500 ${sceneReady ? 'opacity-0' : 'opacity-100'}`}
+					class={`absolute inset-0 z-10 transition-[opacity,visibility] duration-500 ${sceneReady ? 'invisible opacity-0' : 'opacity-100'}`}
 				>
-					<StudioLoadingFallback failed={sceneFailed} />
+					<StudioLoadingFallback
+						failed={sceneFailed}
+						onRetry={sceneCanRetry ? retryScene : undefined}
+					/>
 				</div>
 				{#if SceneComponent}
 					<!--
 						The scene is decoration. Without a WebGL context three.js throws while
 						the canvas mounts, and an uncaught error there stopped the whole page:
 						Come In never opened the auth overlay. The boundary keeps the failure
-						inside the frame and leaves the failed loading card in its place.
+						inside the frame and leaves the sketch in its place.
 					-->
-					<svelte:boundary
-						onerror={() => {
-							void sceneFailedToLoad();
-						}}
-					>
-						<SceneComponent
-							{entryState}
-							{initialPose}
-							{scenePose}
-							avatarUrl={user?.avatarUrl ?? null}
-							artworkSlots={sceneArtworks}
-							onMediaStateChange={(state) => {
-								if (state === 'error') void sceneFailedToLoad();
-								else sceneMediaState = state;
+					{#key sceneAttempt}
+						<svelte:boundary
+							onerror={() => {
+								void sceneFailedToLoad();
 							}}
-						/>
-						{#snippet failed()}{/snippet}
-					</svelte:boundary>
+						>
+							<SceneComponent
+								{entryState}
+								{initialPose}
+								{scenePose}
+								avatarUrl={user?.avatarUrl ?? null}
+								artworkSlots={sceneArtworks}
+								onMediaStateChange={(state) => {
+									if (state === 'error') void sceneFailedToLoad();
+									else sceneMediaState = state;
+								}}
+							/>
+							{#snippet failed()}{/snippet}
+						</svelte:boundary>
+					{/key}
 				{/if}
 			</div>
 		</div>

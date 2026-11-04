@@ -30,6 +30,12 @@
 	import { paintSketchbookLabel } from '#lib/features/home-entry-scene/scene/sketchbook-label.js';
 	import { studioZoomScale } from '#lib/features/home-entry-scene/scene/studio-framing.js';
 	import {
+		DEFAULT_CAMERA,
+		LEVEL,
+		RESTING_CAMERA,
+		STUDIO_MODEL_PLACEMENT
+	} from '#lib/features/home-entry-scene/scene/studio-pose.js';
+	import {
 		deskSnapshotCameraPose,
 		findSideTableBook,
 		handoffCameraPose,
@@ -78,8 +84,6 @@
 		onMediaStateChange?.(state);
 	};
 
-	/** Every pose but the Studio one sees the room level, and the book as it is. */
-	const LEVEL = { roll: 0, shiftY: 0, bookStretch: 1 };
 	const LEFT_WALL_CAMERA = {
 		...LEVEL,
 		cameraX: 0,
@@ -110,20 +114,6 @@
 		const { pixelsPerUnit, ...pose } = deskSnapshotCameraPose();
 		return { ...pose, bookStretch: 1, zoom: pixelsPerUnit };
 	};
-	const DEFAULT_CAMERA = {
-		...LEVEL,
-		cameraX: 0,
-		cameraDepth: 16,
-		cameraHeight: 7.8,
-		rotationX: -0.22,
-		rotationY: 0,
-		targetX: 0,
-		targetY: 0.8,
-		targetZ: 0,
-		zoom: 40
-	};
-	/** Where every "back to the room" move ends: the default pose, turned 45deg. */
-	const RESTING_CAMERA = { ...DEFAULT_CAMERA, rotationY: -Math.PI / 4, zoom: 60 };
 	const initialPoseValue = untrack(() => initialPose);
 	const snapshot = untrack(() => deskSnapshot);
 	const initialCamera = snapshot
@@ -523,8 +513,8 @@
 			bind:scene={studioSceneRoot}
 			dracoLoader={studioDracoLoader}
 			url={STUDIO_MODEL_URL}
-			scale={5.7}
-			position={[0, -6, 0]}
+			scale={STUDIO_MODEL_PLACEMENT.scale}
+			position={STUDIO_MODEL_PLACEMENT.position}
 			rotation={[initialCamera.rotationX, initialCamera.rotationY, 0]}
 			castShadow
 			receiveShadow
