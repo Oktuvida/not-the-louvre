@@ -26,6 +26,8 @@
 		onPrefetch?: (artworkId: string) => void;
 		onSelect: (artwork: Artwork) => void;
 		revealedArtworkIds?: Writable<Set<string>>;
+		/** Names the wall in the page's test ids: it hangs in more than one place. */
+		testId?: string;
 		viewerId?: string | null;
 	}
 
@@ -40,6 +42,7 @@
 		onPrefetch,
 		onSelect,
 		revealedArtworkIds,
+		testId = 'wet-paint',
 		viewerId = null
 	}: Props = $props();
 
@@ -69,7 +72,7 @@
 
 <!-- The newest piece first and no piece above another, whatever its votes: the
      order is the room. Each polaroid has a note of when it went up. -->
-<div class="w-full" data-testid="wet-paint-room">
+<div class="w-full" data-testid={`${testId}-room`}>
 	<VirtualizedGrid
 		bind:this={grid}
 		items={accumulator.allArtworks}
@@ -77,7 +80,7 @@
 		{serverRendered}
 	>
 		{#snippet renderCard(artwork)}
-			<div data-testid={`wet-paint-card-${artwork.id}`}>
+			<div data-testid={`${testId}-card-${artwork.id}`}>
 				<PolaroidCard
 					{artwork}
 					{viewerId}

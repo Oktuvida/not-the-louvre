@@ -225,6 +225,7 @@ const createReadRepository = (
 	};
 
 	return {
+		findArtistStudio: async () => null,
 		async listRecentArtworks({ cursor, limit }) {
 			return Array.from(artworks.values())
 				.filter((record) => !record.isHidden)

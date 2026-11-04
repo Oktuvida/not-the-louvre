@@ -113,6 +113,7 @@ const insertArtwork = async (
 		id: string;
 		isHidden?: boolean;
 		parentId?: string | null;
+		score?: number;
 		updatedAt?: Date;
 	}
 ) => {
@@ -146,7 +147,7 @@ const insertArtwork = async (
 			128,
 			${input.isHidden ?? false},
 			${input.isHidden ? createdAt : null},
-			0,
+			${input.score ?? 0},
 			0,
 			0,
 			${createdAt},
@@ -890,6 +891,52 @@ describeWithDatabase('artwork DB contract', () => {
 			parentStatus: 'none'
 		});
 		expect(byId.get('artwork-hidden-origin')).toBeUndefined();
+	});
+
+	it('sums up an artist from what visitors can see of their work', async () => {
+		const { getArtistStudio } = await import('./read.service');
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-old', score: 7 });
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-new', score: 5 });
+		await insertArtwork(sql, {
+			authorId: 'author-1',
+			id: 'artwork-gone',
+			isHidden: true,
+			score: 90
+		});
+		await sql`
+			update app.artworks set created_at = '2026-01-15T10:00:00.000Z' where id = 'artwork-old'
+		`;
+		await sql`
+			update app.artworks set created_at = '2025-06-01T10:00:00.000Z' where id = 'artwork-gone'
+		`;
+
+		await expect(getArtistStudio('author-1_nick')).resolves.toMatchObject({
+			id: 'author-1',
+			nickname: 'author-1_nick',
+			stats: {
+				hangingSince: new Date('2026-01-15T10:00:00.000Z'),
+				pieces: 2,
+				stars: 12
+			}
+		});
+	});
+
+	it('has an artist with nothing hung yet, and no artist for a name nobody has', async () => {
+		const { getArtistStudio } = await import('./read.service');
+
+		await expect(getArtistStudio('author-1_nick')).resolves.toMatchObject({
+			stats: { hangingSince: null, pieces: 0, stars: 0 }
+		});
+		await expect(getArtistStudio('nobody_here')).rejects.toMatchObject({ status: 404 });
+	});
+
+	it('keeps a banned artist out of the gallery', async () => {
+		const { getArtistStudio } = await import('./read.service');
+
+		await sql`update app.users set is_banned = true where id = 'author-1'`;
+
+		await expect(getArtistStudio('author-1_nick')).rejects.toMatchObject({ status: 404 });
 	});
 
 	it('pages the top feed with a keyset predicate on the raw score column', async () => {

@@ -9,6 +9,7 @@ import {
 	isNotNull,
 	lt,
 	lte,
+	min,
 	or,
 	sql,
 	type AnyColumn,
@@ -316,6 +317,25 @@ const moderationQueueHaving = (
 };
 
 export const artworkReadRepository: ArtworkReadRepository = {
+	async findArtistStudio(nickname: string) {
+		const [row] = await db
+			.select({
+				avatarUrl: users.avatarUrl,
+				hangingSince: min(artworks.createdAt),
+				id: users.id,
+				nickname: users.nickname,
+				pieces: count(artworks.id),
+				stars: sql<number>`coalesce(sum(${artworks.score}), 0)`.mapWith(Number)
+			})
+			.from(users)
+			// In the join, so an artist with nothing up is still an artist.
+			.leftJoin(artworks, and(eq(artworks.authorId, users.id), artworkVisibilityWhere()))
+			.where(and(eq(users.nickname, nickname), eq(users.isBanned, false)))
+			.groupBy(users.id);
+
+		return row ?? null;
+	},
+
 	async listRecentArtworks(input: ListRecentArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
 		const rows = await db

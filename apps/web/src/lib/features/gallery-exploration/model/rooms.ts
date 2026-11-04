@@ -9,7 +9,7 @@ export {
 	roomHref,
 	roomIdForPath
 } from '#lib/shared/gallery/rooms.js';
-export type { GalleryRoomId } from '#lib/shared/gallery/rooms.js';
+export type { GalleryRoomId, GalleryWallId } from '#lib/shared/gallery/rooms.js';
 
 export type GalleryRoomConfig = {
 	color: string;

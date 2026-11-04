@@ -839,7 +839,18 @@
 											{forkAttribution}
 										</p>
 									{/if}
-									<p class="postcard-signature truncate">by {artwork.artist}</p>
+									<p class="postcard-signature truncate">
+										by
+										<a
+											class="postcard-artist focus-ring"
+											href={resolve('/gallery/artist/[nickname]', { nickname: artwork.artist })}
+										>
+											<span class="postcard-artist-name">{artwork.artist}</span>
+											<span class="postcard-artist-go">
+												<span class="hidden sm:inline">see the studio</span> →
+											</span>
+										</a>
+									</p>
 								</div>
 								<!-- The postage: the artwork as its own stamp, its stars the value. -->
 								<div class="postcard-postage">
@@ -1487,6 +1498,24 @@
 		font-size: 1.2rem;
 		line-height: 1.1;
 		color: #1f2a44;
+	}
+
+	.postcard-artist {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.postcard-artist-name {
+		text-decoration: underline dotted rgb(31 42 68 / 0.55);
+		text-decoration-thickness: 1.5px;
+		text-underline-offset: 3px;
+	}
+
+	.postcard-artist-go {
+		margin-left: 0.15rem;
+		color: var(--color-pencil);
+		font-size: 0.85em;
+		white-space: nowrap;
 	}
 
 	.postcard-caption {

@@ -5,6 +5,7 @@ import type { Viewer } from '#lib/shared/viewer.js';
 import { ArtworkFlowError } from './errors';
 import { artworkReadRepository } from './read.repository';
 import type {
+	ArtistStudioSummary,
 	ArtworkAuthorSummary,
 	ArtworkChildForkSummary,
 	ArtworkDetail,
@@ -471,6 +472,29 @@ export const getArtworkMedia = async (
 	}
 
 	return media;
+};
+
+/** Who a studio belongs to, and what visitors can see of the work in it. */
+export const getArtistStudio = async (
+	nickname: string,
+	contextAndDependencies: ReadContextAndDependencies = {},
+	dependencies: ReadServiceDependencies = {}
+): Promise<ArtistStudioSummary> => {
+	const { repository } = getDependencies({
+		repository: contextAndDependencies.repository ?? dependencies.repository
+	});
+	const record = await repository.findArtistStudio(nickname);
+
+	if (!record) {
+		throw new ArtworkFlowError(404, 'Artist not found', 'NOT_FOUND');
+	}
+
+	return {
+		avatarUrl: resolveUserAvatarUrl(record.id, record.avatarUrl),
+		id: record.id,
+		nickname: record.nickname,
+		stats: { hangingSince: record.hangingSince, pieces: record.pieces, stars: record.stars }
+	};
 };
 
 export const getRandomArtwork = async (

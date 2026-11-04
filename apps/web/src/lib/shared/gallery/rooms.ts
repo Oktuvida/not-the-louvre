@@ -10,6 +10,9 @@ export const galleryRoomIds = [
 
 export type GalleryRoomId = (typeof galleryRoomIds)[number];
 
+/** Every wall the gallery hangs: its rooms, and a visit to an artist's studio. */
+export type GalleryWallId = GalleryRoomId | 'artist-studio';
+
 export const isGalleryRoomId = (value: string): value is GalleryRoomId =>
 	galleryRoomIds.includes(value as GalleryRoomId);
 

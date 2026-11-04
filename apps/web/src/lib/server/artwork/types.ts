@@ -419,6 +419,7 @@ export type ArtworkReadRepository = {
 		id: string,
 		viewer?: ArtworkVisibilityActor
 	): Promise<Pick<ArtworkRecord, 'id' | 'isHidden' | 'mediaContentType' | 'storageKey'> | null>;
+	findArtistStudio(nickname: string): Promise<ArtistStudioRecord | null>;
 	findRandomArtwork(viewer?: ArtworkVisibilityActor): Promise<ArtworkReadRecord | null>;
 	listArtworkCommentsByArtworkId(
 		artworkId: string,
@@ -428,6 +429,19 @@ export type ArtworkReadRepository = {
 	listModerationQueue(input: ListModerationQueueInput): Promise<ModerationQueueItem[]>;
 	listRecentArtworks(input: ListRecentArtworksInput): Promise<ArtworkReadRecord[]>;
 	listTopArtworks(input: ListTopArtworksInput): Promise<ArtworkReadRecord[]>;
+};
+
+export type ArtistStudioRecord = {
+	avatarUrl: string | null;
+	hangingSince: Date | null;
+	id: string;
+	nickname: string;
+	pieces: number;
+	stars: number;
+};
+
+export type ArtistStudioSummary = Pick<ArtistStudioRecord, 'avatarUrl' | 'id' | 'nickname'> & {
+	stats: Pick<ArtistStudioRecord, 'hangingSince' | 'pieces' | 'stars'>;
 };
 
 export type ArtworkActorContext = {
