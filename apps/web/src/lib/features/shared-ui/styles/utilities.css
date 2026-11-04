@@ -422,25 +422,6 @@
 	}
 }
 
-@keyframes bob {
-	0%,
-	100% {
-		transform: translateY(0);
-	}
-	50% {
-		transform: translateY(-10px);
-	}
-}
-
-@keyframes shimmer {
-	0% {
-		background-position: 0% 50%;
-	}
-	100% {
-		background-position: 100% 50%;
-	}
-}
-
 /*
  * Loading affordances opt out of the reduced-motion reset.
  *
@@ -448,14 +429,11 @@
  * iteration when the visitor asks for reduced motion, which is right for
  * decoration and wrong for an indicator: a spinner or a shimmer stopped on its
  * first frame reads as "this hung", and a permanently stuck spinner is a worse
- * outcome for that same visitor than the motion it removed. These four are the
+ * outcome for that same visitor than the motion it removed. These two are the
  * app's only informational loops, so they keep their own timing.
  *
  * Both these rules and the reset are unlayered `!important`, so specificity
- * decides and a class beats `*`. The two arbitrary utilities are matched with
- * their duration in the selector on purpose: it keeps the decorative 1.8s
- * medal bob in ArtworkDetailPanel snapped, and if either is ever retuned the
- * selector simply stops matching and the animation falls back to the reset.
+ * decides and a class beats `*`.
  */
 @media (prefers-reduced-motion: reduce) {
 	/* The gallery refresh indicator (GalleryLayoutFrame). */
@@ -467,18 +445,6 @@
 	/* Every skeleton placeholder. */
 	.animate-pulse {
 		animation-duration: 2s !important;
-		animation-iteration-count: infinite !important;
-	}
-
-	/* StudioLoadingFallback's bobbing dot. */
-	[class*='animate-[bob_2s'] {
-		animation-duration: 2s !important;
-		animation-iteration-count: infinite !important;
-	}
-
-	/* StudioLoadingFallback's progress shimmer. */
-	[class*='animate-[shimmer_1.4s'] {
-		animation-duration: 1.4s !important;
 		animation-iteration-count: infinite !important;
 	}
 }

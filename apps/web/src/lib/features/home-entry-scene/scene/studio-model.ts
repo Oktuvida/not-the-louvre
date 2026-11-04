@@ -6,3 +6,12 @@
 import studioModelUrl from '#lib/assets/studio-model/studio.glb?url';
 
 export const STUDIO_MODEL_URL = studioModelUrl;
+
+/*
+ * The same studio drawn in pencil, as `scripts/sketch-studio-room.ts` makes it
+ * from the model: the page shows it where the room will stand until the room
+ * is up.
+ */
+import studioSketchUrl from '#lib/assets/studio-model/studio-sketch.svg?url';
+
+export const STUDIO_SKETCH_URL = studioSketchUrl;

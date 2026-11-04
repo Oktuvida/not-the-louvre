@@ -89,12 +89,16 @@ describe('HomeEntryPage', () => {
 		webgl.supported = true;
 	});
 
-	it('shows the paused scene card at once when the browser has no WebGL', async () => {
+	it('leaves the studio as its pencil sketch at once when the browser has no WebGL', async () => {
 		webgl.supported = false;
 
 		await render(HomeEntryPage, {});
 
-		await expect.element(page.getByText('Scene preview paused')).toBeVisible();
+		await expect.element(page.getByText(/only the sketch of the studio/i)).toBeInTheDocument();
+		// Another try could only fail the same way.
+		await expect
+			.element(page.getByRole('button', { name: /try the real room/i }))
+			.not.toBeInTheDocument();
 
 		await settlePrefetches();
 		// The 3D scene, three.js and all, is never downloaded.

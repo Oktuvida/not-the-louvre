@@ -310,7 +310,7 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/');
 
-		await expect(page.getByText(/Loading Studio(\.\.\.|…)/)).toBeVisible();
+		await expect(page.getByText(/setting up the studio/i)).toBeAttached();
 		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
 		await page.getByRole('button', { name: 'Come In' }).click();
 		await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
@@ -333,21 +333,19 @@ test.describe('Not the Louvre frontend port', () => {
 
 		await page.goto('/');
 
-		await expect(page.getByText('Scene preview paused')).toBeVisible();
+		await expect(page.getByText(/only the sketch of the studio/i)).toBeAttached();
 		await page.getByRole('button', { name: 'Come In' }).click();
 		await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
 	});
 
-	test('home route keeps the localized scene fallback when the studio GLB fails', async ({
-		page
-	}) => {
+	test('home route leaves the studio as its sketch when the studio GLB fails', async ({ page }) => {
 		await page.route('**/studio.*.glb', async (route) => {
 			await route.abort();
 		});
 
 		await page.goto('/');
 
-		await expect(page.getByText(/Loading Studio(\.\.\.|…)/)).toBeVisible();
+		await expect(page.getByText(/only the sketch of the studio/i)).toBeAttached();
 		await expect(page.getByRole('button', { name: 'Come In' })).toBeVisible();
 	});
 

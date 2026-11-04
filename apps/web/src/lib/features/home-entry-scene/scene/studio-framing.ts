@@ -5,7 +5,14 @@
  * where the room at rest just fits; any other screen gets the same framing,
  * scaled by whichever side runs out first.
  */
-const COMPOSED_FOR = { height: 1080, width: 1920 };
+export const COMPOSED_FOR = { height: 1080, width: 1920 };
+
+/*
+ * What the room's pencil sketch covers, in pixels of that composition: the
+ * composition and a margin round it, because a screen of another shape shows
+ * more of the room than the 16:9 frame does.
+ */
+export const SKETCH_FRAME = { height: 1260, left: -160, top: -90, width: 2240 };
 
 /** How much to scale the camera's zoom on a screen of this size. */
 export const studioZoomScale = (width: number, height: number) =>
