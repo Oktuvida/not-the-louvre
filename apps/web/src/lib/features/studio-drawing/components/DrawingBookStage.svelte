@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack, type Snippet } from 'svelte';
+	import { on } from 'svelte/events';
 	import bookclothUrl from '#lib/assets/sketchbook/bookcloth.webp';
 	import coverWearUrl from '#lib/assets/sketchbook/cover-wear.webp';
 	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
@@ -78,6 +79,30 @@
 		return () => window.removeEventListener('resize', readCover);
 	});
 
+	/*
+	 * The book around the canvas is paper, not a control. A pen or finger that
+	 * lands on the page's margin, the line under the drawing or the open cover
+	 * starts no magnifier, no text selection and no Scribble there, as on the
+	 * canvas: iPad keeps all three running unless a touchstart that is not
+	 * passive is prevented (Svelte registers `ontouchstart` as passive). What
+	 * can be pressed or typed in the book still can.
+	 */
+	let shellElement = $state<HTMLElement | null>(null);
+	const PRESSABLE = 'a, button, input, label, select, textarea, [contenteditable], [role="button"]';
+
+	$effect(() => {
+		if (!shellElement) return;
+		return on(
+			shellElement,
+			'touchstart',
+			(event) => {
+				if (event.target instanceof Element && event.target.closest(PRESSABLE)) return;
+				event.preventDefault();
+			},
+			{ passive: false }
+		);
+	});
+
 	let effectiveOpeningDurationMs = $derived(
 		prefersReducedMotion() ? REDUCED_MOTION_OPENING_DURATION_MS : openingDurationMs
 	);
@@ -112,6 +137,7 @@
 </script>
 
 <section
+	bind:this={shellElement}
 	class="book-shell"
 	data-arriving={arriving || undefined}
 	data-state={stageState}

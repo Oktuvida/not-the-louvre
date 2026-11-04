@@ -1,6 +1,6 @@
 import { page, userEvent } from 'vitest/browser';
 import { PAGE_FADE_DURATION_MS } from '#lib/features/shared-ui/page-fade.js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
 	DRAWING_DOCUMENT_V2_VERSION,
@@ -560,6 +560,119 @@ describe('StudioDrawingPage', () => {
 			drawLine(300);
 
 			await expectSaved((lines) => expect(lines.at(-1)?.color).toBe('#fdfbf7'));
+		});
+	});
+
+	/*
+	 * On a tablet the hand holding the pen rests on the glass, and the pen
+	 * slips off the canvas now and then. Neither may press, select or focus
+	 * anything around the page while the artist draws.
+	 */
+	describe('out of the drawing hand’s way', () => {
+		// The paint is shared studio state; the specs after these start with the usual one.
+		const usualColor = drawingTools.activeColor;
+		afterEach(() => {
+			drawingTools.activeColor = usualColor;
+		});
+
+		const openStudio = async () => {
+			await render(StudioDrawingPage, {
+				openingDurationMs: 1,
+				user: { nickname: 'journey_artist' }
+			});
+			await openSketchbook();
+			await expect
+				.element(page.getByLabelText('Drawing canvas'))
+				.toHaveAttribute('aria-disabled', 'false');
+
+			const canvas = page.getByLabelText('Drawing canvas').element() as HTMLCanvasElement;
+			vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+			vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+			vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+			const rect = canvas.getBoundingClientRect();
+			const at = (x: number, y: number) => ({
+				clientX: rect.left + (x / 768) * rect.width,
+				clientY: rect.top + (y / 768) * rect.height
+			});
+
+			return { at, canvas };
+		};
+
+		const touchStart = (target: Element) => {
+			const touchstart = new Event('touchstart', { bubbles: true, cancelable: true });
+			target.dispatchEvent(touchstart);
+			return touchstart.defaultPrevented;
+		};
+
+		/** A finger's tap, as the browser reports it: down, up, then the click. */
+		const tap = (target: Element, pointerId: number) => {
+			const finger = { pointerId, pointerType: 'touch', cancelable: true };
+			target.dispatchEvent(createPointerEvent('pointerdown', finger));
+			target.dispatchEvent(createPointerEvent('pointerup', { ...finger, buttons: 0 }));
+			target.dispatchEvent(
+				new PointerEvent('click', {
+					bubbles: true,
+					cancelable: true,
+					pointerId,
+					pointerType: 'touch'
+				})
+			);
+		};
+
+		const afterThePenLifts = () => new Promise((resolve) => setTimeout(resolve, 400));
+
+		it('starts no magnifier, selection or Scribble on the page around the canvas, but leaves its buttons pressable', async () => {
+			await render(StudioDrawingPage, {
+				openingDurationMs: 1,
+				user: { nickname: 'journey_artist' }
+			});
+			expect(touchStart(page.getByRole('button', { name: 'Open sketchbook' }).element())).toBe(
+				false
+			);
+
+			await openSketchbook();
+			const tagline = page.getByText('U might get a very expensive frame', { exact: false });
+
+			expect(touchStart(tagline.element())).toBe(true);
+		});
+
+		it('lets the hand resting on the paints press nothing while the pen draws, nor just after', async () => {
+			const { at, canvas } = await openStudio();
+			const red = page.getByRole('button', { name: 'Select color #E63030' }).element();
+			const blue = page.getByRole('button', { name: 'Select color #2563EB' }).element();
+			drawingTools.activeColor = '#1A1A1A';
+			const pen = { pointerId: 2, pointerType: 'pen' };
+
+			canvas.dispatchEvent(createPointerEvent('pointerdown', { ...pen, ...at(100, 100) }));
+			canvas.dispatchEvent(createPointerEvent('pointermove', { ...pen, ...at(300, 300) }));
+			expect(touchStart(red)).toBe(true);
+			tap(red, 11);
+			expect(drawingTools.activeColor).toBe('#1A1A1A');
+
+			canvas.dispatchEvent(
+				createPointerEvent('pointerup', { ...pen, ...at(300, 300), buttons: 0 })
+			);
+			tap(red, 12);
+			expect(drawingTools.activeColor).toBe('#1A1A1A');
+
+			// Once the pen has been up a moment, a finger picks a paint as ever.
+			await afterThePenLifts();
+			expect(touchStart(blue)).toBe(false);
+			tap(blue, 13);
+			expect(drawingTools.activeColor).toBe('#2563EB');
+		});
+
+		it('lets go of the title once a line starts, so the keyboard goes away', async () => {
+			const { at, canvas } = await openStudio();
+			const title = page.getByPlaceholder('Untitled genius').element() as HTMLInputElement;
+			title.focus();
+			expect(document.activeElement).toBe(title);
+
+			canvas.dispatchEvent(createPointerEvent('pointerdown', at(100, 100)));
+			canvas.dispatchEvent(createPointerEvent('pointermove', at(300, 300)));
+			canvas.dispatchEvent(createPointerEvent('pointerup', { ...at(300, 300), buttons: 0 }));
+
+			expect(document.activeElement).not.toBe(title);
 		});
 	});
 

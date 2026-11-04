@@ -19,7 +19,8 @@
 		attachPointerReleaseSafetyNet,
 		getCanvasContentRect,
 		getDrawingPointInRect,
-		hasLostPrimaryButton
+		hasLostPrimaryButton,
+		releaseTextField
 	} from '#lib/features/studio-drawing/pointer-drawing.js';
 	import {
 		createInkSurface,
@@ -327,6 +328,7 @@
 		strokesLeft = ink.remainingStrokes - 1;
 
 		event.preventDefault();
+		releaseTextField();
 		canvasRef.setPointerCapture(event.pointerId);
 		activePointerId = event.pointerId;
 		strokePointerType = event.pointerType;
