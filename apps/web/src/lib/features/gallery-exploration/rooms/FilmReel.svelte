@@ -4,6 +4,7 @@
 	import { writable, type Writable } from 'svelte/store';
 	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import ReelFramePhoto from './ReelFramePhoto.svelte';
 
 	/*
 	 * gsap is 27KB gzipped and the reel is the only thing in the whole gallery
@@ -425,19 +426,12 @@
 				revealedIds: $revealedIds
 			})}
 			<div class="reel-frame" style:opacity={slot.opacity} style:transform={slot.transform}>
-				<img
-					src={slot.artwork.imageUrl}
+				<ReelFramePhoto
 					alt={slot.artwork.title}
-					class="reel-frame-image"
-					class:nsfw-blurred={isSensitiveBlurred}
-					width={reelMetrics.frameSize}
-					height={reelMetrics.frameSize}
+					blurred={isSensitiveBlurred}
+					size={reelMetrics.frameSize}
+					src={slot.artwork.imageUrl}
 				/>
-				{#if isSensitiveBlurred}
-					<div class="nsfw-overlay">
-						<span class="nsfw-badge">18+</span>
-					</div>
-				{/if}
 			</div>
 		{/each}
 
@@ -509,43 +503,6 @@
 		.reel-container[data-reel-state='free-spinning'] .reel-frame {
 			will-change: auto;
 		}
-	}
-
-	.reel-frame-image {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		display: block;
-	}
-
-	/* The one censoring treatment, defined in routes/layout.css. The reel cannot
-	 * use <NsfwImage> — its slots are recycled mid-spin and the per-src fade
-	 * would blank frames — so it reads the same two properties instead of
-	 * carrying its own blur radius and scrim alpha. */
-	.nsfw-blurred {
-		scale: 1.04;
-		filter: blur(var(--nsfw-blur, 20px)) saturate(0);
-	}
-
-	.nsfw-overlay {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
-		border-radius: var(--radius-panel);
-	}
-
-	.nsfw-badge {
-		display: inline-block;
-		padding: 4px 12px;
-		border: 2px solid var(--color-paper-bright);
-		border-radius: 9999px;
-		font-size: 12px;
-		font-weight: 900;
-		color: var(--color-paper-bright);
 	}
 
 	@container reel (max-width: 639.98px) {

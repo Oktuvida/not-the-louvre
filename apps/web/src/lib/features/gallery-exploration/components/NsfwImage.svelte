@@ -7,6 +7,9 @@
 </script>
 
 <script lang="ts">
+	import UndevelopedNote from './UndevelopedNote.svelte';
+	import { createDevelopingPhoto } from './developing-photo.svelte.js';
+
 	let {
 		src,
 		alt,
@@ -41,73 +44,24 @@
 	// effect below only opens the fade when the image genuinely has not landed.
 	let isLoaded = $state(true);
 
+	/*
+	 * A photo that did not come: the polaroid stays empty, says so in pencil,
+	 * and asks for the photo again by itself (see developing-photo.svelte.ts).
+	 */
+	const photo = createDevelopingPhoto(() => src);
+
 	const markSettled = (settledSrc: string) => {
 		settledSources.add(settledSrc);
 		isLoaded = true;
-		undevelopedSrc = null;
+		photo.developed();
 	};
-
-	/*
-	 * A photo that did not come. The browser would draw its broken-image icon
-	 * and the bare title; the polaroid stays empty instead, says so in pencil,
-	 * and fetches the photo again by itself after a pause, then a longer one,
-	 * and whenever the connection comes back.
-	 */
-	const RETRY_AFTER_MS = [2_000, 6_000];
-	let undevelopedSrc = $state<string | null>(null);
-	const undeveloped = $derived(undevelopedSrc === src);
-	/** How many times the photo has been asked for again. */
-	let attempt = $state(0);
-	/*
-	 * The browser keeps a failed image under its address for as long as the
-	 * page lives, so a new try asks under a new one: the media route reads only
-	 * the format from the query.
-	 */
-	const requestedSrc = $derived(
-		attempt === 0 || /^(data|blob):/.test(src)
-			? src
-			: `${src}${src.includes('?') ? '&' : '?'}retry=${attempt}`
-	);
-	/*
-	 * The photo the failures count against, copied out of the `src` prop by
-	 * the effect below: an image can fail while its card or postcard is already
-	 * on its way out, when the prop's own source is gone, so the error handler
-	 * never reads the prop.
-	 */
-	let trackedSrc = '';
-	let failures = 0;
-	/** The element whose failure was last counted: the effect below runs again whenever the card re-renders. */
-	let failedImage: Element | null = null;
-	let retryTimer: ReturnType<typeof setTimeout> | undefined;
-
-	const tryAgain = () => {
-		clearTimeout(retryTimer);
-		retryTimer = undefined;
-		attempt += 1;
-	};
-
-	const markUndeveloped = (image: Element) => {
-		if (image === failedImage) return;
-		failedImage = image;
-		undevelopedSrc = trackedSrc;
-		clearTimeout(retryTimer);
-		const wait = RETRY_AFTER_MS[failures];
-		failures += 1;
-		retryTimer = wait === undefined ? undefined : setTimeout(tryAgain, wait);
-	};
-
-	$effect(() => () => clearTimeout(retryTimer));
 
 	$effect(() => {
 		const currentSrc = src;
-		if (currentSrc !== trackedSrc) {
-			trackedSrc = currentSrc;
-			failures = 0;
-		}
 
 		// A server-rendered photo can fail before the page wakes up.
 		if (imageElement?.complete && imageElement.naturalWidth === 0) {
-			markUndeveloped(imageElement);
+			photo.failed(imageElement);
 			return;
 		}
 
@@ -120,35 +74,29 @@
 	});
 </script>
 
-<svelte:window
-	ononline={() => {
-		if (undeveloped) tryAgain();
-	}}
-/>
-
 <!-- The linen background is the placeholder: the cream paper every drawing is
      made on, at no cost, until the photo fades in over it. -->
 <div class={`relative h-full w-full bg-linen ${className}`}>
-	{#key attempt}
+	{#key photo.attempt}
 		<img
 			bind:this={imageElement}
-			src={requestedSrc}
+			src={photo.requestedSrc}
 			{alt}
 			{loading}
 			{decoding}
 			{fetchpriority}
 			onload={() => {
-				markSettled(trackedSrc);
+				markSettled(photo.trackedSrc);
 			}}
-			onerror={(event) => markUndeveloped(event.currentTarget)}
+			onerror={(event) => photo.failed(event.currentTarget)}
 			aria-label={blurred ? ariaLabel : undefined}
 			class={`nsfw-photo relative h-full w-full object-cover ${blurred ? 'is-sensitive' : ''} ${
 				isLoaded ? 'is-loaded' : ''
-			} ${undeveloped ? 'is-undeveloped' : ''}`}
+			} ${photo.undeveloped ? 'is-undeveloped' : ''}`}
 		/>
 	{/key}
-	{#if undeveloped}
-		<p class="undeveloped">didn’t develop…</p>
+	{#if photo.undeveloped}
+		<UndevelopedNote />
 	{:else if blurred && showScrim}
 		<div class="nsfw-scrim">
 			<span class="rounded-full border-2 border-paper-bright px-3 py-1 text-xs font-black">18+</span
@@ -180,26 +128,6 @@
 	 * its name for a screen reader, and comes back when a new try lands. */
 	.nsfw-photo.is-undeveloped {
 		opacity: 0;
-	}
-
-	/* The empty polaroid, lightly hatched in pencil, says what happened. */
-	.undeveloped {
-		position: absolute;
-		inset: 0;
-		display: grid;
-		place-items: center;
-		margin: 0;
-		padding: 8%;
-		background-image: repeating-linear-gradient(
-			-45deg,
-			rgb(74 69 64 / 0.09) 0 1px,
-			transparent 1px 7px
-		);
-		color: var(--color-muted-ink);
-		font-family: var(--font-hand);
-		font-size: 1.15em;
-		text-align: center;
-		pointer-events: none;
 	}
 
 	.nsfw-photo.is-sensitive {

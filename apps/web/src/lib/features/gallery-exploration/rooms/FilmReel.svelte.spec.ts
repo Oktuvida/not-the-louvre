@@ -1,10 +1,23 @@
 import type { ComponentProps } from 'svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
 vi.mock('$app/environment', () => ({
 	browser: true
+}));
+
+// A visitor who asked for less motion sees a still reel. Specs that need every
+// frame to stay where it is opt in; the rest keep the moving reel.
+const motion = vi.hoisted(() => ({ reduced: false }));
+
+vi.mock('svelte/motion', async (importOriginal) => ({
+	...(await importOriginal<typeof import('svelte/motion')>()),
+	prefersReducedMotion: {
+		get current() {
+			return motion.reduced;
+		}
+	}
 }));
 
 vi.mock('#lib/client/gsap.js', () => {
@@ -188,5 +201,77 @@ describe('FilmReel', () => {
 			document.documentElement.style.removeProperty('--nsfw-blur');
 			document.documentElement.style.removeProperty('--nsfw-scrim');
 		}
+	});
+
+	describe('a photo that will not come', () => {
+		// A one-pixel GIF that really resolves, for the frames whose photo does come.
+		const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+		const piece = (id: string, title: string, imageUrl = PIXEL) =>
+			makeArtwork({ id, imageUrl, title });
+		const notes = () => page.getByText(/didn.t develop/i);
+
+		beforeEach(() => {
+			motion.reduced = true;
+		});
+
+		afterEach(() => {
+			motion.reduced = false;
+		});
+
+		// A frame whose photo never arrived showed the browser's broken-image icon
+		// and the bare title, spinning past like any other.
+		it('leaves the frame empty with a pencilled note instead of a broken picture', async () => {
+			await renderReel({
+				artworks: [
+					piece('lost', 'Lost Piece', '/no-such-artwork.webp'),
+					piece('calm', 'Calm Piece'),
+					piece('quiet', 'Quiet Piece')
+				]
+			});
+
+			await expect.element(notes().first()).toBeVisible();
+
+			const lost = page.getByRole('img', { name: 'Lost Piece' }).all();
+			expect(lost.length).toBeGreaterThan(0);
+			// Not drawn, so no broken picture shows; still named for a screen reader.
+			for (const image of lost) await expect.element(image).toHaveStyle({ opacity: '0' });
+			// Only the frames showing that artwork say so.
+			await expect.poll(() => notes().all().length).toBe(lost.length);
+		});
+
+		// The reel reuses its frames: when the pool grows, a frame that showed one
+		// artwork goes on to show another.
+		it('judges a reused frame by the artwork it shows now', async () => {
+			const calm = piece('calm', 'Calm Piece');
+			const quiet = piece('quiet', 'Quiet Piece');
+			const screen = await renderReel({
+				artworks: [piece('lost', 'Lost Piece', '/no-such-artwork.webp'), calm, quiet]
+			});
+			await expect.element(notes().first()).toBeVisible();
+
+			// Of the frames that showed the lost photo, some now show a photo that is
+			// fine and one shows another that will not come either.
+			await screen.rerender({
+				roomProps: {
+					artworks: [
+						piece('gone', 'Gone Piece', '/another-missing-artwork.webp'),
+						piece('fresh', 'Fresh Piece'),
+						calm,
+						quiet
+					],
+					onLand: () => {}
+				}
+			});
+
+			const gone = page.getByRole('img', { name: 'Gone Piece' });
+			await expect.poll(() => gone.all().length).toBeGreaterThan(0);
+			await expect.poll(() => notes().all().length).toBe(gone.all().length);
+			for (const image of gone.all()) await expect.element(image).toHaveStyle({ opacity: '0' });
+			for (const name of ['Fresh Piece', 'Calm Piece', 'Quiet Piece']) {
+				for (const image of page.getByRole('img', { name }).all()) {
+					await expect.element(image).toHaveStyle({ opacity: '1' });
+				}
+			}
+		});
 	});
 });
