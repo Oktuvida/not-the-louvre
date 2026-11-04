@@ -893,6 +893,45 @@ describeWithDatabase('artwork DB contract', () => {
 		expect(byId.get('artwork-hidden-origin')).toBeUndefined();
 	});
 
+	it('reads the visible forks of one artwork, newest first, a page at a time', async () => {
+		const { listArtworkDiscovery } = await import('./read.service');
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-origin' });
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-other' });
+		await insertArtwork(sql, { authorId: 'author-1', id: 'fork-old', parentId: 'artwork-origin' });
+		await insertArtwork(sql, { authorId: 'author-1', id: 'fork-new', parentId: 'artwork-origin' });
+		await insertArtwork(sql, {
+			authorId: 'author-1',
+			id: 'fork-hidden',
+			isHidden: true,
+			parentId: 'artwork-origin'
+		});
+		await insertArtwork(sql, {
+			authorId: 'author-1',
+			id: 'fork-elsewhere',
+			parentId: 'artwork-other'
+		});
+		await sql`update app.artworks set created_at = '2026-04-01T10:00:00.000Z' where id = 'fork-new'`;
+
+		const first = await listArtworkDiscovery({
+			cursor: null,
+			limit: 1,
+			parentId: 'artwork-origin',
+			sort: 'recent'
+		});
+		expect(first.items.map((item) => item.id)).toEqual(['fork-new']);
+		expect(first.pageInfo.hasMore).toBe(true);
+
+		const second = await listArtworkDiscovery({
+			cursor: first.pageInfo.nextCursor,
+			limit: 1,
+			parentId: 'artwork-origin',
+			sort: 'recent'
+		});
+		expect(second.items.map((item) => item.id)).toEqual(['fork-old']);
+		expect(second.pageInfo.hasMore).toBe(false);
+	});
+
 	it('sums up an artist from what visitors can see of their work', async () => {
 		const { getArtistStudio } = await import('./read.service');
 

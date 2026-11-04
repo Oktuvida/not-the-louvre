@@ -836,7 +836,18 @@
 										<p
 											class="truncate text-[0.75rem] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
 										>
-											{forkAttribution}
+											{#if artwork.lineage?.parent}
+												<a
+													class="postcard-lineage focus-ring"
+													href={resolve('/gallery/forks/[artworkId]', {
+														artworkId: artwork.lineage.parent.id
+													})}
+												>
+													{forkAttribution}
+												</a>
+											{:else}
+												{forkAttribution}
+											{/if}
 										</p>
 									{/if}
 									<p class="postcard-signature truncate">
@@ -1113,8 +1124,18 @@
 											</span>
 										</p>
 										<p class="catalogue-row catalogue-row-last">
-											<span class="catalogue-key">Forks</span>
-											<span class="catalogue-hand catalogue-forks">{artwork.forkCount ?? 0}</span>
+											{#if artwork.forkCount}
+												<a
+													class="catalogue-forks-link focus-ring"
+													href={resolve('/gallery/forks/[artworkId]', { artworkId: artwork.id })}
+												>
+													<span class="catalogue-key">Forks</span>
+													<span class="catalogue-hand catalogue-forks">{artwork.forkCount} →</span>
+												</a>
+											{:else}
+												<span class="catalogue-key">Forks</span>
+												<span class="catalogue-hand catalogue-forks">0</span>
+											{/if}
 										</p>
 										{#if artwork.rank && artwork.rank <= 3}
 											<span class="catalogue-honour" aria-hidden="true">Hall of Fame</span>
@@ -1503,6 +1524,25 @@
 	.postcard-artist {
 		color: inherit;
 		text-decoration: none;
+	}
+
+	.postcard-lineage {
+		color: inherit;
+		text-decoration: underline dotted currentColor;
+		text-decoration-thickness: 1.5px;
+		text-underline-offset: 3px;
+	}
+
+	.catalogue-forks-link {
+		display: contents;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.catalogue-forks-link .catalogue-forks {
+		text-decoration: underline dotted currentColor;
+		text-decoration-thickness: 1.5px;
+		text-underline-offset: 3px;
 	}
 
 	.postcard-artist-name {

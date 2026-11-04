@@ -33,7 +33,7 @@ export const resetDemoState = async (request: APIRequestContext) => {
 export const publishArtworkThroughActions = async (
 	request: APIRequestContext,
 	baseURL: string | undefined,
-	options: { isNsfw?: boolean; title: string }
+	options: { isNsfw?: boolean; parentArtworkId?: string; title: string }
 ) => {
 	const { nickname, password } = deterministicAuthUser;
 	const headers = { origin: baseURL ?? '', 'x-sveltekit-action': 'true' };
@@ -55,6 +55,7 @@ export const publishArtworkThroughActions = async (
 				]
 			}),
 			isNsfw: options.isNsfw ? 'true' : 'false',
+			...(options.parentArtworkId ? { parentArtworkId: options.parentArtworkId } : {}),
 			title: options.title
 		},
 		headers
