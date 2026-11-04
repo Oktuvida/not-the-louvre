@@ -109,7 +109,10 @@ test.describe('moving between rooms', () => {
 	// The slide holds the navigation until the browser has its picture of the
 	// room being left, which on a heavy room in Safari takes a while. Going
 	// back inside that moment used to apply the abandoned navigation over the
-	// one that replaced it: the Hot Wall's address over the Hall of Fame.
+	// one that replaced it: the Hot Wall's address over the Hall of Fame. And
+	// nothing takes the window to the top on the way out then, so the wall
+	// comes back up under a window that is already where the visitor left it,
+	// and has to draw its cards there without a scroll to tell it where that is.
 	test('lets the visitor turn back before the slide has started', async ({ page, request }) => {
 		// A wall deep enough to scroll into.
 		await resetDemoState(request);
