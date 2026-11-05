@@ -14,6 +14,11 @@ const workerVariables = {
 };
 
 export default defineConfig({
+	// One `wrangler dev` serves everything, and a busy machine can freeze every
+	// request at once for ten seconds and more. A publish is two of those in a
+	// row, and the journeys that walk every screen load dozens of pages.
+	expect: { timeout: 15_000 },
+	timeout: 60_000,
 	use: {
 		baseURL: 'http://localhost:4173',
 		// Headless Chromium no longer falls back to software WebGL on its own, and

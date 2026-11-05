@@ -21,7 +21,13 @@ export const deterministicArtwork = {
 export const resetDemoState = async (request: APIRequestContext) => {
 	// A body makes this a JSON request: SvelteKit 3 refuses body-less cross-site
 	// POSTs as if they were form submissions.
-	const response = await request.post('/demo/test-support/reset', { data: {} });
+	const reset = () => request.post('/demo/test-support/reset', { data: {} });
+
+	// A read the last test left running can deadlock with the truncate, and
+	// Postgres drops one of the two. Truncating again is always safe.
+	let response = await reset();
+	for (let attempt = 0; attempt < 2 && !response.ok(); attempt += 1) response = await reset();
+
 	expect(response.ok(), 'expected demo reset endpoint to succeed').toBe(true);
 	return response;
 };
