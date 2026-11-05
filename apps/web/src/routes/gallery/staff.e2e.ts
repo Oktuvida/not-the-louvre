@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { resetDemoState } from '../demo/e2e-helpers';
+import { createEmptyDrawingDocument } from '../../lib/features/stroke-json/document';
+import { deterministicAuthUser, resetDemoState } from '../demo/e2e-helpers';
 
 // Who keeps the museum: the wall ends at the velvet rope, and its label leads
 // to the staff, by the names they go by, with their GitHub and Discord.
@@ -37,6 +38,56 @@ test.describe('the museum staff', () => {
 		await expect(
 			page.getByTestId('gallery-room-header').locator('nav [aria-current="page"]')
 		).toHaveCount(0);
+	});
+
+	test('are behind the title over the front door, for whoever tries it', async ({
+		baseURL,
+		page,
+		request
+	}) => {
+		await resetDemoState(request);
+		const headers = { origin: baseURL ?? '', 'x-sveltekit-action': 'true' };
+		await page.request.post('/?/signUp', { form: deterministicAuthUser, headers });
+		await page.request.post('/?/saveAvatar', {
+			form: {
+				drawingDocument: JSON.stringify({
+					...createEmptyDrawingDocument('avatar'),
+					strokes: [
+						{
+							color: '#2d2420',
+							points: [
+								[100, 100],
+								[300, 300]
+							],
+							size: 12
+						}
+					]
+				})
+			},
+			headers
+		});
+
+		await page.goto('/');
+		const title = page.getByRole('heading', { name: 'NOT THE LOUVRE' });
+		await expect(title).toBeVisible();
+		await title.getByRole('link').click();
+
+		await expect(page).toHaveURL(/\/gallery\/staff$/);
+		await expect(page.getByRole('heading', { name: 'Museum staff' })).toBeVisible();
+	});
+
+	// Outside, the title is behind the wall: pressing the window's cornice, over
+	// where it lies, must not lead anywhere.
+	test('are not behind anything a visitor outside cannot see', async ({ page }) => {
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Come In' }).waitFor();
+		const title = page.getByRole('heading', { name: 'NOT THE LOUVRE' });
+		const box = await title.boundingBox();
+		if (!box) throw new Error('The title is not on the page');
+
+		await expect(title.getByRole('link')).toHaveCount(0);
+		await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+		await expect(page).not.toHaveURL(/\/gallery\/staff$/);
 	});
 
 	test('go by their own names, with their GitHub and Discord', async ({ page }) => {

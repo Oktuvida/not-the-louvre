@@ -370,7 +370,7 @@
 			</div>
 		</div>
 	</div>
-	<HomeHeroOverlay {isExiting} />
+	<HomeHeroOverlay {isExiting} isInside={Boolean(user)} />
 	<PersistentNav
 		{adultContentEnabled}
 		{isExiting}

@@ -1,9 +1,29 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 	import { cutoutTitleAssetUrl } from '#lib/features/shared-ui/generated-art.js';
 
-	let { isExiting = false }: { isExiting?: boolean } = $props();
+	let {
+		isExiting = false,
+		isInside = false
+	}: {
+		isExiting?: boolean;
+		/** The visitor is in the room: outside, the title is behind the wall. */
+		isInside?: boolean;
+	} = $props();
 </script>
+
+{#snippet ransomNote()}
+	<picture>
+		<source
+			media="(orientation: portrait)"
+			srcset={cutoutTitleAssetUrl('stacked')}
+			width="494"
+			height="254"
+		/>
+		<img src={cutoutTitleAssetUrl('wide')} alt="Not the Louvre" width="943" height="140" />
+	</picture>
+{/snippet}
 
 <AmbientParticleOverlay />
 
@@ -14,17 +34,16 @@
 	class:opacity-0={isExiting}
 >
 	<!-- A ransom note cut from magazines and newspapers: one line on a screen
-	     on its side, two on an upright one. -->
+	     on its side, two on an upright one. Whoever tries pressing it meets who
+	     cut it out. -->
 	<h1 class="home-hero-title">
-		<picture>
-			<source
-				media="(orientation: portrait)"
-				srcset={cutoutTitleAssetUrl('stacked')}
-				width="494"
-				height="254"
-			/>
-			<img src={cutoutTitleAssetUrl('wide')} alt="Not the Louvre" width="943" height="140" />
-		</picture>
+		{#if isInside}
+			<a class="home-hero-link focus-ring" href={resolve('/gallery/staff')} title="Meet the staff">
+				{@render ransomNote()}
+			</a>
+		{:else}
+			{@render ransomNote()}
+		{/if}
 	</h1>
 	<p
 		class="relative mx-auto mt-3 w-fit rotate-[-1.5deg] px-8 py-2 text-center text-xl text-[#4a3a30] italic"
@@ -93,6 +112,21 @@
 		display: block;
 		width: clamp(20rem, 42vw, 44rem);
 		height: auto;
+	}
+
+	.home-hero-link {
+		display: block;
+		transition: rotate var(--duration-ui) ease;
+	}
+
+	.home-hero-link:hover {
+		rotate: -0.6deg;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.home-hero-link {
+			transition: none;
+		}
 	}
 
 	@media (orientation: portrait) {
