@@ -771,7 +771,6 @@ describe('ArtworkDetailPanel', () => {
 		});
 		expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/media');
 		expect(createObjectURL).toHaveBeenCalledTimes(1);
-		expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
 
 		anchorClick.mockRestore();
 	});

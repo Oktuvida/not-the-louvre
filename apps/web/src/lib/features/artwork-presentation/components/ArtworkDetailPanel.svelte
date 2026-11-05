@@ -28,6 +28,7 @@
 	import InkStamp from '#lib/features/shared-ui/components/InkStamp.svelte';
 	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
 	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import { saveBlob } from '#lib/client/save-blob.js';
 	import TimelapsePlayer from '#lib/features/timelapse/TimelapsePlayer.svelte';
 	import { decodeDrawingV3, type InkDocument } from '#lib/stroke/v3.js';
 	import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
@@ -54,6 +55,7 @@
 	const COMMENT_FAILED_MESSAGE = "The visitor's book didn't take your entry.";
 	const DOWNLOAD_FAILED_MESSAGE = "The download didn't start. Try again in a moment.";
 	const TIMELAPSE_FAILED_MESSAGE = "The timelapse wouldn't play. Try again in a moment.";
+	const VIDEO_FAILED_MESSAGE = "The video didn't come out. Try again in a moment.";
 	const ADULT_PREFERENCE_FAILED_MESSAGE = "Your 18+ setting didn't save. Try again in a moment.";
 
 	/* Thrown with copy that is already safe to show; anything else that reaches
@@ -480,6 +482,12 @@
 		'image/webp': 'webp'
 	};
 
+	const fileNameFor = (title: string) =>
+		title
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/(^-|-$)/g, '') || 'artwork';
+
 	const downloadArtwork = async () => {
 		if (!artwork || isDownloading) return;
 
@@ -494,18 +502,7 @@
 
 			const blob = await response.blob();
 			const extension = downloadExtensions[blob.type] ?? 'png';
-			const safeTitle =
-				artwork.title
-					.toLowerCase()
-					.replace(/[^a-z0-9]+/g, '-')
-					.replace(/(^-|-$)/g, '') || 'artwork';
-
-			const objectUrl = URL.createObjectURL(blob);
-			const anchor = document.createElement('a');
-			anchor.href = objectUrl;
-			anchor.download = `${safeTitle}.${extension}`;
-			anchor.click();
-			URL.revokeObjectURL(objectUrl);
+			saveBlob(blob, `${fileNameFor(artwork.title)}.${extension}`);
 		} catch (error) {
 			notify(toActionError(error, DOWNLOAD_FAILED_MESSAGE));
 		} finally {
@@ -768,6 +765,8 @@
 												drawing={timelapse.drawing}
 												label={`Timelapse of ${artwork.title}`}
 												onClose={() => (timelapse = null)}
+												onVideoFailed={() => notify(VIDEO_FAILED_MESSAGE)}
+												videoName={fileNameFor(artwork.title)}
 											/>
 										</div>
 									{/if}

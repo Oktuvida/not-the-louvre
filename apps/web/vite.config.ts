@@ -124,6 +124,8 @@ export default defineConfig(({ mode }) => {
 					plugins: [keepComponentTestsOffTheBackend],
 					test: {
 						name: 'client',
+						// Only ever imported on demand: found mid-run, Vite would reload the specs.
+						deps: { optimizer: { client: { include: ['mediabunny'] } } },
 						browser: {
 							enabled: true,
 							provider: playwright(),
