@@ -99,6 +99,10 @@ test.describe('the museum staff', () => {
 			'https://github.com/GH-Jaider'
 		);
 		await expect(hiThere.getByText('hi__there')).toBeVisible();
+		await expect(hiThere.getByRole('link', { name: 'Ko-fi' })).toHaveAttribute(
+			'href',
+			'https://ko-fi.com/hit_here'
+		);
 		await expect(hiThere.getByRole('img', { name: 'HiThere' })).toBeVisible();
 
 		const oktuvida = plate(page, 'Oktuvida');

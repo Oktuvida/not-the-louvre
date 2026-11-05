@@ -1,12 +1,13 @@
 <script lang="ts">
 	import Bookplate from '#lib/features/shared-ui/components/Bookplate.svelte';
+	import { KOFI_HANDLE } from '#lib/features/shared-ui/support.js';
 
 	/*
 	 * By the names they go by. The photos are their GitHub profile pictures,
 	 * read from GitHub each time, so they stay whatever each of them has there.
 	 */
 	const staff = [
-		{ discord: 'hi__there', github: 'GH-Jaider', name: 'HiThere', tilt: -1.2 },
+		{ discord: 'hi__there', github: 'GH-Jaider', kofi: KOFI_HANDLE, name: 'HiThere', tilt: -1.2 },
 		{ discord: 'oktuvida', github: 'Oktuvida', name: 'Oktuvida', tilt: 1 }
 	];
 </script>
@@ -31,6 +32,15 @@
 					target="_blank">GitHub</a
 				>
 				· Discord: {member.discord}
+				{#if member.kofi}
+					·
+					<a
+						class="staff-link focus-ring"
+						href={`https://ko-fi.com/${member.kofi}`}
+						rel="noopener noreferrer"
+						target="_blank">Ko-fi</a
+					>
+				{/if}
 			</Bookplate>
 		{/each}
 	</div>

@@ -14,6 +14,7 @@
 	import { onMount } from 'svelte';
 	import AmbientAudioController from '#lib/features/ambient-audio/AmbientAudioController.svelte';
 	import SiteMeta from '#lib/features/shared-ui/components/SiteMeta.svelte';
+	import TipCup from '#lib/features/shared-ui/components/TipCup.svelte';
 	import { readRouteMeta } from '#lib/features/shared-ui/site-meta.js';
 	/*
 	 * The house typefaces, self-hosted as variable fonts (`fonts.css` says why
@@ -110,6 +111,11 @@
 	bootstrappedPreference={data.ambientAudioEnabled}
 	viewerId={data.viewer?.id ?? null}
 />
+
+<!-- The studio asks for nothing but the drawing. -->
+{#if page.route?.id !== '/draw'}
+	<TipCup />
+{/if}
 
 {#if data.viewer && !data.viewer.isBanned && data.viewer.role !== 'user'}
 	<a class="ops-link focus-ring" href={resolve('admin')}>Ops</a>
