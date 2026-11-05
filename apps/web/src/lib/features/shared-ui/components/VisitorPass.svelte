@@ -56,7 +56,9 @@
 	{#each ['pass-shadow-soft', 'pass-shadow-tight'] as layer (layer)}
 		<span class={`pass-shadow ${layer}`} aria-hidden="true">
 			<span class="pass-shadow-body"></span>
-			<span class="pass-shadow-stub" class:is-torn={torn}></span>
+		</span>
+		<span class={`pass-shadow pass-shadow-tilting ${layer}`} aria-hidden="true">
+			<span class="pass-shadow-stub" data-testid="pass-stub-shadow"></span>
 		</span>
 	{/each}
 	<span class="pass-tape tape" aria-hidden="true"></span>
@@ -116,6 +118,8 @@
 		--body-width: 15em;
 		--stub-width: 4.6em;
 		--stub-tilt: 2deg;
+		--stub-motion:
+			rotate 260ms cubic-bezier(0.3, 1.4, 0.5, 1), translate 320ms ease-in, opacity 320ms ease-in;
 		/* The perforation's punched notches, cut at the top and bottom of the
 		 * pass's right edge and the stub's left one. */
 		--body-notches:
@@ -136,26 +140,29 @@
 	 * `drop-shadow` filter over the pass. A piece that lifts or tilts under the
 	 * pointer becomes a compositing layer while it moves, and Safari then drew
 	 * the filtered pass's shadow as the box around it, a pale rectangle behind
-	 * the ticket. The silhouettes never move, so nothing that moves is filtered:
-	 * the ticket lifts off its shadow instead.
+	 * the ticket. So each silhouette carries its own blur, with nothing moving
+	 * inside it: the pass lifts off its shadow, and the stub's shadow turns whole
+	 * on the stub's hinge.
 	 */
 	.pass-shadow {
 		position: absolute;
-		inset: 0;
+		top: 0;
+		left: 0;
 		display: flex;
+		translate: 0 var(--shadow-drop);
 		pointer-events: none;
 	}
 
 	/* Two layers, as on paper: a soft shade a little way down, and the dark
 	 * line right under the edge. A blur's deviation is half a shadow's radius. */
 	.pass-shadow-soft {
-		translate: 0 0.45em;
+		--shadow-drop: 0.45em;
 		filter: blur(0.275em);
 		--shade: rgb(40 25 10 / 0.3);
 	}
 
 	.pass-shadow-tight {
-		translate: 0 1px;
+		--shadow-drop: 1px;
 		filter: blur(0.5px);
 		--shade: rgb(40 25 10 / 0.22);
 	}
@@ -174,16 +181,15 @@
 
 	.pass-shadow-stub {
 		width: var(--stub-width);
-		margin-left: -1px;
-		transform-origin: 0 100%;
-		rotate: var(--stub-tilt);
 		mask: var(--stub-notches);
-		transition: opacity 320ms ease-in;
 	}
 
-	/* A stub torn off takes its shadow with it. */
-	.pass-shadow-stub.is-torn {
-		opacity: 0;
+	/* Hung where the stub hangs, so it goes wherever the stub goes. */
+	.pass-shadow-tilting {
+		left: calc(var(--body-width) - 1px);
+		transform-origin: 0 100%;
+		rotate: var(--stub-tilt);
+		transition: var(--stub-motion);
 	}
 
 	.pass-tape {
@@ -358,21 +364,21 @@
 		color: #b5473c;
 		transform-origin: 0 100%;
 		rotate: var(--stub-tilt);
-		transition:
-			rotate 260ms cubic-bezier(0.3, 1.4, 0.5, 1),
-			translate 320ms ease-in,
-			opacity 320ms ease-in;
+		transition: var(--stub-motion);
 	}
 
 	.pass-stub:hover,
-	.pass-stub:focus-visible {
+	.pass-stub:focus-visible,
+	.visitor-pass:has(.pass-stub:hover) .pass-shadow-tilting,
+	.visitor-pass:has(.pass-stub:focus-visible) .pass-shadow-tilting {
 		rotate: 8deg;
 	}
 
-	/* Torn off: it drops away before the visitor leaves. */
-	.pass-stub.is-torn {
+	/* Torn off: it drops away, with its shadow, before the visitor leaves. */
+	.pass-stub.is-torn,
+	.visitor-pass:has(.pass-stub.is-torn) .pass-shadow-tilting {
 		rotate: 26deg;
-		translate: 0.8em 1.6em;
+		translate: 0.8em calc(1.6em + var(--shadow-drop, 0px));
 		opacity: 0;
 	}
 
@@ -406,7 +412,8 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.pass-stub {
+		.pass-stub,
+		.pass-shadow-tilting {
 			transition: none;
 		}
 	}
