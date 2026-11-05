@@ -1,5 +1,5 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { InkDocument, InkStroke } from '#lib/stroke/v3.js';
 import TimelapsePlayer from './TimelapsePlayer.svelte';
@@ -98,9 +98,11 @@ describe('TimelapsePlayer', () => {
 	});
 
 	it('stops where the visitor pauses it', async () => {
-		// One long line, a little over two seconds.
+		// Half a minute of lines: time enough to press Pause on any machine.
 		const { slider } = await renderPlayer({
-			drawing: drawing([line([100, 100], [700, 700], 0, 220)])
+			drawing: drawing(
+				Array.from({ length: 12 }, (_, i) => line([100, 100], [700, 700], i * 2600, 220))
+			)
 		});
 
 		await page.getByRole('button', { name: 'Pause' }).click();
@@ -125,6 +127,127 @@ describe('TimelapsePlayer', () => {
 		});
 
 		await expect.poll(() => colourAt(700, 100)).toEqual(RED);
+	});
+
+	describe('saving it as a video', () => {
+		const VIDEO = { blob: new Blob(['video'], { type: 'video/mp4' }), extension: 'mp4' };
+
+		afterEach(() => {
+			vi.unstubAllGlobals();
+			vi.restoreAllMocks();
+		});
+
+		const saved = () => {
+			const names: string[] = [];
+			vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+				this: HTMLAnchorElement
+			) {
+				names.push(this.download);
+			});
+			return names;
+		};
+
+		it('saves the replay under the name of the piece', async () => {
+			const names = saved();
+			const exportVideo = vi.fn().mockResolvedValue(VIDEO);
+
+			await renderPlayer({
+				autoplay: false,
+				backdropUrl: '/parent.webp',
+				drawing: twoLines,
+				exportVideo,
+				videoName: 'two-lines'
+			} as never);
+			await page.getByRole('button', { name: 'Save as video' }).click();
+
+			await vi.waitFor(() => expect(names).toEqual(['two-lines.mp4']));
+			expect(exportVideo.mock.calls[0]![0]).toMatchObject({
+				backdropUrl: '/parent.webp',
+				drawing: twoLines
+			});
+		});
+
+		it('shows how far along it is, and stays pressed until it is done', async () => {
+			saved();
+			let report: (share: number) => void = () => {};
+			let finish: (video: typeof VIDEO) => void = () => {};
+			const exportVideo = vi.fn(({ onProgress }: { onProgress: (share: number) => void }) => {
+				report = onProgress;
+				return new Promise((resolve) => (finish = resolve));
+			});
+
+			await renderPlayer({
+				autoplay: false,
+				drawing: twoLines,
+				exportVideo,
+				videoName: 'two-lines'
+			} as never);
+			await page.getByRole('button', { name: 'Save as video' }).click();
+
+			report(0.42);
+			const working = page.getByRole('button', { name: /Making the video/ });
+			await expect.element(working).toHaveTextContent('42%');
+			await expect.element(working).toBeDisabled();
+
+			finish(VIDEO);
+			await expect.element(page.getByRole('button', { name: 'Save as video' })).toBeEnabled();
+			expect(exportVideo).toHaveBeenCalledOnce();
+		});
+
+		it('says so when the video could not be made, and lets the visitor try again', async () => {
+			const onVideoFailed = vi.fn();
+
+			await renderPlayer({
+				autoplay: false,
+				drawing: twoLines,
+				exportVideo: vi.fn().mockRejectedValue(new Error('no encoder')),
+				onVideoFailed,
+				videoName: 'two-lines'
+			} as never);
+			await page.getByRole('button', { name: 'Save as video' }).click();
+
+			await vi.waitFor(() => expect(onVideoFailed).toHaveBeenCalledOnce());
+			await expect.element(page.getByRole('button', { name: 'Save as video' })).toBeEnabled();
+		});
+
+		it('gives up on the video when the replay is closed, without a word', async () => {
+			const onVideoFailed = vi.fn();
+			let signal: AbortSignal | undefined;
+			const exportVideo = vi.fn((options: { signal: AbortSignal }) => {
+				signal = options.signal;
+				return new Promise((_, reject) => {
+					options.signal.addEventListener('abort', () =>
+						reject(new DOMException('Gave up', 'AbortError'))
+					);
+				});
+			});
+
+			const screen = await render(TimelapsePlayer, {
+				autoplay: false,
+				drawing: twoLines,
+				exportVideo,
+				label: 'Timelapse',
+				onVideoFailed,
+				videoName: 'two-lines'
+			} as never);
+			await page.getByRole('button', { name: 'Save as video' }).click();
+			await vi.waitFor(() => expect(signal).toBeDefined());
+
+			await screen.unmount();
+
+			expect(signal?.aborted).toBe(true);
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			expect(onVideoFailed).not.toHaveBeenCalled();
+		});
+
+		it('is not offered where the browser cannot make video', async () => {
+			vi.stubGlobal('VideoEncoder', undefined);
+
+			await renderPlayer({ autoplay: false, drawing: twoLines, videoName: 'two-lines' } as never);
+
+			await expect.element(page.getByRole('button', { name: /^Speed/ })).toBeVisible();
+			expect(page.getByRole('button', { name: 'Save as video' }).query()).toBeNull();
+		});
 	});
 
 	it('speeds up when asked', async () => {

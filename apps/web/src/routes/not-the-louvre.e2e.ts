@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import { getRenderableDrawingStrokes } from '../lib/features/stroke-json/document';
 import { parseEditableDrawing } from '../lib/features/stroke-json/ink-document';
@@ -947,6 +948,29 @@ test.describe('Not the Louvre frontend port', () => {
 		// Back at the start, the paper is blank again.
 		await page.getByRole('slider', { name: 'Replay position' }).fill('0');
 		await expect.poll(() => readCanvasCenterPixel(replay)).toEqual([253, 251, 247, 255]);
+	});
+
+	test('a visitor takes the timelapse away as a video', async ({ page }) => {
+		await page.goto('/demo/better-auth/login');
+		await signUpThroughNicknameDemo(page);
+		await page.goto('/draw');
+		await openDrawSketchbook(page);
+		await drawLineThroughCentre(page);
+		await page.getByPlaceholder('Untitled genius').fill('Worth Keeping!');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		await page.goto('/gallery/your-studio');
+		await page.getByRole('button', { name: /Worth Keeping/ }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Watch it being drawn' }).click();
+
+		const download = page.waitForEvent('download');
+		await page.getByRole('button', { name: 'Save as video' }).click();
+
+		const video = await download;
+		expect(video.suggestedFilename()).toMatch(/^worth-keeping\.(mp4|webm)$/);
+		const bytes = (await readFile(await video.path())).byteLength;
+		expect(bytes).toBeGreaterThan(1024);
 	});
 
 	test("a fork's timelapse replays over the picture it was forked from", async ({ page }) => {

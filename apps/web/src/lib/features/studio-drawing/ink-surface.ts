@@ -53,6 +53,8 @@ export type InkSurface = {
 	wet(stroke: DrawingStroke | null, predicted?: DrawingPoint[]): void;
 	/** The image a fork is drawn over, under every stroke; or none. */
 	setBackdrop(image: CanvasImageSource | null): void;
+	/** Paints now instead of on the next frame, for a video reading each frame. */
+	flush(): void;
 	/** The brush cursor at a document point, or none; the eraser's is a ring. */
 	cursor(point: DrawingPoint | null, color: string, size: number, ring: boolean): void;
 	destroy(): void;
@@ -226,6 +228,10 @@ export const createInkSurface = (
 			backdrop = image;
 			paintDry();
 			schedule();
+		},
+		flush() {
+			cancelAnimationFrame(frame);
+			paint();
 		},
 		cursor(point, color, size, ring) {
 			cursor = point ? { color, point, ring, size } : null;

@@ -55,6 +55,7 @@
 		"gsap": "^3.14.2",
 		"jose": "^6.2.2",
 		"lucide-svelte": "^1.0.1",
+		"mediabunny": "1.62.0",
 		"perfect-freehand": "^1.2.3",
 		"pg": "^8.23.1",
 		"three": "^0.183.2",

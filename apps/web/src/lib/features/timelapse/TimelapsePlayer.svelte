@@ -1,37 +1,39 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Pause, Play, RotateCcw, X } from 'lucide-svelte';
+	import { Download, Pause, Play, RotateCcw, X } from 'lucide-svelte';
+	import { saveBlob } from '#lib/client/save-blob.js';
 	import { createInkSurface, type InkSurface } from '#lib/features/studio-drawing/ink-surface.js';
-	import {
-		DRAWING_DOCUMENT_V2_VERSION,
-		type DrawingDocumentV2,
-		type DrawingStroke
-	} from '#lib/features/stroke-json/document.js';
-	import type { InkDocument, InkStroke } from '#lib/stroke/v3.js';
-	import { buildTimeline, drawnAt } from './timeline';
+	import type { InkDocument } from '#lib/stroke/v3.js';
+	import { canExportVideo, exportTimelapseVideo } from './export-video';
+	import { createReplay } from './replay';
 
 	/*
-	 * An artwork drawn again, stroke by stroke, at the pace it was drawn. The
-	 * studio's ink surface does the painting: finished strokes go onto its dry
-	 * layer one at a time as the replay passes them, and the stroke being drawn
-	 * is its wet stroke, so a frame costs one stroke however big the drawing.
-	 * Scrubbing back repaints the strokes up to that moment.
+	 * An artwork drawn again, stroke by stroke, at the pace it was drawn, on the
+	 * studio's ink surface. A visitor can take it away as a video, which is made
+	 * on a surface of its own and leaves the replay on screen alone.
 	 */
 
 	let {
 		drawing,
 		backdropUrl = null,
 		autoplay = true,
+		exportVideo = exportTimelapseVideo,
 		label = 'Timelapse',
-		onClose
+		onClose,
+		onVideoFailed,
+		videoName
 	}: {
 		/** The drawing; it is read once, so a new one needs a new player. */
 		drawing: InkDocument;
 		/** The image a fork was drawn over, under every stroke. */
 		backdropUrl?: string | null;
 		autoplay?: boolean;
+		exportVideo?: typeof exportTimelapseVideo;
 		label?: string;
 		onClose?: () => void;
+		onVideoFailed?: () => void;
+		/** What to call the video, without its extension; none, and none is offered. */
+		videoName?: string;
 	} = $props();
 
 	const SPEEDS = [1, 2, 4, 8, 16];
@@ -39,8 +41,8 @@
 	const COMFORTABLE_REPLAY_MS = 30_000;
 
 	// svelte-ignore state_referenced_locally
-	const strokes = drawing.strokes;
-	const timeline = buildTimeline(strokes);
+	const replay = createReplay(drawing);
+	const { timeline } = replay;
 	const initialSpeed =
 		SPEEDS.find((speed) => timeline.duration / speed <= COMFORTABLE_REPLAY_MS) ?? SPEEDS.at(-1)!;
 
@@ -53,46 +55,9 @@
 
 	const finished = $derived(!playing && at >= timeline.duration);
 
-	// The strokes on the dry layer: the document's tail grows and shrinks in
-	// place, so passing a stroke costs one push, not a copy of the drawing.
-	const shownStrokes: DrawingStroke[] = [];
-	// svelte-ignore state_referenced_locally
-	const shown: DrawingDocumentV2 = {
-		background: drawing.background,
-		base: [],
-		height: drawing.height,
-		kind: drawing.kind,
-		tail: shownStrokes,
-		version: DRAWING_DOCUMENT_V2_VERSION,
-		width: drawing.width
-	};
-
-	const partOf = (stroke: InkStroke, points: number): DrawingStroke => ({
-		...stroke,
-		points: stroke.points.slice(0, points),
-		...(stroke.pressures ? { pressures: stroke.pressures.slice(0, points) } : {}),
-		times: stroke.times.slice(0, points)
-	});
-
-	const showMoment = (target: InkSurface, moment: number) => {
-		const drawn = drawnAt(timeline, moment);
-
-		if (drawn.finished < shownStrokes.length) {
-			shownStrokes.length = drawn.finished;
-			target.showDocument(shown);
-		}
-		while (shownStrokes.length < drawn.finished) {
-			const stroke = strokes[shownStrokes.length]!;
-			shownStrokes.push(stroke);
-			target.append(shown, stroke);
-		}
-
-		target.wet(drawn.current ? partOf(strokes[drawn.current.index]!, drawn.current.points) : null);
-	};
-
 	$effect(() => {
 		const moment = at;
-		if (surface) showMoment(surface, moment);
+		if (surface) replay.showMoment(surface, moment);
 	});
 
 	let frame = 0;
@@ -127,6 +92,36 @@
 		speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]!;
 	};
 
+	const canSaveVideo = canExportVideo();
+	let videoProgress = $state<number | null>(null);
+	let giveUpOnVideo: AbortController | null = null;
+	const videoPercent = $derived(Math.round((videoProgress ?? 0) * 100));
+
+	const saveVideo = async () => {
+		if (!videoName || videoProgress !== null) return;
+
+		const giveUp = new AbortController();
+		giveUpOnVideo = giveUp;
+		videoProgress = 0;
+
+		try {
+			const { blob, extension } = await exportVideo({
+				backdropUrl,
+				drawing,
+				onProgress: (share) => {
+					videoProgress = share;
+				},
+				signal: giveUp.signal
+			});
+			saveBlob(blob, `${videoName}.${extension}`);
+		} catch {
+			// Closing the replay gives up on the video: nothing went wrong.
+			if (!giveUp.signal.aborted) onVideoFailed?.();
+		} finally {
+			videoProgress = null;
+		}
+	};
+
 	// The parent's image under a fork's strokes, painted once it has loaded.
 	$effect(() => {
 		const source = backdropUrl;
@@ -157,7 +152,7 @@
 			inkSurface.resize(canvas.clientWidth, canvas.clientHeight, window.devicePixelRatio || 1);
 
 		fitToBox();
-		inkSurface.showDocument(shown);
+		inkSurface.showDocument(replay.shown);
 		surface = inkSurface;
 		if (autoplay) play();
 
@@ -167,6 +162,7 @@
 		return () => {
 			resizeObserver.disconnect();
 			cancelAnimationFrame(frame);
+			giveUpOnVideo?.abort();
 			inkSurface.destroy();
 			surface = null;
 		};
@@ -217,6 +213,21 @@
 			aria-label={`Speed ${speed}×`}
 			onclick={nextSpeed}>{speed}×</button
 		>
+		{#if videoName && canSaveVideo}
+			<button
+				type="button"
+				class="timelapse-button timelapse-save"
+				aria-label={videoProgress === null ? 'Save as video' : `Making the video, ${videoPercent}%`}
+				disabled={videoProgress !== null}
+				onclick={saveVideo}
+			>
+				{#if videoProgress === null}
+					<Download class="h-4 w-4" />
+				{:else}
+					{videoPercent}%
+				{/if}
+			</button>
+		{/if}
 		{#if onClose}
 			<button type="button" class="timelapse-button" aria-label="Close timelapse" onclick={onClose}>
 				<X class="h-4 w-4" />
@@ -269,8 +280,15 @@
 		outline-offset: 2px;
 	}
 
-	.timelapse-speed {
+	.timelapse-speed,
+	.timelapse-save {
 		padding-inline: 8px;
+	}
+
+	/* Wide enough for 100%: the bar stays put while the number climbs. */
+	.timelapse-save:disabled {
+		min-width: 46px;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.timelapse-scrubber {
