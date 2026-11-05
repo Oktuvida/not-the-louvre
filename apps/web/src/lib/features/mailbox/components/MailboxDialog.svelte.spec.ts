@@ -49,6 +49,27 @@ describe('MailboxDialog', () => {
 			.not.toBeInTheDocument();
 	});
 
+	it('keeps offering others after a slip is reported out of a full hand', async () => {
+		const hand = [
+			slip,
+			{ author: 'oktuvida', id: 'wish-2', text: 'two pigeons in love' },
+			{ author: 'oktuvida', id: 'wish-3', text: 'a castle made of toast' }
+		];
+		const request = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(json({ wishes: hand }))
+			.mockResolvedValueOnce(json({ report: {} }, 201));
+		render(MailboxDialog, { onClose: vi.fn(), onTake: vi.fn(), request });
+
+		await page.getByRole('button', { name: /Report this slip: a very tired sun/ }).click();
+		await page.getByRole('button', { exact: true, name: 'Spam' }).click();
+
+		await expect
+			.element(page.getByRole('button', { name: /Draw this: a very tired sun/ }))
+			.not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'show me others' })).toBeVisible();
+	});
+
 	it('takes back a refusal once the artist starts rewriting', async () => {
 		const request = vi
 			.fn<typeof fetch>()
