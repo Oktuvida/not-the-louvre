@@ -3,6 +3,7 @@
 	import { fade } from 'svelte/transition';
 	import { ApiError, requestJson } from '#lib/client/api.js';
 	import MailboxDrawing from '#lib/features/mailbox/components/MailboxDrawing.svelte';
+	import WishReport from '#lib/features/mailbox/components/WishReport.svelte';
 	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
@@ -30,6 +31,7 @@
 	let refusal = $state('');
 	let isLeaving = $state(false);
 	let hasLeftOne = $state(false);
+	let hasReported = $state(false);
 
 	const takeOutSlips = async () => {
 		try {
@@ -43,6 +45,13 @@
 		} catch {
 			box = 'stuck';
 		}
+	};
+
+	/** A reported slip leaves the artist's hand at once. */
+	const dropReported = (wish: Wish) => {
+		slips = slips.filter((slip) => slip.id !== wish.id);
+		hasReported = true;
+		if (slips.length === 0) void takeOutSlips();
 	};
 
 	const leaveSlip = async (event: SubmitEvent) => {
@@ -99,6 +108,10 @@
 			<section class="mailbox-take" aria-labelledby="mailbox-take-heading">
 				<h2 id="mailbox-take-heading" class="mailbox-words">Take one and draw it</h2>
 
+				{#if hasReported}
+					<p class="mailbox-words mailbox-note" role="status">Thanks. A moderator will read it.</p>
+				{/if}
+
 				{#if box === 'opening'}
 					<p class="mailbox-words mailbox-note">Opening the box…</p>
 				{:else if box === 'empty'}
@@ -120,6 +133,7 @@
 								>
 									<WishSlip text={wish.text} byline={wish.author} tilt={[-1.4, 1.2, -0.8][index]} />
 								</button>
+								<WishReport {request} {wish} onReported={() => dropReported(wish)} />
 							</li>
 						{/each}
 					</ul>
@@ -245,6 +259,9 @@
 	}
 
 	.mailbox-slips-list li {
+		display: flex;
+		gap: 0.45rem;
+		align-items: center;
 		max-width: 100%;
 	}
 
@@ -258,7 +275,8 @@
 
 	.mailbox-slip {
 		display: block;
-		max-width: 100%;
+		flex: 0 1 auto;
+		min-width: 0;
 		padding: 0;
 		border: 0;
 		background: none;

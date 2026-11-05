@@ -96,7 +96,7 @@ test.describe('the mailbox', () => {
 		await page.goto('/');
 		await mailboxOn(page).click();
 		await openedBox(page)
-			.getByRole('button', { name: new RegExp(WISH) })
+			.getByRole('button', { name: new RegExp(`Draw this: ${WISH}`) })
 			.click();
 
 		await expect(page).toHaveURL(/\/draw\?wish=/);
@@ -255,7 +255,9 @@ test.describe('the mailbox', () => {
 
 		await page.goto('/');
 		await mailboxOn(page).click();
-		const slips = openedBox(page).getByRole('list', { name: 'Slips' }).getByRole('button');
+		const slips = openedBox(page)
+			.getByRole('list', { name: 'Slips' })
+			.getByRole('button', { name: /^Draw this/ });
 		await expect(slips).toHaveCount(3);
 		const first = await slips.allTextContents();
 
@@ -264,6 +266,96 @@ test.describe('the mailbox', () => {
 		await expect.poll(() => slips.allTextContents()).not.toEqual(first);
 		const second = await slips.allTextContents();
 		expect(second.filter((slip) => first.includes(slip))).toEqual([]);
+	});
+
+	test('a slip three artists report leaves the box, and its reporter stops seeing it at once', async ({
+		baseURL,
+		browser,
+		page
+	}) => {
+		const [id] = await leaveSlips(browser, baseURL, 'asker_artist', WISH);
+		await signUpArtist(page.request, baseURL, 'first_reporter');
+
+		await page.goto('/');
+		await mailboxOn(page).click();
+		const box = openedBox(page);
+		await box.getByRole('button', { name: new RegExp(`Report this slip: ${WISH}`) }).click();
+		await box.getByRole('button', { exact: true, name: 'Hate' }).click();
+
+		await expect(box.getByRole('status')).toContainText('Thanks');
+		await expect(box.getByRole('button', { name: new RegExp(`Draw this: ${WISH}`) })).toHaveCount(
+			0
+		);
+
+		for (const nickname of ['second_reporter', 'third_reporter']) {
+			const context = await browser.newContext({ baseURL });
+			await signUpArtist(context.request, baseURL, nickname);
+			const report = await context.request.post(`/api/wishes/${id}/reports`, {
+				data: { reason: 'hate' },
+				headers: { origin: baseURL ?? '' }
+			});
+			expect(report.status()).toBe(201);
+			await context.close();
+		}
+
+		const stranger = await browser.newContext({ baseURL });
+		await signUpArtist(stranger.request, baseURL, 'late_artist');
+		const left = (await (await stranger.request.get('/api/wishes')).json()) as unknown;
+		await stranger.close();
+		expect(left).toEqual({ wishes: [] });
+	});
+
+	test('a slip can be reported from the postcard it hangs beside', async ({
+		baseURL,
+		browser,
+		page
+	}) => {
+		const [id] = await leaveSlips(browser, baseURL, 'asker_artist', WISH);
+		await signUpArtist(page.request, baseURL, 'idle_artist');
+		await page.goto(`/draw?wish=${id}`);
+		await page.getByPlaceholder('Untitled genius').fill('Cat on the 42');
+		await page.getByRole('button', { name: 'Publish' }).click();
+		await expect(page.getByText(/Artwork published as/)).toBeVisible();
+
+		await page.goto('/gallery/wet-paint');
+		await page.getByTestId('wet-paint-room').getByRole('button').first().click();
+		const slip = page.getByRole('dialog').getByRole('complementary', { name: 'Drawn for a slip' });
+		await slip.getByRole('button', { name: /Report this slip/ }).click();
+		await slip.getByRole('button', { exact: true, name: 'Spam' }).click();
+
+		await expect(slip.getByRole('status')).toContainText('Thanks');
+	});
+
+	test('a moderator takes a reported slip down from the ops page', async ({
+		baseURL,
+		browser,
+		page,
+		request
+	}) => {
+		const [id] = await leaveSlips(browser, baseURL, 'asker_artist', WISH);
+		const reporter = await browser.newContext({ baseURL });
+		await signUpArtist(reporter.request, baseURL, 'first_reporter');
+		await reporter.request.post(`/api/wishes/${id}/reports`, {
+			data: { reason: 'hate' },
+			headers: { origin: baseURL ?? '' }
+		});
+		await reporter.close();
+
+		await signUpArtist(page.request, baseURL, 'on_duty');
+		const promoted = await request.post('/demo/test-support/role', {
+			data: { nickname: 'on_duty', role: 'moderator' }
+		});
+		expect(promoted.ok()).toBe(true);
+
+		await page.goto('/admin');
+		const slipCase = page.getByRole('article').filter({ hasText: WISH });
+		await expect(slipCase).toContainText('Slip case');
+		await expect(slipCase).toContainText('asker_artist');
+
+		await slipCase.getByRole('button', { name: 'Delete slip' }).click();
+
+		await expect(page.getByRole('article').filter({ hasText: WISH })).toHaveCount(0);
+		expect(await (await page.request.get('/api/wishes')).json()).toEqual({ wishes: [] });
 	});
 
 	test('closes back to the room', async ({ baseURL, page }) => {

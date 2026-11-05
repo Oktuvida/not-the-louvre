@@ -148,6 +148,20 @@
       "when": 1793893651930,
       "tag": "0020_puzzling_odin",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793896897294,
+      "tag": "0021_silly_medusa",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793896897638,
+      "tag": "0022_wish_report_auto_hide",
+      "breakpoints": true
     }
   ]
 }

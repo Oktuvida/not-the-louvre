@@ -400,7 +400,9 @@ const decodeModerationCursor = (value: string | null | undefined): ModerationQue
 		if (
 			!parsed.id ||
 			typeof parsed.reportCount !== 'number' ||
-			(parsed.targetType !== 'artwork' && parsed.targetType !== 'comment')
+			(parsed.targetType !== 'artwork' &&
+				parsed.targetType !== 'comment' &&
+				parsed.targetType !== 'wish')
 		) {
 			throw new Error('Invalid moderation cursor');
 		}
@@ -450,7 +452,7 @@ export const listModerationQueue = async (
 	const nextCursor =
 		hasMore && last
 			? encodeModerationCursor({
-					id: last.commentId ?? last.artworkId,
+					id: last.targetType === 'wish' ? last.wishId : (last.commentId ?? last.artworkId),
 					reportCount: last.reportCount,
 					targetType: last.targetType
 				})

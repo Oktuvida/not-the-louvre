@@ -962,7 +962,8 @@ describe('artwork engagement service', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: new Date('2026-03-26T16:59:00.000Z')
+			updatedAt: new Date('2026-03-26T16:59:00.000Z'),
+			wishId: null
 		});
 
 		const hidden = await moderateArtwork(
@@ -997,7 +998,8 @@ describe('artwork engagement service', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: new Date('2026-03-26T17:01:00.000Z')
+			updatedAt: new Date('2026-03-26T17:01:00.000Z'),
+			wishId: null
 		});
 
 		const unhidden = await moderateArtwork(
@@ -1078,7 +1080,8 @@ describe('artwork engagement service', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: new Date('2026-03-26T16:55:00.000Z')
+			updatedAt: new Date('2026-03-26T16:55:00.000Z'),
+			wishId: null
 		});
 		reports.set('report-comment-delete', {
 			artworkId: null,
@@ -1091,7 +1094,8 @@ describe('artwork engagement service', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: new Date('2026-03-26T16:56:00.000Z')
+			updatedAt: new Date('2026-03-26T16:56:00.000Z'),
+			wishId: null
 		});
 		const storage = {
 			delete: vi.fn(async () => undefined),
@@ -1153,7 +1157,8 @@ describe('artwork engagement service', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: new Date('2026-03-26T16:56:00.000Z')
+			updatedAt: new Date('2026-03-26T16:56:00.000Z'),
+			wishId: null
 		});
 
 		const result = await moderateComment(

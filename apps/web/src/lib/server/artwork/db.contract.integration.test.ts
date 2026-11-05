@@ -210,6 +210,7 @@ const insertReport = async (
 		commentId?: string | null;
 		id: string;
 		reporterId: string;
+		wishId?: string | null;
 	}
 ) => {
 	const createdAt = new Date('2026-03-27T10:15:00.000Z');
@@ -220,6 +221,7 @@ const insertReport = async (
 			reporter_id,
 			artwork_id,
 			comment_id,
+			wish_id,
 			reason,
 			details,
 			created_at,
@@ -230,6 +232,7 @@ const insertReport = async (
 			${input.reporterId},
 			${input.artworkId ?? null},
 			${input.commentId ?? null},
+			${input.wishId ?? null},
 			'spam',
 			null,
 			${createdAt},
@@ -1234,5 +1237,129 @@ describeWithDatabase('artwork DB contract', () => {
 		await expect(createWish({ text: 'one too many' }, actor)).rejects.toMatchObject({
 			status: 429
 		});
+	});
+
+	it('takes a slip three artists reported out of the mailbox and off its postcards', async () => {
+		const { getArtworkDetail } = await import('./read.service');
+		const { listWishes, submitContentReport } = await import('./service');
+		const report = (reporter: string) =>
+			submitContentReport(
+				{ reason: 'hate', wishId: 'wish-reported' },
+				{ user: createCanonicalUser(reporter) }
+			);
+
+		await insertWish(sql, { authorId: 'author-1', id: 'wish-reported' });
+		await insertArtwork(sql, { authorId: 'viewer-1', id: 'artwork-for-wish' });
+		await sql`update app.artworks set wish_id = 'wish-reported' where id = 'artwork-for-wish'`;
+
+		await report('reporter-1');
+		await report('reporter-2');
+		await expect(listWishes({ seen: [] }, {})).resolves.toHaveLength(1);
+
+		await report('reporter-3');
+
+		const [slip] = await sql`select is_hidden, hidden_at from app.wishes`;
+		expect(slip?.is_hidden).toBe(true);
+		expect(slip?.hidden_at).not.toBeNull();
+		await expect(listWishes({ seen: [] }, {})).resolves.toEqual([]);
+		await expect(getArtworkDetail('artwork-for-wish')).resolves.toMatchObject({ wish: null });
+	});
+
+	it('stops handing a slip to the artist who reported it, and takes one report from them', async () => {
+		const { listWishes, submitContentReport } = await import('./service');
+		const reporter = { user: createCanonicalUser('reporter-1') };
+
+		await insertWish(sql, { authorId: 'author-1', id: 'wish-1' });
+		await submitContentReport({ reason: 'spam', wishId: 'wish-1' }, reporter);
+
+		await expect(listWishes({ seen: [] }, reporter)).resolves.toEqual([]);
+		await expect(
+			listWishes({ seen: [] }, { user: createCanonicalUser('reporter-2') })
+		).resolves.toHaveLength(1);
+		await expect(
+			submitContentReport({ reason: 'spam', wishId: 'wish-1' }, reporter)
+		).rejects.toMatchObject({ code: 'DUPLICATE_REPORT', status: 409 });
+	});
+
+	it('does not take a report on a slip that is already down', async () => {
+		const { submitContentReport } = await import('./service');
+
+		await insertWish(sql, { authorId: 'author-1', id: 'wish-down' });
+		await sql`update app.wishes set is_hidden = true`;
+
+		await expect(
+			submitContentReport(
+				{ reason: 'spam', wishId: 'wish-down' },
+				{ user: createCanonicalUser('reporter-1') }
+			)
+		).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
+	});
+
+	it('queues reported slips with the rest, and pages through all three kinds', async () => {
+		const { listModerationQueue } = await import('./read.service');
+		const moderator = { user: createCanonicalUser('moderator-1', 'moderator') };
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-queued' });
+		await insertComment(sql, {
+			authorId: 'viewer-1',
+			artworkId: 'artwork-queued',
+			id: 'comment-queued'
+		});
+		await insertWish(sql, { authorId: 'viewer-2', id: 'wish-queued', text: 'a rude slip' });
+		await insertReport(sql, { artworkId: 'artwork-queued', id: 'r-1', reporterId: 'reporter-1' });
+		await insertReport(sql, { commentId: 'comment-queued', id: 'r-2', reporterId: 'reporter-1' });
+		await insertReport(sql, { id: 'r-3', reporterId: 'reporter-1', wishId: 'wish-queued' });
+
+		const first = await listModerationQueue({ limit: 2 }, moderator);
+		const second = await listModerationQueue(
+			{ cursor: first.pageInfo.nextCursor, limit: 2 },
+			moderator
+		);
+
+		expect(first.items.map((item) => item.targetType)).toEqual(['artwork', 'comment']);
+		expect(second.items).toEqual([
+			{
+				artworkId: null,
+				authorId: 'viewer-2',
+				authorNickname: 'viewer-2_nick',
+				commentId: null,
+				contentSummary: 'a rude slip',
+				isHidden: false,
+				reportCount: 1,
+				targetType: 'wish',
+				wishId: 'wish-queued'
+			}
+		]);
+		expect(second.pageInfo).toEqual({ hasMore: false, nextCursor: null });
+	});
+
+	it('lets a moderator restore a slip, hide it, dismiss its reports or delete it', async () => {
+		const { listModerationQueue } = await import('./read.service');
+		const { listWishes, moderateWish } = await import('./service');
+		const moderator = { user: createCanonicalUser('moderator-1', 'moderator') };
+		const queued = async () => (await listModerationQueue({}, moderator)).items;
+
+		await insertWish(sql, { authorId: 'author-1', id: 'wish-1' });
+		for (const reporter of ['reporter-1', 'reporter-2', 'reporter-3']) {
+			await insertReport(sql, { id: `r-${reporter}`, reporterId: reporter, wishId: 'wish-1' });
+		}
+		await expect(listWishes({ seen: [] }, {})).resolves.toEqual([]);
+
+		await moderateWish({ action: 'unhide', wishId: 'wish-1' }, moderator);
+		await expect(listWishes({ seen: [] }, {})).resolves.toHaveLength(1);
+		await expect(queued()).resolves.toEqual([]);
+
+		await moderateWish({ action: 'hide', wishId: 'wish-1' }, moderator);
+		await expect(listWishes({ seen: [] }, {})).resolves.toEqual([]);
+
+		await insertReport(sql, { id: 'r-again', reporterId: 'viewer-1', wishId: 'wish-1' });
+		await moderateWish({ action: 'dismiss', wishId: 'wish-1' }, moderator);
+		await expect(queued()).resolves.toEqual([]);
+
+		await moderateWish({ action: 'delete', wishId: 'wish-1' }, moderator);
+		await expect(sql`select id from app.wishes`).resolves.toHaveLength(0);
+		await expect(
+			moderateWish({ action: 'hide', wishId: 'wish-1' }, moderator)
+		).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
 	});
 });

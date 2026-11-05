@@ -83,6 +83,7 @@ type SubmitContentReportInput = {
 	commentId?: string | null;
 	details?: string | null;
 	reason: string;
+	wishId?: string | null;
 };
 
 type ModerateArtworkInput = {
@@ -94,6 +95,11 @@ type ModerateCommentInput = {
 	action: 'delete' | 'dismiss' | 'hide' | 'unhide';
 	artworkId: string;
 	commentId: string;
+};
+
+type ModerateWishInput = {
+	action: 'delete' | 'dismiss' | 'hide' | 'unhide';
+	wishId: string;
 };
 
 type ServiceDependencies = {
@@ -295,25 +301,38 @@ const normalizeReportDetails = (details: string | null | undefined) => {
 	return trimmed;
 };
 
-const assertExactlyOneReportTarget = (artworkId?: string | null, commentId?: string | null) => {
+const assertExactlyOneReportTarget = (
+	artworkId?: string | null,
+	commentId?: string | null,
+	wishId?: string | null
+) => {
 	const normalizedArtworkId = artworkId?.trim() ? artworkId.trim() : null;
 	const normalizedCommentId = commentId?.trim() ? commentId.trim() : null;
-	const targetCount = Number(Boolean(normalizedArtworkId)) + Number(Boolean(normalizedCommentId));
+	const normalizedWishId = wishId?.trim() ? wishId.trim() : null;
+	const targetCount =
+		Number(Boolean(normalizedArtworkId)) +
+		Number(Boolean(normalizedCommentId)) +
+		Number(Boolean(normalizedWishId));
 
 	if (targetCount !== 1) {
 		throw new ArtworkFlowError(
 			400,
-			'Report must target exactly one artwork or comment',
+			'Report must target exactly one artwork, comment or slip',
 			'INVALID_REPORT_TARGET'
 		);
 	}
 
-	return { artworkId: normalizedArtworkId, commentId: normalizedCommentId };
+	return {
+		artworkId: normalizedArtworkId,
+		commentId: normalizedCommentId,
+		wishId: normalizedWishId
+	};
 };
 
 const PENDING_REPORT_UNIQUE_CONSTRAINTS = [
 	'content_reports_pending_artwork_reporter_unique',
-	'content_reports_pending_comment_reporter_unique'
+	'content_reports_pending_comment_reporter_unique',
+	'content_reports_pending_wish_reporter_unique'
 ];
 
 // Drizzle wraps the driver's error in a DrizzleQueryError, so the SQLSTATE and
@@ -331,7 +350,10 @@ const isPendingReportUniqueViolation = (error: unknown) => {
 };
 
 const getResolutionStatus = (
-	action: ModerateArtworkInput['action'] | ModerateCommentInput['action']
+	action:
+		| ModerateArtworkInput['action']
+		| ModerateCommentInput['action']
+		| ModerateWishInput['action']
 ): Exclude<ContentReportStatus, 'pending'> =>
 	action === 'hide' || action === 'delete' || action === 'mark_nsfw' ? 'actioned' : 'reviewed';
 
@@ -674,10 +696,45 @@ export const listWishes = async (
 	dependencies: ServiceDependencies = {}
 ) =>
 	getDependencies(dependencies).repository.listWishes({
-		excludeAuthorId: context.user?.id ?? null,
 		limit: WISHES_IN_HAND,
-		seen: input.seen.slice(0, WISHES_REMEMBERED)
+		seen: input.seen.slice(0, WISHES_REMEMBERED),
+		viewerId: context.user?.id ?? null
 	});
+
+export const moderateWish = async (
+	input: ModerateWishInput,
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+) => {
+	const actor = assertModerator(context);
+	const { now: getNow, repository } = getDependencies(dependencies);
+	const now = getNow();
+	const resolution = {
+		resolvedAt: now,
+		resolvedBy: actor.user.id,
+		status: getResolutionStatus(input.action),
+		targetId: input.wishId
+	} as const;
+
+	if (input.action === 'dismiss') {
+		await repository.resolveWishReports(resolution);
+		return;
+	}
+
+	const found =
+		input.action === 'delete'
+			? await repository.deleteWish(input.wishId)
+			: await repository.setWishHiddenState(input.wishId, {
+					hiddenAt: input.action === 'hide' ? now : null,
+					isHidden: input.action === 'hide'
+				});
+
+	if (!found) {
+		throw new ArtworkFlowError(404, 'Slip not found', 'NOT_FOUND');
+	}
+
+	await repository.resolveWishReports(resolution);
+};
 
 export const getWish = (id: string, dependencies: ServiceDependencies = {}) =>
 	getDependencies(dependencies).repository.findWish(id);
@@ -735,10 +792,18 @@ export const submitContentReport = async (
 	const actor = requireActor(context);
 	const { generateId: nextId, now: getNow, repository } = getDependencies(dependencies);
 	const now = getNow();
-	const { artworkId, commentId } = assertExactlyOneReportTarget(input.artworkId, input.commentId);
+	const { artworkId, commentId, wishId } = assertExactlyOneReportTarget(
+		input.artworkId,
+		input.commentId,
+		input.wishId
+	);
 
 	if (artworkId) {
 		await getArtworkOrThrow(artworkId, repository);
+	}
+
+	if (wishId && !(await repository.findWish(wishId))) {
+		throw new ArtworkFlowError(404, 'Slip not found', 'NOT_FOUND');
 	}
 
 	let reportedCommentArtworkId: string | null = null;
@@ -765,7 +830,8 @@ export const submitContentReport = async (
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: now
+			updatedAt: now,
+			wishId
 		})
 		.catch((error: unknown) => {
 			if (isPendingReportUniqueViolation(error)) {

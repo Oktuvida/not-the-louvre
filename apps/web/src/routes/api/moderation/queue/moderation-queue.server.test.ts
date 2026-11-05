@@ -10,17 +10,19 @@ vi.mock('#lib/server/artwork/read.service.js', () => ({
 	listModerationQueue: mocked.listModerationQueue
 }));
 
-const makeItem = (overrides: Partial<ModerationQueueItem> = {}): ModerationQueueItem => ({
-	artworkId: 'artwork-1',
-	authorId: 'user-1',
-	authorNickname: 'artist',
-	commentId: null,
-	contentSummary: 'Sunset painting',
-	isHidden: false,
-	reportCount: 5,
-	targetType: 'artwork',
-	...overrides
-});
+const makeItem = (overrides: Partial<ModerationQueueItem> = {}) =>
+	({
+		artworkId: 'artwork-1',
+		authorId: 'user-1',
+		authorNickname: 'artist',
+		commentId: null,
+		contentSummary: 'Sunset painting',
+		isHidden: false,
+		reportCount: 5,
+		targetType: 'artwork',
+		wishId: null,
+		...overrides
+	}) as ModerationQueueItem;
 
 const makeModerationPage = (
 	items: ModerationQueueItem[],

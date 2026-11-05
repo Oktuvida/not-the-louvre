@@ -29,6 +29,7 @@
 	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
 	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import { saveBlob } from '#lib/client/save-blob.js';
+	import WishReport from '#lib/features/mailbox/components/WishReport.svelte';
 	import WishSlip from '#lib/features/shared-ui/components/WishSlip.svelte';
 	import TimelapsePlayer from '#lib/features/timelapse/TimelapsePlayer.svelte';
 	import { decodeDrawingV3, type InkDocument } from '#lib/stroke/v3.js';
@@ -719,6 +720,9 @@
 						byline={`left by ${artwork.wish.author}`}
 						tilt={-3.4}
 					/>
+					{#if viewer}
+						<WishReport wish={artwork.wish} />
+					{/if}
 				</aside>
 			{/if}
 
@@ -1335,6 +1339,25 @@
 		right: 0.5rem;
 		left: 0.5rem;
 		z-index: -1;
+		display: flex;
+		gap: 0.3rem;
+		align-items: flex-end;
+	}
+
+	/* The slip lies low on the screen, so the reasons open upwards. */
+	.postcard-wish {
+		--report-top: auto;
+		--report-bottom: calc(100% + 0.4rem);
+	}
+
+	.postcard-wish :global(.wish-slip) {
+		flex: 0 1 auto;
+		min-width: 0;
+	}
+
+	/* The reasons come out over the card, not behind it. */
+	.postcard-wish:has(:global([aria-expanded='true'])) {
+		z-index: 1;
 	}
 
 	@media (orientation: landscape) and (min-width: 64rem) {

@@ -114,6 +114,43 @@ describe('leaving a slip in the mailbox', () => {
 	});
 });
 
+describe('reporting and moderating slips', () => {
+	it('takes a report only from an artist, on a slip that is still in the box', async () => {
+		const { submitContentReport } = await import('./service');
+		const { dependencies, repository } = createDependencies();
+		vi.mocked(repository).findWish = vi.fn(async () => null);
+
+		await expect(
+			submitContentReport({ reason: 'spam', wishId: 'wish-1' }, {}, dependencies)
+		).rejects.toMatchObject({ status: 401 });
+		await expect(
+			submitContentReport({ reason: 'spam', wishId: 'wish-gone' }, actor, dependencies)
+		).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
+	});
+
+	it('names one target, whichever kind it is', async () => {
+		const { submitContentReport } = await import('./service');
+		const { dependencies } = createDependencies();
+
+		await expect(
+			submitContentReport(
+				{ artworkId: 'artwork-1', reason: 'spam', wishId: 'wish-1' },
+				actor,
+				dependencies
+			)
+		).rejects.toMatchObject({ code: 'INVALID_REPORT_TARGET', status: 400 });
+	});
+
+	it('leaves moderating a slip to moderators', async () => {
+		const { moderateWish } = await import('./service');
+		const { dependencies } = createDependencies();
+
+		await expect(
+			moderateWish({ action: 'hide', wishId: 'wish-1' }, actor, dependencies)
+		).rejects.toMatchObject({ status: 403 });
+	});
+});
+
 describe('taking slips out of the mailbox', () => {
 	it('hands out three, leaving out the artist who asks', async () => {
 		const { listWishes } = await import('./service');
@@ -122,9 +159,9 @@ describe('taking slips out of the mailbox', () => {
 		await listWishes({ seen: ['wish-9'] }, actor, dependencies);
 
 		expect(repository.listWishes).toHaveBeenCalledWith({
-			excludeAuthorId: 'artist-1',
 			limit: 3,
-			seen: ['wish-9']
+			seen: ['wish-9'],
+			viewerId: 'artist-1'
 		});
 	});
 
@@ -139,6 +176,6 @@ describe('taking slips out of the mailbox', () => {
 		);
 
 		expect(vi.mocked(repository.listWishes).mock.calls[0]?.[0].seen).toHaveLength(30);
-		expect(vi.mocked(repository.listWishes).mock.calls[0]?.[0].excludeAuthorId).toBeNull();
+		expect(vi.mocked(repository.listWishes).mock.calls[0]?.[0].viewerId).toBeNull();
 	});
 });

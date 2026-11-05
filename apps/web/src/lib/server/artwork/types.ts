@@ -188,6 +188,7 @@ export type ContentReportRecord = {
 	reviewedBy: string | null;
 	status: ContentReportStatus;
 	updatedAt: Date;
+	wishId: string | null;
 };
 
 export type ArtworkCommentView = {
@@ -338,6 +339,7 @@ export type ArtworkRepository = {
 	createArtwork(input: CreateArtworkInput): Promise<ArtworkRecord>;
 	createContentReport(input: CreateContentReportInput): Promise<ContentReportRecord>;
 	createWish(input: CreateWishInput): Promise<void>;
+	deleteWish(id: string): Promise<boolean>;
 	deleteArtwork(id: string): Promise<ArtworkRecord | null>;
 	deleteComment(id: string, updatedAt: Date): Promise<ArtworkCommentRecord | null>;
 	findArtworkReportCount(artworkId: string): Promise<number>;
@@ -353,6 +355,8 @@ export type ArtworkRepository = {
 		viewer?: ArtworkVisibilityActor
 	): Promise<ArtworkCommentView[]>;
 	listWishes(input: ListWishesInput): Promise<Wish[]>;
+	resolveWishReports(input: ResolveContentReportsInput): Promise<number>;
+	setWishHiddenState(id: string, input: Omit<HiddenStateUpdate, 'updatedAt'>): Promise<boolean>;
 	recordEngagementRateLimitAttempt(
 		input: RecordEngagementRateLimitAttemptInput
 	): Promise<ArtworkEngagementRateLimitRecord>;
@@ -380,18 +384,22 @@ export type ArtworkRepository = {
 	updateArtworkTitle(id: string, title: string, updatedAt: Date): Promise<ArtworkRecord | null>;
 };
 
-export type ModerationQueueTargetType = 'artwork' | 'comment';
+export type ModerationQueueTargetType = 'artwork' | 'comment' | 'wish';
 
-export type ModerationQueueItem = {
-	artworkId: string;
+type ModerationQueueCase = {
 	authorId: string;
 	authorNickname: string;
-	commentId: string | null;
 	contentSummary: string;
 	isHidden: boolean;
 	reportCount: number;
-	targetType: ModerationQueueTargetType;
 };
+
+export type ModerationQueueItem = ModerationQueueCase &
+	(
+		| { artworkId: string; commentId: null; targetType: 'artwork'; wishId: null }
+		| { artworkId: string; commentId: string; targetType: 'comment'; wishId: null }
+		| { artworkId: null; commentId: null; targetType: 'wish'; wishId: string }
+	);
 
 export type ModerationQueueCursor = {
 	id: string;
@@ -462,11 +470,11 @@ export type CreateWishInput = {
 };
 
 export type ListWishesInput = {
-	/** Whoever is asking: nobody is handed their own slip. */
-	excludeAuthorId: string | null;
 	limit: number;
 	/** Handed out only once the unseen ones run out. */
 	seen: string[];
+	/** Whoever is asking: nobody is handed their own slip, or one they reported. */
+	viewerId: string | null;
 };
 
 export type ArtworkActorContext = {
