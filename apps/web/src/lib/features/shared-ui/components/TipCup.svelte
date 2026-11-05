@@ -3,8 +3,8 @@
 </script>
 
 <!-- A cup of coffee beside the record player, in plain sight on every page a
-     visitor walks through. On a small screen the cup goes alone, and its line
-     stays for a screen reader. -->
+     visitor walks through. Like the player's, its slip slides out on hover or
+     focus, and a screen reader always has it. -->
 <a
 	class="tip-cup focus-ring"
 	href={`https://ko-fi.com/${KOFI_HANDLE}`}
@@ -37,9 +37,6 @@
 		right: 20px;
 		bottom: 88px;
 		z-index: var(--z-ambient);
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
 		text-decoration: none;
 	}
 
@@ -49,20 +46,41 @@
 		display: none;
 	}
 
-	/* Pencilled on a slip of paper, as the Mystery Room's line is. */
 	.tip-cup-slip {
-		padding: 0.25rem 0.65rem 0.3rem;
-		rotate: -1.5deg;
-		background: #fffdf8;
+		position: absolute;
+		top: 50%;
+		right: calc(100% + 10px);
+		padding: 4px 10px 3px;
+		background: #fbf8f2;
 		box-shadow:
-			0 1px 1px rgb(0 0 0 / 0.1),
-			0 4px 10px rgb(40 25 10 / 0.3);
-		color: #5a4a3c;
+			0 1px 1px rgb(0 0 0 / 0.08),
+			0 4px 8px rgb(40 25 10 / 0.22);
 		font-family: var(--font-hand);
 		font-size: 1.15rem;
 		font-weight: 600;
-		line-height: 1.15;
+		line-height: 1.1;
 		white-space: nowrap;
+		color: var(--color-ink-warm);
+		opacity: 0;
+		translate: 8px -50%;
+		rotate: -2deg;
+		pointer-events: none;
+		transition:
+			opacity 200ms ease,
+			translate 200ms ease;
+	}
+
+	.tip-cup:focus-visible .tip-cup-slip {
+		opacity: 1;
+		translate: 0 -50%;
+	}
+
+	/* Only where there is a pointer: a tap would leave it stuck out. */
+	@media (hover: hover) {
+		.tip-cup:hover .tip-cup-slip {
+			opacity: 1;
+			translate: 0 -50%;
+		}
 	}
 
 	.tip-cup-drawing {
@@ -113,21 +131,13 @@
 		}
 	}
 
-	/* The cup alone where its line would run into something. */
-	@media (max-width: 47.99rem), (max-height: 30rem) {
-		.tip-cup-slip {
-			position: absolute;
-			width: 1px;
-			height: 1px;
-			padding: 0;
-			overflow: hidden;
-			clip-path: inset(50%);
-		}
-	}
-
 	@media (prefers-reduced-motion: reduce) {
 		.tip-cup-drawing {
 			transition: none;
+		}
+
+		.tip-cup-slip {
+			transition: opacity 200ms ease;
 		}
 	}
 </style>

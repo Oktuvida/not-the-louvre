@@ -46,6 +46,21 @@ test.describe('the Ko-fi cup', () => {
 		});
 	}
 
+	test('says what it is only under the pointer, as the record player does', async ({ page }) => {
+		await page.goto('/gallery/wet-paint');
+		const line = page.getByText('help us keep the museum open');
+
+		await expect(cup(page)).toBeInViewport({ ratio: 1 });
+		await expect(line).toHaveCSS('opacity', '0');
+		expect((await boxOf(cup(page))).width, 'at rest it is only the cup').toBeLessThanOrEqual(64);
+
+		await cup(page).hover();
+		await expect(line).toHaveCSS('opacity', '1');
+
+		await page.mouse.move(2, 2);
+		await expect(line).toHaveCSS('opacity', '0');
+	});
+
 	test('keeps out of the studio', async ({ baseURL, page }) => {
 		const headers = { origin: baseURL ?? '', 'x-sveltekit-action': 'true' };
 		const signedUp = await page.request.post('/?/signUp', { form: deterministicAuthUser, headers });
