@@ -24,6 +24,8 @@
 	} = $props();
 
 	let slips = $state<Wish[]>([]);
+	/** A full hand means there may be more in the box, whatever is reported out of it. */
+	let dealtFullHand = $state(false);
 	let box = $state<'empty' | 'opening' | 'open' | 'stuck'>('opening');
 	let seen: string[] = [];
 
@@ -40,6 +42,7 @@
 				fetch: request
 			});
 			slips = wishes;
+			dealtFullHand = wishes.length >= WISHES_IN_HAND;
 			seen = [...seen, ...wishes.map((wish) => wish.id)].slice(-SLIPS_REMEMBERED);
 			box = wishes.length > 0 ? 'open' : 'empty';
 		} catch {
@@ -137,7 +140,7 @@
 							</li>
 						{/each}
 					</ul>
-					{#if slips.length >= WISHES_IN_HAND}
+					{#if dealtFullHand}
 						<button type="button" class="mailbox-more focus-ring" onclick={takeOutSlips}>
 							show me others
 						</button>
