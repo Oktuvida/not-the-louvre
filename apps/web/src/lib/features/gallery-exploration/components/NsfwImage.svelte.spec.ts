@@ -80,7 +80,13 @@ describe('NsfwImage', () => {
 	// A photo that never arrived used to leave the browser's broken-image icon
 	// and the bare title on the polaroid.
 	it('shows a calm pencil note instead of a broken picture when the photo will not come', async () => {
-		await render(NsfwImage, { alt: 'Ocean Breeze', src: '/no-such-artwork.webp' });
+		// Eager: a lazy photo is only asked for once the page has painted, and a
+		// busy machine can keep a spec's page from painting for as long as it likes.
+		await render(NsfwImage, {
+			alt: 'Ocean Breeze',
+			loading: 'eager',
+			src: '/no-such-artwork.webp'
+		});
 
 		await expect.element(page.getByText(/didn.t develop/i)).toBeVisible();
 		// Not drawn, so no broken picture shows; still named for a screen reader.

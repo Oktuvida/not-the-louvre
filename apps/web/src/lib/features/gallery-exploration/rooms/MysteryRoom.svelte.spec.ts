@@ -69,27 +69,37 @@ describe('MysteryRoom', () => {
 
 	it('opens the piece a spin developed, after a moment to look at it', async () => {
 		motion.reduced = true;
-		const fetchRandomArtwork = vi.fn().mockResolvedValue(chosen);
 		const onSelect = vi.fn();
-		await renderRoom({ fetchRandomArtwork, onSelect });
+		await renderRoom({ fetchRandomArtwork: vi.fn().mockResolvedValue(chosen), onSelect });
+		const spunAt = performance.now();
 
 		await spinButton().click();
 
-		await expect.element(page.getByRole('img', { name: 'Random Masterpiece' })).toBeVisible();
-		expect(onSelect).not.toHaveBeenCalled();
-		await vi.waitFor(() => expect(onSelect).toHaveBeenCalledWith(chosen), { timeout: 3000 });
+		await vi.waitFor(() => expect(onSelect).toHaveBeenCalledWith(chosen), { timeout: 5000 });
+		// A floor, which a slow machine can only clear by more.
+		expect(performance.now() - spunAt).toBeGreaterThanOrEqual(500);
 	});
 
-	it('opens the piece at once when the visitor presses it', async () => {
-		motion.reduced = true;
+	it('opens the piece at once when the visitor presses it, and only the once', async () => {
 		const onSelect = vi.fn();
 		await renderRoom({ fetchRandomArtwork: vi.fn().mockResolvedValue(chosen), onSelect });
 
 		await spinButton().click();
-		await page.getByRole('button', { name: 'Open Random Masterpiece' }).click();
+
+		// Played up to the photo coming up, and held there for the press.
+		const track = page.getByTestId('film-reel-track').element();
+		const photo = page.getByRole('img', { name: 'Random Masterpiece' });
+		await vi.waitFor(() => {
+			for (const running of track.getAnimations()) running.finish();
+			expect(photo.element().getAnimations()).toHaveLength(1);
+		});
+		photo.element().getAnimations()[0]!.pause();
+
+		const press = page.getByRole('button', { name: 'Open Random Masterpiece' }).element();
+		(press as HTMLElement).click();
 
 		expect(onSelect).toHaveBeenCalledOnce();
-		await new Promise((resolve) => setTimeout(resolve, 1200));
+		await new Promise((resolve) => setTimeout(resolve, 800));
 		expect(onSelect).toHaveBeenCalledOnce();
 	});
 

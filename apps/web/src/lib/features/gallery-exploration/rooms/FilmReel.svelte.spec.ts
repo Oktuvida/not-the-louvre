@@ -120,8 +120,9 @@ describe('FilmReel', () => {
 
 		reel.startFreeSpin();
 
-		await vi.waitFor(() => expect(drift()).toBeUndefined());
+		// Read in the same breath: the run-up moves it from here on.
 		expect(Math.abs(line().getBoundingClientRect().x - before)).toBeLessThan(40);
+		await vi.waitFor(() => expect(drift()).toBeUndefined());
 	});
 
 	// The reel was the heaviest thing in the gallery because every frame was
@@ -228,7 +229,10 @@ describe('FilmReel', () => {
 			expect(open.element()).toBeVisible();
 		});
 
-		await open.click();
+		// Held half developed, so the press lands before the photo has come up
+		// however long the machine takes to get to it.
+		for (const motion of document.getAnimations()) motion.pause();
+		(open.element() as HTMLElement).click();
 
 		expect(onOpen).toHaveBeenCalledWith(artwork);
 		expect(onDeveloped).not.toHaveBeenCalled();
