@@ -29,6 +29,7 @@
 	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
 	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
 	import { saveBlob } from '#lib/client/save-blob.js';
+	import WishSlip from '#lib/features/shared-ui/components/WishSlip.svelte';
 	import TimelapsePlayer from '#lib/features/timelapse/TimelapsePlayer.svelte';
 	import { decodeDrawingV3, type InkDocument } from '#lib/stroke/v3.js';
 	import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
@@ -693,7 +694,8 @@
 		</button>
 
 		<div
-			class="relative m-auto"
+			class="relative isolate m-auto"
+			class:postcard-with-wish={Boolean(artwork.wish)}
 			style="width: clamp(16rem, calc(100dvh - 12rem), 30rem); max-width: 100%;"
 			role="presentation"
 			transition:scale={{ duration: transitionDuration, start: 0.96 }}
@@ -709,6 +711,17 @@
 				handleEscape();
 			}}
 		>
+			<!-- The slip it answers, tucked behind the card: never on the drawing. -->
+			{#if artwork.wish}
+				<aside class="postcard-wish" aria-label="Drawn for a slip from the mailbox">
+					<WishSlip
+						text={artwork.wish.text}
+						byline={`left by ${artwork.wish.author}`}
+						tilt={-3.4}
+					/>
+				</aside>
+			{/if}
+
 			<!-- The postcard -->
 			<div
 				class="postcard-scene"
@@ -1305,6 +1318,39 @@
 		font-size: 1.05rem;
 		font-weight: 500;
 		color: rgba(253, 251, 247, 0.6);
+	}
+
+	/* Beside the card where there is room; under it where there is not, with
+	 * the room for it kept below the card. */
+	.postcard-with-wish {
+		--wish-room: 3.5rem;
+		padding-bottom: var(--wish-room);
+	}
+
+	.postcard-wish {
+		--slip-padding: 1.6rem 1.1rem 0.5rem 1.2rem;
+		--slip-text: 1.38rem;
+		position: absolute;
+		top: calc(100% - var(--wish-room) - 1.4rem);
+		right: 0.5rem;
+		left: 0.5rem;
+		z-index: -1;
+	}
+
+	@media (orientation: landscape) and (min-width: 64rem) {
+		.postcard-with-wish {
+			--wish-room: 0rem;
+		}
+
+		.postcard-wish {
+			--slip-padding: 0.85rem 1.5rem 0.65rem 3.4rem;
+			--slip-text: 1.7rem;
+			top: 57%;
+			right: auto;
+			left: calc(100% - 2.75rem);
+			width: max-content;
+			max-width: calc(50vw - 50% - 0.5rem);
+		}
 	}
 
 	.postcard-scene {

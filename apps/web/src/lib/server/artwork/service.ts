@@ -5,7 +5,9 @@ import {
 	ARTWORK_COMMENT_RATE_LIMIT,
 	ARTWORK_PUBLISH_RATE_LIMIT,
 	ARTWORK_VOTE_RATE_LIMIT,
-	CONTENT_REPORT_DETAILS_MAX_LENGTH
+	ARTWORK_WISH_RATE_LIMIT,
+	CONTENT_REPORT_DETAILS_MAX_LENGTH,
+	WISHES_REMEMBERED
 } from './config';
 import { ArtworkFlowError, logArtworkFlowFailure } from './errors';
 import { artworkRepository } from './repository';
@@ -14,6 +16,7 @@ import { checkTextModeration } from '#lib/server/moderation/service.js';
 import { isRateLimitBlocked, type RateLimitPolicy } from '#lib/server/db/rate-limit.js';
 import { isArtworkReportReason } from '#lib/shared/content/report-reasons.js';
 import { isArtworkVoteValue } from '#lib/shared/content/votes.js';
+import { WISHES_IN_HAND, WISH_MAX_LENGTH, type Wish } from '#lib/shared/content/wishes.js';
 import { prepareDrawingDocumentForStorage } from '#lib/server/drawing-document/storage.js';
 import type {
 	ArtworkActorContext,
@@ -44,6 +47,7 @@ type PublishArtworkInput = {
 	isNsfw?: boolean;
 	parentArtworkId?: string | null;
 	title?: string | null;
+	wishId?: string | null;
 };
 
 type UpdateArtworkTitleInput = {
@@ -369,6 +373,9 @@ export const publishArtwork = async (
 		throw new ArtworkFlowError(400, 'Artwork drawing document is required', 'INVALID_MEDIA_FORMAT');
 	}
 
+	// A slip can leave the mailbox while it is being drawn; the drawing stands.
+	const wish = input.wishId?.trim() ? await repository.findWish(input.wishId.trim()) : null;
+
 	const artworkId = nextId();
 
 	/*
@@ -443,7 +450,8 @@ export const publishArtwork = async (
 			score: 0,
 			storageKey,
 			title,
-			updatedAt: now
+			updatedAt: now,
+			wishId: wish?.id ?? null
 		});
 	} catch (error) {
 		// The images belong to this request alone. The drawing stays: it is named
@@ -621,6 +629,58 @@ export const createArtworkComment = async (
 	});
 	return comment;
 };
+
+export const createWish = async (
+	input: { text: string },
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+): Promise<Pick<Wish, 'id' | 'text'>> => {
+	const actor = requireActor(context);
+	const { generateId: nextId, now: getNow, repository } = getDependencies(dependencies);
+	const now = getNow();
+
+	await recordEngagementAttempt(
+		'wish',
+		actor,
+		repository,
+		now,
+		nextId,
+		ARTWORK_WISH_RATE_LIMIT,
+		'Too many slips for now. Please wait before leaving another.'
+	);
+	const text = input.text.trim().replace(/\s+/gu, ' ');
+	if (!text || text.length > WISH_MAX_LENGTH) {
+		throw new ArtworkFlowError(
+			400,
+			`A slip takes between 1 and ${WISH_MAX_LENGTH} characters`,
+			'INVALID_WISH'
+		);
+	}
+
+	// Read by everybody, as a comment is, so it is held to the same words.
+	const textModeration = await checkTextModeration(text, 'comment');
+	if (textModeration.status !== 'allowed') {
+		throw new ArtworkFlowError(400, textModeration.message, 'INVALID_WISH');
+	}
+
+	const id = nextId();
+	await repository.createWish({ authorId: actor.user.id, body: text, createdAt: now, id });
+	return { id, text };
+};
+
+export const listWishes = async (
+	input: { seen: string[] },
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+) =>
+	getDependencies(dependencies).repository.listWishes({
+		excludeAuthorId: context.user?.id ?? null,
+		limit: WISHES_IN_HAND,
+		seen: input.seen.slice(0, WISHES_REMEMBERED)
+	});
+
+export const getWish = (id: string, dependencies: ServiceDependencies = {}) =>
+	getDependencies(dependencies).repository.findWish(id);
 
 export const listArtworkComments = async (
 	artworkId: string,

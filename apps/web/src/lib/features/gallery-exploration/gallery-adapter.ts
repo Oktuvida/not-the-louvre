@@ -54,7 +54,8 @@ export const toGalleryArtworkDetail = (
 	rank?: number
 ): Artwork => ({
 	...baseArtwork(artwork),
-	rank
+	rank,
+	wish: artwork.wish
 });
 
 type SerializableArtworkComment = {

@@ -485,7 +485,8 @@ describe('StudioDrawingPage', () => {
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: false,
 			parentArtworkId: null,
-			title: 'My First Piece'
+			title: 'My First Piece',
+			wishId: null
 		});
 		expect(replaceStudioUrl).not.toHaveBeenCalled();
 	});
@@ -874,7 +875,8 @@ describe('StudioDrawingPage', () => {
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: false,
 			parentArtworkId: 'artwork-parent',
-			title: 'Forked Piece'
+			title: 'Forked Piece',
+			wishId: null
 		});
 		expect(window.localStorage.getItem('studio-fork-context:journey_artist')).toBeNull();
 
@@ -1415,7 +1417,8 @@ describe('StudioDrawingPage', () => {
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: false,
 			parentArtworkId: null,
-			title: 'Fresh Start'
+			title: 'Fresh Start',
+			wishId: null
 		});
 		window.localStorage.clear();
 	});
@@ -1558,7 +1561,8 @@ describe('StudioDrawingPage', () => {
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: true,
 			parentArtworkId: null,
-			title: 'Figure Study'
+			title: 'Figure Study',
+			wishId: null
 		});
 	});
 });

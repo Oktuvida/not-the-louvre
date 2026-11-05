@@ -1,4 +1,4 @@
-import { and, asc, count, eq } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '#lib/server/db/index.js';
 import {
 	artworkComments,
@@ -7,6 +7,7 @@ import {
 	contentReports,
 	artworkVotes,
 	artworks,
+	wishes,
 	users
 } from '#lib/server/db/schema.js';
 import {
@@ -27,7 +28,9 @@ import type {
 	CreateArtworkCommentInput,
 	CreateContentReportInput,
 	CreateArtworkVoteInput,
+	CreateWishInput,
 	HiddenStateUpdate,
+	ListWishesInput,
 	PublishRateLimitRecord,
 	RecordEngagementRateLimitAttemptInput,
 	RecordRateLimitAttemptInput,
@@ -55,8 +58,15 @@ const artworkRecordProjection = {
 	score: artworks.score,
 	storageKey: artworks.storageKey,
 	title: artworks.title,
-	updatedAt: artworks.updatedAt
+	updatedAt: artworks.updatedAt,
+	wishId: artworks.wishId
 };
+
+const wishSelect = () => ({
+	author: users.nickname,
+	id: wishes.id,
+	text: wishes.body
+});
 
 // The vote routes serialise this straight to the browser and the client reads
 // only `score`, so the transaction reads back five columns instead of the
@@ -236,6 +246,38 @@ export const artworkRepository: ArtworkRepository = {
 				updatedAt: comment.updatedAt
 			};
 		});
+	},
+	async createWish(input: CreateWishInput) {
+		await db.insert(wishes).values(input);
+	},
+	async findWish(id) {
+		const [wish] = await db
+			.select(wishSelect())
+			.from(wishes)
+			.innerJoin(users, eq(users.id, wishes.authorId))
+			.where(and(eq(wishes.id, id), eq(users.isBanned, false)))
+			.limit(1);
+
+		return wish ?? null;
+	},
+	// A table of short lines, so sorting all of it at random stays cheap.
+	async listWishes(input: ListWishesInput) {
+		return db
+			.select(wishSelect())
+			.from(wishes)
+			.innerJoin(users, eq(users.id, wishes.authorId))
+			.where(
+				and(
+					eq(users.isBanned, false),
+					input.excludeAuthorId ? ne(wishes.authorId, input.excludeAuthorId) : undefined
+				)
+			)
+			.orderBy(
+				// Postgres refuses the bare `false` an empty list turns into.
+				...(input.seen.length > 0 ? [asc(inArray(wishes.id, input.seen))] : []),
+				sql`random()`
+			)
+			.limit(input.limit);
 	},
 	async findCommentById(id) {
 		return (

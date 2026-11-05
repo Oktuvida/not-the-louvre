@@ -18,7 +18,7 @@ import {
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '#lib/server/db/index.js';
-import { artworkComments, artworks, contentReports, users } from '#lib/server/db/schema.js';
+import { artworkComments, artworks, contentReports, users, wishes } from '#lib/server/db/schema.js';
 import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
 import { voteCountSql } from './vote-counts';
 import type {
@@ -127,6 +127,7 @@ const drawingDocumentSelect = {
 
 const parentArtworks = alias(artworks, 'parent_artwork');
 const parentAuthors = alias(users, 'parent_author');
+const wishAuthors = alias(users, 'wish_author');
 
 // The fork parent rides along on the feed statement instead of a second serial
 // round trip. `is_hidden = false` belongs in the join condition, not the WHERE:
@@ -172,7 +173,10 @@ const buildDetailSelect = (
 ) => ({
 	...discoverySelect,
 	...(options.withDrawingDocument ? drawingDocumentSelect : {}),
-	...engagementSelect(viewer)
+	...engagementSelect(viewer),
+	wishAuthor: wishAuthors.nickname,
+	wishBody: wishes.body,
+	wishSlipId: wishes.id
 });
 
 const buildDiscoverySelect = (viewer: { isModerator: boolean; userId: string | null }) => ({
@@ -206,6 +210,9 @@ type ArtworkReadRow = {
 	parentAuthorId?: string | null;
 	parentAuthorNickname?: string | null;
 	parentTitle?: string | null;
+	wishAuthor?: string | null;
+	wishBody?: string | null;
+	wishSlipId?: string | null;
 	downvotes?: number;
 	upvotes?: number;
 	viewerVote?: ArtworkVoteValue | null;
@@ -271,7 +278,11 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	upvotes: row.upvotes,
 	viewerVote: row.viewerVote ?? null,
 	rankingValue: row.rankingValue,
-	updatedAt: row.updatedAt
+	updatedAt: row.updatedAt,
+	wish:
+		row.wishSlipId && row.wishAuthor
+			? { author: row.wishAuthor, id: row.wishSlipId, text: row.wishBody ?? '' }
+			: null
 });
 
 const buildRankedDiscoverySelect = (
@@ -412,6 +423,11 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.select(buildDetailSelect(activeViewer, options))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
+			.leftJoin(wishes, eq(wishes.id, artworks.wishId))
+			.leftJoin(
+				wishAuthors,
+				and(eq(wishAuthors.id, wishes.authorId), eq(wishAuthors.isBanned, false))
+			)
 			.where(and(eq(artworks.id, id), artworkOpenableBy(activeViewer)))
 			.limit(1);
 

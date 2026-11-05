@@ -4,6 +4,7 @@ import type {
 	ContentReportStatus
 } from '#lib/shared/content/report-reasons.js';
 import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
+import type { Wish } from '#lib/shared/content/wishes.js';
 import type { RateLimitPolicy } from '#lib/server/db/rate-limit.js';
 
 export type ArtworkRecord = {
@@ -27,6 +28,7 @@ export type ArtworkRecord = {
 	storageKey: string;
 	title: string;
 	updatedAt: Date;
+	wishId?: string | null;
 };
 
 export type ArtworkAuthorSummary = {
@@ -82,6 +84,8 @@ export type ArtworkDetail = ArtworkFeedCard & {
 	mediaContentType: string;
 	mediaSizeBytes: number;
 	updatedAt: Date;
+	/** The slip it answers, while the slip and whoever left it are still around. */
+	wish: Wish | null;
 };
 
 export type ArtworkDiscoverySort = 'recent' | 'hot' | 'top';
@@ -125,6 +129,7 @@ export type ArtworkDiscoveryPage = {
 export type ArtworkReadRecord = ArtworkRecord & {
 	authorAvatarUrl: string | null;
 	authorNickname: string;
+	wish?: Wish | null;
 	childForks?: Array<{
 		authorAvatarUrl: string | null;
 		authorId: string;
@@ -194,7 +199,7 @@ export type ArtworkCommentView = {
 	updatedAt: Date;
 };
 
-export type ArtworkEngagementRateLimitKind = 'comment' | 'vote';
+export type ArtworkEngagementRateLimitKind = 'comment' | 'vote' | 'wish';
 
 export type ArtworkEngagementRateLimitRecord = {
 	attemptCount: number;
@@ -332,11 +337,13 @@ export type ArtworkRepository = {
 	createComment(input: CreateArtworkCommentInput): Promise<ArtworkCommentView | null>;
 	createArtwork(input: CreateArtworkInput): Promise<ArtworkRecord>;
 	createContentReport(input: CreateContentReportInput): Promise<ContentReportRecord>;
+	createWish(input: CreateWishInput): Promise<void>;
 	deleteArtwork(id: string): Promise<ArtworkRecord | null>;
 	deleteComment(id: string, updatedAt: Date): Promise<ArtworkCommentRecord | null>;
 	findArtworkReportCount(artworkId: string): Promise<number>;
 	findCommentById(id: string): Promise<ArtworkCommentRecord | null>;
 	findCommentReportCount(commentId: string): Promise<number>;
+	findWish(id: string): Promise<Wish | null>;
 	findArtworkById(id: string): Promise<ArtworkRecord | null>;
 	findChildForksByParentId(parentId: string): Promise<ArtworkRecord[]>;
 	findPublishRateLimit(actorKey: string): Promise<PublishRateLimitRecord | null>;
@@ -345,6 +352,7 @@ export type ArtworkRepository = {
 		artworkId: string,
 		viewer?: ArtworkVisibilityActor
 	): Promise<ArtworkCommentView[]>;
+	listWishes(input: ListWishesInput): Promise<Wish[]>;
 	recordEngagementRateLimitAttempt(
 		input: RecordEngagementRateLimitAttemptInput
 	): Promise<ArtworkEngagementRateLimitRecord>;
@@ -444,6 +452,21 @@ export type ArtistStudioRecord = {
 
 export type ArtistStudioSummary = Pick<ArtistStudioRecord, 'avatarUrl' | 'id' | 'nickname'> & {
 	stats: Pick<ArtistStudioRecord, 'hangingSince' | 'pieces' | 'stars'>;
+};
+
+export type CreateWishInput = {
+	authorId: string;
+	body: string;
+	createdAt: Date;
+	id: string;
+};
+
+export type ListWishesInput = {
+	/** Whoever is asking: nobody is handed their own slip. */
+	excludeAuthorId: string | null;
+	limit: number;
+	/** Handed out only once the unseen ones run out. */
+	seen: string[];
 };
 
 export type ArtworkActorContext = {

@@ -24,6 +24,7 @@ const detail: ArtworkDetail = {
 	childForks: [],
 	mediaContentType: 'image/avif',
 	mediaSizeBytes: 1024,
+	wish: null,
 	updatedAt: new Date('2026-03-28T12:30:00.000Z')
 };
 

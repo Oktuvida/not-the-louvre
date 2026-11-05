@@ -139,6 +139,18 @@ body:has(.studio-page) .record-player-shell {
 	padding: 0 var(--studio-margin);
 }
 
+/* In the band beside Exit Studio, without its heading: only some layouts lay
+ * it here, and the others show the copy among the notes. */
+.studio-header .studio-wish {
+	display: none;
+	max-width: 24rem;
+	margin: 0 4rem 0 auto;
+}
+
+.studio-header .studio-wish .wish-slip-label {
+	display: none;
+}
+
 .studio-layout {
 	position: relative;
 	z-index: 10;
@@ -213,6 +225,16 @@ body:has(.studio-page) .record-player-shell {
 		padding-top: 0.75rem;
 	}
 
+	/* The notes have no room to spare here, so the slip lies in the free band
+	 * at the top of the desk, between Exit Studio and the record player. */
+	.studio-notes .studio-wish {
+		display: none;
+	}
+
+	.studio-header .studio-wish {
+		display: block;
+	}
+
 	.studio-tools {
 		--tray-palette-columns: 8;
 		--tray-tilt: 0.8deg;
@@ -259,8 +281,17 @@ body:has(.studio-page) .record-player-shell {
 		padding: 5.5rem 1.75rem 0 0;
 	}
 
-	.studio-notes .cover-postit {
+	.studio-notes .cover-postit,
+	.studio-notes .studio-wish {
 		width: 15rem;
+	}
+
+	.studio-notes .studio-wish {
+		display: block;
+	}
+
+	.studio-header .studio-wish {
+		display: none;
 	}
 
 	.studio-tools {
@@ -325,6 +356,15 @@ body:has(.studio-page) .record-player-shell {
 		flex-grow: 1.4;
 	}
 
+	/* As on the compact desk: the row of notes has no room to spare. */
+	.studio-notes .studio-wish {
+		display: none;
+	}
+
+	.studio-header .studio-wish {
+		display: block;
+	}
+
 	.studio-tools {
 		--tray-areas: 'palette palette' 'brush tools' 'ink ink';
 		--tray-columns: minmax(0, 1fr) auto;
@@ -386,6 +426,14 @@ body:has(.studio-page) .record-player-shell {
 
 	.studio-notes .cover-postit {
 		flex: none;
+	}
+
+	.studio-notes .studio-wish {
+		display: block;
+	}
+
+	.studio-header .studio-wish {
+		display: none;
 	}
 
 	/* A strip of paint to swipe through, and one row of brush and tools. */

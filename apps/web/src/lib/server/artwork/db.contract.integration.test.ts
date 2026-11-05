@@ -45,6 +45,7 @@ const truncateDatabase = async (sql: DbClient) => {
 			app.artwork_votes,
 			app.artwork_comments,
 			app.artworks,
+			app.wishes,
 			app.users,
 			better_auth.account,
 			better_auth.session,
@@ -153,6 +154,16 @@ const insertArtwork = async (
 			${createdAt},
 			${updatedAt}
 		)
+	`;
+};
+
+const insertWish = async (
+	sql: DbClient,
+	input: { authorId: string; id: string; text?: string }
+) => {
+	await sql`
+		insert into app.wishes (id, author_id, body)
+		values (${input.id}, ${input.authorId}, ${input.text ?? input.id})
 	`;
 };
 
@@ -1171,5 +1182,57 @@ describeWithDatabase('artwork DB contract', () => {
 		});
 
 		await expect(getRandomArtwork()).resolves.toMatchObject({ id: 'artwork-visible' });
+	});
+
+	it("hands out other artists' slips, never a banned artist's, unseen ones first", async () => {
+		const { listWishes } = await import('./service');
+
+		await insertWish(sql, { authorId: 'author-1', id: 'wish-seen' });
+		await insertWish(sql, { authorId: 'author-1', id: 'wish-unseen' });
+		await insertWish(sql, { authorId: 'viewer-1', id: 'wish-own' });
+		await insertWish(sql, { authorId: 'viewer-2', id: 'wish-banned' });
+		await sql`update app.users set is_banned = true where id = 'viewer-2'`;
+
+		const viewer = { user: { id: 'viewer-1', role: 'user' as const } };
+		const first = await listWishes({ seen: ['wish-seen'] }, viewer);
+		expect(first.map((wish) => wish.id)).toEqual(['wish-unseen', 'wish-seen']);
+		expect(first[0]).toEqual({ author: 'author-1_nick', id: 'wish-unseen', text: 'wish-unseen' });
+
+		const guest = await listWishes({ seen: [] }, {});
+		expect(guest.map((wish) => wish.id).sort()).toEqual(['wish-own', 'wish-seen', 'wish-unseen']);
+	});
+
+	it('remembers the slip a drawing answers on its detail read, until the slip is gone', async () => {
+		const { getArtworkDetail } = await import('./read.service');
+
+		await insertWish(sql, { authorId: 'viewer-1', id: 'wish-1', text: 'a very tired sun' });
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-wish' });
+		await sql`update app.artworks set wish_id = 'wish-1' where id = 'artwork-wish'`;
+
+		await expect(getArtworkDetail('artwork-wish')).resolves.toMatchObject({
+			wish: { author: 'viewer-1_nick', id: 'wish-1', text: 'a very tired sun' }
+		});
+
+		await sql`update app.users set is_banned = true where id = 'viewer-1'`;
+		await expect(getArtworkDetail('artwork-wish')).resolves.toMatchObject({ wish: null });
+
+		await sql`delete from app.wishes where id = 'wish-1'`;
+		const [artwork] = await sql`select wish_id from app.artworks where id = 'artwork-wish'`;
+		expect(artwork).toEqual({ wish_id: null });
+	});
+
+	it('limits how many slips an artist leaves in an hour', async () => {
+		const { createWish } = await import('./service');
+		const { ARTWORK_WISH_RATE_LIMIT } = await import('./config');
+		const actor = { user: { id: 'viewer-1', role: 'user' as const } };
+
+		// The attempt that reaches the limit is the one refused.
+		for (let attempt = 1; attempt < ARTWORK_WISH_RATE_LIMIT.maxAttempts; attempt += 1) {
+			await createWish({ text: `slip ${attempt}` }, actor);
+		}
+
+		await expect(createWish({ text: 'one too many' }, actor)).rejects.toMatchObject({
+			status: 429
+		});
 	});
 });
