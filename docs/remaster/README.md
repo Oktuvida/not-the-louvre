@@ -106,7 +106,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
   - Lo gris del cordel no sale de las obras: está dibujado, para que no cueste nada.
 - [x] Visitar el estudio de cualquier artista, en `/gallery/artist/<nombre>`: su muro con lo más nuevo primero, bajo un Ex libris con su cara y sus cifras (obras, estrellas y desde cuándo cuelga, contando solo lo visible). Si la moderación ocultó el avatar, la etiqueta sale sin él. Se entra por la firma de la postal. No es una sala, así que no se ilumina ninguna pestaña. Un nombre que no existe o un artista baneado da 404, y quien visita su propio nombre va a Your Studio.
 - [x] El hilo de forks, en `/gallery/forks/<obra>`: la obra original arriba y debajo sus forks en un muro de polaroids, de lo más nuevo a lo más viejo. Se baja por «Forks 3 →» en la ficha de la postal y se sube por «Forked from…» en el frente, así que se recorre todo el hilo sin dibujar un árbol. El feed filtra por obra original y pagina como cualquier sala.
-- [x] Los créditos, en `/gallery/staff`: una etiqueta por persona, con el nombre que usa, su foto de GitHub, su GitHub y su Discord. Se llega desde el cordón del final de cada muro. Falta el Ko-fi cuando haya enlace.
+- [x] Los créditos, en `/gallery/staff`: una etiqueta por persona, con el nombre que usa, su foto de GitHub, su GitHub y su Discord. Se llega desde el cordón del final de cada muro y pulsando el título recortado de la portada. Falta el Ko-fi cuando haya enlace.
 
 ### 4. Estudio v3 y timelapse
 
