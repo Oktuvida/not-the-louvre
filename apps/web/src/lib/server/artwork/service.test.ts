@@ -116,6 +116,9 @@ const createRepository = () => {
 			throw new Error('not implemented in publish tests');
 		}),
 		findCommentById: vi.fn(async () => null),
+		createWish: vi.fn(async () => undefined),
+		findWish: vi.fn(async () => null),
+		listWishes: vi.fn(async () => []),
 		findCommentReportCount: vi.fn(
 			async (commentId: string) =>
 				Array.from(reports.values()).filter(
@@ -462,6 +465,47 @@ describe('artwork service', () => {
 			isNsfw: true,
 			nsfwSource: 'creator'
 		});
+	});
+
+	it('remembers the slip a drawing answers', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage } = createStorage();
+		vi.mocked(repository.findWish).mockResolvedValue({
+			author: 'oktuvida',
+			id: 'wish-1',
+			text: 'a very tired sun'
+		});
+
+		await publishArtwork(
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Tired Sun', wishId: 'wish-1' },
+			{ user: { id: 'user-1', role: 'user' } },
+			{
+				generateId: () => 'artwork-1',
+				repository,
+				storage
+			}
+		);
+
+		expect(artworks.get('artwork-1')?.wishId).toBe('wish-1');
+	});
+
+	it('still publishes a drawing whose slip left the mailbox while it was being drawn', async () => {
+		const { publishArtwork } = await import('./service');
+		const { artworks, repository } = createRepository();
+		const { storage } = createStorage();
+
+		await publishArtwork(
+			{ drawingDocument: ARTWORK_DRAWING_DOCUMENT, title: 'Tired Sun', wishId: 'wish-gone' },
+			{ user: { id: 'user-1', role: 'user' } },
+			{
+				generateId: () => 'artwork-1',
+				repository,
+				storage
+			}
+		);
+
+		expect(artworks.get('artwork-1')?.wishId).toBeNull();
 	});
 
 	it('rejects artwork titles blocked by backend moderation before upload', async () => {

@@ -10,6 +10,7 @@ const RESET_SQL = `
 		app.artwork_engagement_rate_limits,
 		app.artwork_publish_rate_limits,
 		app.artworks,
+		app.wishes,
 		app.auth_rate_limits,
 		app.users,
 		better_auth.account,

@@ -23,6 +23,7 @@ export class ArtworkFlowError extends Error {
 			| 'INVALID_SORT'
 			| 'INVALID_WINDOW'
 			| 'INVALID_TITLE'
+			| 'INVALID_WISH'
 			| 'INVALID_VOTE'
 			| 'VALIDATION_ERROR'
 			| 'MEDIA_TOO_LARGE'

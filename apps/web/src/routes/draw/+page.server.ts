@@ -4,7 +4,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { auth } from '#lib/server/auth.js';
 import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
 import { getArtworkDetail } from '#lib/server/artwork/read.service.js';
-import { publishArtwork } from '#lib/server/artwork/service.js';
+import { getWish, publishArtwork } from '#lib/server/artwork/service.js';
 import { toActionFailure } from '#lib/server/http/errors.js';
 import { resolveArtworkMediaUrl } from '#lib/shared/artwork/media-url.js';
 
@@ -37,12 +37,15 @@ export const load: PageServerLoad = async (event) => {
 			}))
 		: null;
 
+	const wishId = event.url.searchParams.get('wish');
+
 	return {
 		forkParent,
 		// The root layout renders the only <title> in the document from
 		// `page.data.meta`; a page-level <svelte:head><title> would lose to it.
 		meta: { title: 'Studio' } satisfies RouteMeta,
-		user: event.locals.user
+		user: event.locals.user,
+		wish: wishId ? await getWish(wishId) : null
 	};
 };
 
@@ -53,6 +56,7 @@ export const actions: Actions = {
 		const title = formData.get('title')?.toString() ?? '';
 		const parentArtworkId = formData.get('parentArtworkId')?.toString() ?? null;
 		const isNsfw = formData.get('isNsfw')?.toString() === 'true';
+		const wishId = formData.get('wishId')?.toString() ?? null;
 
 		if (!drawingDocument) {
 			return fail(400, {
@@ -68,7 +72,8 @@ export const actions: Actions = {
 					drawingDocument,
 					isNsfw,
 					parentArtworkId,
-					title
+					title,
+					wishId
 				},
 				{
 					ipAddress: getIP(event.request, auth.options),

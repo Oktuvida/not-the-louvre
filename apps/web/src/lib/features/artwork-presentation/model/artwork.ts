@@ -1,3 +1,4 @@
+import type { Wish } from '#lib/shared/content/wishes.js';
 import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
 
 export interface ArtworkComment {
@@ -42,6 +43,8 @@ export interface Artwork {
 	lineage?: ArtworkLineage;
 	rank?: number;
 	viewerVote?: ArtworkVoteValue | null;
+	/** The slip from the mailbox it answers. Only the detail read knows it. */
+	wish?: Wish | null;
 }
 
 /**

@@ -51,7 +51,7 @@ beforeEach(() => {
 	moderation.checkTextModeration.mockResolvedValue({ status: 'allowed' });
 });
 
-type EngagementKind = 'comment' | 'vote';
+type EngagementKind = 'comment' | 'vote' | 'wish';
 
 type EngagementRateLimitRecord = {
 	attemptCount: number;

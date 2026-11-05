@@ -7,6 +7,8 @@
 	import type { HomeAuthUser } from '#lib/features/home-entry-scene/auth-contract.js';
 	import type { HomePreviewCard } from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
 	import AvatarSketchpad from '#lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
+	import MailboxDialog from '#lib/features/mailbox/components/MailboxDialog.svelte';
+	import MailboxStand from '#lib/features/mailbox/components/MailboxStand.svelte';
 	import {
 		homeGalleryTarget,
 		warmOnIntent
@@ -43,6 +45,7 @@
 		onArtworkNavigate,
 		onAvatarSaved,
 		onGalleryNavigate,
+		onWishTaken,
 		previewCards = [],
 		user = null
 	}: {
@@ -52,6 +55,8 @@
 		onArtworkNavigate?: (artworkId: string) => void;
 		onAvatarSaved?: (payload: AvatarSavedPayload) => void;
 		onGalleryNavigate?: () => void;
+		/** A slip taken from the mailbox: the walk to the studio, with the slip. */
+		onWishTaken?: (wishId: string) => void;
 		previewCards?: HomePreviewCard[];
 		user?: HomeAuthUser | null;
 	} = $props();
@@ -61,6 +66,7 @@
 	let adultContentFailure = $state<boolean | null>(null);
 	let isSavingAdultContentPreference = $state(false);
 	let isAvatarEditorOpen = $state(false);
+	let isMailboxOpen = $state(false);
 
 	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
 	const hasSensitivePreview = $derived(previewCards.some((card) => card.isNsfw));
@@ -286,7 +292,9 @@
 		class:opacity-0={isExiting}
 		inert={isExiting}
 	>
-		<div class="flex w-full flex-col items-stretch gap-4 landscape:w-auto landscape:items-start">
+		<div
+			class="relative flex w-full flex-col items-stretch gap-4 landscape:w-auto landscape:items-start"
+		>
 			{#if user}
 				<!--
 					The signed-in GALLERY control is a <button>, so the body-level
@@ -294,7 +302,10 @@
 					starts 2.4s of camera choreography before `goto` runs. Warming on
 					pointer/focus intent turns that hold into overlap.
 				-->
-				<div class="w-full landscape:w-auto" use:warmOnIntent={homeGalleryTarget}>
+				<div
+					class="home-gallery relative z-1 w-full landscape:w-auto"
+					use:warmOnIntent={homeGalleryTarget}
+				>
 					<GameButton
 						type="button"
 						variant="secondary"
@@ -308,6 +319,7 @@
 						<span>GALLERY</span>
 					</GameButton>
 				</div>
+				<MailboxStand onOpen={() => (isMailboxOpen = true)} />
 			{:else}
 				<GameLink
 					href={galleryHref}
@@ -324,6 +336,16 @@
 		</div>
 	</div>
 </div>
+
+{#if isMailboxOpen}
+	<MailboxDialog
+		onClose={() => (isMailboxOpen = false)}
+		onTake={(wish) => {
+			isMailboxOpen = false;
+			onWishTaken?.(wish.id);
+		}}
+	/>
+{/if}
 
 {#if isAvatarEditorOpen && user}
 	<div

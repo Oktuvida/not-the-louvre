@@ -141,7 +141,8 @@ const toDetail = (record: ArtworkReadRecord): ArtworkDetail => ({
 	drawingVersion: record.drawingVersion ?? null,
 	mediaContentType: record.mediaContentType,
 	mediaSizeBytes: record.mediaSizeBytes,
-	updatedAt: record.updatedAt
+	updatedAt: record.updatedAt,
+	wish: record.wish ?? null
 });
 
 const normalizeSort = (value: string): ArtworkDiscoverySort => {

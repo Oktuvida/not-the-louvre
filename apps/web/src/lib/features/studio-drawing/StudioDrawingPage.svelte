@@ -30,6 +30,7 @@
 	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
 	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
 	import InkStamp from '#lib/features/shared-ui/components/InkStamp.svelte';
+	import WishSlip from '#lib/features/shared-ui/components/WishSlip.svelte';
 	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
 	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
 	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
@@ -40,6 +41,7 @@
 	import StudioActions from '#lib/features/studio-drawing/tools/StudioActions.svelte';
 	// Every screen's layout of the studio lives in this one sheet.
 	import './studio-layout.css';
+	import type { Wish } from '#lib/shared/content/wishes.js';
 	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
 	import { keepTheRestingHandOff } from '#lib/features/studio-drawing/resting-hand.js';
 	import {
@@ -59,6 +61,7 @@
 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
 	const FORK_CONTEXT_STORAGE_PREFIX = 'studio-fork-context';
+	const WISH_STORAGE_PREFIX = 'studio-wish';
 
 	type PersistedForkContext = Pick<DrawForkParent, 'id' | 'isNsfw' | 'mediaUrl' | 'title'>;
 
@@ -111,6 +114,33 @@
 		window.localStorage.setItem(storageKey, JSON.stringify(persistedForkContext));
 	};
 
+	/** The slip stays on the book until it is drawn or put back, whatever the URL. */
+	const loadPersistedWish = (storageKey: string): Wish | null => {
+		const rawValue = window.localStorage.getItem(storageKey);
+		if (!rawValue) return null;
+
+		try {
+			const parsed = JSON.parse(rawValue) as Partial<Wish>;
+			if (
+				typeof parsed.author === 'string' &&
+				typeof parsed.id === 'string' &&
+				typeof parsed.text === 'string'
+			) {
+				return { author: parsed.author, id: parsed.id, text: parsed.text };
+			}
+		} catch {
+			// A value this page did not write: treated as no slip at all.
+		}
+
+		window.localStorage.removeItem(storageKey);
+		return null;
+	};
+
+	const savePersistedWish = (storageKey: string, wish: Wish | null) => {
+		if (wish) window.localStorage.setItem(storageKey, JSON.stringify(wish));
+		else window.localStorage.removeItem(storageKey);
+	};
+
 	let {
 		checkTextContent = defaultCheckTextContent,
 		createArtworkPayload = async (documentState: DrawingDocumentV2) =>
@@ -119,12 +149,21 @@
 		openingDurationMs = 950,
 		publishDrawing = async (
 			drawingDocument: string,
-			options: { isNsfw: boolean; parentArtworkId?: string | null; title: string }
+			options: {
+				isNsfw: boolean;
+				parentArtworkId?: string | null;
+				title: string;
+				wishId?: string | null;
+			}
 		): Promise<DrawPublishActionData> => {
 			const formData = new FormData();
 			formData.set('drawingDocument', drawingDocument);
 			formData.set('isNsfw', String(options.isNsfw));
 			formData.set('title', options.title);
+			if (options.wishId) {
+				formData.set('wishId', options.wishId);
+			}
+
 			if (options.parentArtworkId) {
 				formData.set('parentArtworkId', options.parentArtworkId);
 			}
@@ -149,7 +188,8 @@
 		},
 		draftStore,
 		inkLimits = {},
-		user
+		user,
+		wish = null
 	}: {
 		checkTextContent?: TextContentChecker;
 		createArtworkPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
@@ -160,10 +200,17 @@
 		openingDurationMs?: number;
 		publishDrawing?: (
 			drawingDocument: string,
-			options: { isNsfw: boolean; parentArtworkId?: string | null; title: string }
+			options: {
+				isNsfw: boolean;
+				parentArtworkId?: string | null;
+				title: string;
+				wishId?: string | null;
+			}
 		) => Promise<DrawPublishActionData>;
 		replaceStudioUrl?: () => void;
 		user?: DrawPageUser;
+		/** The slip the artist took from the mailbox, or none. */
+		wish?: Wish | null;
 	} = $props();
 
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
@@ -201,6 +248,10 @@
 	let showExitFade = $state(false);
 	let forkContextHydrated = $state(false);
 	const forkContextStorageKey = $derived(getForkContextStorageKey(user));
+	let currentWish = $state<Wish | null>(null);
+	const wishStorageKey = $derived(
+		user ? `${WISH_STORAGE_PREFIX}:${user.id ?? user.nickname}` : null
+	);
 	const resolveDraftKeys = (scope: string | null) => {
 		if (!user) {
 			return { draftKey: null, legacyDraftKey: null };
@@ -350,9 +401,9 @@
 			return;
 		}
 
-		if (!hasForkParent || untrack(() => sceneState) !== 'closed') return;
+		if ((!hasForkParent && !currentWish) || untrack(() => sceneState) !== 'closed') return;
 
-		// Arriving by Fork must still play the book-open transition. The cover flip
+		// Arriving by Fork, or with a slip to draw, must still play the book-open transition. The cover flip
 		// and the frame zoom are CSS transitions, so they need the closed pose to be
 		// computed first: flipping the state inside the mount flush leaves them with
 		// no start value and the book snaps open. One frame later it animates.
@@ -377,6 +428,8 @@
 		if (resolvedForkParent) {
 			currentForkParent = resolvedForkParent;
 		}
+
+		currentWish = wish ?? (wishStorageKey ? loadPersistedWish(wishStorageKey) : null);
 
 		forkContextHydrated = true;
 
@@ -437,6 +490,11 @@
 		savePersistedForkParent(forkContextStorageKey, currentForkParent);
 	});
 
+	$effect(() => {
+		if (!forkContextHydrated || !wishStorageKey) return;
+		savePersistedWish(wishStorageKey, currentWish);
+	});
+
 	const clearCanvas = () => {
 		if (!studioUnlocked) return;
 		drawingDocument = cloneDrawingDocumentV2(artworkBaselineDocument);
@@ -484,6 +542,11 @@
 		if (!studioUnlocked || !currentForkParent) return;
 
 		returnToEmptyArtworkMode();
+	};
+
+	const putWishBack = () => {
+		currentWish = null;
+		replaceStudioUrl();
 	};
 
 	const startOpeningBook = () => {
@@ -625,9 +688,11 @@
 			const result = await publishDrawing(payload, {
 				isNsfw: isArtworkNsfw,
 				parentArtworkId: currentForkParent?.id ?? null,
-				title: artworkTitle
+				title: artworkTitle,
+				wishId: currentWish?.id ?? null
 			});
 			if ('success' in result && result.success) {
+				if (currentWish) putWishBack();
 				publishedArtwork = result.artwork;
 				statusMessage = `Artwork published as ${result.artwork.title}`;
 				statusTone = 'success';
@@ -684,6 +749,28 @@
 	};
 </script>
 
+{#snippet wishOnTheDesk()}
+	{#if currentWish}
+		<aside class="studio-wish" aria-label="Commission">
+			<WishSlip
+				byline={`left by ${currentWish.author}`}
+				label="Commission"
+				text={currentWish.text}
+				tilt={-1.2}
+			>
+				<button
+					type="button"
+					class="studio-wish-back focus-ring"
+					disabled={!studioUnlocked}
+					onclick={putWishBack}
+				>
+					Put it back
+				</button>
+			</WishSlip>
+		</aside>
+	{/if}
+{/snippet}
+
 <!-- The drawing's title, its 18+ mark and a fork's change of plan: on the
      inside of the cover where the layout lays them there, else on the desk. -->
 {#snippet drawingNotes(onCover: boolean)}
@@ -710,6 +797,8 @@
 				</p>
 			</aside>
 		{/if}
+
+		{@render wishOnTheDesk()}
 
 		<div class="cover-postit cover-postit-title sticky-note">
 			<label class="postit-label" for="studio-artwork-title">Title your masterpiece</label>
@@ -861,6 +950,8 @@
 				<span>Exit Studio</span>
 			</GameLink>
 		</div>
+
+		{@render wishOnTheDesk()}
 	</header>
 
 	<!-- One page for every screen: studio-layout.css places these four pieces
@@ -1005,6 +1096,29 @@
 
 	.studio-notes-open {
 		animation: studioPanelReveal 280ms ease-out both;
+	}
+
+	/* --- The slip from the mailbox --- */
+
+	.studio-wish {
+		--slip-padding: 0.5rem 0.9rem 0.4rem 1rem;
+		--slip-text: 1.32rem;
+		flex: none;
+	}
+
+	.studio-wish-back {
+		float: left;
+		margin-top: 0.1rem;
+		padding: 0;
+		border: 0;
+		background: none;
+		font-family: var(--font-hand);
+		font-size: 1rem;
+		line-height: 1.1;
+		color: #a33b31;
+		text-decoration: underline dotted;
+		text-underline-offset: 3px;
+		cursor: pointer;
 	}
 
 	/* --- Post-it notes --- */
@@ -1225,7 +1339,8 @@
 	}
 
 	@container cover-notes (height < 39.5rem) {
-		.studio-notes:has(.cover-postit-cancel) .studio-shortcuts {
+		.studio-notes:has(.cover-postit-cancel) .studio-shortcuts,
+		.studio-notes:has(.studio-wish) .studio-shortcuts {
 			display: none;
 		}
 	}

@@ -11,6 +11,7 @@ const mocked = vi.hoisted(() => ({
 	openStoredDrawingDocument: vi.fn(),
 	getIP: vi.fn(() => '127.0.0.1'),
 	getArtworkDetail: vi.fn(),
+	getWish: vi.fn(),
 	publishArtwork: vi.fn()
 }));
 
@@ -19,6 +20,7 @@ vi.mock('#lib/server/drawing-document/document-store.js', () => ({
 }));
 
 vi.mock('#lib/server/artwork/service.js', () => ({
+	getWish: mocked.getWish,
 	publishArtwork: mocked.publishArtwork
 }));
 
@@ -202,6 +204,41 @@ describe('draw route page', () => {
 		expect(mocked.getArtworkDetail).toHaveBeenCalledWith('artwork-parent', {
 			user: authenticatedUser
 		});
+	});
+
+	it('lays the slip the artist took on the desk', async () => {
+		mocked.getWish.mockResolvedValueOnce({ author: 'oktuvida', id: 'wish-1', text: 'a sun' });
+		const { load } = await import('./+page.server');
+
+		await expect(load(createLoadEvent('http://localhost/draw?wish=wish-1'))).resolves.toMatchObject(
+			{ wish: { author: 'oktuvida', id: 'wish-1', text: 'a sun' } }
+		);
+	});
+
+	it('opens the studio as usual on a slip that is gone', async () => {
+		mocked.getWish.mockResolvedValueOnce(null);
+		const { load } = await import('./+page.server');
+
+		await expect(load(createLoadEvent('http://localhost/draw?wish=gone'))).resolves.toMatchObject({
+			wish: null
+		});
+	});
+
+	it('publishes a drawing for the slip it answers', async () => {
+		const { actions } = await import('./+page.server');
+
+		await actions.publish(
+			createActionEvent({
+				drawingDocument: JSON.stringify({ kind: 'artwork' }),
+				title: 'A Sun',
+				wishId: 'wish-1'
+			})
+		);
+
+		expect(mocked.publishArtwork).toHaveBeenCalledWith(
+			expect.objectContaining({ wishId: 'wish-1' }),
+			expect.anything()
+		);
 	});
 
 	it('preserves the runtime-backed drawing size contract in publish failures', async () => {

@@ -26,5 +26,13 @@ export const ARTWORK_COMMENT_RATE_LIMIT = {
 
 export const ARTWORK_COMMENT_MAX_LENGTH = 500;
 
+export const ARTWORK_WISH_RATE_LIMIT = {
+	maxAttempts: 10,
+	windowMs: 60 * 60 * 1000
+} as const;
+
+/** The slips already seen that a request may name, whatever a client sends. */
+export const WISHES_REMEMBERED = 30;
+
 export const CONTENT_REPORT_AUTO_HIDE_THRESHOLD = 3;
 export const CONTENT_REPORT_DETAILS_MAX_LENGTH = 1000;

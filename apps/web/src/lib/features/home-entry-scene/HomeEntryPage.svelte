@@ -290,10 +290,14 @@
 	 * itself is the way in, so no veil drops over it. The studio is shown once
 	 * the move is over and its desk is ready to paint.
 	 */
-	const handleStudioNavigate = () => {
+	const handleStudioNavigate = (wishId?: string) => {
 		if (isExiting) return;
 		isExiting = true;
 		scenePose = 'top-close';
+
+		const studioTarget = wishId
+			? `${homeStudioTarget}?wish=${encodeURIComponent(wishId)}`
+			: homeStudioTarget;
 
 		warmNavigationTargetWhenIdle(homeStudioTarget);
 		const deskReady = readyStudioBackground();
@@ -303,7 +307,8 @@
 			void deskReady.then(() => {
 				if (!exitDelayedCall) return;
 				handOverBook();
-				void goto(homeStudioTarget);
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- it starts from a resolved route
+				void goto(studioTarget);
 			});
 		});
 	};
@@ -377,6 +382,7 @@
 		{onAvatarSaved}
 		onArtworkNavigate={handleArtworkNavigate}
 		onGalleryNavigate={handleGalleryNavigate}
+		onWishTaken={handleStudioNavigate}
 		{previewCards}
 		{user}
 	/>
@@ -391,7 +397,7 @@
 				variant="primary"
 				size="hero"
 				className="shadow-[0_16px_40px_rgba(0,0,0,0.35)]"
-				onclick={handleStudioNavigate}
+				onclick={() => handleStudioNavigate()}
 			>
 				<Paintbrush size={28} />
 				<span>Studio</span>

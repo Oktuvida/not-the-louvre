@@ -38,7 +38,8 @@ export const artworkReportReason = appSchema.enum('artwork_report_reason', ARTWO
 export const contentReportStatus = appSchema.enum('content_report_status', CONTENT_REPORT_STATUSES);
 export const engagementRateLimitKind = appSchema.enum('engagement_rate_limit_kind', [
 	'vote',
-	'comment'
+	'comment',
+	'wish'
 ]);
 export const moderationTextPolicyContext = appSchema.enum('moderation_text_policy_context', [
 	'nickname',
@@ -102,6 +103,19 @@ export const authRateLimits = appSchema.table(
 	]
 );
 
+export const wishes = appSchema.table(
+	'wishes',
+	{
+		id: text('id').primaryKey(),
+		authorId: text('author_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		body: text('body').notNull(),
+		createdAt: timestamp('created_at').defaultNow().notNull()
+	},
+	(table) => [index('wishes_author_id_idx').on(table.authorId)]
+);
+
 export const artworks = appSchema.table(
 	'artworks',
 	{
@@ -110,6 +124,8 @@ export const artworks = appSchema.table(
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
 		parentId: text('parent_id'),
+		// The slip from the mailbox this drawing answers.
+		wishId: text('wish_id').references(() => wishes.id, { onDelete: 'set null' }),
 		title: text('title').notNull(),
 		// Inline base64 gzip documents from before they moved to object storage;
 		// read until the migration copies them across, then dropped.
@@ -140,6 +156,7 @@ export const artworks = appSchema.table(
 	(table) => [
 		index('artworks_author_id_idx').on(table.authorId),
 		index('artworks_parent_id_idx').on(table.parentId),
+		index('artworks_wish_id_idx').on(table.wishId),
 		uniqueIndex('artworks_storage_key_unique').on(table.storageKey),
 		// Every discovery feed filters on `is_hidden = false` and then sorts,
 		// so these partial indexes match the predicate exactly and let Postgres
@@ -357,6 +374,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 	artworks: many(artworks),
 	votes: many(artworkVotes),
 	comments: many(artworkComments),
+	wishes: many(wishes),
 	reports: many(contentReports),
 	moderationPoliciesUpdated: many(moderationTextPolicies),
 	viewerContentPreferences: one(viewerContentPreferences, {
@@ -365,10 +383,22 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 	})
 }));
 
+export const wishesRelations = relations(wishes, ({ many, one }) => ({
+	author: one(users, {
+		fields: [wishes.authorId],
+		references: [users.id]
+	}),
+	artworks: many(artworks)
+}));
+
 export const artworksRelations = relations(artworks, ({ many, one }) => ({
 	author: one(users, {
 		fields: [artworks.authorId],
 		references: [users.id]
+	}),
+	wish: one(wishes, {
+		fields: [artworks.wishId],
+		references: [wishes.id]
 	}),
 	parent: one(artworks, {
 		fields: [artworks.parentId],
