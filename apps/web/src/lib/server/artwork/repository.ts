@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, ne, notExists, sql, type SQL } from 'drizzle-orm';
 import { db } from '#lib/server/db/index.js';
 import {
 	artworkComments,
@@ -61,6 +61,24 @@ const artworkRecordProjection = {
 	updatedAt: artworks.updatedAt,
 	wishId: artworks.wishId
 };
+
+/** What the mailbox can hand out: neither taken down nor left by a banned artist. */
+const wishInTheBox = (...conditions: (SQL | undefined)[]) =>
+	and(eq(wishes.isHidden, false), eq(users.isBanned, false), ...conditions);
+
+const notReportedBy = (reporterId: string) =>
+	notExists(
+		db
+			.select({ id: contentReports.id })
+			.from(contentReports)
+			.where(
+				and(
+					eq(contentReports.wishId, wishes.id),
+					eq(contentReports.reporterId, reporterId),
+					eq(contentReports.status, 'pending')
+				)
+			)
+	);
 
 const wishSelect = () => ({
 	author: users.nickname,
@@ -255,10 +273,36 @@ export const artworkRepository: ArtworkRepository = {
 			.select(wishSelect())
 			.from(wishes)
 			.innerJoin(users, eq(users.id, wishes.authorId))
-			.where(and(eq(wishes.id, id), eq(users.isBanned, false)))
+			.where(wishInTheBox(eq(wishes.id, id)))
 			.limit(1);
 
 		return wish ?? null;
+	},
+	async deleteWish(id) {
+		const deleted = await db.delete(wishes).where(eq(wishes.id, id)).returning({ id: wishes.id });
+		return deleted.length > 0;
+	},
+	async setWishHiddenState(id, input) {
+		const updated = await db
+			.update(wishes)
+			.set(input)
+			.where(eq(wishes.id, id))
+			.returning({ id: wishes.id });
+		return updated.length > 0;
+	},
+	async resolveWishReports(input: ResolveContentReportsInput) {
+		const records = await db
+			.update(contentReports)
+			.set({
+				reviewedAt: input.resolvedAt,
+				reviewedBy: input.resolvedBy,
+				status: input.status,
+				updatedAt: input.resolvedAt
+			})
+			.where(and(eq(contentReports.wishId, input.targetId), eq(contentReports.status, 'pending')))
+			.returning({ id: contentReports.id });
+
+		return records.length;
 	},
 	// A table of short lines, so sorting all of it at random stays cheap.
 	async listWishes(input: ListWishesInput) {
@@ -267,9 +311,9 @@ export const artworkRepository: ArtworkRepository = {
 			.from(wishes)
 			.innerJoin(users, eq(users.id, wishes.authorId))
 			.where(
-				and(
-					eq(users.isBanned, false),
-					input.excludeAuthorId ? ne(wishes.authorId, input.excludeAuthorId) : undefined
+				wishInTheBox(
+					input.viewerId ? ne(wishes.authorId, input.viewerId) : undefined,
+					input.viewerId ? notReportedBy(input.viewerId) : undefined
 				)
 			)
 			.orderBy(

@@ -201,15 +201,16 @@ describe('artwork read repository statements', () => {
 		expect(state.queries[0]!.fields).toHaveProperty('drawingDocument');
 	});
 
-	it('bounds both moderation queue aggregates in SQL instead of paginating the whole backlog', async () => {
+	it('bounds every moderation queue aggregate in SQL instead of paginating the whole backlog', async () => {
 		const { artworkReadRepository } = await import('./read.repository');
 
+		state.rows.push([]);
 		state.rows.push([]);
 		state.rows.push([]);
 
 		await artworkReadRepository.listModerationQueue({ cursor: null, limit: 21 });
 
-		expect(state.queries).toHaveLength(2);
+		expect(state.queries).toHaveLength(3);
 		for (const query of state.queries) {
 			expect(argumentAt(query, 'limit', 0)).toEqual([21]);
 			expect(argumentAt(query, 'orderBy', 0).length).toBeGreaterThan(0);
@@ -219,6 +220,7 @@ describe('artwork read repository statements', () => {
 	it('pushes the moderation queue cursor into each aggregate having clause', async () => {
 		const { artworkReadRepository } = await import('./read.repository');
 
+		state.rows.push([]);
 		state.rows.push([]);
 		state.rows.push([]);
 

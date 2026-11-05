@@ -32,7 +32,7 @@ describe('MailboxDialog', () => {
 		const request = vi.fn<typeof fetch>().mockResolvedValue(json({ wishes: [slip] }));
 		render(MailboxDialog, { onClose: vi.fn(), onTake, request });
 
-		await page.getByRole('button', { name: /a very tired sun/ }).click();
+		await page.getByRole('button', { name: /Draw this: a very tired sun/ }).click();
 
 		expect(onTake).toHaveBeenCalledWith(slip);
 	});
@@ -41,7 +41,9 @@ describe('MailboxDialog', () => {
 		const request = vi.fn<typeof fetch>().mockResolvedValue(json({ wishes: [slip] }));
 		render(MailboxDialog, { onClose: vi.fn(), onTake: vi.fn(), request });
 
-		await expect.element(page.getByRole('button', { name: /a very tired sun/ })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: /Draw this: a very tired sun/ }))
+			.toBeVisible();
 		await expect
 			.element(page.getByRole('button', { name: 'show me others' }))
 			.not.toBeInTheDocument();

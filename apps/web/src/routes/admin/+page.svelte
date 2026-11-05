@@ -299,6 +299,22 @@
 		});
 	}
 
+	async function moderateWish(wishId: string, action: 'delete' | 'dismiss' | 'hide' | 'unhide') {
+		await withBusy(`wish:${wishId}:${action}`, async () => {
+			if (action === 'delete') {
+				await requestJson(`/api/wishes/${wishId}/moderation`, { method: 'DELETE' });
+			} else {
+				await requestJson(`/api/wishes/${wishId}/moderation`, {
+					json: { action },
+					method: 'PATCH'
+				});
+			}
+
+			await refreshModeration();
+			setMessage('success', 'Slip moderation updated.');
+		});
+	}
+
 	async function saveTextPolicy() {
 		await withBusy('policy:save', async () => {
 			const payload = {
@@ -582,11 +598,17 @@
 			</div>
 
 			<div class="queue-list">
-				{#each moderationItems as item (`${item.targetType}:${item.commentId ?? item.artworkId}`)}
+				{#each moderationItems as item (`${item.targetType}:${item.commentId ?? item.wishId ?? item.artworkId}`)}
 					<article class="entity-card queue-card">
 						<div class="entity-header">
 							<div>
-								<h3>{item.targetType === 'artwork' ? 'Artwork case' : 'Comment case'}</h3>
+								<h3>
+									{item.targetType === 'artwork'
+										? 'Artwork case'
+										: item.targetType === 'comment'
+											? 'Comment case'
+											: 'Slip case'}
+								</h3>
 								<p>{item.authorNickname} · {item.reportCount} reports</p>
 							</div>
 							<div class="badge-row">
@@ -681,6 +703,39 @@
 									onclick={() => moderateComment(item.artworkId, item.commentId!, 'delete')}
 								>
 									Delete comment
+								</button>
+							{:else if item.wishId}
+								<button
+									type="button"
+									class="secondary"
+									disabled={busyKey !== null || item.isHidden}
+									onclick={() => moderateWish(item.wishId!, 'hide')}
+								>
+									Hide
+								</button>
+								<button
+									type="button"
+									class="secondary"
+									disabled={busyKey !== null || !item.isHidden}
+									onclick={() => moderateWish(item.wishId!, 'unhide')}
+								>
+									Unhide
+								</button>
+								<button
+									type="button"
+									class="secondary"
+									disabled={busyKey !== null}
+									onclick={() => moderateWish(item.wishId!, 'dismiss')}
+								>
+									Dismiss report
+								</button>
+								<button
+									type="button"
+									class="danger"
+									disabled={busyKey !== null}
+									onclick={() => moderateWish(item.wishId!, 'delete')}
+								>
+									Delete slip
 								</button>
 							{/if}
 						</div>

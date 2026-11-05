@@ -31,7 +31,8 @@ import type {
 	ListRecentArtworksInput,
 	ListTopArtworksInput,
 	ModerationQueueCursor,
-	ModerationQueueItem
+	ModerationQueueItem,
+	ModerationQueueTargetType
 } from './types';
 
 const recentCursorWhere = (cursor: ArtworkDiscoveryCursor | null) => {
@@ -295,13 +296,16 @@ const buildRankedDiscoverySelect = (
 
 const moderationQueueReportCount = () => count(contentReports.id);
 
+const moderationItemId = (item: ModerationQueueItem) =>
+	item.targetType === 'wish' ? item.wishId : (item.commentId ?? item.artworkId);
+
 // Mirrors the (report_count DESC, target_type ASC, id ASC) ordering the service's
 // cursor encodes. target_type is constant inside each aggregate, so the branch
 // that matches the cursor breaks ties on the id while the other one only has to
 // compare report counts — which is what lets both aggregates carry a LIMIT.
 const moderationQueueHaving = (
 	cursor: ModerationQueueCursor | null,
-	targetType: 'artwork' | 'comment',
+	targetType: ModerationQueueTargetType,
 	idColumn: AnyColumn
 ) => {
 	const reportCount = moderationQueueReportCount();
@@ -423,7 +427,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.select(buildDetailSelect(activeViewer, options))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.leftJoin(wishes, eq(wishes.id, artworks.wishId))
+			.leftJoin(wishes, and(eq(wishes.id, artworks.wishId), eq(wishes.isHidden, false)))
 			.leftJoin(
 				wishAuthors,
 				and(eq(wishAuthors.id, wishes.authorId), eq(wishAuthors.isBanned, false))
@@ -516,7 +520,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 		return rows[0] ? mapRow(rows[0]) : null;
 	},
 	async listModerationQueue(input: ListModerationQueueInput) {
-		const [artworkRows, commentRows] = await Promise.all([
+		const [artworkRows, commentRows, wishRows] = await Promise.all([
 			db
 				.select({
 					artworkId: artworks.id,
@@ -552,6 +556,24 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				.groupBy(artworkComments.id, users.id)
 				.having(moderationQueueHaving(input.cursor, 'comment', artworkComments.id))
 				.orderBy(desc(moderationQueueReportCount()), asc(artworkComments.id))
+				.limit(input.limit),
+
+			db
+				.select({
+					authorId: wishes.authorId,
+					authorNickname: users.nickname,
+					contentSummary: wishes.body,
+					isHidden: wishes.isHidden,
+					reportCount: moderationQueueReportCount(),
+					wishId: wishes.id
+				})
+				.from(contentReports)
+				.innerJoin(wishes, eq(wishes.id, contentReports.wishId))
+				.innerJoin(users, eq(users.id, wishes.authorId))
+				.where(and(isNotNull(contentReports.wishId), eq(contentReports.status, 'pending')))
+				.groupBy(wishes.id, users.id)
+				.having(moderationQueueHaving(input.cursor, 'wish', wishes.id))
+				.orderBy(desc(moderationQueueReportCount()), asc(wishes.id))
 				.limit(input.limit)
 		]);
 
@@ -564,7 +586,8 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				contentSummary: row.contentSummary,
 				isHidden: row.isHidden,
 				reportCount: row.reportCount,
-				targetType: 'artwork' as const
+				targetType: 'artwork' as const,
+				wishId: null
 			})),
 			...commentRows.map((row) => ({
 				artworkId: row.artworkId,
@@ -574,19 +597,31 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				contentSummary: row.contentSummary,
 				isHidden: row.isHidden,
 				reportCount: row.reportCount,
-				targetType: 'comment' as const
+				targetType: 'comment' as const,
+				wishId: null
+			})),
+			...wishRows.map((row) => ({
+				artworkId: null,
+				authorId: row.authorId,
+				authorNickname: row.authorNickname,
+				commentId: null,
+				contentSummary: row.contentSummary,
+				isHidden: row.isHidden,
+				reportCount: row.reportCount,
+				targetType: 'wish' as const,
+				wishId: row.wishId
 			}))
 		];
 
-		// Both aggregates are already cursor-filtered and capped at the page
-		// size in SQL, and target_type only breaks ties, so the global page is
-		// contained in their union: merging at most 2 * limit rows here is
+		// The aggregates are already cursor-filtered and capped at the page size
+		// in SQL, and target_type only breaks ties, so the global page is
+		// contained in their union: merging at most 3 * limit rows here is
 		// enough to restore the exact order the service's cursor encodes.
 		allItems.sort((a, b) => {
 			if (b.reportCount !== a.reportCount) return b.reportCount - a.reportCount;
 			if (a.targetType !== b.targetType) return a.targetType < b.targetType ? -1 : 1;
-			const aId = a.commentId ?? a.artworkId;
-			const bId = b.commentId ?? b.artworkId;
+			const aId = moderationItemId(a);
+			const bId = moderationItemId(b);
 			return aId < bId ? -1 : aId > bId ? 1 : 0;
 		});
 

@@ -111,6 +111,8 @@ export const wishes = appSchema.table(
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
 		body: text('body').notNull(),
+		isHidden: boolean('is_hidden').notNull().default(false),
+		hiddenAt: timestamp('hidden_at'),
 		createdAt: timestamp('created_at').defaultNow().notNull()
 	},
 	(table) => [index('wishes_author_id_idx').on(table.authorId)]
@@ -243,6 +245,7 @@ export const contentReports = appSchema.table(
 			.references(() => users.id, { onDelete: 'cascade' }),
 		artworkId: text('artwork_id'),
 		commentId: text('comment_id'),
+		wishId: text('wish_id'),
 		reason: artworkReportReason('reason').notNull(),
 		status: contentReportStatus('status').notNull().default('pending'),
 		reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
@@ -257,6 +260,7 @@ export const contentReports = appSchema.table(
 	(table) => [
 		index('content_reports_artwork_id_idx').on(table.artworkId),
 		index('content_reports_comment_id_idx').on(table.commentId),
+		index('content_reports_wish_id_idx').on(table.wishId),
 		index('content_reports_reporter_id_idx').on(table.reporterId),
 		index('content_reports_status_idx').on(table.status),
 		uniqueIndex('content_reports_pending_artwork_reporter_unique')
@@ -265,9 +269,12 @@ export const contentReports = appSchema.table(
 		uniqueIndex('content_reports_pending_comment_reporter_unique')
 			.on(table.reporterId, table.commentId)
 			.where(sql`${table.commentId} is not null and ${table.status} = 'pending'`),
+		uniqueIndex('content_reports_pending_wish_reporter_unique')
+			.on(table.reporterId, table.wishId)
+			.where(sql`${table.wishId} is not null and ${table.status} = 'pending'`),
 		check(
 			'content_reports_single_target_check',
-			sql`(case when ${table.artworkId} is null then 0 else 1 end + case when ${table.commentId} is null then 0 else 1 end) = 1`
+			sql`(case when ${table.artworkId} is null then 0 else 1 end + case when ${table.commentId} is null then 0 else 1 end + case when ${table.wishId} is null then 0 else 1 end) = 1`
 		),
 		check(
 			'content_reports_review_resolution_check',

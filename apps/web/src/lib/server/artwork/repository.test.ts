@@ -234,7 +234,8 @@ describe('artwork repository reporting persistence', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: now
+			updatedAt: now,
+			wishId: null
 		});
 
 		expect(report).toMatchObject({

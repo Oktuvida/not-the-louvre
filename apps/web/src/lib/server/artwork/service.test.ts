@@ -117,6 +117,9 @@ const createRepository = () => {
 		}),
 		findCommentById: vi.fn(async () => null),
 		createWish: vi.fn(async () => undefined),
+		deleteWish: vi.fn(async () => false),
+		resolveWishReports: vi.fn(async () => 0),
+		setWishHiddenState: vi.fn(async () => false),
 		findWish: vi.fn(async () => null),
 		listWishes: vi.fn(async () => []),
 		findCommentReportCount: vi.fn(
