@@ -10,8 +10,8 @@ const assertPlaywrightRuntime = () => {
 	}
 };
 
-export const POST: RequestHandler = async () => {
+export const POST: RequestHandler = async ({ url }) => {
 	assertPlaywrightRuntime();
 
-	return Response.json({ ok: true, ...(await resetBackendState()) });
+	return Response.json({ ok: true, ...(await resetBackendState(url.origin)) });
 };

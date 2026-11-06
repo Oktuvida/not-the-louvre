@@ -1,6 +1,10 @@
 import type { RequestHandler } from './$types';
 import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
-import { edgeCacheControl, readEdgeCache, storeInEdgeCache } from '#lib/server/http/edge-cache.js';
+import {
+	ANONYMOUS_FEED_CACHE_CONTROL,
+	readEdgeCache,
+	storeInEdgeCache
+} from '#lib/server/http/edge-cache.js';
 import { toApiErrorResponse } from '#lib/server/http/errors.js';
 
 // Anonymous discovery pages are viewer-independent: `viewerVote` collapses to a
@@ -12,8 +16,6 @@ import { toApiErrorResponse } from '#lib/server/http/errors.js';
 // (sort, window, cursor, limit) is unbounded, so nothing can enumerate the keys
 // a hide would have to drop. The TTL is the only bound there is, so it stays
 // short.
-const ANONYMOUS_EDGE_TTL_SECONDS = 30;
-const ANONYMOUS_CACHE_CONTROL = edgeCacheControl(ANONYMOUS_EDGE_TTL_SECONDS, 120);
 const SIGNED_IN_CACHE_CONTROL = 'private, no-store';
 
 const DISCOVERY_ERROR = {
@@ -51,7 +53,7 @@ export const GET: RequestHandler = async (event) => {
 		const discovery = await listArtworkDiscovery(discoveryRequest, { user: event.locals.user });
 		const response = Response.json(discovery, {
 			headers: {
-				'cache-control': isAnonymous ? ANONYMOUS_CACHE_CONTROL : SIGNED_IN_CACHE_CONTROL
+				'cache-control': isAnonymous ? ANONYMOUS_FEED_CACHE_CONTROL : SIGNED_IN_CACHE_CONTROL
 			}
 		});
 

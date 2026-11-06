@@ -20,7 +20,7 @@ import { hyperdriveConnectionString } from '#lib/server/platform.js';
 // A first visit (a shared link, a reload) renders the first page on the
 // server instead: the HTML then carries the artworks, so the browser fetches
 // the first images while the page's JavaScript is still on its way.
-export const load: PageServerLoad = async ({ isDataRequest, locals, params, parent }) => {
+export const load: PageServerLoad = async ({ isDataRequest, locals, params, parent, url }) => {
 	const shell = loadGalleryRoomShell(params.room ?? 'hall-of-fame', locals.user);
 
 	// The root layout owns the only <title> in the document; a route says who it
@@ -39,7 +39,8 @@ export const load: PageServerLoad = async ({ isDataRequest, locals, params, pare
 		return {
 			...shell,
 			initialRoomContent: await loadGalleryRoomContent(shell.roomId, locals.user, {
-				adultContentEnabled: (await parent()).adultContentEnabled
+				adultContentEnabled: (await parent()).adultContentEnabled,
+				origin: url.origin
 			}),
 			lazy: { roomContent: null },
 			meta
@@ -54,7 +55,8 @@ export const load: PageServerLoad = async ({ isDataRequest, locals, params, pare
 			roomContent: runWithRequestDbConnection(
 				async () =>
 					loadGalleryRoomContent(shell.roomId, locals.user, {
-						adultContentEnabled: (await parent()).adultContentEnabled
+						adultContentEnabled: (await parent()).adultContentEnabled,
+						origin: url.origin
 					}),
 				{
 					connectionString: hyperdriveConnectionString()
