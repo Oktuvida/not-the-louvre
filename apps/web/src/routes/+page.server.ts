@@ -5,6 +5,7 @@ import { auth } from '#lib/server/auth.js';
 import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
 import { avatarService } from '#lib/server/user/avatar.service.js';
 import { userRepository } from '#lib/server/user/repository.js';
+import { homeBestPiecesEdgeCacheKey, sharedAtTheEdge } from '#lib/server/http/edge-cache.js';
 import { toActionFailure } from '#lib/server/http/errors.js';
 import {
 	homeSceneArtworkSlotNames,
@@ -43,12 +44,16 @@ const toFailure = (action: HomeActionName, error: unknown, fallback: string) =>
 		scope: `home ${action} action`
 	});
 
-export const load: PageServerLoad = async ({ locals, parent }) => {
-	const [topDiscovery, parentData, studioDiscovery, avatarUserRecord] = await Promise.all([
+export const load: PageServerLoad = async ({ locals, parent, url }) => {
+	const readBestPieces = () =>
 		listArtworkDiscovery(
 			{ cursor: null, limit: 3, sort: 'top', window: 'all' },
 			{ user: locals.user }
-		),
+		);
+	const [topDiscovery, parentData, studioDiscovery, avatarUserRecord] = await Promise.all([
+		locals.user
+			? readBestPieces()
+			: sharedAtTheEdge(homeBestPiecesEdgeCacheKey(url.origin), readBestPieces),
 		parent(),
 		locals.user
 			? listArtworkDiscovery(

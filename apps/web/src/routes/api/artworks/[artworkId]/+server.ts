@@ -1,8 +1,8 @@
 import type { RequestHandler } from './$types';
 import { getArtworkDetail } from '#lib/server/artwork/read.service.js';
 import {
+	ANONYMOUS_CACHE_CONTROL,
 	artworkDetailEdgeCacheKeys,
-	edgeCacheControl,
 	purgeFromEdgeCache,
 	readEdgeCache,
 	storeInEdgeCache
@@ -87,8 +87,6 @@ export const DELETE: RequestHandler = async (event) => {
 // reaches the local datacenter — which is where the moderator is. The TTL is
 // what bounds a hidden artwork's readability in every other colo, so it stays
 // short.
-const ANONYMOUS_EDGE_TTL_SECONDS = 30;
-const ANONYMOUS_CACHE_CONTROL = edgeCacheControl(ANONYMOUS_EDGE_TTL_SECONDS, 120);
 const SIGNED_IN_CACHE_CONTROL = 'private, no-store';
 
 export const GET: RequestHandler = async (event) => {

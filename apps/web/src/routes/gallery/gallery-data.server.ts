@@ -1,11 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
-import {
-	ANONYMOUS_FEED_CACHE_CONTROL,
-	readEdgeCache,
-	roomFirstPageEdgeCacheKey,
-	storeInEdgeCache
-} from '#lib/server/http/edge-cache.js';
+import { roomFirstPageEdgeCacheKey, sharedAtTheEdge } from '#lib/server/http/edge-cache.js';
 import { getViewerContentPreferences } from '#lib/server/moderation/service.js';
 import { toGalleryArtwork } from '#lib/features/gallery-exploration/gallery-adapter.js';
 import {
@@ -64,20 +59,9 @@ const listRoomFirstPage = async (
 	user: ProductUser | undefined,
 	origin: string
 ): Promise<RoomFirstPage> => {
-	const firstPage = { ...request, cursor: null };
-	if (user) return listArtworkDiscovery(firstPage, { user });
-
-	const key = new Request(roomFirstPageEdgeCacheKey(origin, roomId));
-	const shared = await readEdgeCache(key);
-	// Its dates come back as text, which `toGalleryArtwork` takes as well.
-	if (shared) return (await shared.json()) as RoomFirstPage;
-
-	const discovery = await listArtworkDiscovery(firstPage, { user });
-	storeInEdgeCache(
-		key,
-		Response.json(discovery, { headers: { 'cache-control': ANONYMOUS_FEED_CACHE_CONTROL } })
-	);
-	return discovery;
+	const read = () => listArtworkDiscovery({ ...request, cursor: null }, { user });
+	// `toGalleryArtwork` takes the shared copy's dates as text as well.
+	return user ? read() : sharedAtTheEdge(roomFirstPageEdgeCacheKey(origin, roomId), read);
 };
 
 export const loadGalleryRoomContent = async (
