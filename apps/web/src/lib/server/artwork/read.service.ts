@@ -139,6 +139,9 @@ const toDetail = (record: ArtworkReadRecord): ArtworkDetail => ({
 	drawingDocument: record.drawingDocument ?? null,
 	drawingDocumentKey: record.drawingDocumentKey ?? null,
 	drawingVersion: record.drawingVersion ?? null,
+	// Every whole drawing lives under a key. One without a key was never drawn
+	// here, or was too damaged for the cutover to move, and only its image is left.
+	hasReplay: Boolean(record.drawingDocumentKey),
 	mediaContentType: record.mediaContentType,
 	mediaSizeBytes: record.mediaSizeBytes,
 	updatedAt: record.updatedAt,

@@ -54,6 +54,7 @@ export const toGalleryArtworkDetail = (
 	rank?: number
 ): Artwork => ({
 	...baseArtwork(artwork),
+	hasReplay: artwork.hasReplay,
 	rank,
 	wish: artwork.wish
 });
