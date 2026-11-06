@@ -7,6 +7,7 @@ import {
 } from '#lib/features/gallery-exploration/gallery-adapter.js';
 import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
 import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import { artworkPageEdgeCacheKey, sharedAtTheEdge } from '#lib/server/http/edge-cache.js';
 import {
 	getArtworkDetail,
 	listArtworkCommentsForViewer
@@ -16,18 +17,27 @@ import {
 // the one a chat app unfurls into a card showing the drawing itself. A
 // sensitive artwork keeps the site card, so a link preview never shows what
 // the gallery hides behind its 18+ notice.
-export const load: PageServerLoad = async ({ locals, params }) => {
+//
+// A shared link is where a wave of visitors lands, so signed-out visitors share
+// one copy of the page. Whoever is signed in reads their own: it carries their
+// vote.
+export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const context = { user: locals.user };
-	const [detail, comments] = await Promise.all([
-		getArtworkDetail(params.artworkId, context).catch((cause: unknown) => {
-			if (cause instanceof ArtworkFlowError && cause.status === 404) {
-				error(404, 'Artwork not found');
-			}
-			throw cause;
-		}),
-		listArtworkCommentsForViewer(params.artworkId, context)
-	]);
-	const artwork = { ...toGalleryArtworkDetail(detail), comments: toGalleryComments(comments) };
+	const readArtwork = async () => {
+		const [detail, comments] = await Promise.all([
+			getArtworkDetail(params.artworkId, context).catch((cause: unknown) => {
+				if (cause instanceof ArtworkFlowError && cause.status === 404) {
+					error(404, 'Artwork not found');
+				}
+				throw cause;
+			}),
+			listArtworkCommentsForViewer(params.artworkId, context)
+		]);
+		return { ...toGalleryArtworkDetail(detail), comments: toGalleryComments(comments) };
+	};
+	const artwork = locals.user
+		? await readArtwork()
+		: await sharedAtTheEdge(artworkPageEdgeCacheKey(url.origin, params.artworkId), readArtwork);
 
 	return {
 		artwork,

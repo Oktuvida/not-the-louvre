@@ -1,9 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { db } from '#lib/server/db/index.js';
-import { roomFirstPageEdgeCacheKey } from '#lib/server/http/edge-cache.js';
+import { sharedPageEdgeCacheKeys } from '#lib/server/http/edge-cache.js';
 import { deleteAllMediaObjects } from '#lib/server/media/object-storage.js';
 import { edgeCache } from '#lib/server/platform.js';
-import { galleryRoomIds } from '#lib/shared/gallery/rooms.js';
 
 const RESET_SQL = `
 	truncate table
@@ -29,9 +28,7 @@ export const resetBackendState = async (origin: string) => {
 
 	// A wiped gallery must not go on showing signed-out visitors the last walls.
 	const cache = edgeCache();
-	await Promise.all(
-		galleryRoomIds.map((roomId) => cache?.delete(roomFirstPageEdgeCacheKey(origin, roomId)))
-	);
+	await Promise.all(sharedPageEdgeCacheKeys(origin).map((key) => cache?.delete(key)));
 
 	return {
 		resetAt: new Date().toISOString()

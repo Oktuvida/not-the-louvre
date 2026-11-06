@@ -10,6 +10,26 @@ import {
 
 type HomeActionEvent = Parameters<Actions['signUp']>[0];
 
+// The colo's cache, as the Cache API behaves: what is put comes back as a copy.
+const edge = vi.hoisted(() => {
+	const stored = new Map<string, Response>();
+	return {
+		cache: {
+			match: async (url: string) => stored.get(url)?.clone(),
+			put: async (url: string, response: Response) => {
+				stored.set(url, response);
+			}
+		},
+		stored
+	};
+});
+
+vi.mock('#lib/server/platform.js', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/server/platform.js')>()),
+	edgeCache: () => edge.cache,
+	runAfterResponse: () => {}
+}));
+
 const mocked = vi.hoisted(() => ({
 	openStoredDrawingDocument: vi.fn(),
 	findUserById: vi.fn(),
@@ -100,6 +120,7 @@ const createEvent = (
 describe('home route auth contract', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		edge.stored.clear();
 		mocked.getIP.mockClear();
 		mocked.getViewerContentPreferences.mockReset();
 		mocked.getNicknameAvailability.mockReset();
@@ -171,6 +192,22 @@ describe('home route auth contract', () => {
 			{ cursor: null, limit: 3, sort: 'top', window: 'all' },
 			{ user: undefined }
 		);
+	});
+
+	it('serves the next signed-out visitor the best pieces without reading the database', async () => {
+		const { load } = await import('./+page.server');
+		const visit = () =>
+			load({
+				locals: {},
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/')
+			} as never);
+
+		const first = await visit();
+		const next = await visit();
+
+		expect(mocked.listArtworkDiscovery).toHaveBeenCalledOnce();
+		expect(next).toEqual(first);
 	});
 
 	it('returns an empty homepage teaser when top-ranked discovery has no artworks', async () => {
@@ -247,6 +284,25 @@ describe('home route auth contract', () => {
 			legacyBase64: 'persisted-avatar-payload',
 			version: 2
 		});
+	});
+
+	it('reads the best pieces fresh for a signed-in artist and shares nothing of theirs', async () => {
+		const { load } = await import('./+page.server');
+		const visit = () =>
+			load({
+				locals: { user: { avatarOnboardingCompletedAt: null, id: 'user-1', role: 'user' } },
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/')
+			} as never);
+
+		await visit();
+		await visit();
+
+		const bestPieces = mocked.listArtworkDiscovery.mock.calls.filter(
+			([request]) => request.limit === 3
+		);
+		expect(bestPieces).toHaveLength(2);
+		expect(edge.stored.size).toBe(0);
 	});
 
 	it('asks the studio feed for exactly the artworks the scene has frames for', async () => {
