@@ -81,6 +81,8 @@ export type ArtworkDetail = ArtworkFeedCard & {
 	drawingDocument?: string | null;
 	drawingDocumentKey?: string | null;
 	drawingVersion?: number | null;
+	/** Whether its strokes can be replayed. */
+	hasReplay: boolean;
 	mediaContentType: string;
 	mediaSizeBytes: number;
 	updatedAt: Date;

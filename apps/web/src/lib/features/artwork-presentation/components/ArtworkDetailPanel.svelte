@@ -944,7 +944,7 @@
 									<p class="postcard-signin-note">Sign in to vote, fork, or leave a comment.</p>
 									<span class="postcard-actions-spacer"></span>
 								{/if}
-								{#if !isSensitiveBlurred}
+								{#if !isSensitiveBlurred && artwork.hasReplay !== false}
 									<GameButton
 										variant="secondary"
 										size="sm"

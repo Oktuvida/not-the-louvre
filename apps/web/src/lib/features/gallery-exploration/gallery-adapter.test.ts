@@ -22,6 +22,7 @@ const feedCard: ArtworkFeedCard = {
 const detail: ArtworkDetail = {
 	...feedCard,
 	childForks: [],
+	hasReplay: true,
 	mediaContentType: 'image/avif',
 	mediaSizeBytes: 1024,
 	wish: null,

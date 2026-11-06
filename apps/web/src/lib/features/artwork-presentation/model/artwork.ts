@@ -40,6 +40,8 @@ export interface Artwork {
 	commentCount?: number;
 	comments: ArtworkComment[];
 	forkCount?: number;
+	/** False once the strokes are known to be lost. Only the detail read knows it. */
+	hasReplay?: boolean;
 	lineage?: ArtworkLineage;
 	rank?: number;
 	viewerVote?: ArtworkVoteValue | null;

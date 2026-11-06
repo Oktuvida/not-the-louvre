@@ -122,7 +122,6 @@ const discoverySelect = {
 
 const drawingDocumentSelect = {
 	drawingDocument: artworks.drawingDocument,
-	drawingDocumentKey: artworks.drawingDocumentKey,
 	drawingVersion: artworks.drawingVersion
 };
 
@@ -173,6 +172,8 @@ const buildDetailSelect = (
 	options: { withDrawingDocument?: boolean } = {}
 ) => ({
 	...discoverySelect,
+	// The key is small, and says whether there is a drawing to replay at all.
+	drawingDocumentKey: artworks.drawingDocumentKey,
 	...(options.withDrawingDocument ? drawingDocumentSelect : {}),
 	...engagementSelect(viewer),
 	wishAuthor: wishAuthors.nickname,

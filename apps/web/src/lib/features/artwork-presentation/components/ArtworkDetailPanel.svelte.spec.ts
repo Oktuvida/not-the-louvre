@@ -818,6 +818,15 @@ describe('ArtworkDetailPanel', () => {
 		await expect.element(page.getByRole('img', { name: 'Detail artwork' })).toBeVisible();
 	});
 
+	it('offers no replay of an artwork whose drawing was lost', async () => {
+		await render(ArtworkDetailPanel, { artwork: { ...artwork, hasReplay: false } });
+
+		await expect.element(page.getByRole('button', { name: 'Download' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Watch it being drawn' }))
+			.not.toBeInTheDocument();
+	});
+
 	it('keeps the picture and says so when the timelapse cannot be had', async () => {
 		vi.stubGlobal(
 			'fetch',
