@@ -23,6 +23,9 @@ export const edgeCacheControl = (ttlSeconds: number, staleWhileRevalidateSeconds
 			: [])
 	].join(', ');
 
+/** What a page of the feed shared among signed-out visitors is stored with. */
+export const ANONYMOUS_FEED_CACHE_CONTROL = edgeCacheControl(30, 120);
+
 export const readEdgeCache = async (request: Request): Promise<Response | undefined> => {
 	const cache = edgeCache();
 	if (!cache) return undefined;
@@ -38,6 +41,13 @@ export const readEdgeCache = async (request: Request): Promise<Response | undefi
 export const artworkDetailEdgeCacheKeys = (origin: string | URL, artworkId: string): string[] => [
 	new URL(`/api/artworks/${artworkId}`, origin).href
 ];
+
+/**
+ * Where a room's first page for signed-out visitors is stored. No route answers
+ * this address: only the Cache API reads it.
+ */
+export const roomFirstPageEdgeCacheKey = (origin: string | URL, roomId: string) =>
+	new URL(`/__edge/rooms/${roomId}/first-page`, origin).href;
 
 /**
  * Drops keys the origin has just invalidated. `caches.default.delete()` only

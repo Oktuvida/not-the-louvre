@@ -153,7 +153,8 @@ describe('gallery route', () => {
 				isDataRequest: true,
 				locals: {},
 				params: { room: 'hot-wall' },
-				parent: async () => ({ adultContentEnabled: false })
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/gallery')
 			} as never)) as {
 				lazy: { roomContent: Promise<{ discovery: Record<string, unknown> }> };
 				roomId: string;
@@ -193,7 +194,8 @@ describe('gallery route', () => {
 				isDataRequest: true,
 				locals: {},
 				params: { room: 'mystery' },
-				parent: async () => ({ adultContentEnabled: false })
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/gallery')
 			} as never)) as {
 				lazy: { roomContent: Promise<{ discovery: Record<string, unknown> }> };
 				roomId: string;
@@ -215,7 +217,8 @@ describe('gallery route', () => {
 				isDataRequest: true,
 				locals: {},
 				params: { room: 'wet-paint' },
-				parent: async () => ({ adultContentEnabled: false })
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/gallery')
 			} as never)) as {
 				lazy: { roomContent: Promise<{ discovery: Record<string, unknown> }> };
 				roomId: string;
@@ -256,7 +259,8 @@ describe('gallery route', () => {
 				isDataRequest: true,
 				locals: { user: { id: 'user-1', role: 'user' } },
 				params: { room: 'your-studio' },
-				parent: async () => ({ adultContentEnabled: false })
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/gallery')
 			} as never)) as {
 				lazy: {
 					roomContent: Promise<{
@@ -294,7 +298,8 @@ describe('gallery route', () => {
 				isDataRequest: true,
 				locals: { user: { id: 'user-1', role: 'user' } },
 				params: { room: 'hot-wall' },
-				parent: async () => ({ adultContentEnabled: true })
+				parent: async () => ({ adultContentEnabled: true }),
+				url: new URL('http://localhost/gallery')
 			} as never)) as {
 				lazy: { roomContent: Promise<{ adultContentEnabled: boolean }> };
 			};
@@ -310,7 +315,8 @@ describe('gallery route', () => {
 				load({
 					locals: {},
 					params: { room: 'your-studio' },
-					parent: async () => ({ adultContentEnabled: false })
+					parent: async () => ({ adultContentEnabled: false }),
+					url: new URL('http://localhost/gallery')
 				} as never)
 			).rejects.toMatchObject({
 				location: '/gallery',
@@ -325,7 +331,8 @@ describe('gallery route', () => {
 				load({
 					locals: {},
 					params: { room: 'unknown-room' },
-					parent: async () => ({ adultContentEnabled: false })
+					parent: async () => ({ adultContentEnabled: false }),
+					url: new URL('http://localhost/gallery')
 				} as never)
 			).rejects.toMatchObject({
 				status: 404

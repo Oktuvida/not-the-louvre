@@ -1,9 +1,16 @@
 import { error, redirect } from '@sveltejs/kit';
 import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
+import {
+	ANONYMOUS_FEED_CACHE_CONTROL,
+	readEdgeCache,
+	roomFirstPageEdgeCacheKey,
+	storeInEdgeCache
+} from '#lib/server/http/edge-cache.js';
 import { getViewerContentPreferences } from '#lib/server/moderation/service.js';
 import { toGalleryArtwork } from '#lib/features/gallery-exploration/gallery-adapter.js';
 import {
 	galleryRoomDiscoveryRequest,
+	type GalleryDiscoveryRequest,
 	type GalleryRoomContent
 } from '#lib/features/gallery-exploration/model/discovery.js';
 import {
@@ -44,18 +51,47 @@ export const loadGalleryRoomShell = (roomId: string, user?: ProductUser) => {
 	};
 };
 
+type RoomFirstPage = Awaited<ReturnType<typeof listArtworkDiscovery>>;
+
+// A room's first page is the same for every signed-out visitor, so the edge
+// shares it as it shares the pages after it: a wave of visitors reads the
+// database once per room and datacenter, not once each. Nothing purges it, so
+// the shared TTL is what bounds it. A signed-in artist always reads the
+// database: the page carries their own votes, and must show what they just did.
+const listRoomFirstPage = async (
+	roomId: GalleryRoomId,
+	request: GalleryDiscoveryRequest,
+	user: ProductUser | undefined,
+	origin: string
+): Promise<RoomFirstPage> => {
+	const firstPage = { ...request, cursor: null };
+	if (user) return listArtworkDiscovery(firstPage, { user });
+
+	const key = new Request(roomFirstPageEdgeCacheKey(origin, roomId));
+	const shared = await readEdgeCache(key);
+	// Its dates come back as text, which `toGalleryArtwork` takes as well.
+	if (shared) return (await shared.json()) as RoomFirstPage;
+
+	const discovery = await listArtworkDiscovery(firstPage, { user });
+	storeInEdgeCache(
+		key,
+		Response.json(discovery, { headers: { 'cache-control': ANONYMOUS_FEED_CACHE_CONTROL } })
+	);
+	return discovery;
+};
+
 export const loadGalleryRoomContent = async (
 	roomId: GalleryRoomId,
-	user?: ProductUser,
+	user: ProductUser | undefined,
 	// The root layout already read the viewer's preference row for this
 	// request; when the caller passes it down, the room content stops issuing
 	// the identical single-row query a second time (on Workers, on its own
 	// connection). Omitting it falls back to reading the row here.
-	options: { adultContentEnabled?: boolean } = {}
+	options: { adultContentEnabled?: boolean; origin: string }
 ): Promise<GalleryRoomContent> => {
 	const discoveryRequest = galleryRoomDiscoveryRequest(roomId, user?.id ?? null);
 	const [discovery, viewerContentPreferences] = await Promise.all([
-		listArtworkDiscovery({ ...discoveryRequest, cursor: null }, { user }),
+		listRoomFirstPage(roomId, discoveryRequest, user, options.origin),
 		options.adultContentEnabled !== undefined
 			? Promise.resolve({ adultContentEnabled: options.adultContentEnabled })
 			: user
