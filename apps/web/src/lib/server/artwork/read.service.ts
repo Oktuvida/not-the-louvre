@@ -1,9 +1,11 @@
-import { assertNotBanned } from '$lib/server/auth/guards';
-import { resolveUserAvatarUrl } from '$lib/shared/user/avatar-url';
-import type { Viewer } from '$lib/shared/viewer';
+import { assertNotBanned } from '#lib/server/auth/guards.js';
+import { resolveArtworkMediaUrl } from '#lib/shared/artwork/media-url.js';
+import { resolveUserAvatarUrl } from '#lib/shared/user/avatar-url.js';
+import type { Viewer } from '#lib/shared/viewer.js';
 import { ArtworkFlowError } from './errors';
 import { artworkReadRepository } from './read.repository';
 import type {
+	ArtistStudioSummary,
 	ArtworkAuthorSummary,
 	ArtworkChildForkSummary,
 	ArtworkDetail,
@@ -25,6 +27,8 @@ type ListArtworkDiscoveryInput = {
 	authorId?: string | null;
 	cursor?: string | null;
 	limit?: number;
+	/** Only the forks of this artwork; the recent feed is the one that reads it. */
+	parentId?: string | null;
 	sort: ArtworkDiscoverySort;
 	window?: string | null;
 };
@@ -60,8 +64,6 @@ const toAuthorSummary = (record: ArtworkReadRecord): ArtworkAuthorSummary => ({
 	id: record.authorId,
 	nickname: record.authorNickname
 });
-
-const getArtworkMediaUrl = (artworkId: string) => `/api/artworks/${artworkId}/media`;
 
 const toLineage = (record: ArtworkReadRecord): ArtworkLineageSummary => {
 	if (!record.parentId) {
@@ -109,7 +111,7 @@ const toChildForkSummary = (
 	createdAt: record.createdAt,
 	id: record.id,
 	isNsfw: record.isNsfw,
-	mediaUrl: getArtworkMediaUrl(record.id),
+	mediaUrl: resolveArtworkMediaUrl(record.id, record.mediaContentType),
 	title: record.title
 });
 
@@ -120,10 +122,10 @@ const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 	downvotes: record.downvotes ?? 0,
 	forkCount: record.forkCount,
 	id: record.id,
+	isHidden: record.isHidden ?? false,
 	isNsfw: record.isNsfw,
 	lineage: toLineage(record),
-	mediaPlaceholder: record.mediaPlaceholder ?? null,
-	mediaUrl: getArtworkMediaUrl(record.id),
+	mediaUrl: resolveArtworkMediaUrl(record.id, record.mediaContentType),
 	score: record.score,
 	title: record.title,
 	upvotes: record.upvotes ?? 0,
@@ -133,13 +135,17 @@ const toFeedCard = (record: ArtworkReadRecord): ArtworkFeedCard => ({
 const toDetail = (record: ArtworkReadRecord): ArtworkDetail => ({
 	...toFeedCard(record),
 	childForks: (record.childForks ?? []).map(toChildForkSummary),
-	// A document without a version never completed its chunked write; expose
-	// it as absent so decoders never see a partial gzip stream.
-	drawingDocument: record.drawingVersion != null ? (record.drawingDocument ?? null) : null,
+	// Where the drawing is; openStoredDrawingDocument reads it from either.
+	drawingDocument: record.drawingDocument ?? null,
+	drawingDocumentKey: record.drawingDocumentKey ?? null,
 	drawingVersion: record.drawingVersion ?? null,
+	// Every whole drawing lives under a key. One without a key was never drawn
+	// here, or was too damaged for the cutover to move, and only its image is left.
+	hasReplay: Boolean(record.drawingDocumentKey),
 	mediaContentType: record.mediaContentType,
 	mediaSizeBytes: record.mediaSizeBytes,
-	updatedAt: record.updatedAt
+	updatedAt: record.updatedAt,
+	wish: record.wish ?? null
 });
 
 const normalizeSort = (value: string): ArtworkDiscoverySort => {
@@ -292,6 +298,7 @@ export const listArtworkDiscovery = async (
 					authorId: input.authorId,
 					cursor: cursor?.sort === 'recent' ? cursor : null,
 					limit: limit + 1,
+					parentId: input.parentId,
 					viewer
 				})
 			: sort === 'hot'
@@ -396,7 +403,9 @@ const decodeModerationCursor = (value: string | null | undefined): ModerationQue
 		if (
 			!parsed.id ||
 			typeof parsed.reportCount !== 'number' ||
-			(parsed.targetType !== 'artwork' && parsed.targetType !== 'comment')
+			(parsed.targetType !== 'artwork' &&
+				parsed.targetType !== 'comment' &&
+				parsed.targetType !== 'wish')
 		) {
 			throw new Error('Invalid moderation cursor');
 		}
@@ -446,7 +455,7 @@ export const listModerationQueue = async (
 	const nextCursor =
 		hasMore && last
 			? encodeModerationCursor({
-					id: last.commentId ?? last.artworkId,
+					id: last.targetType === 'wish' ? last.wishId : (last.commentId ?? last.artworkId),
 					reportCount: last.reportCount,
 					targetType: last.targetType
 				})
@@ -472,6 +481,30 @@ export const getArtworkMedia = async (
 	}
 
 	return media;
+};
+
+/** Who a studio belongs to, and what visitors can see of the work in it. */
+export const getArtistStudio = async (
+	nickname: string,
+	contextAndDependencies: ReadContextAndDependencies = {},
+	dependencies: ReadServiceDependencies = {}
+): Promise<ArtistStudioSummary> => {
+	const { repository } = getDependencies({
+		repository: contextAndDependencies.repository ?? dependencies.repository
+	});
+	const record = await repository.findArtistStudio(nickname);
+
+	if (!record) {
+		throw new ArtworkFlowError(404, 'Artist not found', 'NOT_FOUND');
+	}
+
+	return {
+		// The avatar route answers 404 for one moderation took down.
+		avatarUrl: record.avatarIsHidden ? null : resolveUserAvatarUrl(record.id, record.avatarUrl),
+		id: record.id,
+		nickname: record.nickname,
+		stats: { hangingSince: record.hangingSince, pieces: record.pieces, stars: record.stars }
+	};
 };
 
 export const getRandomArtwork = async (

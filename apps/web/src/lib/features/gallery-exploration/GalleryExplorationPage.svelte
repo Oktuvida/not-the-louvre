@@ -1,49 +1,74 @@
 <script lang="ts">
 	import { Brush } from 'lucide-svelte';
-	import { browser } from '$app/environment';
-	import { goto, invalidateAll, pushState, replaceState } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { browser } from '$app/env';
+	import { goto, refreshAll } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { get } from 'svelte/store';
-	import { apiErrorMessage, requestJson } from '$lib/client/api';
-	import { setAdultContentEnabled } from '$lib/client/avatar-upload';
-	import { getBrowserRealtimeClient } from '$lib/features/realtime/browser-client';
-	import { getGalleryLayoutContext } from '$lib/features/gallery-exploration/gallery-layout-context';
-	import { onMount } from 'svelte';
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { apiErrorMessage, requestJson } from '#lib/client/api.js';
+	import { setAdultContentEnabled } from '#lib/client/avatar-upload.js';
+	import { getGalleryLayoutContext } from '#lib/features/gallery-exploration/gallery-layout-context.js';
+	import { onMount, untrack } from 'svelte';
 	import { writable } from 'svelte/store';
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import {
+		artworkEngagement,
+		type Artwork
+	} from '#lib/features/artwork-presentation/model/artwork.js';
 	import {
 		toGalleryArtwork,
-		toGalleryArtworkDetail
-	} from '$lib/features/gallery-exploration/gallery-adapter';
-	import { createDetailPrefetcher } from '$lib/features/gallery-exploration/detail-prefetch';
-	import type {
-		GalleryDiscovery,
-		GalleryDiscoveryRequest,
-		GalleryRoomContent
-	} from '$lib/features/gallery-exploration/model/discovery';
-	import { suppressNextRoomFeedSnapshot } from '$lib/features/gallery-exploration/model/feed-cache';
+		toGalleryArtworkDetail,
+		toGalleryComments
+	} from '#lib/features/gallery-exploration/gallery-adapter.js';
+	import { createDetailPrefetcher } from '#lib/features/gallery-exploration/detail-prefetch.js';
+	import {
+		galleryRoomDiscoveryRequest,
+		type GalleryArtworkPage,
+		type GalleryDiscovery,
+		type GalleryDiscoveryRequest,
+		type GalleryRoomContent
+	} from '#lib/features/gallery-exploration/model/discovery.js';
+	import {
+		patchCachedArtwork,
+		readRoomFeedSnapshot,
+		suppressNextRoomFeedSnapshot
+	} from '#lib/features/gallery-exploration/model/feed-cache.js';
 	import {
 		type GalleryRoomConfig,
-		type GalleryRoomId
-	} from '$lib/features/gallery-exploration/model/rooms';
-	import { createRealtimeSubscription } from '$lib/features/gallery-exploration/use-realtime-subscription.svelte';
-	import type { Viewer } from '$lib/shared/viewer';
-	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
-	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
-	import GalleryStatusRegion from '$lib/features/gallery-exploration/components/GalleryStatusRegion.svelte';
-	import RoomLoadingSkeleton from '$lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
-	import HallOfFameRoom from '$lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
-	import HotWallRoom from '$lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
-	import MysteryRoom from '$lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
-	import YourStudioRoom from '$lib/features/gallery-exploration/rooms/YourStudioRoom.svelte';
+		type GalleryWallId
+	} from '#lib/features/gallery-exploration/model/rooms.js';
+	import { applyArtworkLiveChange } from '#lib/features/gallery-exploration/artwork-live-change.js';
+	import { createArtworkLiveUpdates } from '#lib/features/gallery-exploration/artwork-live-updates.js';
+	import type { Viewer } from '#lib/shared/viewer.js';
+	import PostItNote from '#lib/features/shared-ui/components/PostItNote.svelte';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import ChalkEasel from '#lib/features/gallery-exploration/components/ChalkEasel.svelte';
+	import ReservedSpot from '#lib/features/gallery-exploration/components/ReservedSpot.svelte';
+	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
+	import GalleryStatusRegion from '#lib/features/gallery-exploration/components/GalleryStatusRegion.svelte';
+	import RoomLoadingSkeleton from '#lib/features/gallery-exploration/components/RoomLoadingSkeleton.svelte';
+	import ArtistBookplate from '#lib/features/gallery-exploration/components/ArtistBookplate.svelte';
+	import ForksHead from '#lib/features/gallery-exploration/components/ForksHead.svelte';
+	import type { ArtistStudio } from '#lib/features/gallery-exploration/model/artist-studio.js';
+	import HallOfFameRoom from '#lib/features/gallery-exploration/rooms/HallOfFameRoom.svelte';
+	import type { AwardStyle } from '#lib/features/shared-ui/award-style.js';
+	import HotWallRoom from '#lib/features/gallery-exploration/rooms/HotWallRoom.svelte';
+	import MysteryRoom from '#lib/features/gallery-exploration/rooms/MysteryRoom.svelte';
+	import NewestFirstRoom from '#lib/features/gallery-exploration/rooms/NewestFirstRoom.svelte';
+	import YourStudioRoom from '#lib/features/gallery-exploration/rooms/YourStudioRoom.svelte';
 
 	type GalleryDetailHistoryState = NonNullable<App.PageState['galleryDetail']>;
 
+	type NewArtworksCheck = { count: number; preview: Artwork | null };
+
 	const LOCAL_GALLERY_DETAIL_SOURCE = 'local-room-selection' as const;
 
-	const ROOM_LOAD_ERROR_MESSAGE = 'The gallery could not load right now — refresh to try again.';
+	// Chalked under "This room is still being hung." on the easel.
+	const ROOM_LOAD_ERROR_MESSAGE = 'Give it a moment, then try again.';
+
+	const ROOM_REFRESH_ERROR_MESSAGE =
+		"Couldn't check this room for new pieces. What's up may be a little old.";
 
 	/*
 	 * The house copy for a failed API call. `apiErrorMessage` prefers the
@@ -51,8 +76,11 @@
 	 * explaining itself to a visitor (a rate limit, a rejected cursor) and keeps
 	 * these strings for a 500, a proxy's HTML page or a dropped connection.
 	 */
-	const GALLERY_DISCOVERY_ERROR_MESSAGE = 'Gallery discovery could not be loaded';
-	const ARTWORK_DETAIL_ERROR_MESSAGE = 'Artwork details could not be loaded';
+	const GALLERY_DISCOVERY_ERROR_MESSAGE = 'Give it a moment, then try again.';
+	const ARTWORK_DETAIL_ERROR_MESSAGE = "Couldn't open that one. Tap it again?";
+	const GALLERY_REFRESH_ERROR_MESSAGE =
+		"Couldn't check for new pieces just now. Try again in a moment.";
+	const ADULT_PREFERENCE_ERROR_MESSAGE = "Your 18+ setting didn't save. Try again in a moment.";
 
 	const isGalleryDetailHistoryState = (
 		value: App.PageState['galleryDetail'] | null | undefined
@@ -102,6 +130,10 @@
 				query.push(`authorId=${encodeURIComponent(request.authorId)}`);
 			}
 
+			if (request.parentId) {
+				query.push(`parentId=${encodeURIComponent(request.parentId)}`);
+			}
+
 			if (request.window) {
 				query.push(`window=${encodeURIComponent(request.window)}`);
 			}
@@ -131,14 +163,9 @@
 				).catch((error: unknown) => {
 					throw new Error(apiErrorMessage(error, ARTWORK_DETAIL_ERROR_MESSAGE), { cause: error });
 				}),
-				requestJson<{
-					comments: Array<{
-						author: { nickname: string };
-						body: string;
-						createdAt: Date | string;
-						id: string;
-					}>;
-				}>(`/api/artworks/${artworkId}/comments`).catch(() => null)
+				requestJson<{ comments: Parameters<typeof toGalleryComments>[0] }>(
+					`/api/artworks/${artworkId}/comments`
+				).catch(() => null)
 			]);
 
 			const detail = toGalleryArtworkDetail(payload.artwork);
@@ -147,18 +174,7 @@
 				return detail;
 			}
 
-			return {
-				...detail,
-				comments: commentsPayload.comments.map((comment) => ({
-					author: comment.author.nickname,
-					id: comment.id,
-					text: comment.body,
-					timestamp:
-						comment.createdAt instanceof Date
-							? comment.createdAt.getTime()
-							: new Date(comment.createdAt).getTime()
-				}))
-			};
+			return { ...detail, comments: toGalleryComments(commentsPayload.comments) };
 		},
 		fetchRandomArtwork = async () => {
 			try {
@@ -173,24 +189,29 @@
 				});
 			}
 		},
+		artist = null,
+		forksOf = null,
 		room,
 		roomId,
-		realtimeConfig = { anonKey: null, url: null },
-		viewer = null
-	}: {
-		adultContentEnabled?: boolean;
-		artworks?: Artwork[];
-		discovery?: GalleryDiscovery;
-		emptyStateMessage?: string | null;
-		isRoomLoading?: boolean;
+		viewer = null,
+		awardStyle = 'stamps',
+		checkForNewArtworks,
+		newArtworkCheckMs = 60_000
+
 		/** Set only by the route's failure path; never reuses the empty-state slot. */
-		loadError?: string | null;
 		/**
 		 * The streamed room payload. Owning the await here — instead of branching
 		 * three `<GalleryExplorationPage>` instances around it in the route — is
 		 * what keeps one instance alive across the skeleton→room hand-off, so the
 		 * entry fade, the layout bindings and the detail state survive it.
 		 */
+	}: {
+		adultContentEnabled?: boolean;
+		artworks?: Artwork[];
+		discovery?: GalleryDiscovery;
+		emptyStateMessage?: string | null;
+		isRoomLoading?: boolean;
+		loadError?: string | null;
 		roomContent?: Promise<GalleryRoomContent> | null;
 		fetchRandomArtwork?: () => Promise<Artwork>;
 		loadMoreArtworks?: (request: GalleryDiscoveryRequest & { cursor: string }) => Promise<{
@@ -198,31 +219,50 @@
 			pageInfo: { hasMore: boolean; nextCursor: string | null };
 		}>;
 		loadArtworkDetail?: (artworkId: string) => Promise<Artwork>;
-		realtimeConfig?: { anonKey: string | null; url: string | null };
+		/** Whose studio this wall is, on a visit to one. */
+		artist?: ArtistStudio | null;
+		/** The piece this wall hangs the forks of. */
+		forksOf?: Artwork | null;
 		room: GalleryRoomConfig;
-		roomId: GalleryRoomId;
+		roomId: GalleryWallId;
 		viewer?: Viewer | null;
+		/** The Hall of Fame's award style, drawn once per visit to the gallery. */
+		awardStyle?: AwardStyle;
+		/**
+		 * How many pieces are up that are not on the wall yet, and the newest of
+		 * them. Reads the room's own first page unless a caller supplies one.
+		 */
+		checkForNewArtworks?: (knownIds: string[]) => Promise<NewArtworksCheck>;
+		/** How often the room looks for new pieces while it is on screen. */
+		newArtworkCheckMs?: number;
 	} = $props();
 
 	const galleryLayout = getGalleryLayoutContext();
 	const revealedArtworkIds = galleryLayout?.revealedArtworkIds ?? writable(new Set<string>());
 
-	// Values deliberately frozen at construction (the realtime channel is opened
-	// once for the viewer that mounted the page); the IIFE keeps them out of the
-	// reactive graph without tripping `state_referenced_locally`.
-	const { initialArtworks, initialRealtimeConfig, initialRoomContent, initialViewer } = (() => ({
-		initialArtworks: $state.snapshot(routeArtworks),
-		initialRealtimeConfig: $state.snapshot(realtimeConfig),
+	// Deliberately frozen at construction; the IIFE keeps it out of the reactive
+	// graph without tripping `state_referenced_locally`.
+	const { initialRoomContent, rememberedSeed } = (() => ({
 		initialRoomContent: roomContent,
-		initialViewer: $state.snapshot(viewer)
+		rememberedSeed: roomContent ? (readRoomFeedSnapshot(roomId)?.seed ?? null) : null
 	}))();
 
+	/*
+	 * The first page the room shows while its stream is on the way, when it
+	 * already has one to show: a room the visitor walked through before goes
+	 * straight back up as it was left, and a room handed its own stream again
+	 * (a navigation that lands where the visitor already is) stays as it is.
+	 * Either way the fresh page merges in when it lands.
+	 */
+	let heldSeed = $state<GalleryArtworkPage | null>(rememberedSeed);
+
 	// --- Streamed room content ---------------------------------------------
-	// The template awaits the same promise so SvelteKit still streams the room
-	// HTML; this seeder is what feeds the script-level state (notes, panel
-	// bindings, the seed each room reconciles against). The rejection handler is
-	// attached at init, not in onMount: without the route's `{:catch}` a streamed
-	// failure would otherwise surface as an unhandled rejection.
+	// This seeder is what feeds both the template and the script-level state
+	// (notes, panel bindings, the seed each room reconciles against). The
+	// template draws from that state rather than awaiting the promise itself,
+	// so a remembered room stays in one branch across its fresh page landing.
+	// The rejection handler is attached at init, not in onMount, so a streamed
+	// failure never surfaces as an unhandled rejection.
 	let streamedContent = $state<GalleryRoomContent | null>(null);
 	let streamFailed = $state(false);
 
@@ -238,6 +278,9 @@
 			() => {
 				if (!isCurrent) return;
 				streamFailed = true;
+				// The room stays up as it was left; the visitor is told it may
+				// be stale rather than having it taken off the wall.
+				if (isSeedRemembered) detailErrorMessage = ROOM_REFRESH_ERROR_MESSAGE;
 			}
 		);
 
@@ -252,35 +295,62 @@
 	const disposeInitialSeed = initialRoomContent ? seedFromStream(initialRoomContent) : null;
 	$effect(() => () => disposeInitialSeed?.());
 
-	// A refresh hands over a new promise; the room goes back to its skeleton
-	// while it settles, exactly as the template's await block does.
+	// What is on the wall now, read before a new stream replaces it.
+	let seedOnWall: GalleryArtworkPage | null = null;
+
+	// A new promise for this room: a refresh is the visitor asking for fresh
+	// data, and the room goes back to its skeleton while it settles; any other
+	// keeps what is on the wall until the fresh page lands.
 	$effect.pre(() => {
 		const pending = roomContent;
 		if (!pending || pending === initialRoomContent) return;
 
-		streamedContent = null;
-		streamFailed = false;
+		untrack(() => {
+			heldSeed = isRefreshingGallery ? null : seedOnWall;
+			streamedContent = null;
+			streamFailed = false;
+		});
 
 		return seedFromStream(pending);
 	});
 
-	const seedArtworks = $derived(roomContent ? (streamedContent?.artworks ?? []) : routeArtworks);
+	const isSeedRemembered = $derived(heldSeed !== null && streamedContent === null);
+
+	const seedArtworks = $derived(
+		roomContent
+			? (streamedContent?.artworks ?? (isSeedRemembered ? heldSeed!.artworks : []))
+			: routeArtworks
+	);
+
 	const seedDiscovery = $derived<GalleryDiscovery>(
 		roomContent
 			? (streamedContent?.discovery ?? {
-					pageInfo: { hasMore: false, nextCursor: null },
-					request: null
+					pageInfo: isSeedRemembered ? heldSeed!.pageInfo : { hasMore: false, nextCursor: null },
+					request: galleryRoomDiscoveryRequest(roomId, viewer?.id ?? null)
 				})
 			: routeDiscovery
 	);
+
 	const roomEmptyStateMessage = $derived(
 		roomContent ? (streamedContent?.emptyStateMessage ?? null) : emptyStateMessage
 	);
+
+	// A room on the wall is not loading, even while its fresh page streams.
 	const isRoomBusy = $derived(
-		roomContent ? streamedContent === null && !streamFailed : isRoomLoading
+		roomContent ? streamedContent === null && !streamFailed && !isSeedRemembered : isRoomLoading
 	);
 
-	let artworks = $state<Artwork[]>(initialRoomContent ? [] : initialArtworks);
+	// Reseeds from route data on navigation; votes and comment counts patch it
+	// locally in between.
+	let artworks = $derived<Artwork[]>(seedArtworks);
+
+	$effect(() => {
+		if (seedArtworks.length === 0) return;
+		seedOnWall = {
+			artworks: $state.snapshot(seedArtworks),
+			pageInfo: $state.snapshot(seedDiscovery.pageInfo)
+		};
+	});
 
 	/*
 	 * What the room tells a screen reader while it streams.
@@ -326,7 +396,9 @@
 	let selectedArtwork = $state<Artwork | null>(null);
 	let isHydratingDetail = $state(false);
 	let detailErrorMessage = $state<string | null>(null);
-	const enteredFromHome = browser ? $page.url?.searchParams?.get('from') === 'home' : false;
+
+	const enteredFromHome = browser ? page.url?.searchParams?.get('from') === 'home' : false;
+
 	let showEntryFade = $state(enteredFromHome);
 	let showExitFade = $state(false);
 	let isExitingToHome = $state(false);
@@ -336,25 +408,29 @@
 	let detailLoadSequence = 0;
 
 	const selectedArtworkId = $derived(selectedArtwork?.id ?? null);
+
+	// Until the stream lands, the preference the page was handed (the root
+	// layout reads it for every request) stands in for the stream's copy.
 	const adultContentAllowed = $derived(
 		adultContentPreferenceOverride ??
-			(roomContent ? (streamedContent?.adultContentEnabled ?? false) : adultContentEnabled)
+			(roomContent
+				? (streamedContent?.adultContentEnabled ?? adultContentEnabled)
+				: adultContentEnabled)
 	);
+
 	const hasSensitiveArtwork = $derived(
 		artworks.some((artwork) => artwork.isNsfw) || Boolean(selectedArtwork?.isNsfw)
 	);
 	const showSensitiveArtworkNote = $derived(hasSensitiveArtwork && roomId !== 'your-studio');
-	const currentGalleryUrl = $derived(
-		roomId === 'hall-of-fame'
+	const currentGalleryUrl = $derived.by(() => {
+		if (artist) return resolve('/gallery/artist/[nickname]', { nickname: artist.nickname });
+		if (forksOf) return resolve('/gallery/forks/[artworkId]', { artworkId: forksOf.id });
+		return roomId === 'hall-of-fame'
 			? resolve('/gallery/[[room]]', {})
-			: resolve('/gallery/[[room]]', { room: roomId })
-	);
-	const historyDetailState = $derived(readGalleryDetailHistoryState($page.state));
-
-	// --- Reseed artworks from route data on navigation ---
-	$effect(() => {
-		artworks = seedArtworks;
+			: resolve('/gallery/[[room]]', { room: roomId });
 	});
+
+	const historyDetailState = $derived(readGalleryDetailHistoryState(page.state));
 
 	// --- Room-scoped loadMoreArtworks that binds discovery request context ---
 	const roomLoadMoreArtworks = $derived.by(() => {
@@ -410,15 +486,20 @@
 			detailOrigin = null;
 			detailErrorMessage = error instanceof Error ? error.message : ARTWORK_DETAIL_ERROR_MESSAGE;
 
-			const currentHistoryState = readGalleryDetailHistoryState($page.state);
+			const currentHistoryState = readGalleryDetailHistoryState(page.state);
+
 			if (
 				browser &&
 				currentHistoryState?.artworkId === historyState.artworkId &&
 				currentHistoryState.roomId === historyState.roomId
 			) {
 				didCreateLocalDetailHistoryEntry = false;
-				// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
-				replaceState(currentGalleryUrl, clearGalleryDetailHistoryState($page.state));
+
+				goto(currentGalleryUrl, {
+					shallow: true,
+					replace: true,
+					state: clearGalleryDetailHistoryState(page.state)
+				});
 			}
 		} finally {
 			if (requestSequence === detailLoadSequence) {
@@ -427,16 +508,21 @@
 		}
 	};
 
+	// The address bar names the artwork while it is open, so a copied link or a
+	// reload lands on its permalink; the room stays mounted underneath.
 	const openArtwork = (artwork: Artwork) => {
 		detailErrorMessage = null;
 		didCreateLocalDetailHistoryEntry = true;
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
-		pushState(currentGalleryUrl, {
-			...$page.state,
-			galleryDetail: {
-				artworkId: artwork.id,
-				roomId,
-				source: LOCAL_GALLERY_DETAIL_SOURCE
+
+		goto(resolve('/artwork/[artworkId]', { artworkId: artwork.id }), {
+			shallow: true,
+			state: {
+				...page.state,
+				galleryDetail: {
+					artworkId: artwork.id,
+					roomId,
+					source: LOCAL_GALLERY_DETAIL_SOURCE
+				}
 			}
 		});
 	};
@@ -449,7 +535,7 @@
 		detailLoadSequence += 1;
 		isHydratingDetail = false;
 
-		const currentHistoryState = readGalleryDetailHistoryState($page.state);
+		const currentHistoryState = readGalleryDetailHistoryState(page.state);
 
 		if (
 			browser &&
@@ -463,8 +549,11 @@
 		}
 
 		if (browser && currentHistoryState) {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
-			replaceState(currentGalleryUrl, clearGalleryDetailHistoryState($page.state));
+			goto(currentGalleryUrl, {
+				shallow: true,
+				replace: true,
+				state: clearGalleryDetailHistoryState(page.state)
+			});
 		}
 
 		selectedArtwork = null;
@@ -483,22 +572,14 @@
 
 	const syncArtwork = (nextArtwork: Artwork) => {
 		selectedArtwork = nextArtwork;
+		const engagement = artworkEngagement(nextArtwork);
+		patchCachedArtwork(nextArtwork.id, engagement);
+
 		const index = artworks.findIndex((candidate) => candidate.id === nextArtwork.id);
 		if (index === -1) return;
 
 		artworks = artworks.map((candidate, candidateIndex) =>
-			candidateIndex === index
-				? {
-						...candidate,
-						commentCount: nextArtwork.commentCount,
-						comments: nextArtwork.comments,
-						downvotes: nextArtwork.downvotes,
-						forkCount: nextArtwork.forkCount,
-						score: nextArtwork.score,
-						upvotes: nextArtwork.upvotes,
-						viewerVote: nextArtwork.viewerVote
-					}
-				: candidate
+			candidateIndex === index ? { ...candidate, ...engagement } : candidate
 		);
 	};
 
@@ -509,6 +590,7 @@
 		if (selectedArtwork?.id === artworkId) {
 			selectedArtwork = { ...selectedArtwork, ...patch };
 		}
+		patchCachedArtwork(artworkId, patch);
 
 		artworks = artworks.map((candidate) =>
 			candidate.id === artworkId ? { ...candidate, ...patch } : candidate
@@ -528,29 +610,32 @@
 			await setAdultContentEnabled(enabled);
 			adultContentPreferenceOverride = enabled;
 		} catch (error) {
-			detailErrorMessage =
-				error instanceof Error ? error.message : '18+ artwork preference could not be updated.';
+			detailErrorMessage = error instanceof Error ? error.message : ADULT_PREFERENCE_ERROR_MESSAGE;
 		} finally {
 			isSavingAdultContentPreference = false;
 		}
 	};
 
-	// --- Realtime subscription ---
-	const realtime =
-		browser && initialViewer && initialRealtimeConfig.url && initialRealtimeConfig.anonKey
-			? createRealtimeSubscription({
-					getRealtimeClient: () =>
-						getBrowserRealtimeClient(initialRealtimeConfig.url!, initialRealtimeConfig.anonKey!),
-					fetchToken: async () =>
-						requestJson<{ expiresAt?: string; token: string }>('/api/realtime/token').catch(
-							() => null
-						),
-					viewerId: initialViewer.id,
-					onRefresh: (artworkId: string) => {
+	// --- Live updates ---
+	// Signed in or not, whoever has an artwork open sees its votes and comments
+	// change as they happen. A change carries its data; only one that does not
+	// (a comment taken down, a reconnect) reads the artwork again.
+	const realtime = browser
+		? createArtworkLiveUpdates({
+				onChange: (artworkId, change) => {
+					const patched =
+						change && selectedArtwork?.id === artworkId
+							? applyArtworkLiveChange(selectedArtwork, change)
+							: null;
+
+					if (!patched) {
 						void refreshSelectedArtwork(artworkId);
+					} else if (patched !== selectedArtwork) {
+						syncArtwork(patched);
 					}
-				})
-			: null;
+				}
+			})
+		: null;
 
 	const refreshSelectedArtwork = async (artworkId: string) => {
 		try {
@@ -576,49 +661,66 @@
 			return;
 		}
 
-		void realtime.start(artworkId);
+		realtime.start(artworkId);
 
 		return () => {
 			realtime.stop();
 		};
 	});
 
+	/*
+	 * The panel follows the history entry, and only the history entry: a
+	 * navigation opens and closes it. What the page itself has on screen is
+	 * read here, never tracked. Tracked, putting a piece away re-ran this
+	 * before the shallow goto retiring its entry had landed (SvelteKit 3
+	 * resolves the route first), so the entry still named the piece and it
+	 * was opened again: the postcard blinked back, a second request went out,
+	 * and the guard's note about the failure was wiped before anyone read it.
+	 */
 	$effect(() => {
 		const currentHistoryState = historyDetailState;
 		const galleryUrl = currentGalleryUrl;
+		const currentRoomId = roomId;
 
 		if (!browser) return;
 
-		if (currentHistoryState && currentHistoryState.roomId !== roomId) {
-			detailLoadSequence += 1;
-			isHydratingDetail = false;
-			didCreateLocalDetailHistoryEntry = false;
-			selectedArtwork = null;
-			detailOrigin = null;
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- path is already resolved in currentGalleryUrl
-			replaceState(galleryUrl, clearGalleryDetailHistoryState($page.state));
-			return;
-		}
-
-		if (!currentHistoryState) {
-			detailLoadSequence += 1;
-			isHydratingDetail = false;
-			didCreateLocalDetailHistoryEntry = false;
-
-			if (selectedArtwork || detailOrigin) {
+		untrack(() => {
+			if (currentHistoryState && currentHistoryState.roomId !== currentRoomId) {
+				detailLoadSequence += 1;
+				isHydratingDetail = false;
+				didCreateLocalDetailHistoryEntry = false;
 				selectedArtwork = null;
 				detailOrigin = null;
+
+				goto(galleryUrl, {
+					shallow: true,
+					replace: true,
+					state: clearGalleryDetailHistoryState(page.state)
+				});
+
+				return;
 			}
 
-			return;
-		}
+			if (!currentHistoryState) {
+				detailLoadSequence += 1;
+				isHydratingDetail = false;
+				didCreateLocalDetailHistoryEntry = false;
 
-		if (selectedArtwork?.id === currentHistoryState.artworkId) {
-			detailOrigin = currentHistoryState.source;
-			return;
-		}
+				if (selectedArtwork || detailOrigin) {
+					selectedArtwork = null;
+					detailOrigin = null;
+				}
 
-		void loadArtworkFromHistoryState(currentHistoryState);
+				return;
+			}
+
+			if (selectedArtwork?.id === currentHistoryState.artworkId) {
+				detailOrigin = currentHistoryState.source;
+				return;
+			}
+
+			void loadArtworkFromHistoryState(currentHistoryState);
+		});
 	});
 
 	// --- Transitions ---
@@ -654,23 +756,103 @@
 		detailPrefetcher.clear();
 
 		try {
-			await invalidateAll();
+			await refreshAll();
 		} catch (error) {
-			detailErrorMessage =
-				error instanceof Error ? error.message : 'Gallery could not be refreshed.';
+			detailErrorMessage = error instanceof Error ? error.message : GALLERY_REFRESH_ERROR_MESSAGE;
 		} finally {
 			isRefreshingGallery = false;
 		}
+	};
+
+	// --- New pieces ---
+	// The room re-reads its own first page now and then while it is on screen,
+	// and counts what is not on the wall yet. Nothing shows until something is
+	// new, so the gallery needs no Refresh button.
+	const readFirstPage = async (knownIds: string[]): Promise<NewArtworksCheck> => {
+		const request = seedDiscovery.request;
+		if (!request) return { count: 0, preview: null };
+
+		const query = [
+			`limit=${encodeURIComponent(String(request.limit))}`,
+			`sort=${encodeURIComponent(request.sort)}`
+		];
+		if (request.authorId) query.push(`authorId=${encodeURIComponent(request.authorId)}`);
+		if (request.parentId) query.push(`parentId=${encodeURIComponent(request.parentId)}`);
+		if (request.window) query.push(`window=${encodeURIComponent(request.window)}`);
+
+		const payload = await requestJson<{ items: Parameters<typeof toGalleryArtwork>[0][] }>(
+			`/api/artworks?${query.join('&')}`
+		);
+		const known = new Set(knownIds);
+		const fresh = payload.items
+			.map((item) => toGalleryArtwork(item))
+			.filter((artwork) => !known.has(artwork.id));
+		return { count: fresh.length, preview: fresh[0] ?? null };
+	};
+
+	let newPieces = $state<NewArtworksCheck | null>(null);
+
+	$effect(() => {
+		if (roomId === 'mystery' || isRoomBusy) return;
+		const check = checkForNewArtworks ?? readFirstPage;
+		const knownIds = artworks.map((artwork) => artwork.id);
+		let stopped = false;
+		let timer: number | undefined;
+
+		const look = async () => {
+			if (!document.hidden) {
+				try {
+					const found = await check(knownIds);
+					// A look that lands while the wall is being re-hung saw the old wall.
+					if (!stopped && !isRefreshingGallery) newPieces = found.count > 0 ? found : null;
+				} catch {
+					// A missed look is not worth telling anyone about: the next one runs on time.
+				}
+			}
+			if (!stopped) timer = window.setTimeout(look, newArtworkCheckMs);
+		};
+
+		timer = window.setTimeout(look, newArtworkCheckMs);
+		return () => {
+			stopped = true;
+			window.clearTimeout(timer);
+		};
+	});
+
+	const hangNewPieces = async () => {
+		newPieces = null;
+		window.scrollTo({ top: 0, behavior: prefersReducedMotion.current ? 'auto' : 'smooth' });
+		await refreshGallery();
 	};
 
 	// --- Clean home return query param ---
 	onMount(() => {
 		if (!enteredFromHome) return;
 
+		// A best piece picked on the front door arrives open: the address is
+		// its own, as for an artwork opened from the wall.
+		const arrivingWith = historyDetailState;
+		if (arrivingWith?.source === 'external') {
+			goto(resolve('/artwork/[artworkId]', { artworkId: arrivingWith.artworkId }), {
+				shallow: true,
+				replace: true,
+				state: page.state
+			});
+			return;
+		}
+
 		if (roomId === 'hall-of-fame') {
-			replaceState(resolve('/gallery/[[room]]', {}), window.history.state);
+			goto(resolve('/gallery/[[room]]', {}), {
+				shallow: true,
+				replace: true,
+				state: window.history.state
+			});
 		} else {
-			replaceState(resolve('/gallery/[[room]]', { room: roomId }), window.history.state);
+			goto(resolve('/gallery/[[room]]', { room: roomId }), {
+				shallow: true,
+				replace: true,
+				state: window.history.state
+			});
 		}
 	});
 
@@ -699,14 +881,20 @@
 	});
 
 	// --- Empty state ---
-	const roomNoteClassNames: Record<GalleryRoomId, string> = {
+	const roomNoteClassNames: Record<GalleryWallId, string> = {
+		'artist-studio': '',
+		'artwork-forks': '',
 		'hall-of-fame': '',
 		'hot-wall': '',
+		'wet-paint': '',
 		mystery: '',
 		'your-studio': ''
 	};
 	const showEmptyState = $derived(Boolean(roomEmptyStateMessage) && roomId !== 'hot-wall');
 	const emptyStateSupportMessage = $derived.by(() => {
+		if (forksOf) return 'Forks of this piece will appear here as they are hung.';
+		if (artist) return 'New pieces will appear here as they are hung.';
+
 		if (viewer && roomId === 'your-studio') {
 			return 'Publish a new piece from the studio and it will show up here.';
 		}
@@ -722,17 +910,23 @@
 		if (!galleryLayout) return;
 
 		/*
-		 * Ownership, not lifecycle. The room lives inside the layout's
-		 * `{#key roomId}` block, whose out-transition defers this teardown ~225ms
-		 * — long after the incoming room has published its own handlers into the
-		 * same stores. Clearing unconditionally therefore erased the live room's
-		 * bindings: Refresh became a no-op that still looked enabled, Back lost
-		 * its fade to the home page, and the detail panel unmounted entirely.
+		 * Ownership, not lifecycle. The room lives inside the layout's keyed
+		 * room stage, and the room that replaces it publishes its own handlers
+		 * into the same stores. Clearing unconditionally therefore erased the
+		 * live room's bindings: Refresh became a no-op that still looked
+		 * enabled, Back lost its fade to the home page, and the detail panel
+		 * unmounted entirely.
 		 */
 		const actions = {
-			isRefreshingGallery,
+			newPieces: newPieces
+				? {
+						count: newPieces.count,
+						previewBlurred: Boolean(newPieces.preview?.isNsfw) && !adultContentAllowed,
+						previewUrl: newPieces.preview?.imageUrl ?? null
+					}
+				: null,
 			onBack: handleBackToHome,
-			onRefresh: refreshGallery
+			onHangNewPieces: hangNewPieces
 		};
 
 		const panel = {
@@ -752,8 +946,14 @@
 		galleryLayout.panelBindings.set(panel);
 
 		return () => {
-			if (get(galleryLayout.actionBindings) === actions) galleryLayout.actionBindings.set(null);
-			if (get(galleryLayout.panelBindings) === panel) galleryLayout.panelBindings.set(null);
+			// Let go only once the room replacing this one has had its turn: the
+			// stage builds the next room before it tears this one down, and
+			// letting go at once left the stores empty in between, while the
+			// header and the detail panel were still reading them.
+			queueMicrotask(() => {
+				if (get(galleryLayout.actionBindings) === actions) galleryLayout.actionBindings.set(null);
+				if (get(galleryLayout.panelBindings) === panel) galleryLayout.panelBindings.set(null);
+			});
 		};
 	});
 </script>
@@ -761,48 +961,49 @@
 {#snippet roomLoadFailure(message: string)}
 	<!-- `role="alert"` on the failure, never on the skeleton: a room that failed
 	     to load is the one room event worth interrupting a reader for. -->
-	<div
-		class="rounded-xl border-4 border-ink-warm bg-paper-bright p-10 text-center shadow-md"
-		data-testid="gallery-room-error"
-		role="alert"
-	>
-		<p class="font-display text-2xl text-ink-warm">Something went wrong</p>
-		<p class="mt-3 text-ink-faint">{message}</p>
-		<button
-			class="mt-6 rounded-full border-3 border-ink-warm bg-[#f6df65] px-5 py-2 text-sm font-black text-ink-warm transition hover:-translate-y-0.5 disabled:opacity-60"
-			disabled={isRefreshingGallery}
-			onclick={() => refreshGallery()}
-			type="button"
-		>
-			{isRefreshingGallery ? 'Retrying…' : 'Try again'}
-		</button>
+	<div class="py-6" data-testid="gallery-room-error" role="alert">
+		<ChalkEasel title="This room is still being hung." {message}>
+			<GameButton
+				variant="secondary"
+				size="sm"
+				disabled={isRefreshingGallery}
+				onclick={() => refreshGallery()}
+			>
+				<span class="font-semibold">{isRefreshingGallery ? 'Retrying…' : 'Try again'}</span>
+			</GameButton>
+		</ChalkEasel>
 	</div>
 {/snippet}
 
 {#snippet roomBody()}
 	{#if showEmptyState}
-		<div
-			class="rounded-xl border-4 border-dashed border-olive bg-paper-bright p-10 text-center shadow-md"
+		<ReservedSpot
+			message={roomEmptyStateMessage ?? ''}
+			reservedFor={roomId === 'your-studio' ? 'for you' : 'for the next masterpiece'}
+			support={emptyStateSupportMessage}
 		>
-			<p class="font-display text-2xl text-ink-warm">{roomEmptyStateMessage}</p>
-			<p class="mt-3 text-ink-faint">
-				{emptyStateSupportMessage}
-			</p>
 			{#if !viewer}
-				<div class="mt-6 flex justify-center">
-					<GameLink href="/" variant="primary" size="sm">
-						<Brush class="h-5 w-5" />
-						<span class="font-semibold">Join &amp; draw</span>
-					</GameLink>
-				</div>
+				<GameLink href="/" variant="primary" size="sm">
+					<Brush class="h-5 w-5" />
+					<span class="font-semibold">Join & draw</span>
+				</GameLink>
+			{:else if roomId === 'your-studio'}
+				<!-- The empty studio is the moment to draw: the way there, not just the news. -->
+				<GameLink href="/draw" variant="primary" size="sm">
+					<Brush class="h-5 w-5" />
+					<span class="font-semibold">Draw your first piece</span>
+				</GameLink>
 			{/if}
-		</div>
+		</ReservedSpot>
 	{:else if roomId === 'hall-of-fame'}
 		<HallOfFameRoom
 			{artworks}
+			{awardStyle}
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
+			seedIsRemembered={isSeedRemembered}
+			serverRendered={!roomContent}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}
@@ -815,21 +1016,35 @@
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
+			seedIsRemembered={isSeedRemembered}
+			serverRendered={!roomContent}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}
 			{revealedArtworkIds}
 			viewerId={viewer?.id ?? null}
 		/>
-	{:else if roomId === 'mystery' && artworks.length > 0}
-		<MysteryRoom
+	{:else if roomId === 'wet-paint' || roomId === 'artist-studio' || roomId === 'artwork-forks'}
+		<NewestFirstRoom
 			{artworks}
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
-			feedCacheKey={roomId}
+			feedCacheKey={roomId === 'wet-paint' ? roomId : null}
+			seedIsRemembered={isSeedRemembered}
+			serverRendered={!roomContent}
 			loadMoreArtworks={roomLoadMoreArtworks}
+			onPrefetch={prefetchArtworkDetail}
+			onSelect={openArtwork}
+			{revealedArtworkIds}
+			testId={roomId}
+			viewerId={viewer?.id ?? null}
+		/>
+	{:else if roomId === 'mystery' && artworks.length > 0}
+		<MysteryRoom
+			adultContentEnabled={adultContentAllowed}
 			{fetchRandomArtwork}
 			onSelect={openArtwork}
+			postcardOpen={selectedArtwork !== null}
 			{revealedArtworkIds}
 			viewerId={viewer?.id ?? null}
 		/>
@@ -839,6 +1054,8 @@
 			pageInfo={seedDiscovery.pageInfo}
 			adultContentEnabled={adultContentAllowed}
 			feedCacheKey={roomId}
+			seedIsRemembered={isSeedRemembered}
+			serverRendered={!roomContent}
 			loadMoreArtworks={roomLoadMoreArtworks}
 			onPrefetch={prefetchArtworkDetail}
 			onSelect={openArtwork}
@@ -850,10 +1067,26 @@
 <div class="relative z-10" data-testid="gallery-room-content">
 	<p aria-live="polite" class="sr-only" data-testid="gallery-room-status">{roomStatusMessage}</p>
 	<div
-		class="relative z-10 mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8"
+		class="relative z-10 mx-auto flex max-w-[160rem] flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8"
 	>
-		{#if roomId === 'your-studio'}
-			<div class="mb-4 flex justify-start md:mb-6" data-testid="your-studio-room-note-flow">
+		{#if artist}
+			<div class="mb-6 flex justify-center md:mb-8">
+				<ArtistBookplate {artist} />
+			</div>
+		{:else if forksOf}
+			<div class="mb-6 flex justify-center md:mb-8">
+				<ForksHead
+					adultContentEnabled={adultContentAllowed}
+					artwork={forksOf}
+					onPrefetch={prefetchArtworkDetail}
+					onSelect={openArtwork}
+					viewerId={viewer?.id ?? null}
+				/>
+			</div>
+		{:else if roomId === 'your-studio' || roomId === 'wet-paint'}
+			<!-- A plain wall of polaroids starts at the top left, right where the note
+			     would be stuck, so here the note takes a line of its own. -->
+			<div class="mb-4 flex justify-start md:mb-6" data-testid={`${roomId}-room-note-flow`}>
 				<PostItNote
 					attachment={room.postItAttachment}
 					className={roomNoteClassNames[roomId]}
@@ -864,8 +1097,17 @@
 				/>
 			</div>
 		{:else}
+			<!-- The room's note is stuck on the wall over the top left, taking no room
+			     from the room (on a phone it sits above it). It stays inside the window,
+			     low enough to clear the room tabs and, until 2xl, a little smaller to
+			     keep off the champion's medal. The Mystery Room's big polaroid reaches
+			     that corner on a tablet, so there it stays above the room for longer. -->
 			<div
-				class="pointer-events-none mb-4 flex justify-center md:absolute md:top-5 md:-left-16 md:z-25 md:mb-0 md:rotate-[-20deg] md:justify-start"
+				class={`room-note pointer-events-none mb-4 flex justify-center 2xl:scale-100 ${
+					roomId === 'mystery'
+						? 'lg:absolute lg:top-14 lg:left-4 lg:z-25 lg:mb-0 lg:origin-top-left lg:-rotate-12 lg:scale-80 lg:justify-start'
+						: 'md:absolute md:top-14 md:left-4 md:z-25 md:mb-0 md:origin-top-left md:-rotate-12 md:scale-80 md:justify-start'
+				}`}
 				data-testid="gallery-room-note"
 			>
 				<PostItNote
@@ -881,7 +1123,7 @@
 
 		{#if showSensitiveArtworkNote}
 			<div
-				class="pointer-events-none mb-4 flex justify-center md:mb-6 md:rotate-14 md:justify-end lg:absolute lg:top-20 lg:right-0 lg:z-26 lg:mb-0 xl:right-[max(-17.5rem,calc((80rem-100vw)/2))]"
+				class="pointer-events-none mb-4 flex justify-center md:mb-6 md:rotate-14 md:justify-end lg:absolute lg:top-20 lg:right-4 lg:z-26 lg:mb-0 lg:origin-top-right lg:scale-80 xl:scale-100"
 			>
 				<PostItNote
 					attachment="tape"
@@ -911,13 +1153,15 @@
 
 		<div aria-busy={isRoomBusy} class="space-y-5 md:space-y-6">
 			{#if roomContent}
-				{#await roomContent}
-					<RoomLoadingSkeleton {roomId} />
-				{:then}
+				<!-- One branch for the room whether it streamed or was remembered, so
+				     a remembered room is not rebuilt when its fresh page lands. -->
+				{#if streamedContent || isSeedRemembered}
 					{@render roomBody()}
-				{:catch}
+				{:else if streamFailed}
 					{@render roomLoadFailure(ROOM_LOAD_ERROR_MESSAGE)}
-				{/await}
+				{:else}
+					<RoomLoadingSkeleton {roomId} />
+				{/if}
 			{:else if loadError}
 				{@render roomLoadFailure(loadError)}
 			{:else if isRoomLoading}

@@ -1,35 +1,40 @@
 <script lang="ts">
-	import { LogOut, Trophy, X } from 'lucide-svelte';
+	import { Trophy, X } from 'lucide-svelte';
 	import { resolve } from '$app/paths';
-	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
-	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
-	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
-	import type { HomePreviewCard } from '$lib/features/home-entry-scene/state/home-entry.svelte';
-	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
+	import ArtworkFrame from '#lib/features/artwork-presentation/components/ArtworkFrame.svelte';
+	import { resolveArtworkFrame } from '#lib/features/artwork-presentation/model/frame.js';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import type { HomeAuthUser } from '#lib/features/home-entry-scene/auth-contract.js';
+	import type { HomePreviewCard } from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
+	import AvatarSketchpad from '#lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
+	import MailboxDialog from '#lib/features/mailbox/components/MailboxDialog.svelte';
+	import MailboxStand from '#lib/features/mailbox/components/MailboxStand.svelte';
 	import {
 		homeGalleryTarget,
 		warmOnIntent
-	} from '$lib/features/home-entry-scene/navigation-warmup';
-	import { setAdultContentEnabled, uploadViewerAvatar } from '$lib/client/avatar-upload';
-	import { buildDrawingDraftKey, clearDrawingDraft } from '$lib/features/stroke-json/drafts';
+	} from '#lib/features/home-entry-scene/navigation-warmup.js';
+	import { setAdultContentEnabled, uploadViewerAvatar } from '#lib/client/avatar-upload.js';
+	import { buildDrawingDraftKey, clearDrawingDraft } from '#lib/features/stroke-json/drafts.js';
 	import {
 		DRAWING_DOCUMENT_VERSION,
-		createEmptyDrawingDocumentV2,
-		parseEditableDrawingDocumentV2
-	} from '$lib/features/stroke-json/document';
-	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
-	import PaperSheet from '$lib/features/shared-ui/components/PaperSheet.svelte';
-	import PostItNote from '$lib/features/shared-ui/components/PostItNote.svelte';
-	import VisitorBadge from '$lib/features/shared-ui/components/VisitorBadge.svelte';
-	import WashiTape from '$lib/features/shared-ui/components/WashiTape.svelte';
-	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
-	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
+		createEmptyDrawingDocumentV2
+	} from '#lib/features/stroke-json/document.js';
+	import { parseEditableDrawing } from '#lib/features/stroke-json/ink-document.js';
+	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import InkStamp from '#lib/features/shared-ui/components/InkStamp.svelte';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import PaperSheet from '#lib/features/shared-ui/components/PaperSheet.svelte';
+	import PostItNote from '#lib/features/shared-ui/components/PostItNote.svelte';
+	import VisitorPass from '#lib/features/shared-ui/components/VisitorPass.svelte';
+	import WashiTape from '#lib/features/shared-ui/components/WashiTape.svelte';
+	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import { dispatchAvatarFaviconUpdate } from '#lib/favicon.js';
 
 	type AvatarSavedPayload = {
-		avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
+		avatarDrawingDocument?:
+			| import('#lib/features/stroke-json/document.js').DrawingDocumentV2
+			| null;
 		avatarOnboardingCompletedAt: Date;
 		avatarUrl: string;
 	};
@@ -37,23 +42,31 @@
 	let {
 		adultContentEnabled = false,
 		isExiting = false,
+		onArtworkNavigate,
 		onAvatarSaved,
 		onGalleryNavigate,
+		onWishTaken,
 		previewCards = [],
 		user = null
 	}: {
 		adultContentEnabled?: boolean;
 		isExiting?: boolean;
+		/** A best piece picked from the wall: the page walks into the gallery with it open. */
+		onArtworkNavigate?: (artworkId: string) => void;
 		onAvatarSaved?: (payload: AvatarSavedPayload) => void;
 		onGalleryNavigate?: () => void;
+		/** A slip taken from the mailbox: the walk to the studio, with the slip. */
+		onWishTaken?: (wishId: string) => void;
 		previewCards?: HomePreviewCard[];
 		user?: HomeAuthUser | null;
 	} = $props();
 
 	let adultContentPreferenceOverride = $state<boolean | null>(null);
-	let adultContentError = $state<string | null>(null);
+	/** The 18+ choice that did not save, stamped on its note until it is tried again or put away. */
+	let adultContentFailure = $state<boolean | null>(null);
 	let isSavingAdultContentPreference = $state(false);
 	let isAvatarEditorOpen = $state(false);
+	let isMailboxOpen = $state(false);
 
 	const adultContentAllowed = $derived(adultContentPreferenceOverride ?? adultContentEnabled);
 	const hasSensitivePreview = $derived(previewCards.some((card) => card.isNsfw));
@@ -81,20 +94,18 @@
 	);
 
 	const updateAdultContentPreference = async (enabled: boolean) => {
-		if (!user || isSavingAdultContentPreference) {
-			adultContentError = 'Sign in to manage 18+ artwork visibility.';
-			return;
-		}
+		// Only an artist sees the button; a second press while one is saving waits.
+		if (!user || isSavingAdultContentPreference) return;
 
 		isSavingAdultContentPreference = true;
-		adultContentError = null;
+		adultContentFailure = null;
 
 		try {
 			await setAdultContentEnabled(enabled);
 			adultContentPreferenceOverride = enabled;
-		} catch (error) {
-			adultContentError =
-				error instanceof Error ? error.message : '18+ artwork preference could not be updated.';
+		} catch {
+			// What the visitor asked for, so Try again asks for it once more.
+			adultContentFailure = enabled;
 		} finally {
 			isSavingAdultContentPreference = false;
 		}
@@ -102,6 +113,16 @@
 
 	const handleGalleryClick = () => {
 		onGalleryNavigate?.();
+	};
+
+	// Each best piece is a link to its own page, so it can be opened in a new
+	// tab, copied or shared; a plain click walks into the gallery with it.
+	const openBestPiece = (event: MouseEvent, artworkId: string) => {
+		if (!onArtworkNavigate) return;
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+			return;
+		event.preventDefault();
+		onArtworkNavigate(artworkId);
 	};
 
 	const openAvatarEditor = () => {
@@ -129,7 +150,7 @@
 		if (result.success && userId) {
 			dispatchAvatarFaviconUpdate(userId);
 			onAvatarSaved?.({
-				avatarDrawingDocument: parseEditableDrawingDocumentV2(drawingDocument),
+				avatarDrawingDocument: parseEditableDrawing(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
 				avatarUrl: result.avatarUrl
 			});
@@ -141,16 +162,18 @@
 
 <div class="pointer-events-none absolute inset-0 z-30">
 	{#if user}
+		<!-- The visitor's own corner: who they are, and the way out. Its size and
+		     place come from HomeEntryPage, which keeps room for it above the window. -->
 		<div
-			class="pointer-events-auto absolute top-4 left-4 max-w-[calc(100vw-2rem)] transition-all duration-700 ease-in md:top-8 md:left-8 md:max-w-[22rem]"
+			class="home-account pointer-events-auto absolute flex items-start gap-3 transition-[translate,opacity] duration-700 ease-in"
 			class:-translate-x-[calc(100%+3rem)]={isExiting}
 			class:opacity-0={isExiting}
 			inert={isExiting}
 		>
-			<VisitorBadge
+			<VisitorPass
 				avatarUrl={user.avatarUrl ?? user.image ?? null}
 				nickname={user.nickname}
-				onclick={openAvatarEditor}
+				onEdit={openAvatarEditor}
 				userId={user.id}
 			/>
 		</div>
@@ -162,7 +185,7 @@
 		layer out of the tab order and the a11y tree while it leaves.
 	-->
 	<div
-		class="pointer-events-auto absolute top-4 right-4 hidden transition-all duration-700 ease-in md:top-8 md:right-8 md:block"
+		class="home-previews pointer-events-auto absolute top-8 right-8 transition-[translate,opacity] duration-700 ease-in"
 		class:translate-x-[calc(100%+3rem)]={isExiting}
 		class:opacity-0={isExiting}
 		data-testid="home-preview-stack"
@@ -173,9 +196,10 @@
 				{@const frame = resolveArtworkFrame({ artworkId: card.id, podiumPosition: card.rank })}
 				{@const blurred = isArtworkBlurred(card, { adultContentEnabled: adultContentAllowed })}
 				<a
-					href={resolve('/gallery/[[room]]', {})}
+					href={resolve('/artwork/[artworkId]', { artworkId: card.id })}
 					class="group relative block cursor-pointer"
 					style={`transform: rotate(${card.rotation}deg);`}
+					onclick={(event) => openBestPiece(event, card.id)}
 				>
 					<div
 						class="relative transition-all duration-200 group-hover:-translate-x-[10px] group-hover:scale-110 group-hover:rotate-0"
@@ -247,23 +271,29 @@
 						{:else}
 							<p class="text-xs font-semibold text-rust">Sign in to reveal 18+ artworks.</p>
 						{/if}
-						{#if adultContentError}
-							<p class="mt-2 text-xs font-semibold text-rust">{adultContentError}</p>
-						{/if}
 					</PostItNote>
+					{#if adultContentFailure !== null}
+						{@const wanted = adultContentFailure}
+						<InkStamp
+							label="Not saved"
+							message="Your 18+ setting didn't save."
+							onDismiss={() => (adultContentFailure = null)}
+							onRetry={() => void updateAdultContentPreference(wanted)}
+						/>
+					{/if}
 				</div>
 			{/if}
 		</div>
 	</div>
 
 	<div
-		class="pointer-events-auto absolute right-4 bottom-6 left-4 flex items-stretch justify-center transition-all duration-700 ease-in md:right-auto md:bottom-20 md:left-16 md:translate-x-0 md:items-start"
+		class="home-nav pointer-events-auto absolute flex transition-[translate,opacity] duration-700 ease-in"
 		class:translate-y-[calc(100%+6rem)]={isExiting}
 		class:opacity-0={isExiting}
 		inert={isExiting}
 	>
 		<div
-			class="flex w-full max-w-[22rem] flex-col items-stretch gap-4 md:w-auto md:max-w-none md:items-start"
+			class="relative flex w-full flex-col items-stretch gap-4 landscape:w-auto landscape:items-start"
 		>
 			{#if user}
 				<!--
@@ -272,12 +302,15 @@
 					starts 2.4s of camera choreography before `goto` runs. Warming on
 					pointer/focus intent turns that hold into overlap.
 				-->
-				<div class="w-full md:w-auto" use:warmOnIntent={homeGalleryTarget}>
+				<div
+					class="home-gallery relative z-1 w-full landscape:w-auto"
+					use:warmOnIntent={homeGalleryTarget}
+				>
 					<GameButton
 						type="button"
 						variant="secondary"
 						size="lg"
-						className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 md:w-auto"
+						className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 landscape:w-auto"
 						onclick={handleGalleryClick}
 					>
 						<Trophy
@@ -286,12 +319,13 @@
 						<span>GALLERY</span>
 					</GameButton>
 				</div>
+				<MailboxStand onOpen={() => (isMailboxOpen = true)} />
 			{:else}
 				<GameLink
 					href={galleryHref}
 					variant="secondary"
 					size="lg"
-					className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 md:w-auto"
+					className="group w-full justify-center -rotate-1 hover:translate-x-[10px] hover:rotate-2 landscape:w-auto"
 				>
 					<Trophy
 						class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
@@ -299,25 +333,19 @@
 					<span>GALLERY</span>
 				</GameLink>
 			{/if}
-
-			{#if user}
-				<form method="POST" action="?/signOut" class="w-full md:w-fit md:self-start">
-					<GameButton
-						type="submit"
-						variant="danger"
-						size="lg"
-						className="group w-full justify-center rotate-1 hover:translate-x-[10px] hover:rotate-[-2deg] md:w-auto"
-					>
-						<LogOut
-							class="transition-transform duration-300 group-hover:animate-[wiggle_0.5s_ease-in-out]"
-						/>
-						<span>LOGOUT</span>
-					</GameButton>
-				</form>
-			{/if}
 		</div>
 	</div>
 </div>
+
+{#if isMailboxOpen}
+	<MailboxDialog
+		onClose={() => (isMailboxOpen = false)}
+		onTake={(wish) => {
+			isMailboxOpen = false;
+			onWishTaken?.(wish.id);
+		}}
+	/>
+{/if}
 
 {#if isAvatarEditorOpen && user}
 	<div
@@ -390,6 +418,70 @@
 
 	.nsfw-scrim {
 		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
+	}
+
+	/*
+	 * Where the front door's pieces stand on each screen; MuseumWallOverlay
+	 * lays the window out around them, so the two must change together.
+	 */
+
+	/* The visitor's corner, at the top left, its size set by HomeEntryPage:
+	 * Logout under the badge on a screen on its side, beside it on an upright
+	 * one, where the title sits under the corner (HomeHeroOverlay). */
+	.home-account {
+		top: var(--account-top, 1rem);
+		left: var(--account-top, 1rem);
+		flex-direction: column;
+		font-size: var(--account-em, 1rem);
+	}
+
+	@media (orientation: portrait) {
+		.home-account {
+			flex-direction: row;
+		}
+	}
+
+	/* The best pieces hang down the right only where there is room for them
+	 * beside the window: a wide screen, on its side, at least 40rem tall. */
+	.home-previews {
+		display: none;
+	}
+
+	@media (orientation: landscape) and (min-width: 48rem) and (min-height: 40rem) {
+		.home-previews {
+			display: block;
+		}
+	}
+
+	/* Gallery: at the bottom left beside Come In on a screen on its side; under
+	 * the window on an upright one, clear of the audio tab in the corner. */
+	@media (orientation: landscape) {
+		.home-nav {
+			bottom: 2rem;
+			left: 2rem;
+		}
+	}
+
+	@media (orientation: landscape) and (max-height: 30rem) {
+		.home-nav {
+			bottom: 1rem;
+			left: 1rem;
+		}
+	}
+
+	@media (orientation: portrait) {
+		.home-nav {
+			right: 8.5rem;
+			bottom: 1rem;
+			left: 1rem;
+		}
+	}
+
+	@media (orientation: portrait) and (min-width: 43.75rem) {
+		.home-nav {
+			right: auto;
+			width: 22rem;
+		}
 	}
 
 	/* torn-out spiral perforations along the left edge */

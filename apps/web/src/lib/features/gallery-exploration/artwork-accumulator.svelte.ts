@@ -1,8 +1,8 @@
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 import type {
 	GalleryArtworkPage,
 	GalleryPageInfo
-} from '$lib/features/gallery-exploration/model/discovery';
+} from '#lib/features/gallery-exploration/model/discovery.js';
 
 /*
  * The paging engine behind every gallery room, including the Mystery reel —
@@ -10,7 +10,7 @@ import type {
  * whose only addition was a write-only `progress` field.
  *
  * The base/appended split is what lets a streamed seed refresh (a realtime vote,
- * an `invalidateAll`) patch the first page in place without discarding the pages
+ * a `refreshAll`) patch the first page in place without discarding the pages
  * infinite scroll has already fetched.
  */
 

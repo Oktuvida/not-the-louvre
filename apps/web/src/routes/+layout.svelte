@@ -8,69 +8,39 @@
 	 * font import.
 	 */
 	import './layout.css';
+	import { beforeNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { page, updated } from '$app/state';
 	import { onMount } from 'svelte';
-	import AmbientAudioController from '$lib/features/ambient-audio/AmbientAudioController.svelte';
-	import SiteMeta from '$lib/features/shared-ui/components/SiteMeta.svelte';
-	import { readRouteMeta } from '$lib/features/shared-ui/site-meta';
+	import AmbientAudioController from '#lib/features/ambient-audio/AmbientAudioController.svelte';
+	import SiteMeta from '#lib/features/shared-ui/components/SiteMeta.svelte';
+	import TipCup from '#lib/features/shared-ui/components/TipCup.svelte';
+	import { readRouteMeta } from '#lib/features/shared-ui/site-meta.js';
 	/*
-	 * Self-hosted fonts, latin + latin-ext subsets only.
-	 *
-	 * The aggregate entry points (`@fontsource/baloo-2/400.css`) declare EVERY
-	 * subset the family ships — devanagari, vietnamese, cyrillic(-ext) and
-	 * hebrew as well — which put 40 @font-face rules on the render-blocking
-	 * path of every route and pushed 2MB of never-requested font files into the
-	 * Workers asset bundle. The per-subset entry points below carry the 22
-	 * faces this UI can actually paint.
-	 *
-	 * The accepted trade: user-generated text in a non-Latin script (a nickname,
-	 * a guestbook note) renders in the system fallback stack rather than in
-	 * Baloo 2 / Fredoka / Caveat.
-	 *
-	 * Only the latin entry points are imported from the package: they declare no
-	 * `unicode-range`, so each one is the family's universal fallback face. The
-	 * latin-ext faces are declared in `fonts-latin-ext.css` instead, with the
-	 * range their package entry points forgot — importing those alongside these
-	 * put two rangeless faces on the same family/style/weight, and the later one
-	 * (latin-ext) then owned the whole range and pulled both files down.
+	 * The house typefaces, self-hosted as variable fonts (`fonts.css` says why
+	 * and how). Two of them paint above the fold on every route: Baloo 2 is the
+	 * body font and Fredoka letters every sticker control and the home hero.
+	 * Imported as URLs so Vite hashes them and the preload can never drift from
+	 * the emitted filename. `crossorigin` is mandatory even same-origin —
+	 * without it the preload does not match the font fetch and the file is
+	 * downloaded twice.
 	 */
-	import '@fontsource/baloo-2/latin-400.css';
-	import '@fontsource/baloo-2/latin-500.css';
-	import '@fontsource/baloo-2/latin-600.css';
-	import '@fontsource/baloo-2/latin-700.css';
-	// Weight 800 stays: `font-black` (900) has no 900 face anywhere and matches
-	// upward onto it, so dropping it would visibly lighten 11 call sites.
-	import '@fontsource/baloo-2/latin-800.css';
-	import '@fontsource/caveat/latin-400.css';
-	import '@fontsource/caveat/latin-700.css';
-	import '@fontsource/fredoka/latin-400.css';
-	import '@fontsource/fredoka/latin-500.css';
-	import '@fontsource/fredoka/latin-600.css';
-	import '@fontsource/fredoka/latin-700.css';
-	import './fonts-latin-ext.css';
-	/*
-	 * The two faces that paint above the fold on every route: Baloo 2 400 is
-	 * the body font and Fredoka 700 letters every sticker control and the home
-	 * hero. Imported as URLs so Vite hashes them and the preload can never
-	 * drift from the emitted filename. `crossorigin` is mandatory even
-	 * same-origin — without it the preload does not match the font fetch and
-	 * the file is downloaded twice.
-	 */
-	import balooBodyFontUrl from '@fontsource/baloo-2/files/baloo-2-latin-400-normal.woff2?url';
-	import fredokaDisplayFontUrl from '@fontsource/fredoka/files/fredoka-latin-700-normal.woff2?url';
+	import './fonts.css';
+	import balooBodyFontUrl from '@fontsource-variable/baloo-2/files/baloo-2-latin-wght-normal.woff2?url';
+	import fredokaDisplayFontUrl from '@fontsource-variable/fredoka/files/fredoka-latin-wght-normal.woff2?url';
 	import type { LayoutProps } from './$types';
-	import { faviconUpdateEventName } from '$lib/favicon';
+	import { avatarFavicon, faviconUpdateEventName } from '#lib/favicon.js';
 
 	let { children, data }: LayoutProps = $props();
 	let clientFaviconHref = $state<string | null>(null);
 	let clientFaviconBaseHref = $state<string | null>(null);
 
 	const serverFaviconHref = $derived(data.favicon.href);
-	const faviconHref = $derived(
+	// An avatar saved in the page replaces the icon the server rendered.
+	const favicon = $derived(
 		clientFaviconHref && clientFaviconBaseHref === serverFaviconHref
-			? clientFaviconHref
-			: serverFaviconHref
+			? avatarFavicon(clientFaviconHref)
+			: data.favicon
 	);
 
 	// Routes contribute `meta` from their `load`; the head is rendered here
@@ -82,6 +52,13 @@
 	// returned — which would title a 404 after the page the visitor never
 	// reached. The status is the only title an error page can carry.
 	const documentTitle = $derived(page.error ? String(page.status) : routeMeta.title);
+
+	// A release went out while this tab was open: the code it runs asks for
+	// hashed files the new build no longer has, the studio model among them. The
+	// next page the visitor opens is loaded whole, from the new release.
+	beforeNavigate(({ to, willUnload }) => {
+		if (updated.current && !willUnload && to?.url) location.href = to.url.href;
+	});
 
 	onMount(() => {
 		const handleFaviconUpdate = (event: Event) => {
@@ -104,8 +81,14 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={faviconHref} sizes="any" />
+	<!-- Keyed, so a new icon arrives as a new link: Safari reads a page's icon
+	     when a link arrives, never when an existing link's address changes. -->
+	{#key favicon.href}
+		<link rel="icon" href={favicon.href} type={favicon.type} sizes={favicon.sizes} />
+	{/key}
+
 	<link rel="preload" as="font" type="font/woff2" href={balooBodyFontUrl} crossorigin="anonymous" />
+
 	<link
 		rel="preload"
 		as="font"
@@ -115,7 +98,12 @@
 	/>
 </svelte:head>
 
-<SiteMeta title={documentTitle} description={routeMeta.description} {pathname} />
+<SiteMeta
+	title={documentTitle}
+	description={routeMeta.description}
+	image={page.error ? undefined : routeMeta.image}
+	{pathname}
+/>
 
 {@render children()}
 
@@ -124,8 +112,13 @@
 	viewerId={data.viewer?.id ?? null}
 />
 
+<!-- The studio asks for nothing but the drawing. -->
+{#if page.route?.id !== '/draw'}
+	<TipCup />
+{/if}
+
 {#if data.viewer && !data.viewer.isBanned && data.viewer.role !== 'user'}
-	<a class="ops-link focus-ring" href={resolve('/admin')}>Ops</a>
+	<a class="ops-link focus-ring" href={resolve('admin')}>Ops</a>
 {/if}
 
 <style>

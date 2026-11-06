@@ -50,10 +50,12 @@
 	--color-frame-line: #e5dfd5;
 	--color-hairline: #d6cfc5;
 	--color-clay: #c4b5a6;
+	/* The brick wall's own average colour: what fills a stretch of it the
+	 * browser has not painted yet (generated/museum-wall.svg). */
+	--color-wall: #b8a98d;
 	--color-panel: rgb(251 247 240 / 0.92);
 
 	/* ---- Ink (dark surfaces and text, darkest first) ---------------------- */
-	--color-wall: #252018;
 	--color-ink-warm: #2d2420;
 	--color-ink: #2f241c;
 	--color-note-ink: #3d3530;
@@ -61,7 +63,8 @@
 	--color-bark: #6b5a45;
 	--color-ink-faint: #6b625a;
 	--color-muted: #6f6257;
-	--color-muted-ink: #8a6c52;
+	/* Dark enough for small text on the paper and linen: 5.3:1 on --color-paper-card. */
+	--color-muted-ink: #7c5f46;
 
 	/* ---- Brand and signals ------------------------------------------------ */
 	--color-primary: #d4834a;
@@ -74,6 +77,10 @@
 	--color-danger: #a24d49;
 	--color-danger-deep: #a8403a;
 	--color-rust: #8f3720;
+	/* What a mistake is marked in: a red pencil on a field (5.4:1 on the
+	 * paper), and the red ink of the rubber stamp on an action that failed. */
+	--color-pencil: #b8362a;
+	--color-stamp: #b23a2e;
 	/* The veil that covers a page while the next one is fetched. */
 	--color-scrim: #6e6e6e;
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProductRole } from '$lib/shared/viewer';
+import type { ProductRole } from '#lib/shared/viewer.js';
 
 const mocked = vi.hoisted(() => ({
 	getTextModerationSnapshot: vi.fn(),
@@ -7,24 +7,24 @@ const mocked = vi.hoisted(() => ({
 	listUsers: vi.fn()
 }));
 
-vi.mock('$lib/server/artwork/read.service', async () => {
-	const actual = await vi.importActual<object>('$lib/server/artwork/read.service');
+vi.mock('#lib/server/artwork/read.service.js', async () => {
+	const actual = await vi.importActual<object>('#lib/server/artwork/read.service.js');
 	return {
 		...actual,
 		listModerationQueue: mocked.listModerationQueue
 	};
 });
 
-vi.mock('$lib/server/moderation/service', async () => {
-	const actual = await vi.importActual<object>('$lib/server/moderation/service');
+vi.mock('#lib/server/moderation/service.js', async () => {
+	const actual = await vi.importActual<object>('#lib/server/moderation/service.js');
 	return {
 		...actual,
 		getTextModerationSnapshot: mocked.getTextModerationSnapshot
 	};
 });
 
-vi.mock('$lib/server/user/admin.service', async () => {
-	const actual = await vi.importActual<object>('$lib/server/user/admin.service');
+vi.mock('#lib/server/user/admin.service.js', async () => {
+	const actual = await vi.importActual<object>('#lib/server/user/admin.service.js');
 	return {
 		...actual,
 		listUsers: mocked.listUsers

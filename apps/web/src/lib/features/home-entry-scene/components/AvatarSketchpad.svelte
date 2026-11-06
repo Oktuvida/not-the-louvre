@@ -4,39 +4,25 @@
 		buildDrawingDraftKey,
 		createDrawingDraftSession,
 		type IndexedDbDrawingDraftStore
-	} from '$lib/features/stroke-json/drafts';
+	} from '#lib/features/stroke-json/drafts.js';
 	import {
 		AVATAR_DRAWING_DIMENSIONS,
 		DRAWING_DOCUMENT_VERSION,
 		cloneDrawingDocumentV2,
-		createEmptyDrawingDocument,
 		createEmptyDrawingDocumentV2,
 		getRenderableDrawingStrokes,
 		type DrawingDocumentV2,
-		type DrawingPoint,
 		type DrawingStroke
-	} from '$lib/features/stroke-json/document';
-	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/runtime.browser';
-	import { renderDrawingStroke } from '$lib/features/stroke-json/canvas';
-	import {
-		appendBufferedStrokePoint,
-		appendCommittedStroke,
-		createBufferedStroke,
-		shouldUseResponsiveDrawing
-	} from '$lib/features/stroke-json/responsive-editing';
-	import {
-		attachPointerReleaseSafetyNet,
-		ensureCommittedCacheCanvas,
-		getCanvasDrawingPoint,
-		hasLostPrimaryButton,
-		isSameDrawingRenderSignature,
-		readDrawingRenderSignature,
-		type DrawingRenderSignature
-	} from '$lib/features/studio-drawing/pointer-drawing';
-	import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
-	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
-	import type { AvatarUploadResult } from '$lib/client/avatar-upload';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
+	} from '#lib/features/stroke-json/document.js';
+	import { renderDrawingStroke } from '#lib/features/stroke-json/canvas.js';
+	import DrawingCanvas from '#lib/features/studio-drawing/components/DrawingCanvas.svelte';
+	import { drawingPalette } from '#lib/features/studio-drawing/state/drawing.svelte.js';
+	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import { encodeDrawingV3 } from '#lib/stroke/v3.js';
+	import { toInkDocument } from '#lib/features/stroke-json/ink-document.js';
+	import type { AvatarUploadResult } from '#lib/client/avatar-upload.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import InkStamp from '#lib/features/shared-ui/components/InkStamp.svelte';
 
 	const palette = drawingPalette;
 	const BRUSH_SIZES = [1, 2, 4, 6, 8, 10, 12, 14, 18, 24, 32, 42];
@@ -55,31 +41,16 @@
 	const CANVAS_WIDTH = AVATAR_DRAWING_DIMENSIONS.width;
 	const CANVAS_HEIGHT = AVATAR_DRAWING_DIMENSIONS.height;
 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
+	const AVATAR_UNSAVED_MESSAGE = "Your portrait didn't save. It's still on the easel.";
+	const AVATAR_UNPREPARED_MESSAGE = "Your browser couldn't get the portrait ready.";
 
 	let {
 		clearMode = 'initial',
-		createAvatarPayload = async (documentState: DrawingDocumentV2) => {
-			const mode =
-				typeof window === 'undefined'
-					? 'good'
-					: ((
-							window as Window & {
-								__avatarExportMode?: 'bad' | 'good' | 'unsupported';
-							}
-						).__avatarExportMode ?? 'good');
-
-			if (mode === 'unsupported') {
-				return null;
-			}
-
-			if (mode === 'bad') {
-				return JSON.stringify(createEmptyDrawingDocument('artwork'));
-			}
-
-			return prepareDrawingDocumentForPublish(documentState);
-		},
+		createAvatarPayload = async (documentState: DrawingDocumentV2) =>
+			JSON.stringify(encodeDrawingV3(toInkDocument(documentState))),
 		draftUserKey = null,
 		draftStore,
+		fit = false,
 		initialDrawingDocument = null,
 		nickname,
 		onContinue,
@@ -93,6 +64,12 @@
 		createAvatarPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		draftUserKey?: string | null;
 		draftStore?: IndexedDbDrawingDraftStore;
+		/**
+		 * Take the height the sheet gives it instead of growing the sheet: the
+		 * canvas becomes the largest square the easel has room for. The
+		 * onboarding sheet, which sizes itself to the screen, asks for this.
+		 */
+		fit?: boolean;
 		initialDrawingDocument?: DrawingDocumentV2 | null;
 		nickname: string;
 		onContinue?: () => void;
@@ -100,23 +77,16 @@
 		submitLabel?: string;
 	} = $props();
 
-	let canvasElement = $state<HTMLCanvasElement | null>(null);
 	let activeColor = $state(DEFAULT_AVATAR_COLOR);
 	let baselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
 	let brushStep = $state(Math.floor((BRUSH_SIZES.length - 1) / 2));
 	let drawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('avatar'));
-	let activeStroke = $state<DrawingStroke | null>(null);
-	let activePointerId = $state<number | null>(null);
-	let isDrawing = $state(false);
+	// Strokes wait for the local draft: restoring it replaces the document, and a
+	// stroke drawn while it loads would vanish under it. The studio gates the same way.
+	let draftReady = $state(false);
 	let isSaving = $state(false);
 	let draftStatusMessage = $state('');
 	let saveError = $state('');
-	let responsiveDrawing = $derived(shouldUseResponsiveDrawing(drawingDocument));
-	let committedCacheCanvas: HTMLCanvasElement | null = null;
-	let committedCacheDirty = true;
-	let renderedSignature: DrawingRenderSignature | null = null;
-	let renderedSealSignature: DrawingRenderSignature | null = null;
-	let renderedSealTarget: HTMLCanvasElement | null = null;
 	let sealCanvasElement = $state<HTMLCanvasElement | null>(null);
 	let sealBlobElement = $state<HTMLDivElement | null>(null);
 
@@ -200,10 +170,12 @@
 
 	const drawGhostSilhouette = (ctx: CanvasRenderingContext2D) => {
 		ctx.save();
-		ctx.globalAlpha = 0.17;
-		ctx.strokeStyle = '#2d2a26';
-		ctx.lineWidth = 3;
-		ctx.setLineDash([8, 6]);
+		// Soft graphite, dotted: a guide to draw over, not a line of the drawing.
+		ctx.globalAlpha = 0.2;
+		ctx.strokeStyle = '#6b6258';
+		ctx.lineWidth = 3.5;
+		ctx.lineCap = 'round';
+		ctx.setLineDash([0.5, 8]);
 
 		const centerX = CANVAS_WIDTH / 2;
 		const centerY = CANVAS_HEIGHT / 2 - 8;
@@ -252,33 +224,6 @@
 		ctx.restore();
 	};
 
-	const renderCommittedDocument = (
-		context: CanvasRenderingContext2D,
-		documentState: DrawingDocumentV2
-	) => {
-		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
-		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-		drawGhostSilhouette(context);
-
-		for (const stroke of getRenderableDrawingStrokes(documentState)) {
-			renderDrawingStroke(context, stroke);
-		}
-	};
-
-	const renderCommittedCache = () => {
-		committedCacheCanvas = ensureCommittedCacheCanvas(
-			committedCacheCanvas,
-			CANVAS_WIDTH,
-			CANVAS_HEIGHT
-		);
-
-		const context = committedCacheCanvas.getContext('2d');
-		if (!context) return;
-
-		renderCommittedDocument(context, drawingDocument);
-		committedCacheDirty = false;
-	};
-
 	// Live wax-seal preview: the drawing (sans ghost guides) scaled into the
 	// seal well, so artists see exactly what gets pressed into their seal.
 	const updateSealPreview = () => {
@@ -292,9 +237,6 @@
 		context.scale(seal.width / CANVAS_WIDTH, seal.height / CANVAS_HEIGHT);
 		for (const stroke of getRenderableDrawingStrokes(drawingDocument)) {
 			renderDrawingStroke(context, stroke);
-		}
-		if (activeStroke) {
-			renderDrawingStroke(context, activeStroke);
 		}
 		context.restore();
 	};
@@ -312,176 +254,12 @@
 		});
 	};
 
-	const markDocumentRendered = () => {
-		renderedSignature = readDrawingRenderSignature({
-			activeStroke,
-			document: drawingDocument,
-			responsive: responsiveDrawing,
-			target: canvasElement
-		});
-	};
-
-	const renderCurrentDocument = () => {
-		if (!canvasElement) return;
-		const context = canvasElement.getContext('2d');
-		if (!context) return;
-
-		if (!responsiveDrawing) {
-			renderCommittedDocument(context, drawingDocument);
-			markDocumentRendered();
-			return;
-		}
-
-		if (committedCacheDirty || !committedCacheCanvas) {
-			renderCommittedCache();
-		}
-
-		context.fillStyle = AVATAR_CANVAS_BACKGROUND;
-		context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-		if (committedCacheCanvas) {
-			context.drawImage(committedCacheCanvas, 0, 0);
-		}
-		if (activeStroke) {
-			renderDrawingStroke(context, activeStroke);
-		}
-
-		markDocumentRendered();
-	};
-
-	const getPoint = (event: PointerEvent): DrawingPoint | null =>
-		canvasElement ? getCanvasDrawingPoint(canvasElement, event, drawingDocument) : null;
-
-	const startStroke = (point: DrawingPoint) => {
-		if (responsiveDrawing) {
-			activeStroke = createBufferedStroke({
-				color: activeColor,
-				point,
-				size: brushSize
-			});
-			renderCurrentDocument();
-			return;
-		}
-
-		drawingDocument.tail.push({
-			color: activeColor,
-			points: [point],
-			size: brushSize
-		});
-		committedCacheDirty = true;
-		renderCurrentDocument();
-	};
-
-	const appendPoint = (point: DrawingPoint) => {
-		if (responsiveDrawing) {
-			if (!activeStroke) return;
-			if (!appendBufferedStrokePoint(activeStroke, point)) return;
-			renderCurrentDocument();
-			return;
-		}
-
-		const stroke = drawingDocument.tail.at(-1);
-		if (!stroke) return;
-
-		const lastPoint = stroke.points.at(-1);
-		if (lastPoint && point[0] === lastPoint[0] && point[1] === lastPoint[1]) {
-			return;
-		}
-
-		stroke.points.push(point);
-		committedCacheDirty = true;
-		renderCurrentDocument();
-	};
-
-	const commitActiveStroke = () => {
-		if (!activeStroke) return;
-
-		const previousDocument = cloneDrawingDocumentV2(drawingDocument);
-		const committedStroke = {
-			color: activeStroke.color,
-			points: activeStroke.points.map((point) => [point[0], point[1]] as [number, number]),
-			size: activeStroke.size
-		};
-
-		drawingDocument = appendCommittedStroke(previousDocument, committedStroke);
-		void persistCommittedStroke(previousDocument, committedStroke);
-		activeStroke = null;
-		committedCacheDirty = true;
-		renderCurrentDocument();
-	};
-
-	const startDrawing = (event: PointerEvent) => {
-		if (!canvasElement) return;
-		if (!event.isPrimary) return;
-
-		event.preventDefault();
-
-		const point = getPoint(event);
-		if (!point) return;
-
-		canvasElement.setPointerCapture(event.pointerId);
-		activePointerId = event.pointerId;
-		startStroke(point);
-		isDrawing = true;
-	};
-
-	const draw = (event: PointerEvent) => {
-		if (!isDrawing || !canvasElement) return;
-		if (!event.isPrimary) return;
-		if (activePointerId !== event.pointerId) return;
-
-		event.preventDefault();
-
-		// A mouse released outside the window delivers no pointerup here. Commit the
-		// stroke rather than dropping it, and only for mice: a stylus can report
-		// `buttons: 0` mid-stroke and would otherwise truncate the line.
-		if (hasLostPrimaryButton(event)) {
-			finishDrawing(event);
-			return;
-		}
-
-		const point = getPoint(event);
-		if (!point) return;
-
-		appendPoint(point);
-	};
-
-	const stopDrawing = () => {
-		activeStroke = null;
-		isDrawing = false;
-		activePointerId = null;
-	};
-
-	const finishDrawing = (event?: PointerEvent) => {
-		if (
-			canvasElement &&
-			event &&
-			activePointerId === event.pointerId &&
-			canvasElement.hasPointerCapture(event.pointerId)
-		) {
-			canvasElement.releasePointerCapture(event.pointerId);
-		}
-
-		if (responsiveDrawing) {
-			commitActiveStroke();
-		} else if (isDrawing) {
-			const previousDocument = cloneDrawingDocumentV2(drawingDocument);
-			const committedStroke = previousDocument.tail.pop();
-			if (committedStroke) {
-				void persistCommittedStroke(previousDocument, committedStroke);
-			}
-		}
-
-		stopDrawing();
+	const handleStrokeCommitted = (input: {
+		previousDocument: DrawingDocumentV2;
+		stroke: DrawingStroke;
+	}) => {
+		void persistCommittedStroke(input.previousDocument, input.stroke);
 		pressSealAnimation();
-	};
-
-	const cancelDrawing = (event: PointerEvent) => {
-		event.preventDefault();
-		finishDrawing(event);
-	};
-
-	const preventCanvasDrag = (event: DragEvent) => {
-		event.preventDefault();
 	};
 
 	const handleEnterGallery = async () => {
@@ -497,7 +275,7 @@
 				avatarPayload = await createAvatarPayload(drawingDocument);
 			} catch (error) {
 				console.error('Failed to create avatar payload', error);
-				saveError = 'This browser could not prepare your avatar. Please try again.';
+				saveError = AVATAR_UNPREPARED_MESSAGE;
 				return;
 			}
 
@@ -506,13 +284,17 @@
 					'Failed to create avatar payload',
 					new Error('createAvatarPayload returned no payload')
 				);
-				saveError = 'This browser could not prepare your avatar. Please try again.';
+				saveError = AVATAR_UNPREPARED_MESSAGE;
 				return;
 			}
 
 			const result = await saveAvatar(avatarPayload);
 			if (!result.success) {
-				saveError = result.message;
+				// A lockout keeps its own words; the server's other reasons are for the logs.
+				saveError =
+					result.code === 'RATE_LIMITED' && result.message
+						? result.message
+						: AVATAR_UNSAVED_MESSAGE;
 				return;
 			}
 
@@ -541,69 +323,38 @@
 
 					drawingDocument =
 						draft?.kind === 'avatar' ? draft : cloneDrawingDocumentV2(baselineDocument);
-					committedCacheDirty = true;
+					draftReady = true;
 					clearUnsavedDraftWarning();
 				})
 				.catch(() => {
 					if (draftLoadCancelled) return;
 
 					drawingDocument = cloneDrawingDocumentV2(baselineDocument);
-					committedCacheDirty = true;
+					draftReady = true;
 					markUnsavedDraftWarning();
 				});
 		} else {
 			drawingDocument = cloneDrawingDocumentV2(baselineDocument);
-			committedCacheDirty = true;
+			draftReady = true;
 		}
-
-		const detachPointerReleaseSafetyNet = attachPointerReleaseSafetyNet(finishDrawing);
-
-		renderCurrentDocument();
 
 		return () => {
 			draftLoadCancelled = true;
-			detachPointerReleaseSafetyNet();
 		};
 	});
 
-	// The pointer handlers already paint the pad synchronously, so this effect only
-	// covers the repaints nothing else does (mount, draft hydration, a cleared pad)
-	// and skips the duplicate paint of the very same frame. The seal preview is
-	// driven from here alone, so it keeps refreshing on every change.
+	// The seal follows every committed change to the drawing.
 	$effect(() => {
-		const nextSignature = readDrawingRenderSignature({
-			activeStroke,
-			document: drawingDocument,
-			responsive: responsiveDrawing,
-			target: canvasElement
-		});
-		const nextSealTarget = sealCanvasElement;
-
-		if (!isSameDrawingRenderSignature(renderedSignature, nextSignature)) {
-			renderCurrentDocument();
-		}
-
-		if (
-			isSameDrawingRenderSignature(renderedSealSignature, nextSignature) &&
-			renderedSealTarget === nextSealTarget
-		) {
-			return;
-		}
-
-		renderedSealSignature = nextSignature;
-		renderedSealTarget = nextSealTarget;
+		void drawingDocument;
+		void sealCanvasElement;
 		updateSealPreview();
 	});
 </script>
 
-<div class="sketchpad">
+<div class="sketchpad" class:sketchpad-fit={fit}>
 	<p class="sketch-subtitle">
 		Sketch a quick self-portrait for <span class="sketch-nickname">{nickname}</span>.
 	</p>
-
-	{#if saveError}
-		<div class="sketch-alert">{saveError}</div>
-	{/if}
 
 	{#if draftStatusMessage}
 		<div class="sketch-alert">{draftStatusMessage}</div>
@@ -647,9 +398,11 @@
 						step="1"
 						class="brush-slider focus-ring"
 						aria-label="Brush size"
+						style={`--slider-pct: ${(brushStep / (BRUSH_SIZES.length - 1)) * 100}%`}
 					/>
 					<div class="test-scrap-stack">
 						<div class="test-scrap">
+							<span class="test-scrap-tape tape" aria-hidden="true"></span>
 							<div
 								class="flex items-center justify-center"
 								data-testid="brush-preview-shell"
@@ -670,30 +423,36 @@
 
 		<div class="sketch-easel">
 			<div class="canvas-mat aspect-square" data-testid="avatar-sketchpad-frame">
-				<span class="canvas-tape canvas-tape-left" aria-hidden="true"></span>
-				<span class="canvas-tape canvas-tape-right" aria-hidden="true"></span>
-				<canvas
-					bind:this={canvasElement}
-					width={CANVAS_WIDTH}
-					height={CANVAS_HEIGHT}
-					class="sketch-canvas"
-					data-responsive-mode={responsiveDrawing ? 'active' : 'inactive'}
-					draggable="false"
-					ondragstart={preventCanvasDrag}
-					onpointerdown={startDrawing}
-					onpointermove={draw}
-					onpointerup={finishDrawing}
-					onpointercancel={cancelDrawing}
-				></canvas>
-			</div>
-			<div class="seal-station" aria-hidden="true">
-				<div class="seal-blob" bind:this={sealBlobElement}>
-					<div class="seal-well">
-						<canvas bind:this={sealCanvasElement} width="124" height="124" class="seal-canvas"
-						></canvas>
-					</div>
+				<div class="sketch-canvas">
+					<DrawingCanvas
+						bind:drawingDocument
+						decorate={drawGhostSilhouette}
+						interactive={draftReady}
+						label="Avatar drawing canvas"
+						onStrokeCommitted={handleStrokeCommitted}
+						paper={AVATAR_CANVAS_BACKGROUND}
+						sheet
+						strokeColor={activeColor}
+						strokeSize={brushSize}
+					/>
 				</div>
-				<p class="seal-caption">your wax seal</p>
+				<div class="seal-station" aria-hidden="true">
+					<div class="seal-blob" bind:this={sealBlobElement}>
+						<div class="seal-well">
+							<canvas bind:this={sealCanvasElement} width="124" height="124" class="seal-canvas"
+							></canvas>
+						</div>
+					</div>
+					<p class="seal-caption">your wax seal</p>
+				</div>
+				{#if saveError}
+					<InkStamp
+						label="Not saved"
+						message={saveError}
+						onDismiss={() => (saveError = '')}
+						onRetry={() => void handleEnterGallery()}
+					/>
+				{/if}
 			</div>
 			<p class="easel-note">draw inside the lines… or don't.</p>
 		</div>
@@ -707,10 +466,8 @@
 			size="sm"
 			onclick={() => {
 				saveError = '';
-				activeStroke = null;
 				drawingDocument = cloneDrawingDocumentV2(clearDocument);
 				void resetDraftSession(clearDocument);
-				committedCacheDirty = true;
 				pressSealAnimation();
 			}}
 			disabled={isSaving}
@@ -826,12 +583,16 @@
 		}
 	}
 
+	/* A dab of gouache, as on the studio's tray: matte, a little darker where it
+	 * pools at the edge, over the thin wash it was first brushed out in. */
 	.dab-paint {
 		position: absolute;
 		inset: 0;
 		display: block;
 		background: var(--dab-color);
-		box-shadow: 1px 2px 3px rgba(45, 36, 32, 0.28);
+		box-shadow:
+			inset 0 0 0 1.5px color-mix(in srgb, var(--dab-color) 78%, black),
+			0.14rem 0.18rem 0 0.1rem color-mix(in srgb, var(--dab-color) 20%, transparent);
 		transition:
 			scale 130ms var(--ease-spring),
 			rotate 130ms ease;
@@ -864,13 +625,15 @@
 		rotate: 5deg;
 	}
 
-	/* gloss — fresh paint catches the gallery lights */
+	/* the body of the paint: a soft ridge of light, never a glossy highlight */
 	.dab-paint::before {
 		content: '';
 		position: absolute;
 		inset: 0;
 		border-radius: inherit;
-		background: radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.5), transparent 46%);
+		background:
+			radial-gradient(circle at 34% 30%, rgb(255 255 255 / 0.18), transparent 48%),
+			radial-gradient(circle at 64% 72%, rgb(0 0 0 / 0.1), transparent 58%);
 	}
 
 	.dab-paint-light {
@@ -916,15 +679,23 @@
 		min-width: 0;
 	}
 
+	/* The studio's track: a drying brushstroke, thick where it starts, thin where it lifts. */
 	.brush-slider::-webkit-slider-runnable-track {
-		height: 3px;
-		border-radius: var(--radius-pill);
-		background: rgba(107, 74, 46, 0.4);
+		height: 7px;
+		rotate: -0.8deg;
+		border-radius: 4px 12px 10px 6px / 6px 8px 12px 4px;
+		background: linear-gradient(
+			90deg,
+			#d9a468 0%,
+			var(--color-primary) var(--slider-pct, 50%),
+			rgba(107, 74, 46, 0.18) var(--slider-pct, 50%),
+			rgba(107, 74, 46, 0.12) 100%
+		);
 	}
 
 	.brush-slider::-webkit-slider-thumb {
 		-webkit-appearance: none;
-		margin-top: -8.5px;
+		margin-top: -6.5px;
 		height: 20px;
 		width: 20px;
 		border: 2px solid var(--color-paper-bright);
@@ -934,10 +705,16 @@
 	}
 
 	.brush-slider::-moz-range-track {
-		height: 3px;
+		height: 7px;
 		border: none;
-		border-radius: var(--radius-pill);
-		background: rgba(107, 74, 46, 0.4);
+		border-radius: 4px 12px 10px 6px / 6px 8px 12px 4px;
+		background: linear-gradient(
+			90deg,
+			#d9a468 0%,
+			var(--color-primary) var(--slider-pct, 50%),
+			rgba(107, 74, 46, 0.18) var(--slider-pct, 50%),
+			rgba(107, 74, 46, 0.12) 100%
+		);
 	}
 
 	.brush-slider::-moz-range-thumb {
@@ -965,16 +742,13 @@
 		rotate: 3deg;
 	}
 
-	.test-scrap::before {
-		content: '';
+	.test-scrap-tape {
 		position: absolute;
-		top: -7px;
-		left: 12px;
-		width: 30px;
-		height: 12px;
-		background: rgba(243, 235, 216, 0.9);
+		top: -8px;
+		left: 10px;
+		width: 34px;
+		height: 13px;
 		rotate: -4deg;
-		box-shadow: 0 1px 2px rgba(45, 36, 32, 0.15);
 	}
 
 	.test-dot {
@@ -1003,47 +777,17 @@
 		width: 100%;
 		max-width: 27rem;
 		margin-inline: auto;
-		background: var(--color-paper-bright);
+		/* Room for the sheet's deckled edge and its tape; the sheet is the paper. */
 		padding: 11px;
-		border: 1px solid var(--color-hairline);
-		box-shadow:
-			3px 4px 12px rgba(0, 0, 0, 0.22),
-			1px 1px 3px rgba(0, 0, 0, 0.12);
-	}
-
-	.canvas-tape {
-		position: absolute;
-		width: 84px;
-		height: 24px;
-		background: rgba(243, 235, 216, 0.85);
-		box-shadow: 0 1px 3px rgba(45, 36, 32, 0.18);
-		z-index: 2;
-	}
-
-	.canvas-tape-left {
-		top: -11px;
-		left: 26px;
-		rotate: -6deg;
-	}
-
-	.canvas-tape-right {
-		top: -9px;
-		right: 30px;
-		rotate: 5deg;
 	}
 
 	.sketch-canvas {
-		display: block;
+		position: relative;
 		width: 100%;
 		/* Sized by its own ratio, never by the mat's height: Safari cannot
-		 * resolve a percentage height against an aspect-ratio-derived box and
-		 * falls back to the canvas's intrinsic 340px, overflowing the mat. */
+		 * resolve a percentage height against an aspect-ratio-derived box. */
 		height: auto;
 		aspect-ratio: 1;
-		cursor: crosshair;
-		touch-action: none;
-		background: #ffffff;
-		border: 1px solid #e7dfd2;
 	}
 
 	.easel-note {
@@ -1138,6 +882,132 @@
 	@media (max-width: 540px) {
 		.footer-note {
 			display: none;
+		}
+	}
+
+	/*
+	 * Fitted to its sheet: the pad takes the height it is given, the easel is
+	 * measured so the canvas can be the largest square inside it, and the paints
+	 * pack into fewer rows. Side by side from 640px wide; below that the paints
+	 * run in one row under the canvas, scrolling sideways.
+	 */
+	.sketchpad-fit {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	.sketchpad-fit .sketch-bench {
+		flex: 1;
+		/* The easel stretches to its row: it is measured, not sized by its content. */
+		align-items: stretch;
+		grid-template-rows: minmax(0, 1fr) auto;
+		gap: 14px 24px;
+		min-height: 0;
+		margin-top: 12px;
+	}
+
+	.sketchpad-fit .sketch-easel {
+		container-type: size;
+		min-height: 0;
+	}
+
+	.sketchpad-fit .canvas-mat {
+		/* The easel note keeps its line under the canvas. */
+		width: min(100cqw, 100cqh - 2.4rem);
+	}
+
+	.sketchpad-fit .paint-grid {
+		grid-template-columns: repeat(6, 34px);
+		gap: 8px;
+	}
+
+	.sketchpad-fit .paint-dab {
+		width: 34px;
+		height: 32px;
+	}
+
+	.sketchpad-fit .brush-block {
+		margin-top: 14px;
+	}
+
+	@media (min-width: 640px) {
+		.sketchpad-fit .sketch-bench {
+			grid-template-columns: auto minmax(0, 1fr);
+			grid-template-rows: minmax(0, 1fr);
+		}
+
+		.sketchpad-fit .sketch-rail {
+			order: 1;
+		}
+
+		.sketchpad-fit .sketch-easel {
+			order: 2;
+		}
+	}
+
+	@media (max-width: 639.98px) {
+		.sketchpad-fit .paint-grid {
+			grid-auto-columns: 40px;
+			grid-auto-flow: column;
+			grid-template-columns: none;
+			grid-template-rows: 36px;
+			/* Room for the pencil ring around the chosen paint. */
+			margin: -6px -6px 0;
+			padding: 6px 6px 8px;
+			overflow-x: auto;
+		}
+
+		.sketchpad-fit .paint-dab {
+			width: 40px;
+			height: 36px;
+		}
+
+		/* A phone gives the canvas the note's line, and the dab's caption's. */
+		.sketchpad-fit .easel-note,
+		.sketchpad-fit .test-caption {
+			display: none;
+		}
+
+		.sketchpad-fit .canvas-mat {
+			width: min(100cqw, 100cqh);
+		}
+	}
+
+	/* A short screen keeps the canvas and the controls and drops the asides. */
+	@media (max-height: 640px) {
+		.sketchpad-fit .sketch-subtitle,
+		.sketchpad-fit .easel-note,
+		.sketchpad-fit .test-caption,
+		.sketchpad-fit .footer-note {
+			display: none;
+		}
+
+		.sketchpad-fit .sketch-bench {
+			margin-top: 8px;
+		}
+
+		.sketchpad-fit .canvas-mat {
+			width: min(100cqw, 100cqh);
+		}
+
+		.sketchpad-fit .paint-grid {
+			grid-template-columns: repeat(8, 30px);
+			gap: 6px;
+		}
+
+		.sketchpad-fit .paint-dab {
+			width: 30px;
+			height: 30px;
+		}
+
+		.sketchpad-fit .brush-block {
+			margin-top: 8px;
+		}
+
+		.sketchpad-fit .sketch-footer {
+			margin-top: 10px;
 		}
 	}
 

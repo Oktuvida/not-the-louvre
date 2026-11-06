@@ -1,54 +1,49 @@
 import { page } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakePage } from '#lib/testing/fake-page-state.svelte.js';
 import { render } from 'vitest-browser-svelte';
 import HomeEntryPage from './HomeEntryPage.svelte';
+import { STUDIO_MODEL_URL } from './scene/studio-model';
+import { takeHandedOverBook } from '#lib/features/shared-ui/studio-handoff.js';
 
 // The scene mounts a Threlte `<Canvas>`, which the headless browser cannot give
 // a WebGL context; the stub keeps the rest of the page mountable.
-vi.mock('$lib/features/home-entry-scene/scene/StudioScene.svelte', async () => ({
+vi.mock('#lib/features/home-entry-scene/scene/StudioScene.svelte', async () => ({
 	default: (await import('./components/StudioSceneStub.svelte')).default
 }));
 
-const { navigation, pageStore, setPageUrl } = vi.hoisted(() => {
-	let current = { state: {}, url: new URL('http://localhost/') };
-	const subscribers = new Set<(value: typeof current) => void>();
+// For the same reason the WebGL probe answers what each test needs.
+const webgl = vi.hoisted(() => ({ supported: true }));
 
-	return {
-		navigation: { goto: vi.fn(), replaceState: vi.fn() },
-		pageStore: {
-			subscribe(run: (value: typeof current) => void) {
-				subscribers.add(run);
-				run(current);
+vi.mock('#lib/features/shared-3d-world/webgl-support.js', () => ({
+	browserSupportsWebGL: () => webgl.supported
+}));
 
-				return () => {
-					subscribers.delete(run);
-				};
-			}
-		},
-		setPageUrl(href: string) {
-			current = { state: {}, url: new URL(href) };
+const navigation = vi.hoisted(() => ({ goto: vi.fn() }));
 
-			for (const subscriber of subscribers) {
-				subscriber(current);
-			}
-		}
-	};
-});
+const setPageUrl = (href: string) => fakePage.set({ state: {}, url: href });
 
-vi.mock('$app/navigation', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$app/navigation')>();
+vi.mock('$app/navigation', async () => ({
+	...(await import('#lib/testing/fake-navigation.js')).fakeNavigation,
+	goto: navigation.goto
+}));
 
-	return { ...actual, goto: navigation.goto, replaceState: navigation.replaceState };
-});
-
-vi.mock('$app/stores', () => ({ page: pageStore }));
+vi.mock(
+	'$app/state',
+	async () => (await import('#lib/testing/fake-page-state.svelte.js')).fakeAppState
+);
 
 const warmup = vi.hoisted(() => ({
 	cancel: vi.fn(),
+	deskReady: () => {},
 	schedule: vi.fn()
 }));
 
-vi.mock('$lib/features/shared-ui/studio-background-warmup', () => ({
+vi.mock('#lib/features/shared-ui/studio-background-warmup.js', () => ({
+	readyStudioBackground: () =>
+		new Promise<void>((resolve) => {
+			warmup.deskReady = resolve;
+		}),
 	scheduleStudioBackgroundWarmup: () => {
 		warmup.schedule();
 		return warmup.cancel;
@@ -56,7 +51,7 @@ vi.mock('$lib/features/shared-ui/studio-background-warmup', () => ({
 }));
 
 const PREFETCHED_HREFS = [
-	'/models/studio-transformed.glb',
+	STUDIO_MODEL_URL,
 	'/draco/draco_wasm_wrapper.js',
 	'/draco/draco_decoder.wasm'
 ];
@@ -91,7 +86,23 @@ describe('HomeEntryPage', () => {
 	afterEach(() => {
 		setPageUrl('http://localhost/');
 		navigation.goto.mockClear();
-		navigation.replaceState.mockClear();
+		webgl.supported = true;
+	});
+
+	it('leaves the studio as its pencil sketch at once when the browser has no WebGL', async () => {
+		webgl.supported = false;
+
+		await render(HomeEntryPage, {});
+
+		await expect.element(page.getByText(/only the sketch of the studio/i)).toBeInTheDocument();
+		// Another try could only fail the same way.
+		await expect
+			.element(page.getByRole('button', { name: /try the real room/i }))
+			.not.toBeInTheDocument();
+
+		await settlePrefetches();
+		// The 3D scene, three.js and all, is never downloaded.
+		expect(document.querySelector('[data-testid="studio-scene-stub"]')).toBeNull();
 	});
 
 	it('lifts the shared grey veil when the visitor comes back from a room', async () => {
@@ -99,7 +110,7 @@ describe('HomeEntryPage', () => {
 		// scrim the room dropped, not at a page that fades one in.
 		setPageUrl('http://localhost/?from=gallery');
 
-		render(HomeEntryPage, { entryState: 'inside' });
+		await render(HomeEntryPage, { entryState: 'inside' });
 
 		const veil = page.getByTestId('page-fade-overlay');
 		await expect.element(veil).toBeInTheDocument();
@@ -117,20 +128,50 @@ describe('HomeEntryPage', () => {
 	});
 
 	it('warms the studio table background itself instead of leaving it to the root layout', async () => {
-		const { unmount } = render(HomeEntryPage, {});
+		const { unmount } = await render(HomeEntryPage, {});
 
 		expect(warmup.schedule).toHaveBeenCalledTimes(1);
 
 		await settlePrefetches();
 		unmount();
 
-		// A visitor who leaves before the idle callback fires never spends the
-		// 109KB.
+		// A visitor who leaves before the idle callback fires never fetches it.
 		expect(warmup.cancel).toHaveBeenCalledTimes(1);
 	});
 
+	// The camera ends on the side table's sketchbook lying where the studio lays
+	// its own, on the desk the studio is drawn on: the room itself is the way
+	// in, so no veil drops over it.
+	it('walks into the studio once the camera reaches the book, with no veil over the room', async () => {
+		await render(HomeEntryPage, {
+			entryState: 'inside',
+			user: {
+				authUserId: 'auth-1',
+				avatarOnboardingCompletedAt: new Date(),
+				email: 'artist@example.com',
+				id: 'user-1',
+				nickname: 'artist',
+				role: 'user'
+			}
+		});
+
+		await page.getByRole('button', { name: 'Studio' }).click();
+
+		// The camera move takes two seconds; the desk is still decoding after it.
+		await new Promise((resolve) => setTimeout(resolve, 2300));
+		expect(navigation.goto).not.toHaveBeenCalled();
+		expect(document.querySelector('[data-testid="page-fade-overlay"]')).toBeNull();
+
+		warmup.deskReady();
+		await vi.waitFor(() => expect(navigation.goto).toHaveBeenCalledWith('/draw'));
+		expect(document.querySelector('[data-testid="page-fade-overlay"]')).toBeNull();
+		expect(takeHandedOverBook()).toBe(true);
+
+		await settlePrefetches();
+	});
+
 	it('prefetches the studio model and its DRACO decoder from the page that needs them', async () => {
-		render(HomeEntryPage, {});
+		await render(HomeEntryPage, {});
 
 		const prefetched = [...document.head.querySelectorAll('link[rel="prefetch"]')].map((link) =>
 			link.getAttribute('href')

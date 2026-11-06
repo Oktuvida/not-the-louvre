@@ -2,36 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocked = vi.hoisted(() => ({
 	resolveSessionContext: vi.fn(),
-	svelteKitHandler: vi.fn(async ({ event, resolve }) => resolve(event)),
 	logSecurityEvent: vi.fn()
 }));
 
-vi.mock('$app/environment', () => ({
-	building: false
-}));
-
-vi.mock('$lib/server/auth', () => ({
-	auth: {}
-}));
-
-vi.mock('$lib/server/auth/service', () => ({
+vi.mock('#lib/server/auth/service.js', () => ({
 	resolveSessionContext: mocked.resolveSessionContext
 }));
 
-vi.mock('$lib/server/security/logging', () => ({
+vi.mock('#lib/server/security/logging.js', () => ({
 	logSecurityEvent: mocked.logSecurityEvent
-}));
-
-vi.mock('better-auth/svelte-kit', () => ({
-	svelteKitHandler: mocked.svelteKitHandler
 }));
 
 describe('server handle hardening', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mocked.resolveSessionContext.mockReset();
-		mocked.svelteKitHandler.mockReset();
-		mocked.svelteKitHandler.mockImplementation(async ({ event, resolve }) => resolve(event));
 		mocked.logSecurityEvent.mockReset();
 	});
 
@@ -162,8 +147,6 @@ describe('session resolution allowlist', () => {
 		vi.resetModules();
 		mocked.resolveSessionContext.mockReset();
 		mocked.resolveSessionContext.mockResolvedValue(null);
-		mocked.svelteKitHandler.mockReset();
-		mocked.svelteKitHandler.mockImplementation(async ({ event, resolve }) => resolve(event));
 		mocked.logSecurityEvent.mockReset();
 	});
 

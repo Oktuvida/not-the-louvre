@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { museumWindowAspectRatio } from '$lib/features/home-entry-scene/canvas/museum-canvas';
-	import { rasterizeSvgUrl } from '$lib/features/home-entry-scene/canvas/svg-bitmap';
-	import { museumWindowFrameAssetUrl } from '$lib/features/shared-ui/generated-art';
+	import { museumWindowAspectRatio } from '#lib/features/home-entry-scene/canvas/museum-canvas.js';
+	import { rasterizeSvgUrl } from '#lib/features/home-entry-scene/canvas/svg-bitmap.js';
+	import { museumWindowFrameAssetUrl } from '#lib/features/shared-ui/generated-art.js';
 
 	// The frame renders at most 49rem (784px) wide; raster at 2x for sharpness.
 	const FRAME_MAX_WIDTH_CSS_PX = 784;

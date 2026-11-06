@@ -1,22 +1,49 @@
 <script lang="ts">
-	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
+	import { resolve } from '$app/paths';
+	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
+	import { cutoutTitleAssetUrl } from '#lib/features/shared-ui/generated-art.js';
 
-	let { isExiting = false }: { isExiting?: boolean } = $props();
+	let {
+		isExiting = false,
+		isInside = false
+	}: {
+		isExiting?: boolean;
+		/** The visitor is in the room: outside, the title is behind the wall. */
+		isInside?: boolean;
+	} = $props();
 </script>
+
+{#snippet ransomNote()}
+	<picture>
+		<source
+			media="(orientation: portrait)"
+			srcset={cutoutTitleAssetUrl('stacked')}
+			width="494"
+			height="254"
+		/>
+		<img src={cutoutTitleAssetUrl('wide')} alt="Not the Louvre" width="943" height="140" />
+	</picture>
+{/snippet}
 
 <AmbientParticleOverlay />
 
 <!-- Game Title -->
 <div
-	class="absolute top-16 left-1/2 z-20 -translate-x-1/2 transition-all duration-700 ease-in"
+	class="home-hero absolute left-1/2 z-20 -translate-x-1/2 transition-[translate,opacity] duration-700 ease-in"
 	class:-translate-y-[calc(100%+6rem)]={isExiting}
 	class:opacity-0={isExiting}
 >
-	<h1
-		class="text-center font-display text-7xl font-black tracking-tight text-ink-warm"
-		style="text-shadow: 4px 4px 0px #e8b896, 8px 8px 0px rgba(45, 36, 32, 0.2);"
-	>
-		NOT THE LOUVRE
+	<!-- A ransom note cut from magazines and newspapers: one line on a screen
+	     on its side, two on an upright one. Whoever tries pressing it meets who
+	     cut it out. -->
+	<h1 class="home-hero-title">
+		{#if isInside}
+			<a class="home-hero-link focus-ring" href={resolve('/gallery/staff')} title="Meet the staff">
+				{@render ransomNote()}
+			</a>
+		{:else}
+			{@render ransomNote()}
+		{/if}
 	</h1>
 	<p
 		class="relative mx-auto mt-3 w-fit rotate-[-1.5deg] px-8 py-2 text-center text-xl text-[#4a3a30] italic"
@@ -49,11 +76,87 @@
 	</p>
 </div>
 <!-- Footer tagline -->
+<!-- Lettered by hand on a strip of washi tape stuck to the floor's edge. -->
 <div
-	class="pointer-events-none absolute bottom-6 left-1/2 z-20 -translate-x-1/2 text-sm text-wall-text italic transition-all duration-700 ease-in"
+	class="home-footer pointer-events-none absolute bottom-6 left-1/2 z-20 -translate-x-1/2 transition-[translate,opacity] duration-700 ease-in"
 	class:translate-y-[calc(100%+3rem)]={isExiting}
 	class:opacity-0={isExiting}
-	style="font-family: var(--font-body); letter-spacing: 0.01em; text-shadow: 0 1px 1px rgba(45,36,32,.7), 0 2px 8px rgba(45,36,32,.35);"
 >
-	A social art studio where your doodles compete for glory
+	<p class="home-tagline tape tape-washi">
+		A social art studio where your doodles compete for glory
+	</p>
 </div>
+
+<style>
+	/*
+	 * The title fits the screen: half a wide screen on one line, most of an
+	 * upright one on two, never larger than it was designed. On an upright
+	 * screen a signed-in artist's corner (PersistentNav) is at the top left, so
+	 * the title starts under it.
+	 */
+	/* As wide as its widest line, never wider than the screen: the subtitle
+	 * keeps to one line where it fits and wraps on a small phone. */
+	.home-hero {
+		top: 4rem;
+		width: max-content;
+		max-width: calc(100vw - 2rem);
+	}
+
+	.home-hero-title {
+		width: fit-content;
+		margin: 0 auto;
+		line-height: 0;
+	}
+
+	.home-hero-title img {
+		display: block;
+		width: clamp(20rem, 42vw, 44rem);
+		height: auto;
+	}
+
+	.home-hero-link {
+		display: block;
+		transition: rotate var(--duration-ui) ease;
+	}
+
+	.home-hero-link:hover {
+		rotate: -0.6deg;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.home-hero-link {
+			transition: none;
+		}
+	}
+
+	@media (orientation: portrait) {
+		.home-hero-title img {
+			width: clamp(14rem, 64vw, 26rem);
+		}
+
+		:global([data-visitor='signed-in']) .home-hero {
+			top: calc(var(--account-top, 1rem) + 8.8 * var(--account-em, 1rem) + 1rem);
+		}
+	}
+
+	.home-tagline {
+		position: relative;
+		margin: 0;
+		padding: 0.45rem 1.6rem 0.4rem;
+		rotate: -1.5deg;
+		font-family: var(--font-hand);
+		font-size: 1.4rem;
+		font-weight: 700;
+		line-height: 1.1;
+		white-space: nowrap;
+		color: var(--color-ink-warm);
+	}
+
+	/* The footer line only where it has the bottom of the screen to itself:
+	 * an upright screen gives that to Gallery, a short one has no room. */
+	@media (orientation: portrait), (max-height: 30rem) {
+		.home-footer {
+			display: none;
+		}
+	}
+</style>

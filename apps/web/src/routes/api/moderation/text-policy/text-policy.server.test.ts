@@ -1,11 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+
+// Handlers reach the Cloudflare runtime through #lib/server/platform.js; each
+// test registers the cache and waitUntil it would have found there.
+type FakePlatform = {
+	caches?: { default?: unknown };
+	context?: { waitUntil?: (promise: Promise<unknown>) => void };
+};
+const fakePlatform = vi.hoisted(() => ({ current: undefined as FakePlatform | undefined }));
+vi.mock('#lib/server/platform.js', () => ({
+	edgeCache: () => fakePlatform.current?.caches?.default,
+	hyperdriveConnectionString: () => undefined,
+	runAfterResponse: (promise: Promise<unknown>) =>
+		fakePlatform.current?.context?.waitUntil?.(promise)
+}));
+const usePlatform = (platform: FakePlatform) => {
+	fakePlatform.current = platform;
+	return platform;
+};
+beforeEach(() => {
+	fakePlatform.current = undefined;
+});
 
 const mocked = vi.hoisted(() => ({
 	getTextModerationSnapshot: vi.fn()
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	getTextModerationSnapshot: mocked.getTextModerationSnapshot
 }));
 
@@ -82,7 +103,7 @@ describe('GET /api/moderation/text-policy', () => {
 		const { GET } = await import('./+server');
 		const event = () => ({
 			locals: {},
-			platform,
+			platform: usePlatform(platform),
 			request: new Request('http://localhost/api/moderation/text-policy')
 		});
 

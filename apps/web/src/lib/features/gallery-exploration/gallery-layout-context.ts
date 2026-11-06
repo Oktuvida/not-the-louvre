@@ -1,7 +1,7 @@
 import { getContext, setContext } from 'svelte';
 import { writable, type Writable } from 'svelte/store';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-import type { Viewer as SharedViewer } from '$lib/shared/viewer';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+import type { Viewer as SharedViewer } from '#lib/shared/viewer.js';
 
 // The context stores the signed-out case too, so it keeps the nullable alias.
 type Viewer = SharedViewer | null;
@@ -23,17 +23,24 @@ export type GalleryPanelBindings = {
 	viewer: Viewer;
 };
 
+/** Pieces that went up since the room was hung, and the newest of them. */
+export type GalleryNewPieces = {
+	count: number;
+	previewUrl: string | null;
+	/** The newest piece is sensitive and this visitor has not opted in. */
+	previewBlurred: boolean;
+};
+
 export type GalleryActionBindings = {
-	isRefreshingGallery: boolean;
+	newPieces: GalleryNewPieces | null;
 	onBack: (event: MouseEvent) => void;
-	onRefresh: () => Promise<void> | void;
+	onHangNewPieces: () => Promise<void> | void;
 };
 
 export type GalleryLayoutContext = {
 	panelBindings: Writable<GalleryPanelBindings | null>;
 	actionBindings: Writable<GalleryActionBindings | null>;
 	revealedArtworkIds: Writable<Set<string>>;
-	previousRoomId: Writable<string | null>;
 };
 
 const KEY = Symbol('gallery-layout-context');
@@ -41,8 +48,7 @@ const KEY = Symbol('gallery-layout-context');
 export const createGalleryLayoutContext = (): GalleryLayoutContext => ({
 	panelBindings: writable<GalleryPanelBindings | null>(null),
 	actionBindings: writable<GalleryActionBindings | null>(null),
-	revealedArtworkIds: writable<Set<string>>(new Set()),
-	previousRoomId: writable<string | null>(null)
+	revealedArtworkIds: writable<Set<string>>(new Set())
 });
 
 export const setGalleryLayoutContext = (value: GalleryLayoutContext) => setContext(KEY, value);

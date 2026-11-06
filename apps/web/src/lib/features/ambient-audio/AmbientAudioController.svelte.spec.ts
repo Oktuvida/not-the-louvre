@@ -55,18 +55,22 @@ describe('AmbientAudioController', () => {
 		const fakeAudio = createFakeAudio();
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: false,
 			playlist: [{ id: 'track-1', src: '/audio/ambient/test.wav', title: 'Gallery Rain' }],
 			viewerId: 'user-1'
 		});
 
-		await expect.element(page.getByRole('button', { name: 'Enable ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: false }))
+			.toBeVisible();
 
-		await page.getByRole('button', { name: 'Enable ambient audio' }).click();
+		await page.getByRole('button', { name: 'Ambient music', pressed: false }).click();
 
-		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: true }))
+			.toBeVisible();
 		expect(window.localStorage.getItem(AMBIENT_AUDIO_ENABLED_STORAGE_KEY)).toBe('true');
 		expect(fetchSpy).toHaveBeenCalledWith('/api/viewer/content-preferences', {
 			body: JSON.stringify({ ambientAudioEnabled: true }),
@@ -78,14 +82,16 @@ describe('AmbientAudioController', () => {
 	it('stays off on first visit when no local or bootstrapped preference exists', async () => {
 		const fakeAudio = createFakeAudio();
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: null,
 			playlist: [{ id: 'track-1', src: '/audio/ambient/test.wav', title: 'Gallery Rain' }],
 			viewerId: null
 		});
 
-		await expect.element(page.getByRole('button', { name: 'Enable ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: false }))
+			.toBeVisible();
 		await vi.waitFor(() => {
 			expect(fakeAudio.play).not.toHaveBeenCalled();
 		});
@@ -95,7 +101,7 @@ describe('AmbientAudioController', () => {
 		const fakeAudio = createFakeAudio();
 		window.localStorage.setItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY, 'track-2');
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: true,
 			playlist: [
@@ -119,7 +125,7 @@ describe('AmbientAudioController', () => {
 		vi.stubGlobal('fetch', fetchSpy);
 		window.localStorage.setItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY, 'track-2');
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: false,
 			playlist: [
@@ -130,9 +136,11 @@ describe('AmbientAudioController', () => {
 		});
 
 		await expect.element(page.getByText('Night Hall')).toBeInTheDocument();
-		await page.getByRole('button', { name: 'Enable ambient audio' }).click();
+		await page.getByRole('button', { name: 'Ambient music', pressed: false }).click();
 
-		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: true }))
+			.toBeVisible();
 		expect(window.localStorage.getItem(AMBIENT_AUDIO_ENABLED_STORAGE_KEY)).toBe('true');
 		expect(window.localStorage.getItem(AMBIENT_AUDIO_TRACK_STORAGE_KEY)).toBe('track-2');
 		expect(fakeAudio.load).toHaveBeenCalledTimes(1);
@@ -147,7 +155,7 @@ describe('AmbientAudioController', () => {
 	it('persists the next track identifier when the playlist advances', async () => {
 		const fakeAudio = createFakeAudio();
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: true,
 			playlist: [
@@ -173,14 +181,16 @@ describe('AmbientAudioController', () => {
 	it('pauses on mute even when animation frames stop being delivered', async () => {
 		const fakeAudio = createFakeAudio();
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: true,
 			playlist: [{ id: 'track-1', src: '/audio/ambient/test.wav', title: 'Gallery Rain' }],
 			viewerId: null
 		});
 
-		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: true }))
+			.toBeVisible();
 		await vi.waitFor(() => {
 			expect(fakeAudio.play).toHaveBeenCalledTimes(1);
 		});
@@ -191,7 +201,7 @@ describe('AmbientAudioController', () => {
 			vi.fn(() => 0)
 		);
 
-		await page.getByRole('button', { name: 'Mute ambient audio' }).click();
+		await page.getByRole('button', { name: 'Ambient music', pressed: true }).click();
 
 		await vi.waitFor(() => {
 			expect(fakeAudio.pause).toHaveBeenCalled();
@@ -203,20 +213,22 @@ describe('AmbientAudioController', () => {
 	it('pauses and resumes the current stream position when toggled off and on', async () => {
 		const fakeAudio = createFakeAudio();
 
-		render(AmbientAudioController, {
+		await render(AmbientAudioController, {
 			audioFactory: () => fakeAudio,
 			bootstrappedPreference: true,
 			playlist: [{ id: 'track-1', src: '/audio/ambient/test.wav', title: 'Gallery Rain' }],
 			viewerId: null
 		});
 
-		await expect.element(page.getByRole('button', { name: 'Mute ambient audio' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Ambient music', pressed: true }))
+			.toBeVisible();
 		await vi.waitFor(() => {
 			expect(fakeAudio.play).toHaveBeenCalledTimes(1);
 		});
 		fakeAudio.currentTime = 42;
 
-		await page.getByRole('button', { name: 'Mute ambient audio' }).click();
+		await page.getByRole('button', { name: 'Ambient music', pressed: true }).click();
 
 		await vi.waitFor(() => {
 			expect(fakeAudio.pause).toHaveBeenCalled();
@@ -224,7 +236,7 @@ describe('AmbientAudioController', () => {
 		expect(fakeAudio.currentTime).toBe(42);
 		expect(fakeAudio.__currentTimeWrites()).not.toContain(0);
 
-		await page.getByRole('button', { name: 'Enable ambient audio' }).click();
+		await page.getByRole('button', { name: 'Ambient music', pressed: false }).click();
 
 		expect(fakeAudio.currentTime).toBe(42);
 		expect(fakeAudio.play).toHaveBeenCalledTimes(2);

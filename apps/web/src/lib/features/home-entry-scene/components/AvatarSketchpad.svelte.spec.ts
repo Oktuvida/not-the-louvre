@@ -6,12 +6,12 @@ import {
 	createEmptyDrawingDocument,
 	normalizeDrawingDocumentToEditableV2,
 	serializeDrawingDocument
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 import {
 	buildDrawingDraftKey,
 	createIndexedDbDrawingDraftStore
-} from '$lib/features/stroke-json/drafts';
-import { drawingPalette } from '$lib/features/studio-drawing/state/drawing.svelte';
+} from '#lib/features/stroke-json/drafts.js';
+import { drawingPalette } from '#lib/features/studio-drawing/state/drawing.svelte.js';
 import AvatarSketchpad from './AvatarSketchpad.svelte';
 
 const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
@@ -130,7 +130,7 @@ describe('AvatarSketchpad', () => {
 	});
 
 	it('shows a fuller palette and brush slider without a redundant nickname field', async () => {
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			nickname: 'artist_1'
 		});
 
@@ -142,7 +142,7 @@ describe('AvatarSketchpad', () => {
 	});
 
 	it('keeps the avatar drawing frame square across breakpoints', async () => {
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			nickname: 'artist_1'
 		});
 
@@ -152,7 +152,7 @@ describe('AvatarSketchpad', () => {
 	});
 
 	it('keeps palette swatches clickable beside the brush slider', async () => {
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			nickname: 'artist_1'
 		});
 
@@ -170,7 +170,7 @@ describe('AvatarSketchpad', () => {
 	});
 
 	it('keeps the brush preview footprint stable while the dot size and color change', async () => {
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			nickname: 'artist_1'
 		});
 
@@ -225,7 +225,7 @@ describe('AvatarSketchpad', () => {
 		const createAvatarPayload = vi.fn(async () => avatarPayload);
 		const saveAvatar = vi.fn(async () => ({ avatarUrl: AVATAR_URL, success: true as const }));
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			createAvatarPayload,
 			nickname: 'artist_1',
 			onContinue,
@@ -270,7 +270,7 @@ describe('AvatarSketchpad', () => {
 		);
 		const saveAvatar = vi.fn(async () => ({ avatarUrl: AVATAR_URL, success: true as const }));
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			createAvatarPayload,
 			draftUserKey: 'artist_1',
 			nickname: 'artist_1',
@@ -307,7 +307,7 @@ describe('AvatarSketchpad', () => {
 		);
 		const saveAvatar = vi.fn(async () => ({ avatarUrl: AVATAR_URL, success: true as const }));
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			createAvatarPayload,
 			initialDrawingDocument: storedDocument,
 			nickname: 'artist_1',
@@ -330,7 +330,7 @@ describe('AvatarSketchpad', () => {
 			userKey: 'artist_1'
 		});
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			draftUserKey: 'artist_1',
 			initialDrawingDocument,
 			nickname: 'artist_1'
@@ -394,7 +394,7 @@ describe('AvatarSketchpad', () => {
 			userKey: 'artist_1'
 		});
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			draftUserKey: 'artist_1',
 			initialDrawingDocument,
 			nickname: 'artist_1'
@@ -435,7 +435,7 @@ describe('AvatarSketchpad', () => {
 
 		await vi.waitFor(async () => {
 			expect(await readPersistedJournalEntries(draftKey)).toEqual([
-				{
+				expect.objectContaining({
 					color: drawingPalette[3] ?? '#1a1a1a',
 					points: [
 						[80, 96],
@@ -443,7 +443,7 @@ describe('AvatarSketchpad', () => {
 						[82, 98]
 					],
 					size: 10
-				}
+				})
 			]);
 		});
 	});
@@ -457,7 +457,7 @@ describe('AvatarSketchpad', () => {
 			userKey: 'artist_1'
 		});
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			draftUserKey: 'artist_1',
 			initialDrawingDocument,
 			nickname: 'artist_1'
@@ -497,14 +497,14 @@ describe('AvatarSketchpad', () => {
 
 		await vi.waitFor(async () => {
 			expect(await readPersistedJournalEntries(draftKey)).toEqual([
-				{
+				expect.objectContaining({
 					color: drawingPalette[3] ?? '#1a1a1a',
 					points: [
 						[80, 96],
 						[81, 97]
 					],
 					size: 10
-				}
+				})
 			]);
 		});
 	});
@@ -526,7 +526,7 @@ describe('AvatarSketchpad', () => {
 		});
 		const createAvatarPayload = vi.fn(async (document) => serializeDrawingDocument(document));
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			createAvatarPayload,
 			draftStore: failingStore,
 			draftUserKey: 'artist_1',
@@ -595,7 +595,7 @@ describe('AvatarSketchpad', () => {
 		);
 		const saveAvatar = vi.fn(async () => ({ avatarUrl: AVATAR_URL, success: true as const }));
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			clearMode: 'blank',
 			createAvatarPayload,
 			initialDrawingDocument: storedDocument,
@@ -615,17 +615,20 @@ describe('AvatarSketchpad', () => {
 		});
 	});
 
-	it('shows a retryable save error and stays in the avatar step when persistence fails', async () => {
+	it('stamps a portrait that did not save, keeps it on the easel, and saves it again from the stamp', async () => {
 		const onContinue = vi.fn();
 		const createAvatarPayload = vi.fn(async () =>
 			serializeDrawingDocument(createEmptyDrawingDocument('avatar'))
 		);
-		const saveAvatar = vi.fn(async () => ({
-			message: 'Avatar save requires an avatar drawing document',
-			success: false as const
-		}));
+		const saveAvatar = vi
+			.fn()
+			.mockResolvedValueOnce({
+				message: 'Avatar save requires an avatar drawing document',
+				success: false as const
+			})
+			.mockResolvedValueOnce({ avatarUrl: '/api/users/artist-1/avatar', success: true as const });
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			createAvatarPayload,
 			nickname: 'artist_1',
 			onContinue,
@@ -634,10 +637,19 @@ describe('AvatarSketchpad', () => {
 
 		await enterGalleryButton().click();
 
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not saved' });
+		await expect
+			.element(stamp.getByText("Your portrait didn't save. It's still on the easel."))
+			.toBeVisible();
 		await expect
 			.element(page.getByText('Avatar save requires an avatar drawing document'))
-			.toBeVisible();
+			.not.toBeInTheDocument();
 		expect(onContinue).not.toHaveBeenCalled();
+
+		await page.getByRole('button', { name: 'Try again' }).click();
+
+		await vi.waitFor(() => expect(onContinue).toHaveBeenCalledOnce());
+		expect(saveAvatar).toHaveBeenCalledTimes(2);
 	});
 
 	it('surfaces an unsupported payload error when the browser cannot create a valid avatar payload', async () => {
@@ -646,7 +658,7 @@ describe('AvatarSketchpad', () => {
 		const saveAvatar = vi.fn();
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			createAvatarPayload,
 			nickname: 'artist_1',
 			onContinue,
@@ -656,7 +668,12 @@ describe('AvatarSketchpad', () => {
 		await enterGalleryButton().click();
 
 		await expect
-			.element(page.getByText('This browser could not prepare your avatar. Please try again.'))
+			.element(
+				page
+					.getByRole('alert')
+					.filter({ hasText: 'Not saved' })
+					.getByText("Your browser couldn't get the portrait ready.")
+			)
 			.toBeVisible();
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
 			'Failed to create avatar payload',
@@ -677,7 +694,7 @@ describe('AvatarSketchpad', () => {
 		const saveAvatar = vi.fn();
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			createAvatarPayload,
 			nickname: 'artist_1',
 			onContinue,
@@ -687,7 +704,12 @@ describe('AvatarSketchpad', () => {
 		await enterGalleryButton().click();
 
 		await expect
-			.element(page.getByText('This browser could not prepare your avatar. Please try again.'))
+			.element(
+				page
+					.getByRole('alert')
+					.filter({ hasText: 'Not saved' })
+					.getByText("Your browser couldn't get the portrait ready.")
+			)
 			.toBeVisible();
 		expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to create avatar payload', payloadError);
 		expect(saveAvatar).not.toHaveBeenCalled();
@@ -723,7 +745,7 @@ describe('AvatarSketchpad', () => {
 				serializeDrawingDocument(document)
 		);
 
-		render(AvatarSketchpad, {
+		await render(AvatarSketchpad, {
 			createAvatarPayload,
 			nickname: 'artist_1',
 			saveAvatar

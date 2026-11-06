@@ -1,46 +1,67 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import { goto } from '$app/navigation';
-	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
-	} from '$lib/client/content-filter';
+	} from '#lib/client/content-filter/index.js';
 	import {
 		buildDrawingDraftKey,
 		createDrawingDraftSession,
+		type DrawingDraftSession,
 		type IndexedDbDrawingDraftStore
-	} from '$lib/features/stroke-json/drafts';
+	} from '#lib/features/stroke-json/drafts.js';
 	import {
 		DRAWING_DOCUMENT_VERSION,
 		cloneDrawingDocumentV2,
-		createEmptyDrawingDocument,
 		createEmptyDrawingDocumentV2,
-		getRenderableDrawingStrokes,
 		type DrawingDocumentV2,
 		type DrawingStroke
-	} from '$lib/features/stroke-json/document';
-	import { prepareDrawingDocumentForPublish } from '$lib/features/stroke-json/runtime.browser';
+	} from '#lib/features/stroke-json/document.js';
 	import type {
 		DrawForkParent,
 		DrawPageUser,
 		DrawPublishActionData,
 		DrawPublishedArtwork
-	} from '$lib/features/studio-drawing/publish-contract';
-	import DrawingBookStage from '$lib/features/studio-drawing/components/DrawingBookStage.svelte';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
-	import AmbientParticleOverlay from '$lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
-	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
-	import DrawingCanvas from '$lib/features/studio-drawing/components/DrawingCanvas.svelte';
-	import DrawingToolTray from '$lib/features/studio-drawing/tools/DrawingToolTray.svelte';
+	} from '#lib/features/studio-drawing/publish-contract.js';
+	import DrawingBookStage from '#lib/features/studio-drawing/components/DrawingBookStage.svelte';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import InkStamp from '#lib/features/shared-ui/components/InkStamp.svelte';
+	import WishSlip from '#lib/features/shared-ui/components/WishSlip.svelte';
+	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
+	import AmbientParticleOverlay from '#lib/features/shared-ui/components/AmbientParticleOverlay.svelte';
+	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
+	import DrawingCanvas from '#lib/features/studio-drawing/components/DrawingCanvas.svelte';
+	import { encodeDrawingV3 } from '#lib/stroke/v3.js';
+	import { toInkDocument } from '#lib/features/stroke-json/ink-document.js';
+	import DrawingToolTray from '#lib/features/studio-drawing/tools/DrawingToolTray.svelte';
+	import StudioActions from '#lib/features/studio-drawing/tools/StudioActions.svelte';
+	// Every screen's layout of the studio lives in this one sheet.
+	import './studio-layout.css';
+	import type { Wish } from '#lib/shared/content/wishes.js';
+	import { measureInk, type InkLimits } from '#lib/features/stroke-json/ink.js';
+	import { keepTheRestingHandOff } from '#lib/features/studio-drawing/resting-hand.js';
+	import {
+		studioShortcuts,
+		type StudioShortcut
+	} from '#lib/features/studio-drawing/shortcut-keys.js';
+	import { STUDIO_DESK_IMAGE } from '#lib/features/shared-ui/studio-background-warmup.js';
+	import {
+		HANDOFF_CSS_VARIABLES,
+		takeHandedOverBook
+	} from '#lib/features/shared-ui/studio-handoff.js';
+	import { layBookOnSpot, liftBookOffSpot } from '#lib/features/studio-drawing/book-on-spot.js';
+	// The bookplate's printed heading and its typed line.
+	import '@fontsource/playfair-display/latin-700.css';
+	import '@fontsource/special-elite/latin-400.css';
 
 	const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
 	const FORK_CONTEXT_STORAGE_PREFIX = 'studio-fork-context';
-	const MOBILE_STUDIO_MEDIA_QUERY = '(max-width: 700px)';
+	const WISH_STORAGE_PREFIX = 'studio-wish';
 
 	type PersistedForkContext = Pick<DrawForkParent, 'id' | 'isNsfw' | 'mediaUrl' | 'title'>;
 
@@ -93,59 +114,56 @@
 		window.localStorage.setItem(storageKey, JSON.stringify(persistedForkContext));
 	};
 
+	/** The slip stays on the book until it is drawn or put back, whatever the URL. */
+	const loadPersistedWish = (storageKey: string): Wish | null => {
+		const rawValue = window.localStorage.getItem(storageKey);
+		if (!rawValue) return null;
+
+		try {
+			const parsed = JSON.parse(rawValue) as Partial<Wish>;
+			if (
+				typeof parsed.author === 'string' &&
+				typeof parsed.id === 'string' &&
+				typeof parsed.text === 'string'
+			) {
+				return { author: parsed.author, id: parsed.id, text: parsed.text };
+			}
+		} catch {
+			// A value this page did not write: treated as no slip at all.
+		}
+
+		window.localStorage.removeItem(storageKey);
+		return null;
+	};
+
+	const savePersistedWish = (storageKey: string, wish: Wish | null) => {
+		if (wish) window.localStorage.setItem(storageKey, JSON.stringify(wish));
+		else window.localStorage.removeItem(storageKey);
+	};
+
 	let {
 		checkTextContent = defaultCheckTextContent,
-		createArtworkPayload = async (documentState: DrawingDocumentV2) => {
-			const mode =
-				typeof window === 'undefined'
-					? 'good'
-					: ((
-							window as Window & {
-								__drawingExportMode?: 'bad' | 'unsupported' | 'webp';
-							}
-						).__drawingExportMode ?? 'good');
-
-			if (mode === 'unsupported') {
-				return null;
-			}
-
-			if (mode === 'bad') {
-				return JSON.stringify(createEmptyDrawingDocument('avatar'));
-			}
-
-			if (mode === 'webp' && getRenderableDrawingStrokes(documentState).length === 0) {
-				return JSON.stringify({
-					...createEmptyDrawingDocument('artwork'),
-					strokes: [
-						{
-							color: '#2d2420',
-							points: [
-								[128, 128] as [number, number],
-								[384, 384] as [number, number],
-								[640, 640] as [number, number]
-							],
-							size: 48
-						}
-					]
-				});
-			}
-
-			return prepareDrawingDocumentForPublish(documentState);
-		},
+		createArtworkPayload = async (documentState: DrawingDocumentV2) =>
+			JSON.stringify(encodeDrawingV3(toInkDocument(documentState))),
 		forkParent = null,
-		// Seeded from the request's client hints so a phone is not served the
-		// desktop book stage and then swapped whole after mount; the matchMedia
-		// sync in onMount stays the authority and corrects a wrong guess.
-		initialIsMobile = false,
 		openingDurationMs = 950,
 		publishDrawing = async (
 			drawingDocument: string,
-			options: { isNsfw: boolean; parentArtworkId?: string | null; title: string }
+			options: {
+				isNsfw: boolean;
+				parentArtworkId?: string | null;
+				title: string;
+				wishId?: string | null;
+			}
 		): Promise<DrawPublishActionData> => {
 			const formData = new FormData();
 			formData.set('drawingDocument', drawingDocument);
 			formData.set('isNsfw', String(options.isNsfw));
 			formData.set('title', options.title);
+			if (options.wishId) {
+				formData.set('wishId', options.wishId);
+			}
+
 			if (options.parentArtworkId) {
 				formData.set('parentArtworkId', options.parentArtworkId);
 			}
@@ -166,26 +184,44 @@
 			return { message: 'Artwork publish failed' };
 		},
 		replaceStudioUrl = () => {
-			replaceState(resolve('/draw'), window.history.state);
+			goto(resolve('draw'), { shallow: true, replace: true, state: window.history.state });
 		},
 		draftStore,
-		user
+		inkLimits = {},
+		user,
+		wish = null
 	}: {
 		checkTextContent?: TextContentChecker;
 		createArtworkPayload?: (documentState: DrawingDocumentV2) => Promise<string | null>;
 		draftStore?: IndexedDbDrawingDraftStore;
+		/** The server's drawing limits; specs pass a small budget. */
+		inkLimits?: InkLimits;
 		forkParent?: DrawForkParent | null;
-		initialIsMobile?: boolean;
 		openingDurationMs?: number;
 		publishDrawing?: (
 			drawingDocument: string,
-			options: { isNsfw: boolean; parentArtworkId?: string | null; title: string }
+			options: {
+				isNsfw: boolean;
+				parentArtworkId?: string | null;
+				title: string;
+				wishId?: string | null;
+			}
 		) => Promise<DrawPublishActionData>;
 		replaceStudioUrl?: () => void;
 		user?: DrawPageUser;
+		/** The slip the artist took from the mailbox, or none. */
+		wish?: Wish | null;
 	} = $props();
 
 	let canvasRef = $state<HTMLCanvasElement | null>(null);
+	let canvasHistory = $state<{
+		canRedo(): boolean;
+		canUndo(): boolean;
+		redo(): boolean;
+		undo(): boolean;
+	}>();
+	const canRedo = $derived(canvasHistory?.canRedo() ?? false);
+	const canUndo = $derived(canvasHistory?.canUndo() ?? false);
 	let clearVersion = $state(0);
 	let currentForkParent = $state<DrawForkParent | null>(null);
 	let draftHydrated = $state(false);
@@ -193,20 +229,29 @@
 	let initialDrawingDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
 	let artworkBaselineDocument = $state<DrawingDocumentV2>(createEmptyDrawingDocumentV2('artwork'));
 	let isPublishing = $state(false);
-	// Seed only: onMount's matchMedia sync owns the value from then on.
-	let isMobileViewport = $state(untrack(() => initialIsMobile));
+	// Whether this screen's layout shows the sketchbook's cover; without one
+	// (a tablet held upright, a phone) the page is open from the start. The
+	// stage reads it from the CSS, which alone decides each screen's layout.
+	let coverShown = $state(true);
 	let publishedArtwork = $state<DrawPublishedArtwork | null>(null);
 	let sceneState = $state<'closed' | 'opening' | 'open' | 'closing'>('closed');
 	let seededForkParent = $state(false);
 	let statusMessage = $state('');
 	let statusTone = $state<'error' | 'success' | 'idle'>('idle');
 	let artworkTitle = $state('');
+	let titleInput = $state<HTMLInputElement | null>(null);
 	let isArtworkNsfw = $state(false);
 	let titleError = $state('');
+	/** Why the drawing did not reach the wall, stamped across it until it is published or put away. */
+	let publishFailure = $state<string | null>(null);
 	let isExitingToHome = $state(false);
 	let showExitFade = $state(false);
 	let forkContextHydrated = $state(false);
 	const forkContextStorageKey = $derived(getForkContextStorageKey(user));
+	let currentWish = $state<Wish | null>(null);
+	const wishStorageKey = $derived(
+		user ? `${WISH_STORAGE_PREFIX}:${user.id ?? user.nickname}` : null
+	);
 	const resolveDraftKeys = (scope: string | null) => {
 		if (!user) {
 			return { draftKey: null, legacyDraftKey: null };
@@ -230,10 +275,72 @@
 	const draftKey = $derived(resolveDraftKeys(currentForkParent?.id ?? null).draftKey);
 	const legacyDraftKey = $derived(resolveDraftKeys(currentForkParent?.id ?? null).legacyDraftKey);
 
-	let studioUnlocked = $derived(draftHydrated && (isMobileViewport || sceneState === 'open'));
+	/*
+	 * Closed, the book lies on the hand-off spot, where the home room's camera
+	 * left the side table's book (book-on-spot.ts). Coming from that room it is
+	 * there from the first frame; otherwise it glides there from the layout.
+	 */
+	let bookElement = $state<HTMLElement | null>(null);
+	let coverElement = $state<HTMLElement | null>(null);
+	let bookArrivesFromRoom = takeHandedOverBook();
+	/** The room's last frame has no header nor cover lettering; they join after the cut. */
+	const arrivedFromRoom = bookArrivesFromRoom;
+
+	$effect(() => {
+		const book = bookElement;
+		const cover = coverElement;
+		if (!book || !cover) return;
+
+		if (!coverShown || (sceneState !== 'closed' && sceneState !== 'closing')) {
+			liftBookOffSpot(book);
+			return;
+		}
+
+		layBookOnSpot(book, cover, !bookArrivesFromRoom);
+		bookArrivesFromRoom = false;
+		const relay = () => layBookOnSpot(book, cover, false);
+		window.addEventListener('resize', relay);
+		return () => window.removeEventListener('resize', relay);
+	});
+
+	let studioUnlocked = $derived(draftHydrated && (!coverShown || sceneState === 'open'));
 	let toolsVisible = $derived(
-		draftHydrated && (isMobileViewport || (sceneState !== 'closed' && sceneState !== 'closing'))
+		draftHydrated && (!coverShown || (sceneState !== 'closed' && sceneState !== 'closing'))
 	);
+	/*
+	 * Where the layout lays the notes on the open cover (studio-layout.css sets
+	 * --studio-notes-on-cover), they are drawn on the inside of the cover, so
+	 * they turn open and shut with it; elsewhere they have their own place on
+	 * the desk and come in as the cover turns.
+	 */
+	let pageElement = $state<HTMLElement | null>(null);
+	let layoutPutsNotesOnCover = $state(false);
+	const notesOnCover = $derived(coverShown && layoutPutsNotesOnCover);
+
+	// The hand that rests on the glass while the pen draws presses nothing
+	// around the page (resting-hand.ts).
+	$effect(() => {
+		if (!pageElement) return;
+		return keepTheRestingHandOff(pageElement, (target) => target !== null && target === canvasRef);
+	});
+
+	$effect(() => {
+		const studio = pageElement;
+		if (!studio) return;
+		const read = () => {
+			layoutPutsNotesOnCover =
+				getComputedStyle(studio).getPropertyValue('--studio-notes-on-cover').trim() === '1';
+		};
+		read();
+		window.addEventListener('resize', read);
+		return () => window.removeEventListener('resize', read);
+	});
+	// Which keys the label inside the cover prints is the browser's to say, so
+	// it is printed once the page is in one.
+	let shortcuts = $state<StudioShortcut[] | null>(null);
+	onMount(() => {
+		shortcuts = studioShortcuts();
+	});
 	let hasForkParent = $derived(Boolean(currentForkParent?.mediaUrl));
 
 	const createDraftSession = (
@@ -287,16 +394,16 @@
 	$effect(() => {
 		if (isExitingToHome) return;
 
-		if (isMobileViewport) {
+		if (!coverShown) {
 			if (untrack(() => sceneState) !== 'open') {
 				sceneState = 'open';
 			}
 			return;
 		}
 
-		if (!hasForkParent || untrack(() => sceneState) !== 'closed') return;
+		if ((!hasForkParent && !currentWish) || untrack(() => sceneState) !== 'closed') return;
 
-		// Arriving by Fork must still play the book-open transition. The cover flip
+		// Arriving by Fork, or with a slip to draw, must still play the book-open transition. The cover flip
 		// and the frame zoom are CSS transitions, so they need the closed pose to be
 		// computed first: flipping the state inside the mount flush leaves them with
 		// no start value and the book snaps open. One frame later it animates.
@@ -311,21 +418,8 @@
 	});
 
 	onMount(() => {
-		const mobileMediaQuery = window.matchMedia(MOBILE_STUDIO_MEDIA_QUERY);
 		let draftLoadCancelled = false;
 		draftHydrated = false;
-
-		const syncViewportMode = (matches: boolean) => {
-			isMobileViewport = matches;
-		};
-
-		syncViewportMode(mobileMediaQuery.matches);
-
-		const handleViewportChange = (event: MediaQueryListEvent) => {
-			syncViewportMode(event.matches);
-		};
-
-		mobileMediaQuery.addEventListener('change', handleViewportChange);
 
 		const persistedForkParent =
 			!forkParent && forkContextStorageKey ? loadPersistedForkParent(forkContextStorageKey) : null;
@@ -334,6 +428,8 @@
 		if (resolvedForkParent) {
 			currentForkParent = resolvedForkParent;
 		}
+
+		currentWish = wish ?? (wishStorageKey ? loadPersistedWish(wishStorageKey) : null);
 
 		forkContextHydrated = true;
 
@@ -350,7 +446,6 @@
 			draftHydrated = true;
 			return () => {
 				draftLoadCancelled = true;
-				mobileMediaQuery.removeEventListener('change', handleViewportChange);
 			};
 		}
 
@@ -387,13 +482,17 @@
 
 		return () => {
 			draftLoadCancelled = true;
-			mobileMediaQuery.removeEventListener('change', handleViewportChange);
 		};
 	});
 
 	$effect(() => {
 		if (!forkContextHydrated || !forkContextStorageKey) return;
 		savePersistedForkParent(forkContextStorageKey, currentForkParent);
+	});
+
+	$effect(() => {
+		if (!forkContextHydrated || !wishStorageKey) return;
+		savePersistedWish(wishStorageKey, currentWish);
 	});
 
 	const clearCanvas = () => {
@@ -445,6 +544,11 @@
 		returnToEmptyArtworkMode();
 	};
 
+	const putWishBack = () => {
+		currentWish = null;
+		replaceStudioUrl();
+	};
+
 	const startOpeningBook = () => {
 		if (sceneState !== 'closed') return;
 		sceneState = 'opening';
@@ -461,21 +565,68 @@
 		fadeAndExitHome();
 	};
 
-	const handleStrokeCommitted = async (input: {
+	/*
+	 * Draft writes go out one at a time. A stroke's journal entry still being
+	 * written when an undo rewrites the snapshot would land after it, and the
+	 * undone line would come back on the next reload.
+	 */
+	let draftWrites = Promise.resolve();
+
+	const writeDraft = (write: (session: DrawingDraftSession) => Promise<unknown>) => {
+		const draftSession = createDraftSession(draftKey, legacyDraftKey);
+		if (!draftSession) return;
+
+		draftWrites = draftWrites.then(async () => {
+			try {
+				await write(draftSession);
+				clearUnsavedDraftWarning();
+			} catch {
+				markUnsavedDraftWarning();
+			}
+		});
+	};
+
+	const handleStrokeCommitted = (input: {
 		nextDocument: DrawingDocumentV2;
 		previousDocument: DrawingDocumentV2;
 		stroke: DrawingStroke;
 	}) => {
-		const draftSession = createDraftSession(draftKey, legacyDraftKey);
-		if (!draftSession) {
-			return;
-		}
+		writeDraft((session) => session.appendCommittedStroke(input.previousDocument, input.stroke));
+	};
 
-		try {
-			await draftSession.appendCommittedStroke(input.previousDocument, input.stroke);
-			clearUnsavedDraftWarning();
-		} catch {
-			markUnsavedDraftWarning();
+	const ink = $derived(measureInk(drawingDocument, inkLimits));
+
+	const handleOutOfInk = () => {
+		statusMessage = 'Out of ink. Undo a line to free some up, or publish.';
+		statusTone = 'error';
+	};
+
+	const handleHistoryChange = (document: DrawingDocumentV2) => {
+		writeDraft((session) => session.compact(document));
+	};
+
+	const undo = () => {
+		if (studioUnlocked) canvasHistory?.undo();
+	};
+
+	const redo = () => {
+		if (studioUnlocked) canvasHistory?.redo();
+	};
+
+	// Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (or Ctrl+Y), except while typing: the
+	// title field keeps its own undo.
+	const handleHistoryShortcut = (event: KeyboardEvent) => {
+		if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+		const key = event.key.toLowerCase();
+		if (key === 'z' && !event.shiftKey) {
+			event.preventDefault();
+			undo();
+		} else if ((key === 'z' && event.shiftKey) || key === 'y') {
+			event.preventDefault();
+			redo();
 		}
 	};
 
@@ -488,7 +639,15 @@
 	// studio is unmounted mid-fade — a stale callback would still pull a visitor
 	// who has already gone somewhere else back to the home page.
 	const completeExitToHome = () => {
-		void goto(resolve('/?from=studio'));
+		void goto(resolve('?from=studio'));
+	};
+
+	const PUBLISH_FAILED_MESSAGE = "Your drawing didn't make it to the wall. It's still here.";
+
+	/** The title note is where the cursor goes once it is marked in red pencil. */
+	const markTitle = async () => {
+		await tick();
+		titleInput?.focus();
 	};
 
 	const publishArtwork = async () => {
@@ -496,9 +655,10 @@
 
 		artworkTitle = artworkTitle.trim();
 		if (!artworkTitle) {
-			titleError = 'Title is required before publishing';
+			titleError = 'Give it a title before you publish.';
 			statusMessage = '';
 			statusTone = 'idle';
+			void markTitle();
 			return;
 		}
 
@@ -506,6 +666,7 @@
 		statusMessage = '';
 		statusTone = 'idle';
 		titleError = '';
+		publishFailure = null;
 		isPublishing = true;
 
 		try {
@@ -514,22 +675,24 @@
 				titleError = titleModeration.message;
 				statusMessage = '';
 				statusTone = 'idle';
+				void markTitle();
 				return;
 			}
 
 			const payload = await createArtworkPayload(drawingDocument);
 			if (!payload) {
-				statusMessage = 'This browser could not prepare your drawing. Please try again.';
-				statusTone = 'error';
+				publishFailure = "Your browser couldn't get the drawing ready.";
 				return;
 			}
 
 			const result = await publishDrawing(payload, {
 				isNsfw: isArtworkNsfw,
 				parentArtworkId: currentForkParent?.id ?? null,
-				title: artworkTitle
+				title: artworkTitle,
+				wishId: currentWish?.id ?? null
 			});
 			if ('success' in result && result.success) {
+				if (currentWish) putWishBack();
 				publishedArtwork = result.artwork;
 				statusMessage = `Artwork published as ${result.artwork.title}`;
 				statusTone = 'success';
@@ -552,11 +715,21 @@
 				return;
 			}
 
-			statusMessage = result.message;
-			statusTone = 'error';
-		} catch (error) {
-			statusMessage = error instanceof Error ? error.message : 'Artwork publish failed';
-			statusTone = 'error';
+			// The server's moderation can still refuse the title the browser let through.
+			if ('code' in result && result.code === 'INVALID_TITLE') {
+				titleError = result.message;
+				void markTitle();
+				return;
+			}
+
+			// A lockout says how long to wait in its own words; anything else (a
+			// 500, a drawing the server could not read) is the house sentence.
+			publishFailure =
+				'code' in result && result.code === 'RATE_LIMITED' && result.message
+					? result.message
+					: PUBLISH_FAILED_MESSAGE;
+		} catch {
+			publishFailure = PUBLISH_FAILED_MESSAGE;
 		} finally {
 			isPublishing = false;
 		}
@@ -567,7 +740,7 @@
 		if (isExitingToHome) return;
 		isExitingToHome = true;
 
-		if (!isMobileViewport && sceneState === 'open') {
+		if (coverShown && sceneState === 'open') {
 			sceneState = 'closing';
 			return;
 		}
@@ -576,19 +749,179 @@
 	};
 </script>
 
+{#snippet wishOnTheDesk()}
+	{#if currentWish}
+		<aside class="studio-wish" aria-label="Commission">
+			<WishSlip
+				byline={`left by ${currentWish.author}`}
+				label="Commission"
+				text={currentWish.text}
+				tilt={-1.2}
+			>
+				<button
+					type="button"
+					class="studio-wish-back focus-ring"
+					disabled={!studioUnlocked}
+					onclick={putWishBack}
+				>
+					Put it back
+				</button>
+			</WishSlip>
+		</aside>
+	{/if}
+{/snippet}
+
+<!-- The drawing's title, its 18+ mark and a fork's change of plan: on the
+     inside of the cover where the layout lays them there, else on the desk. -->
+{#snippet drawingNotes(onCover: boolean)}
+	<section
+		class={`studio-notes ${
+			onCover ? 'studio-notes-on-cover' : toolsVisible ? 'studio-notes-open' : 'studio-notes-hidden'
+		}`}
+		aria-label="About this drawing"
+		aria-hidden={onCover ? !studioUnlocked : !toolsVisible}
+		inert={onCover ? !studioUnlocked : !toolsVisible}
+	>
+		{#if user}
+			<!-- Where the notes lie on the open cover, its inside is the artist's
+			     own: a bookplate, signed. -->
+			<aside class="studio-bookplate" aria-label="Ex libris">
+				<p class="bookplate-heading">Ex libris</p>
+				<svg class="bookplate-mark" viewBox="0 0 60 44" aria-hidden="true">
+					<path d="M30 3 L56 41 H4 Z" stroke-width="2.6" stroke-linejoin="round"></path>
+					<path d="M30 3 L22 41 M30 3 L38 41 M12 29 H48 M18 22 H42" stroke-width="1.2"></path>
+				</svg>
+				<p class="bookplate-owner">
+					this sketchbook belongs to
+					<span class="bookplate-name">{user.nickname}</span>
+				</p>
+			</aside>
+		{/if}
+
+		{@render wishOnTheDesk()}
+
+		<div class="cover-postit cover-postit-title sticky-note">
+			<label class="postit-label" for="studio-artwork-title">Title your masterpiece</label>
+			<input
+				id="studio-artwork-title"
+				bind:this={titleInput}
+				bind:value={artworkTitle}
+				aria-describedby={titleError ? 'studio-artwork-title-note' : undefined}
+				aria-invalid={titleError ? 'true' : undefined}
+				type="text"
+				maxlength="80"
+				placeholder="Untitled genius"
+				disabled={!studioUnlocked}
+				class="postit-input"
+			/>
+			<span class="postit-rule" aria-hidden="true"></span>
+			{#if titleError}
+				<PencilNote id="studio-artwork-title-note" message={titleError} />
+			{/if}
+		</div>
+
+		<div class="cover-postit cover-postit-nsfw sticky-note sticky-note-curl-left">
+			<button
+				type="button"
+				role="checkbox"
+				aria-checked={isArtworkNsfw}
+				disabled={!studioUnlocked}
+				onclick={() => {
+					if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
+				}}
+				class="postit-nsfw-btn"
+			>
+				<!-- A box drawn on the note, ticked in red when it is checked. -->
+				<svg class="nsfw-box" viewBox="0 0 26 26" aria-hidden="true">
+					<path
+						class="nsfw-box-frame"
+						d="M4 5 C 10 3.5, 17 4.5, 22 4 C 22.5 10, 21.5 16, 22 22 C 15 22.5, 9 21.5, 4 22 C 3.5 16, 4.5 10, 4 5 Z"
+					></path>
+					{#if isArtworkNsfw}
+						<path class="nsfw-box-tick" d="M7 13.5 L11.5 18.5 L22 5"></path>
+					{/if}
+				</svg>
+				<span class={isArtworkNsfw ? 'font-semibold text-danger-bright' : ''}
+					>Not safe for the Louvre</span
+				>
+			</button>
+		</div>
+
+		{#if currentForkParent}
+			<div class="cover-postit cover-postit-cancel sticky-note">
+				<p class="postit-label">Change of plan</p>
+				<p class="postit-fork-note postit-fork-note-compact">
+					Forking <span class="postit-fork-name">{currentForkParent.title}</span>
+				</p>
+				<GameButton
+					type="button"
+					variant="ghost"
+					size="sm"
+					disabled={!studioUnlocked}
+					onclick={cancelFork}
+					className="postit-cancel-btn"
+				>
+					<span>Cancel fork</span>
+				</GameButton>
+			</div>
+		{/if}
+
+		{#if shortcuts}
+			<!-- Printed inside the cover under the notes, like the bookplate, and
+			     shown only where the notes lie there. -->
+			<aside class="studio-shortcuts" aria-label="Shortcuts">
+				<p class="shortcuts-heading">Shortcuts</p>
+				<dl class="shortcuts-list">
+					{#each shortcuts as shortcut (shortcut.action)}
+						<div class="shortcuts-row">
+							<dt>{shortcut.action}</dt>
+							<dd>{shortcut.keys}</dd>
+						</div>
+					{/each}
+				</dl>
+			</aside>
+		{/if}
+	</section>
+{/snippet}
+
+{#snippet notesOnTheCover()}
+	{@render drawingNotes(true)}
+{/snippet}
+
+<svelte:window onkeydown={handleHistoryShortcut} />
+
 <svelte:head>
 	<!-- No title element here on purpose: the route contributes `meta.title`
 	from its load and the root layout renders the document's only one. -->
-	<link rel="preload" as="image" href="/table.avif" type="image/avif" fetchpriority="high" />
+	<link
+		rel="preload"
+		as="image"
+		type="image/avif"
+		imagesrcset={STUDIO_DESK_IMAGE.avif}
+		imagesizes={STUDIO_DESK_IMAGE.sizes}
+		fetchpriority="high"
+	/>
 </svelte:head>
 
-<div class="studio-page relative flex h-dvh flex-col overflow-hidden" data-book-state={sceneState}>
-	<picture class="pointer-events-none absolute inset-0 z-0">
-		<source type="image/avif" srcset="/table.avif" />
+<div
+	bind:this={pageElement}
+	class="studio-page"
+	data-arrival={arrivedFromRoom ? 'room' : undefined}
+	data-book-state={sceneState}
+	style={HANDOFF_CSS_VARIABLES}
+>
+	<!-- The home room's side table, photographed from where the Studio move
+	     ends (scripts/render-studio-desk.ts), laid so the book's place is the
+	     closed book's spot. -->
+	<picture class="studio-desk">
+		<source type="image/avif" srcset={STUDIO_DESK_IMAGE.avif} sizes={STUDIO_DESK_IMAGE.sizes} />
+		<source type="image/webp" srcset={STUDIO_DESK_IMAGE.webp} sizes={STUDIO_DESK_IMAGE.sizes} />
 		<img
-			src="/table.webp"
+			src={STUDIO_DESK_IMAGE.fallback}
 			alt=""
-			class="h-full w-full scale-[1.4] object-cover object-[center_115%]"
+			width="1920"
+			height="1080"
+			class="studio-desk-image"
 			loading="eager"
 			decoding="async"
 		/>
@@ -596,9 +929,7 @@
 
 	<AmbientParticleOverlay className="z-5 opacity-90" />
 
-	<header
-		class="relative z-30 flex flex-shrink-0 items-start justify-between gap-4 px-4 pt-4 sm:px-6"
-	>
+	<header class="studio-header">
 		<div onclickcapture={handleBackToHome}>
 			<GameLink href="/" variant="secondary" size="md" className="-rotate-1 shadow-lg">
 				<svg
@@ -610,285 +941,119 @@
 					stroke="currentColor"
 					stroke-width="2"
 					stroke-linecap="round"
-					stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg
+					stroke-linejoin="round"
 				>
+					<path d="m12 19-7-7 7-7"></path>
+					<path d="M19 12H5"></path>
+				</svg>
+
 				<span>Exit Studio</span>
 			</GameLink>
 		</div>
+
+		{@render wishOnTheDesk()}
 	</header>
 
-	<main
-		class="relative z-10 mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col px-4 pt-3 pb-4 sm:px-6"
-	>
-		{#if isMobileViewport}
-			<div class="studio-mobile-layout">
-				<div class="studio-mobile-canvas-shell">
-					<div class="studio-mobile-canvas-card" data-testid="studio-mobile-canvas-card">
-						<DrawingCanvas
-							bind:canvasRef
-							bind:drawingDocument
-							{clearVersion}
-							{initialDrawingDocument}
-							interactive={studioUnlocked}
-							onStrokeCommitted={handleStrokeCommitted}
-							{statusMessage}
-							{statusTone}
-						/>
-					</div>
-				</div>
-
-				<div class="studio-mobile-notes">
-					<div class="cover-postit cover-postit-title studio-mobile-postit-title">
-						<div class="postit-tape" aria-hidden="true"></div>
-						<p class="postit-label">Title your masterpiece</p>
-						<input
-							bind:value={artworkTitle}
-							type="text"
-							maxlength="80"
-							placeholder="Untitled genius"
-							disabled={!studioUnlocked}
-							class="postit-input"
-						/>
-						{#if titleError}
-							<p class="postit-error">{titleError}</p>
-						{/if}
-					</div>
-
-					<div class="studio-mobile-note-row">
-						<div class="cover-postit cover-postit-nsfw studio-mobile-postit-toggle">
-							<div class="postit-tape" aria-hidden="true"></div>
-							<button
-								type="button"
-								role="checkbox"
-								aria-checked={isArtworkNsfw}
-								disabled={!studioUnlocked}
-								onclick={() => {
-									if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
-								}}
-								class="postit-nsfw-btn"
-							>
-								<span
-									class="nsfw-track"
-									style={`background: ${isArtworkNsfw ? 'var(--color-danger-bright)' : 'rgb(60 50 40 / 0.15)'};`}
-								>
-									<span
-										class="nsfw-dot"
-										style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
-									></span>
-								</span>
-								<span class={isArtworkNsfw ? 'font-semibold text-danger-bright' : ''}
-									>Not safe for the Louvre</span
-								>
-							</button>
-						</div>
-
-						{#if currentForkParent}
-							<div class="cover-postit cover-postit-cancel studio-mobile-postit-cancel">
-								<div class="postit-tape" aria-hidden="true"></div>
-								<p class="postit-label">Change of plan</p>
-								<p class="postit-fork-note postit-fork-note-compact">
-									Forking <span class="postit-fork-name">{currentForkParent.title}</span>
-								</p>
-								<GameButton
-									type="button"
-									variant="ghost"
-									size="sm"
-									disabled={!studioUnlocked}
-									onclick={cancelFork}
-									className="postit-cancel-btn"
-								>
-									<span>Cancel fork</span>
-								</GameButton>
-							</div>
-						{/if}
-					</div>
-				</div>
-
-				<div class="studio-mobile-tools">
-					<DrawingToolTray mobile {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
-				</div>
-
-				{#if publishedArtwork}
-					<div class="publish-postit studio-mobile-publish">
-						<div class="postit-tape" aria-hidden="true"></div>
-						<p class="postit-label">Hung on the wall!</p>
-						<h2 class="publish-postit-title">{publishedArtwork.title}</h2>
-						<div class="publish-postit-actions">
-							<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
-								<span>Draw again</span>
-							</GameButton>
-							<GameLink href="/gallery/your-studio" variant="secondary" size="sm">
-								<span>See it on the wall</span>
-							</GameLink>
-						</div>
-						<div class="postit-curl" aria-hidden="true"></div>
-					</div>
-				{/if}
-			</div>
-		{:else}
-			<div
-				class="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17rem] xl:gap-4"
+	<!-- One page for every screen: studio-layout.css places these four pieces
+	     (the book, its notes, the supplies, the buttons) for each shape of window. -->
+	<main class="studio-layout">
+		<div class="studio-book" bind:this={bookElement}>
+			<DrawingBookStage
+				arriving={arrivedFromRoom}
+				bind:coverElement
+				bind:coverShown
+				stageState={sceneState}
+				onClosed={handleBookClosed}
+				onOpenRequest={startOpeningBook}
+				onOpened={unlockStudio}
+				{openingDurationMs}
+				coverBack={notesOnCover ? notesOnTheCover : undefined}
 			>
-				<div class="order-1 flex min-h-0 flex-col">
-					<div class="studio-book-frame">
-						<DrawingBookStage
-							stageState={sceneState}
-							onClosed={handleBookClosed}
-							onOpenRequest={startOpeningBook}
-							onOpened={unlockStudio}
-							{openingDurationMs}
-						>
-							{#snippet coverFields()}
-								<div class="cover-postit cover-postit-title">
-									<div class="postit-tape" aria-hidden="true"></div>
-									<p class="postit-label">Title your masterpiece</p>
-									<input
-										bind:value={artworkTitle}
-										type="text"
-										maxlength="80"
-										placeholder="Untitled genius"
-										disabled={!studioUnlocked}
-										class="postit-input"
-									/>
-									{#if titleError}
-										<p class="postit-error">{titleError}</p>
-									{/if}
-								</div>
+				<DrawingCanvas
+					sheet
+					backdrop={currentForkParent?.mediaUrl ?? null}
+					bind:this={canvasHistory}
+					bind:canvasRef
+					bind:drawingDocument
+					{clearVersion}
+					{initialDrawingDocument}
+					interactive={studioUnlocked}
+					{inkLimits}
+					onHistoryChange={handleHistoryChange}
+					onOutOfInk={handleOutOfInk}
+					onStrokeCommitted={handleStrokeCommitted}
+					{statusMessage}
+					{statusTone}
+				>
+					{#if publishFailure}
+						<InkStamp
+							label="Not published"
+							message={publishFailure}
+							onDismiss={() => (publishFailure = null)}
+							onRetry={() => void publishArtwork()}
+						/>
+					{/if}
+				</DrawingCanvas>
+			</DrawingBookStage>
+		</div>
 
-								{#if currentForkParent}
-									<div class="cover-postit cover-postit-cancel">
-										<div class="postit-tape" aria-hidden="true"></div>
-										<p class="postit-label">Change of plan</p>
-										<p class="postit-fork-note postit-fork-note-compact">
-											Forking <span class="postit-fork-name">{currentForkParent.title}</span>
-										</p>
-										<GameButton
-											type="button"
-											variant="ghost"
-											size="sm"
-											disabled={!studioUnlocked}
-											onclick={cancelFork}
-											className="postit-cancel-btn"
-										>
-											<span>Cancel fork</span>
-										</GameButton>
-									</div>
-								{/if}
+		{#if !notesOnCover}
+			{@render drawingNotes(false)}
+		{/if}
 
-								<div class="cover-postit cover-postit-nsfw">
-									<div class="postit-tape" aria-hidden="true"></div>
-									<button
-										type="button"
-										role="checkbox"
-										aria-checked={isArtworkNsfw}
-										disabled={!studioUnlocked}
-										onclick={() => {
-											if (studioUnlocked) isArtworkNsfw = !isArtworkNsfw;
-										}}
-										class="postit-nsfw-btn"
-									>
-										<span
-											class="nsfw-track"
-											style={`background: ${isArtworkNsfw ? 'var(--color-danger-bright)' : 'rgb(60 50 40 / 0.15)'};`}
-										>
-											<span
-												class="nsfw-dot"
-												style={`transform: translateX(${isArtworkNsfw ? '13px' : '2px'}) translateY(2px);`}
-											></span>
-										</span>
-										<span class={isArtworkNsfw ? 'font-semibold text-danger-bright' : ''}
-											>Not safe for the Louvre</span
-										>
-									</button>
-								</div>
-							{/snippet}
-							<DrawingCanvas
-								bind:canvasRef
-								bind:drawingDocument
-								{clearVersion}
-								{initialDrawingDocument}
-								interactive={studioUnlocked}
-								onStrokeCommitted={handleStrokeCommitted}
-								{statusMessage}
-								{statusTone}
-							/>
-						</DrawingBookStage>
+		<div
+			class={`studio-tools tools-stage ${toolsVisible ? 'tools-stage-open' : 'tools-stage-hidden'}`}
+			aria-hidden={!studioUnlocked}
+			inert={!studioUnlocked}
+		>
+			<DrawingToolTray {canRedo} {canUndo} inkUsed={ink.used} onRedo={redo} onUndo={undo} />
+		</div>
+
+		<div
+			class={`studio-actions tools-stage ${toolsVisible ? 'tools-stage-open' : 'tools-stage-hidden'}`}
+			aria-hidden={!studioUnlocked}
+			inert={!studioUnlocked}
+		>
+			<StudioActions {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
+
+			{#if publishedArtwork}
+				<div class="publish-postit sticky-note">
+					<span class="postit-tape tape tape-dots" aria-hidden="true"></span>
+					<p class="postit-label">Hung on the wall!</p>
+					<h2 class="publish-postit-title">{publishedArtwork.title}</h2>
+					<div class="publish-postit-actions">
+						<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
+							<span>Draw again</span>
+						</GameButton>
+						<GameLink href="/gallery/your-studio" variant="secondary" size="sm">
+							<span>See it on the wall</span>
+						</GameLink>
 					</div>
 				</div>
-
-				<div
-					class={`tools-stage order-2 ${toolsVisible ? 'tools-stage-open' : 'tools-stage-hidden'}`}
-					aria-hidden={!studioUnlocked}
-					inert={!studioUnlocked}
-				>
-					<DrawingToolTray {isPublishing} onPublish={publishArtwork} onClear={clearCanvas} />
-
-					{#if publishedArtwork}
-						<div class="publish-postit">
-							<div class="postit-tape" aria-hidden="true"></div>
-							<p class="postit-label">Hung on the wall!</p>
-							<h2 class="publish-postit-title">{publishedArtwork.title}</h2>
-							<div class="publish-postit-actions">
-								<GameButton type="button" variant="accent" size="sm" onclick={clearCanvas}>
-									<span>Draw again</span>
-								</GameButton>
-								<GameLink href="/gallery/your-studio" variant="secondary" size="sm">
-									<span>See it on the wall</span>
-								</GameLink>
-							</div>
-							<div class="postit-curl" aria-hidden="true"></div>
-						</div>
-					{/if}
-				</div>
-			</div>
-		{/if}
+			{/if}
+		</div>
 	</main>
 </div>
 
 <PageFadeOverlay direction="in" onComplete={completeExitToHome} visible={showExitFade} />
 
 <style>
-	.studio-book-frame {
-		/* exposed as a var so DrawingBookStage can size the page explicitly
-		 * (Safari resolves aspect-ratio + height:100% from the canvas's
-		 * intrinsic 768px and the closed book goes landscape) */
-		--book-frame-h: clamp(29rem, 78vh, 56rem);
-		height: var(--book-frame-h);
-		flex: 0 0 auto;
-		justify-self: center;
-		--book-closed-offset-x: 20rem;
-		--book-closed-offset-y: 7rem;
-		--book-closed-scale: 0.8;
-		--book-closed-rotation: -4deg;
-		--book-open-offset-x: 30rem;
-		--book-open-offset-y: 2rem;
-		--book-open-scale: 1.3;
-		--book-open-rotation: 0deg;
-		--book-offset-x: var(--book-closed-offset-x);
-		--book-offset-y: var(--book-closed-offset-y);
-		--book-scale: var(--book-closed-scale);
-		--book-rotation: var(--book-closed-rotation);
-		transform: translate(var(--book-offset-x), var(--book-offset-y)) scale(var(--book-scale))
-			rotate(var(--book-rotation));
-		transform-origin: center center;
-		transition: transform 800ms var(--ease-glide);
+	/*
+	 * Nothing in the studio is text to pick up: a pen or finger that slips off
+	 * the canvas onto the page, the notes or the supplies selects nothing and
+	 * opens no long-press menu. The fields stay text, or iPad would not let
+	 * the artist type in them.
+	 */
+	.studio-page {
+		-webkit-user-select: none;
+		user-select: none;
+		-webkit-touch-callout: none;
 	}
 
-	/* Book approaches viewer when opening/open */
-	.studio-page[data-book-state='opening'] .studio-book-frame,
-	.studio-page[data-book-state='open'] .studio-book-frame {
-		--book-offset-x: var(--book-open-offset-x);
-		--book-offset-y: var(--book-open-offset-y);
-		--book-scale: var(--book-open-scale);
-		--book-rotation: var(--book-open-rotation);
-	}
-
-	.tools-stage {
-		width: min(100%, 15rem);
-		/* hug the book side of the column; the old margin pushed the tray
-		 * past its grid cell and off-screen on ~1500px viewports */
-		justify-self: start;
-		transform-origin: left center;
+	.studio-page :global(:is(input, textarea, [contenteditable])) {
+		-webkit-user-select: text;
+		user-select: text;
+		-webkit-touch-callout: default;
 	}
 
 	/*
@@ -911,147 +1076,98 @@
 		animation: toolTrayCrashIn 210ms cubic-bezier(0.2, 0.9, 0.24, 1.12) both;
 	}
 
-	.studio-mobile-layout {
-		display: flex;
-		min-height: 0;
-		flex: 1;
-		flex-direction: column;
-		gap: 1rem;
-		position: relative;
-		isolation: isolate;
-		overflow-y: auto;
-		-ms-overflow-style: none;
-		scrollbar-width: none;
-		padding-bottom: 0.75rem;
-	}
-
-	.studio-mobile-layout::-webkit-scrollbar {
-		display: none;
-		width: 0;
-		height: 0;
-	}
-
-	.studio-mobile-canvas-shell {
-		position: relative;
-		z-index: 1;
-	}
-
-	.studio-mobile-canvas-card {
-		position: relative;
-		aspect-ratio: 1 / 1;
-		overflow: visible;
-		border: 3px solid rgb(47 36 28 / 0.8);
-		border-radius: 1.4rem;
-		background:
-			linear-gradient(180deg, rgb(251 247 240 / 0.98), rgb(243 234 220 / 0.98)),
-			radial-gradient(circle at top, rgb(255 255 255 / 0.4), transparent 60%);
-		padding: 0.9rem;
-		box-shadow:
-			0 1.2rem 2.5rem rgb(47 36 28 / 0.14),
-			inset 0 1px 0 rgb(255 255 255 / 0.4);
-	}
-
-	.studio-mobile-canvas-card::before {
-		content: '';
+	/* On the inside of the cover they keep to the strip beside the spine, the
+	 * width of the desk layout's notes column. */
+	.studio-notes-on-cover {
 		position: absolute;
-		inset: 0.65rem;
-		border: 1px solid rgb(47 36 28 / 0.08);
-		border-radius: 1rem;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		width: var(--studio-notes-w, 19rem);
+		z-index: 1;
+		container: cover-notes / size;
+	}
+
+	/* On the desk, the notes arrive as the cover opens. */
+	.studio-notes-hidden {
+		opacity: 0;
 		pointer-events: none;
 	}
 
-	.studio-mobile-notes {
-		position: relative;
-		z-index: 2;
-		display: flex;
-		flex-direction: column;
-		gap: 0.85rem;
+	.studio-notes-open {
+		animation: studioPanelReveal 280ms ease-out both;
 	}
 
-	.studio-mobile-note-row {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 0.85rem;
-		align-items: start;
+	/* --- The slip from the mailbox --- */
+
+	.studio-wish {
+		--slip-padding: 0.5rem 0.9rem 0.4rem 1rem;
+		--slip-text: 1.32rem;
+		flex: none;
 	}
 
-	.studio-mobile-postit-title,
-	.studio-mobile-postit-toggle,
-	.studio-mobile-postit-cancel,
-	.studio-mobile-tools,
-	.studio-mobile-publish {
-		width: 100%;
-		max-width: none;
+	.studio-wish-back {
+		float: left;
+		margin-top: 0.1rem;
+		padding: 0;
+		border: 0;
+		background: none;
+		font-family: var(--font-hand);
+		font-size: 1rem;
+		line-height: 1.1;
+		color: #a33b31;
+		text-decoration: underline dotted;
+		text-underline-offset: 3px;
+		cursor: pointer;
 	}
 
-	.studio-mobile-postit-cancel {
-		margin-right: 0;
-		justify-self: stretch;
-	}
-
-	.studio-mobile-tools {
-		position: relative;
-		z-index: 12;
-		overflow: visible;
-	}
-
-	.studio-mobile-publish {
-		margin-top: 0.25rem;
-	}
-
-	/* --- Post-it notes (inside cover fields) --- */
+	/* --- Post-it notes --- */
 
 	.cover-postit {
-		position: relative;
-		padding: 12px 12px 8px;
-		box-shadow: var(--shadow-lift);
-		max-width: 214px;
+		padding: 0.875rem 0.875rem 0.625rem;
 	}
 
 	.cover-postit-title {
-		background: linear-gradient(160deg, #fef49c 0%, #f7e67a 100%);
+		--note-paper: linear-gradient(172deg, #fff3a8 0%, #fbe57e 60%, #f2d65e 100%);
 		transform: rotate(-1.5deg);
 	}
 
 	.cover-postit-nsfw {
-		background: linear-gradient(160deg, #ffcdd2 0%, #f7929e 100%);
+		--note-paper: linear-gradient(172deg, #ffd6de 0%, #f8b9c7 55%, #f0a5b6 100%);
 		transform: rotate(2deg);
 	}
 
 	.cover-postit-cancel {
-		background: linear-gradient(160deg, #d5ecff 0%, #a9d4ff 100%);
+		--note-paper: linear-gradient(172deg, #d6ecff 0%, #b9dbfb 60%, #a3cdf5 100%);
 		transform: rotate(1deg);
-		align-self: flex-end;
-		max-width: 188px;
-		margin-right: 0.35rem;
 	}
 
 	.postit-tape {
 		position: absolute;
-		top: -7px;
+		top: -9px;
 		left: 50%;
 		transform: translateX(-50%) rotate(-2deg);
-		width: 42px;
-		height: 14px;
-		background: rgb(255 255 240 / 0.55);
-		border: 1px solid rgb(200 190 170 / 0.3);
+		width: 60px;
+		height: 18px;
 		pointer-events: none;
 		z-index: 3;
 	}
 
 	.postit-label {
+		display: block;
 		font-family: var(--font-display);
-		font-size: 0.68rem;
+		font-size: 0.75rem;
 		font-weight: 600;
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
-		color: rgb(61 53 48 / 0.5);
+		/* 0.5 alpha read 2.9:1 on the yellow; this is the darkest that still looks pencilled */
+		color: rgb(61 53 48 / 0.78);
 		margin-bottom: 3px;
 	}
 
 	.postit-fork-note {
 		font-family: var(--font-hand);
-		font-size: 0.7rem;
+		font-size: 1rem;
 		color: var(--color-note-ink);
 		margin-bottom: 2px;
 	}
@@ -1072,14 +1188,24 @@
 		border-bottom: 1.5px solid rgb(61 53 48 / 0.2);
 		padding: 3px 2px;
 		font-family: var(--font-hand);
-		font-size: 0.92rem;
+		font-size: 1.25rem;
 		color: var(--color-note-ink);
 		outline: none;
 	}
 
 	.postit-input::placeholder {
-		color: rgb(61 53 48 / 0.3);
+		color: rgb(61 53 48 / 0.55);
 		font-style: italic;
+	}
+
+	/* A second ruled line, so the note is the square pad it is cut from. Only
+	 * where the notes lie on the open cover, with the bookplate, is there room
+	 * for it; in a column it would push Publish off a short screen. */
+	.postit-rule {
+		display: var(--studio-bookplate-display, none);
+		height: 1.5px;
+		margin-top: 1.9rem;
+		background: rgb(61 53 48 / 0.2);
 	}
 
 	.postit-input:focus {
@@ -1088,13 +1214,6 @@
 
 	.postit-input:disabled {
 		opacity: 0.5;
-	}
-
-	.postit-error {
-		font-family: var(--font-hand);
-		font-size: 0.75rem;
-		color: var(--color-danger-bright);
-		margin-top: 2px;
 	}
 
 	:global(.postit-cancel-btn) {
@@ -1119,9 +1238,10 @@
 		padding: 0;
 		cursor: pointer;
 		font-family: var(--font-hand);
-		font-size: 0.82rem;
+		font-size: 1.2rem;
 		color: var(--color-note-ink);
 		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
 
 	.postit-nsfw-btn:disabled {
@@ -1129,34 +1249,173 @@
 		cursor: not-allowed;
 	}
 
-	.nsfw-track {
-		position: relative;
-		display: inline-flex;
-		width: 28px;
-		height: 16px;
-		border-radius: var(--radius-panel);
-		transition: background var(--duration-ui);
+	.nsfw-box {
+		width: 1.6rem;
+		height: 1.6rem;
 		flex-shrink: 0;
+		fill: none;
+		stroke-linecap: round;
+		stroke-linejoin: round;
 	}
 
-	.nsfw-dot {
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: var(--color-paper);
-		border: 1.5px solid rgb(47 36 28 / 0.25);
-		box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
-		transition: transform var(--duration-ui);
+	.nsfw-box-frame {
+		stroke: rgb(74 47 54 / 0.85);
+		stroke-width: 2;
+	}
+
+	.nsfw-box-tick {
+		stroke: var(--color-danger-bright);
+		stroke-width: 2.8;
+	}
+
+	/* The bookplate glued inside the cover: printed heading and border, the
+	 * owner's name in ink. Shown only where the notes lie on the open cover
+	 * (studio-layout.css sets --studio-bookplate-display). */
+	.studio-bookplate {
+		display: var(--studio-bookplate-display, none);
+		position: relative;
+		align-self: center;
+		width: 13rem;
+		margin-bottom: 0.75rem;
+		padding: 0.85rem 0.9rem 0.8rem;
+		rotate: -1.2deg;
+		background: #fbf6ea;
+		box-shadow: 0 1px 1px rgb(40 25 10 / 0.2);
+		text-align: center;
+		color: #4a3524;
+	}
+
+	.studio-bookplate::before {
+		content: '';
+		position: absolute;
+		inset: 0.3rem;
+		border: 1.5px solid #8c6a46;
+		outline: 1px solid #8c6a46;
+		outline-offset: -0.3rem;
+		pointer-events: none;
+	}
+
+	.bookplate-heading {
+		margin: 0.3rem 0 0.15rem;
+		font-family: 'Playfair Display', serif;
+		font-size: 0.85rem;
+		font-weight: 700;
+		letter-spacing: 0.3em;
+		text-transform: uppercase;
+	}
+
+	.bookplate-mark {
+		display: block;
+		width: 2.4rem;
+		height: auto;
+		margin: 0.2rem auto;
+		fill: none;
+		stroke: #6b4a30;
+	}
+
+	/* The shortcuts' label, printed by the same press as the bookplate: a
+	 * single frame, the heading in capitals, each key set off by a dotted
+	 * leader. It sits at the foot of the cover, under the notes. */
+	.studio-shortcuts {
+		display: var(--studio-shortcuts-display, none);
+		position: relative;
+		align-self: center;
+		width: 14.5rem;
+		margin: auto 0 3.25rem;
+		padding: 0.85rem 1rem 0.8rem;
+		rotate: 0.8deg;
+		background: #fbf6ea;
+		box-shadow: 0 1px 1px rgb(40 25 10 / 0.2);
+		color: #4a3524;
+	}
+
+	/* The first thing to go where the cover is short: the notes above it come
+	 * first, and the note about a fork needs room of its own. The heights are
+	 * of the notes' content box, below the padding that clears the header. */
+	@container cover-notes (height < 31rem) {
+		.studio-shortcuts {
+			display: none;
+		}
+	}
+
+	@container cover-notes (height < 39.5rem) {
+		.studio-notes:has(.cover-postit-cancel) .studio-shortcuts,
+		.studio-notes:has(.studio-wish) .studio-shortcuts {
+			display: none;
+		}
+	}
+
+	.studio-shortcuts::before {
+		content: '';
+		position: absolute;
+		inset: 0.3rem;
+		border: 1px solid #8c6a46;
+		pointer-events: none;
+	}
+
+	.shortcuts-heading {
+		margin: 0.15rem 0 0.45rem;
+		font-family: 'Playfair Display', serif;
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.28em;
+		text-align: center;
+		text-transform: uppercase;
+	}
+
+	.shortcuts-list {
+		margin: 0;
+	}
+
+	.shortcuts-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.35rem;
+		margin: 0.12rem 0;
+		font-family: 'Special Elite', 'Courier New', monospace;
+		font-size: 0.75rem;
+		line-height: 1.35;
+	}
+
+	.shortcuts-row::after {
+		content: '';
+		order: 1;
+		flex: 1;
+		border-bottom: 1px dotted rgb(74 53 36 / 0.45);
+		translate: 0 -0.2rem;
+	}
+
+	.shortcuts-row dd {
+		order: 2;
+		margin: 0;
+		text-align: right;
+	}
+
+	.bookplate-owner {
+		margin: 0;
+		font-family: 'Special Elite', 'Courier New', monospace;
+		font-size: 0.75rem;
+		line-height: 1.3;
+	}
+
+	.bookplate-name {
+		display: block;
+		margin-top: 0.1rem;
+		font-family: var(--font-hand);
+		font-size: 1.75rem;
+		font-weight: 700;
+		line-height: 1.1;
+		color: #2c4a7a;
+		overflow-wrap: anywhere;
 	}
 
 	/* --- Publish notification post-it --- */
 
 	.publish-postit {
 		position: relative;
-		margin-top: 4rem;
+		margin-top: 1.5rem;
 		padding: 14px 12px 12px;
-		background: linear-gradient(160deg, #c8e6c9 0%, #a5d6a7 100%);
-		box-shadow: var(--shadow-lift);
+		--note-paper: linear-gradient(172deg, #dcf2d4 0%, #c3e6bb 60%, #a9d6a0 100%);
 		transform: rotate(-2deg);
 		/* The reveal has to be declared in this stylesheet: Svelte renames scoped
 		 * keyframes and only rewrites `animation` references inside the same block,
@@ -1188,26 +1447,17 @@
 		margin-top: 8px;
 	}
 
-	.postit-curl {
-		position: absolute;
-		right: 0;
-		bottom: 0;
-		width: 22px;
-		height: 22px;
-		background: linear-gradient(225deg, #b8956e 0%, #b8956e 45%, transparent 46%);
-	}
-
-	.postit-curl::after {
-		content: '';
-		position: absolute;
-		right: -2px;
-		bottom: -2px;
-		width: 24px;
-		height: 24px;
-		background: linear-gradient(225deg, transparent 42%, rgb(0 0 0 / 0.08) 44%, #8cc98f 45%);
-	}
-
 	/* --- Animations --- */
+
+	.studio-page[data-arrival='room'] .studio-header {
+		animation: studioArrival 500ms 250ms ease-out both;
+	}
+
+	@keyframes studioArrival {
+		from {
+			opacity: 0;
+		}
+	}
 
 	@keyframes studioPanelReveal {
 		from {
@@ -1235,107 +1485,6 @@
 		100% {
 			opacity: 1;
 			transform: translateX(0) rotate(0deg) scale(1);
-		}
-	}
-
-	/* .98 rather than 1279px: Tailwind's `xl:` starts at 1280px, so a whole
-	 * integer leaves fractional widths (zoom, DPR scaling) matching neither. */
-	@media (max-width: 1279.98px) {
-		.studio-book-frame {
-			--book-frame-h: clamp(27rem, 74vh, 52rem);
-			height: var(--book-frame-h);
-			--book-closed-offset-x: 0rem;
-			--book-closed-offset-y: 0.8rem;
-			--book-closed-scale: 0.9;
-			--book-open-offset-x: 7rem;
-			--book-open-offset-y: 1rem;
-			--book-open-scale: 1.48;
-		}
-
-		.tools-stage {
-			width: min(100%, 14rem);
-			margin-left: 0;
-		}
-	}
-
-	/* 700px is this app's own studio breakpoint — deliberately not Tailwind's
-	 * `md:` (768px). It is shared by MOBILE_STUDIO_MEDIA_QUERY above,
-	 * DrawingToolTray, DrawingBookStage and the root layout, and pinned by
-	 * StudioDrawingPage.svelte.spec.ts. Do not "align" it without moving all five. */
-	@media (max-width: 700px) {
-		main {
-			overflow: hidden;
-		}
-
-		.studio-book-frame {
-			--book-frame-h: clamp(24rem, 68vh, 48rem);
-			height: var(--book-frame-h);
-			--book-closed-offset-x: 0rem;
-			--book-closed-offset-y: 0.65rem;
-			--book-closed-scale: 0.88;
-			--book-open-offset-x: 4.5rem;
-			--book-open-offset-y: 0.8rem;
-			--book-open-scale: 1.02;
-		}
-
-		.cover-postit-cancel {
-			margin-right: 0.2rem;
-			max-width: 170px;
-		}
-
-		.studio-mobile-layout {
-			gap: 0.9rem;
-		}
-
-		.studio-mobile-note-row {
-			grid-template-columns: 1fr;
-		}
-
-		.studio-mobile-canvas-card {
-			padding: 0.8rem;
-			border-radius: 1.15rem;
-			aspect-ratio: 1 / 1;
-		}
-
-		.studio-mobile-canvas-card :global(canvas) {
-			aspect-ratio: 1 / 1;
-			height: auto;
-			max-height: min(70vw, 24rem);
-			width: 100%;
-		}
-
-		.studio-mobile-postit-title {
-			transform: rotate(-1deg);
-		}
-
-		.studio-mobile-postit-toggle {
-			transform: rotate(1.25deg);
-		}
-
-		.studio-mobile-postit-cancel {
-			transform: rotate(-0.75deg);
-			max-width: none;
-		}
-
-		.tools-stage-hidden {
-			transform: translateY(1.5rem) scale(0.97);
-		}
-
-		@keyframes toolTrayCrashIn {
-			0% {
-				opacity: 0;
-				transform: translateY(1.5rem) scale(0.97);
-			}
-
-			68% {
-				opacity: 1;
-				transform: translateY(-0.35rem) scale(1.01);
-			}
-
-			100% {
-				opacity: 1;
-				transform: translateY(0) scale(1);
-			}
 		}
 	}
 </style>

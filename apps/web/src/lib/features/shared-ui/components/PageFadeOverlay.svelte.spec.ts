@@ -1,14 +1,14 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { PAGE_FADE_DURATION_MS } from '$lib/features/shared-ui/page-fade';
+import { PAGE_FADE_DURATION_MS } from '#lib/features/shared-ui/page-fade.js';
 import PageFadeOverlay from './PageFadeOverlay.svelte';
 
 const scrim = () => page.getByTestId('page-fade-overlay');
 
 describe('PageFadeOverlay', () => {
 	it('paints one full-bleed grey veil above everything else', async () => {
-		render(PageFadeOverlay, { direction: 'in', durationMs: 40, visible: true });
+		await render(PageFadeOverlay, { direction: 'in', durationMs: 40, visible: true });
 
 		await expect.element(scrim()).toBeInTheDocument();
 
@@ -30,7 +30,7 @@ describe('PageFadeOverlay', () => {
 
 	it('reports the veil as complete once it has finished dropping', async () => {
 		const onComplete = vi.fn();
-		const { rerender } = render(PageFadeOverlay, {
+		const { rerender } = await render(PageFadeOverlay, {
 			direction: 'in',
 			durationMs: 60,
 			onComplete,
@@ -49,7 +49,7 @@ describe('PageFadeOverlay', () => {
 
 	it('never reports completion twice, whatever the transition does', async () => {
 		const onComplete = vi.fn();
-		const { rerender } = render(PageFadeOverlay, {
+		const { rerender } = await render(PageFadeOverlay, {
 			direction: 'in',
 			durationMs: 60,
 			onComplete,
@@ -74,7 +74,7 @@ describe('PageFadeOverlay', () => {
 		// A page that mounts with the veil already down gets no `introend` at
 		// all — Svelte only plays intro transitions for blocks created after the
 		// mount — so the safety net is the only thing that can navigate.
-		render(PageFadeOverlay, { direction: 'in', durationMs: 20, onComplete, visible: true });
+		await render(PageFadeOverlay, { direction: 'in', durationMs: 20, onComplete, visible: true });
 
 		await vi.waitFor(() => {
 			expect(onComplete).toHaveBeenCalledTimes(1);
@@ -83,7 +83,7 @@ describe('PageFadeOverlay', () => {
 
 	it('lifts an already opaque veil and reports when the page is clear', async () => {
 		const onComplete = vi.fn();
-		const { rerender } = render(PageFadeOverlay, {
+		const { rerender } = await render(PageFadeOverlay, {
 			direction: 'out',
 			durationMs: 60,
 			onComplete,
@@ -105,7 +105,7 @@ describe('PageFadeOverlay', () => {
 
 	it('does not navigate after the page is torn down mid-fade', async () => {
 		const onComplete = vi.fn();
-		const { rerender, unmount } = render(PageFadeOverlay, {
+		const { rerender, unmount } = await render(PageFadeOverlay, {
 			direction: 'in',
 			durationMs: PAGE_FADE_DURATION_MS,
 			onComplete,

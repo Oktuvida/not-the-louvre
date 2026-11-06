@@ -1,17 +1,26 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import StudioLoadingFallback from './StudioLoadingFallback.svelte';
 
-describe('StudioLoadingFallback', () => {
-	it('renders as a non-blocking localized scene placeholder', async () => {
-		render(StudioLoadingFallback);
+// Where the 3D studio will stand, the room is drawn in pencil while it is on
+// its way; if it never comes, the drawing stays and offers to try again.
 
-		const fallback = page.getByTestId('studio-scene-fallback');
-		await expect.element(fallback).toBeVisible();
-		await expect.element(fallback).toHaveAttribute('aria-live', 'polite');
-		expect(document.querySelector('[data-testid="studio-scene-fallback"]')?.className).toContain(
-			'pointer-events-none'
-		);
+describe('StudioLoadingFallback', () => {
+	it('tells the visitor the studio is being set up, with nothing to press', async () => {
+		await render(StudioLoadingFallback);
+
+		await expect.element(page.getByRole('status')).toMatchTextContent(/setting up the studio/i);
+		await expect.element(page.getByRole('button')).not.toBeInTheDocument();
+	});
+
+	it('offers to try the real room again when the studio could not come', async () => {
+		const onRetry = vi.fn();
+		await render(StudioLoadingFallback, { failed: true, onRetry });
+
+		await expect.element(page.getByRole('status')).toMatchTextContent(/only the sketch/i);
+		await page.getByRole('button', { name: /try the real room/i }).click();
+
+		expect(onRetry).toHaveBeenCalledOnce();
 	});
 });

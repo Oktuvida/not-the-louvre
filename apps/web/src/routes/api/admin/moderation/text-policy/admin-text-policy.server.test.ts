@@ -1,12 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+
+// Handlers reach the Cloudflare runtime through #lib/server/platform.js; each
+// test registers the cache and waitUntil it would have found there.
+type FakePlatform = {
+	caches?: { default?: unknown };
+	context?: { waitUntil?: (promise: Promise<unknown>) => void };
+};
+const fakePlatform = vi.hoisted(() => ({ current: undefined as FakePlatform | undefined }));
+vi.mock('#lib/server/platform.js', () => ({
+	edgeCache: () => fakePlatform.current?.caches?.default,
+	hyperdriveConnectionString: () => undefined,
+	runAfterResponse: (promise: Promise<unknown>) =>
+		fakePlatform.current?.context?.waitUntil?.(promise)
+}));
+const usePlatform = (platform: FakePlatform) => {
+	fakePlatform.current = platform;
+	return platform;
+};
+beforeEach(() => {
+	fakePlatform.current = undefined;
+});
 
 const mocked = vi.hoisted(() => ({
 	getTextModerationSnapshot: vi.fn(),
 	updateTextModerationPolicies: vi.fn()
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	getTextModerationSnapshot: mocked.getTextModerationSnapshot,
 	updateTextModerationPolicies: mocked.updateTextModerationPolicies
 }));
@@ -121,7 +142,7 @@ describe('admin text policy endpoint', () => {
 		const { PUT } = await import('./+server');
 		await PUT({
 			locals: makeAdminLocals(),
-			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil } }),
 			request: new Request('https://gallery.test/api/admin/moderation/text-policy', {
 				body: JSON.stringify({ policies: {} }),
 				headers: { 'content-type': 'application/json' },

@@ -1,100 +1,207 @@
 <script lang="ts">
 	import { House, Paintbrush } from 'lucide-svelte';
-	import GameLink from '$lib/features/shared-ui/components/GameLink.svelte';
+	import GameLink from '#lib/features/shared-ui/components/GameLink.svelte';
+	import { museumWallPatternAssetUrl } from '#lib/features/shared-ui/generated-art.js';
 	import { page } from '$app/state';
 
-	let props = $props<{ error?: App.Error; status?: number }>();
+	let props: { status?: number } = $props();
 
 	const status = $derived(props.status ?? page.status ?? 500);
-	const message = $derived(
-		props.error?.message ??
-			page.error?.message ??
-			'Something broke behind the velvet rope. Please try again in a moment.'
-	);
+
+	/*
+	 * A page with nothing to show is a gap on the gallery wall: an empty frame
+	 * and the museum's label beside it, saying in the house voice why nothing
+	 * hangs there and where to go instead. The label is chosen by status, never
+	 * from the error's own message: that is written for the logs ("Not Found",
+	 * "Authenticated session is missing its product user profile"), not for a
+	 * visitor.
+	 */
+	type MuseumLabel = { kicker: string; meta: string; text: string };
+
+	const labelFor = (code: number): MuseumLabel => {
+		if (code === 404) {
+			return {
+				kicker: 'Not on display',
+				meta: 'Artist unknown · an empty frame',
+				text: 'This piece was moved, sold, or never painted. The rest of the museum is right where you left it.'
+			};
+		}
+
+		if (code === 401 || code === 403) {
+			return {
+				kicker: 'Staff only',
+				meta: 'Behind the velvet rope',
+				text: 'This room is not open to visitors. The rest of the museum is, so come back through the front door.'
+			};
+		}
+
+		if (code === 429) {
+			return {
+				kicker: 'One moment, please',
+				meta: 'A queue at the door',
+				text: 'The attendants asked everyone to slow down a little. Wait a moment, then try again.'
+			};
+		}
+
+		return {
+			kicker: 'Closed for repairs',
+			meta: 'Work in progress',
+			text: 'Something fell off the wall behind the scenes. Give it a moment, then try again.'
+		};
+	};
+
+	const label = $derived(labelFor(status));
 </script>
 
-<div class="relative flex h-screen w-full items-center justify-center overflow-hidden bg-shell">
-	<!-- Paint splotches background -->
-	<div class="pointer-events-none absolute inset-0">
-		{#each Array.from({ length: 8 }).map((__, i) => i) as index (`splotch-${index}`)}
-			<div
-				class="splotch absolute rounded-full opacity-10"
-				style={`
-					width: ${100 + index * 20}px;
-					height: ${100 + index * 20}px;
-					background: ${['#d4956c', '#8b9d91', '#e8b896', '#c84f4f'][index % 4]};
-					left: ${10 + index * 12}%;
-					top: ${20 + (index % 3) * 25}%;
-					animation-delay: ${index * 0.3}s;
-					animation-duration: ${5 + index * 0.5}s;
-				`}
-			></div>
-		{/each}
-	</div>
+<main
+	class="error-wall"
+	style={`background-image: url('${museumWallPatternAssetUrl}');`}
+	aria-labelledby="museum-label-room"
+>
+	<div class="error-spotlight" aria-hidden="true"></div>
 
-	<div class="z-10 px-8 text-center">
-		<!-- Giant 404 -->
-		<h1
-			class="mb-4 font-display text-[10rem] leading-none font-black text-ink-warm"
-			style="text-shadow: 6px 6px 0px #e8b896, 12px 12px 0px rgba(45, 36, 32, 0.2);"
-		>
-			{status}
-		</h1>
-
-		<h2 class="mb-6 font-display text-4xl font-bold text-ink-warm">Oops! This Canvas is Blank</h2>
-
-		<p class="mx-auto mb-8 max-w-md font-body text-xl text-ink-faint italic">
-			{message}
-		</p>
-
-		<div class="flex flex-wrap justify-center gap-4">
-			<GameLink
-				href="/"
-				variant="primary"
-				className="rotate-1 border-4 px-8 py-4 shadow-xl font-body"
-			>
-				<House class="mr-3 h-6 w-6" />
-				<span class="text-lg">Go Home</span>
-			</GameLink>
-
-			<GameLink
-				href="/draw"
-				variant="secondary"
-				className="-rotate-1 border-4 px-8 py-4 shadow-xl font-body"
-			>
-				<Paintbrush class="mr-3 h-6 w-6" />
-				<span class="text-lg">Start Drawing</span>
-			</GameLink>
+	<div class="error-hang">
+		<!-- The frame is empty: the wall shows through where the piece should be. -->
+		<div class="empty-frame" aria-hidden="true">
+			<span class="empty-frame-hook"></span>
+			<div class="empty-frame-inside"></div>
 		</div>
-	</div>
 
-	<!-- Paint drip gradient at bottom -->
-	<div
-		class="pointer-events-none absolute right-0 bottom-0 left-0 h-32"
-		style="background: linear-gradient(to bottom, transparent, #d4956c); opacity: 0.2;"
-	></div>
-</div>
+		<article class="museum-label">
+			<h1 id="museum-label-room" class="museum-label-room">Room {status}</h1>
+			<p class="museum-label-kicker">{label.kicker}</p>
+			<p class="museum-label-meta">{label.meta}</p>
+			<p class="museum-label-text">{label.text}</p>
+
+			<div class="museum-label-ways">
+				<GameLink href="/" variant="primary" size="md" className="rotate-1">
+					<House class="mr-2 h-5 w-5" />
+					<span>Go Home</span>
+				</GameLink>
+				<GameLink href="/draw" variant="secondary" size="md" className="-rotate-1">
+					<Paintbrush class="mr-2 h-5 w-5" />
+					<span>Start Drawing</span>
+				</GameLink>
+			</div>
+		</article>
+	</div>
+</main>
 
 <style>
-	/* Declared in the same scoped block as the keyframes: Svelte renames scoped
-	 * keyframes and only rewrites `animation` references inside this stylesheet,
-	 * so a Tailwind `animate-[splotchFloat_…]` utility (or an inline style) can
-	 * never resolve them. The per-element inline animation-delay/duration above
-	 * still wins over this shorthand and keeps the stagger. */
-	.splotch {
-		animation: splotchFloat 5s ease-in-out infinite;
+	/* The gallery's own brick wall, at the tile size the rooms use. */
+	.error-wall {
+		position: relative;
+		display: grid;
+		place-items: center;
+		min-height: 100dvh;
+		padding: 2rem 1rem 6rem;
+		overflow: hidden;
+		background-color: var(--color-wall);
+		background-repeat: repeat;
+		background-size: 512px 512px;
 	}
 
-	@keyframes splotchFloat {
-		0%,
-		100% {
-			transform: translateY(0) scale(1) rotate(0deg);
-		}
-		33% {
-			transform: translateY(-30px) scale(1.15) rotate(15deg);
-		}
-		66% {
-			transform: translateY(0) scale(1) rotate(-15deg);
-		}
+	/* A gallery lamp on the spot where the piece should hang. */
+	.error-spotlight {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		background:
+			radial-gradient(48% 42% at 50% 40%, rgb(255 244 220 / 0.32), transparent 70%),
+			radial-gradient(circle at center, transparent 45%, rgb(12 9 7 / 0.22) 100%);
+	}
+
+	.error-hang {
+		position: relative;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: center;
+		gap: 2.5rem;
+	}
+
+	/* A plain wooden frame with nothing in it, hung from a hook. */
+	.empty-frame {
+		position: relative;
+		width: clamp(9rem, 24vw, 14rem);
+		aspect-ratio: 3 / 4;
+		padding: 0.85rem;
+		background: #6b4128;
+		box-shadow:
+			inset 0 0 0 0.2rem #8a5a34,
+			inset 0 0 0 0.55rem #5a3520,
+			0 0.75rem 1.5rem rgb(30 15 5 / 0.35);
+		rotate: -1.5deg;
+	}
+
+	.empty-frame-hook {
+		position: absolute;
+		top: -1.4rem;
+		left: 50%;
+		width: 0.7rem;
+		height: 0.7rem;
+		translate: -50% 0;
+		border-radius: 50%;
+		background: #4a3a2c;
+		box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+	}
+
+	.empty-frame-inside {
+		height: 100%;
+		background-color: var(--color-wall);
+		box-shadow: inset 0 0.3rem 0.8rem rgb(0 0 0 / 0.35);
+	}
+
+	/* The museum's wall label: a small white card in a clean sans. */
+	.museum-label {
+		width: min(22rem, 100%);
+		padding: 1.4rem 1.5rem 1.3rem;
+		background: var(--color-paper-bright);
+		box-shadow:
+			0 1px 2px rgb(0 0 0 / 0.25),
+			0 0.75rem 1.5rem rgb(30 15 5 / 0.28);
+		color: var(--color-ink-warm);
+		rotate: 0.6deg;
+	}
+
+	.museum-label-room {
+		margin: 0;
+		font-family: var(--font-body);
+		font-size: clamp(2.2rem, 6vw, 3rem);
+		font-weight: 800;
+		line-height: 1;
+	}
+
+	.museum-label-kicker {
+		margin: 0.5rem 0 0;
+		font-family: var(--font-display);
+		font-size: 0.85rem;
+		font-weight: 700;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+	}
+
+	.museum-label-meta {
+		margin: 0.2rem 0 0;
+		font-family: var(--font-display);
+		font-size: 0.85rem;
+		font-style: italic;
+		color: var(--color-muted-ink);
+	}
+
+	.museum-label-text {
+		margin: 0.85rem 0 0;
+		font-family: var(--font-display);
+		font-size: 1rem;
+		line-height: 1.4;
+		color: var(--color-note-ink);
+		text-wrap: pretty;
+	}
+
+	.museum-label-ways {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin-top: 1.2rem;
 	}
 </style>

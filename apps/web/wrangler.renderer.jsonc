@@ -1,0 +1,14 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "not-the-louvre-renderer",
+	"main": "src/workers/renderer.ts",
+	"compatibility_date": "2026-06-01",
+	// Buffer, for the placeholder data URI.
+	"compatibility_flags": ["nodejs_compat"],
+	// Only the web Worker calls it, through its RENDERER service binding.
+	"workers_dev": false,
+	"observability": {
+		"enabled": false,
+		"logs": { "enabled": true, "head_sampling_rate": 1, "persist": true, "invocation_logs": true }
+	}
+}

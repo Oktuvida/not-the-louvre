@@ -36,7 +36,7 @@ describe('SceneTextureBindings', () => {
 		const sceneRoot = new Group();
 		sceneRoot.add(avatarMesh);
 
-		render(SceneTextureBindings, {
+		await render(SceneTextureBindings, {
 			avatarUrl: '/api/users/product-user-1/avatar?v=123',
 			sceneRoot
 		});
@@ -69,7 +69,7 @@ describe('SceneTextureBindings', () => {
 		const healthyMesh = meshFor('a2');
 		const originalFailedMaterial = failedMesh.material;
 
-		render(SceneTextureBindings, {
+		await render(SceneTextureBindings, {
 			artworkSlots: [
 				{ id: 'artwork-1', imageUrl: '/api/artworks/artwork-1/media', slotName: 'a1', title: 'A' },
 				{ id: 'artwork-2', imageUrl: '/api/artworks/artwork-2/media', slotName: 'a2', title: 'B' }
@@ -110,7 +110,7 @@ describe('SceneTextureBindings', () => {
 			}
 		];
 
-		const { rerender } = render(SceneTextureBindings, {
+		const { rerender } = await render(SceneTextureBindings, {
 			artworkSlots,
 			avatarUrl: '/api/users/product-user-1/avatar?v=1',
 			sceneRoot

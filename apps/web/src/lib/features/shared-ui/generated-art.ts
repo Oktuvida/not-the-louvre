@@ -34,6 +34,15 @@ export const STICKER_VARIANTS: readonly StickerVariant[] = [
 	'ghost'
 ];
 
+/** The front door's cut-out title, one file per layout (see `cutout-title.ts`). */
+export const CUTOUT_TITLE_ASSET_NAMES = {
+	stacked: 'cutout-title-stacked',
+	wide: 'cutout-title-wide'
+} as const;
+
+export const cutoutTitleAssetUrl = (layout: keyof typeof CUTOUT_TITLE_ASSET_NAMES) =>
+	generatedArtUrl(CUTOUT_TITLE_ASSET_NAMES[layout]);
+
 export const museumWallPatternAssetUrl = generatedArtUrl(MUSEUM_WALL_ASSET_NAME);
 
 export const museumWindowFrameAssetUrl = generatedArtUrl(MUSEUM_WINDOW_FRAME_ASSET_NAME);

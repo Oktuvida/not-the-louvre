@@ -1,4 +1,5 @@
-import type { ArtworkVoteValue } from '$lib/shared/content/votes';
+import type { Wish } from '#lib/shared/content/wishes.js';
+import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
 
 export interface ArtworkComment {
 	id: string;
@@ -30,7 +31,6 @@ export interface Artwork {
 	authorId: string;
 	artistAvatar?: string;
 	imageUrl: string;
-	imagePlaceholder?: string | null;
 	isHidden?: boolean;
 	score: number;
 	upvotes: number;
@@ -40,7 +40,26 @@ export interface Artwork {
 	commentCount?: number;
 	comments: ArtworkComment[];
 	forkCount?: number;
+	/** False once the strokes are known to be lost. Only the detail read knows it. */
+	hasReplay?: boolean;
 	lineage?: ArtworkLineage;
 	rank?: number;
 	viewerVote?: ArtworkVoteValue | null;
+	/** The slip from the mailbox it answers. Only the detail read knows it. */
+	wish?: Wish | null;
 }
+
+/**
+ * What votes, comments and forks change about an artwork. A room's copy takes
+ * only these from a fresher one: its `rank` belongs to the room, not to the
+ * artwork, and the detail endpoint does not return it.
+ */
+export const artworkEngagement = (artwork: Artwork) => ({
+	commentCount: artwork.commentCount,
+	comments: artwork.comments,
+	downvotes: artwork.downvotes,
+	forkCount: artwork.forkCount,
+	score: artwork.score,
+	upvotes: artwork.upvotes,
+	viewerVote: artwork.viewerVote
+});

@@ -4,14 +4,12 @@
 	// buffer must reappear instantly instead of replaying the 200ms fade.
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- session-wide memo, deliberately non-reactive
 	const settledSources = new Set<string>();
-
-	// Once the photo is opaque the LQIP underneath is invisible, so its blur is
-	// pure GPU cost. Retire it a beat after the crossfade ends — on a timer, not
-	// on `transitionend`, because a cached image never runs a transition at all.
-	const PLACEHOLDER_RETIRE_MS = 250;
 </script>
 
 <script lang="ts">
+	import UndevelopedNote from './UndevelopedNote.svelte';
+	import { createDevelopingPhoto } from './developing-photo.svelte.js';
+
 	let {
 		src,
 		alt,
@@ -21,8 +19,7 @@
 		ariaLabel = undefined,
 		loading = 'lazy',
 		decoding = 'async',
-		fetchpriority = 'auto',
-		placeholder = null
+		fetchpriority = 'auto'
 	}: {
 		src: string;
 		alt: string;
@@ -40,77 +37,67 @@
 		loading?: 'eager' | 'lazy';
 		decoding?: 'async' | 'sync';
 		fetchpriority?: 'auto' | 'high' | 'low';
-		placeholder?: string | null;
 	} = $props();
 
 	let imageElement = $state<HTMLImageElement>();
 	// Starts opaque so the server-rendered markup shows the real photo; the
 	// effect below only opens the fade when the image genuinely has not landed.
 	let isLoaded = $state(true);
-	let placeholderRetired = $state(true);
+
+	/*
+	 * A photo that did not come: the polaroid stays empty, says so in pencil,
+	 * and asks for the photo again by itself (see developing-photo.svelte.ts).
+	 */
+	const photo = createDevelopingPhoto(() => src);
 
 	const markSettled = (settledSrc: string) => {
 		settledSources.add(settledSrc);
 		isLoaded = true;
+		photo.developed();
 	};
 
 	$effect(() => {
 		const currentSrc = src;
 
+		// A server-rendered photo can fail before the page wakes up.
+		if (imageElement?.complete && imageElement.naturalWidth === 0) {
+			photo.failed(imageElement);
+			return;
+		}
+
 		if (settledSources.has(currentSrc) || (imageElement?.complete ?? false)) {
 			markSettled(currentSrc);
-			placeholderRetired = true;
 			return;
 		}
 
 		isLoaded = false;
-		placeholderRetired = false;
-	});
-
-	$effect(() => {
-		if (!isLoaded) return;
-
-		const timer = setTimeout(() => {
-			placeholderRetired = true;
-		}, PLACEHOLDER_RETIRE_MS);
-
-		return () => {
-			clearTimeout(timer);
-		};
 	});
 </script>
 
+<!-- The linen background is the placeholder: the cream paper every drawing is
+     made on, at no cost, until the photo fades in over it. -->
 <div class={`relative h-full w-full bg-linen ${className}`}>
-	{#if placeholder}
-		<!-- Blurred tiny preview stays mounted beneath the real image so a
-		     recycled card never re-decodes it; the slight scale hides the blur's
-		     soft edges at the frame border. -->
+	{#key photo.attempt}
 		<img
-			src={placeholder}
-			alt=""
-			aria-hidden="true"
-			draggable="false"
-			class={`nsfw-layer nsfw-placeholder ${blurred ? 'is-sensitive' : ''} ${
-				placeholderRetired && !blurred ? 'is-retired' : ''
-			}`}
+			bind:this={imageElement}
+			src={photo.requestedSrc}
+			{alt}
+			{loading}
+			{decoding}
+			{fetchpriority}
+			onload={() => {
+				markSettled(photo.trackedSrc);
+			}}
+			onerror={(event) => photo.failed(event.currentTarget)}
+			aria-label={blurred ? ariaLabel : undefined}
+			class={`nsfw-photo relative h-full w-full object-cover ${blurred ? 'is-sensitive' : ''} ${
+				isLoaded ? 'is-loaded' : ''
+			} ${photo.undeveloped ? 'is-undeveloped' : ''}`}
 		/>
-	{/if}
-	<img
-		bind:this={imageElement}
-		{src}
-		{alt}
-		{loading}
-		{decoding}
-		{fetchpriority}
-		onload={() => {
-			markSettled(src);
-		}}
-		aria-label={blurred ? ariaLabel : undefined}
-		class={`nsfw-photo relative h-full w-full object-cover ${blurred ? 'is-sensitive' : ''} ${
-			isLoaded ? 'is-loaded' : ''
-		}`}
-	/>
-	{#if blurred && showScrim}
+	{/key}
+	{#if photo.undeveloped}
+		<UndevelopedNote />
+	{:else if blurred && showScrim}
 		<div class="nsfw-scrim">
 			<span class="rounded-full border-2 border-paper-bright px-3 py-1 text-xs font-black">18+</span
 			>
@@ -125,22 +112,6 @@
 	/* The NSFW treatment is written once, here, and read from the shared
 	 * `--nsfw-*` tokens so the Hot Wall, the podium, the home preview stack and
 	 * the Mystery reel all censor artwork at the same radius and scrim. */
-	.nsfw-layer {
-		position: absolute;
-		inset: 0;
-		height: 100%;
-		width: 100%;
-		object-fit: cover;
-	}
-
-	.nsfw-placeholder {
-		scale: 1.06;
-		filter: blur(var(--nsfw-placeholder-blur, 12px));
-		transition:
-			opacity var(--duration-ui) ease,
-			filter var(--duration-ui) ease;
-	}
-
 	.nsfw-photo {
 		opacity: 0;
 		transition:
@@ -153,16 +124,15 @@
 		opacity: 1;
 	}
 
-	.nsfw-placeholder.is-sensitive,
+	/* Not drawn, so the browser paints no broken picture on the paper; it keeps
+	 * its name for a screen reader, and comes back when a new try lands. */
+	.nsfw-photo.is-undeveloped {
+		opacity: 0;
+	}
+
 	.nsfw-photo.is-sensitive {
 		scale: 1.04;
 		filter: blur(var(--nsfw-blur, 20px)) saturate(0);
-	}
-
-	/* Only ever applied once the opaque photo covers it. */
-	.nsfw-placeholder.is-retired {
-		opacity: 0;
-		filter: none;
 	}
 
 	.nsfw-scrim {

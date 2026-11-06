@@ -1,44 +1,24 @@
-import { env } from '$env/dynamic/private';
 import { error, redirect } from '@sveltejs/kit';
-import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
-import { getViewerContentPreferences } from '$lib/server/moderation/service';
-import { toGalleryArtwork } from '$lib/features/gallery-exploration/gallery-adapter';
-import type { GalleryRoomContent } from '$lib/features/gallery-exploration/model/discovery';
+import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
+import { roomFirstPageEdgeCacheKey, sharedAtTheEdge } from '#lib/server/http/edge-cache.js';
+import { getViewerContentPreferences } from '#lib/server/moderation/service.js';
+import { toGalleryArtwork } from '#lib/features/gallery-exploration/gallery-adapter.js';
+import {
+	galleryRoomDiscoveryRequest,
+	type GalleryDiscoveryRequest,
+	type GalleryRoomContent
+} from '#lib/features/gallery-exploration/model/discovery.js';
 import {
 	getGalleryRoom,
 	isGalleryRoomId,
 	type GalleryRoomId
-} from '$lib/features/gallery-exploration/model/rooms';
-import type { Viewer } from '$lib/shared/viewer';
+} from '#lib/features/gallery-exploration/model/rooms.js';
+import type { Viewer } from '#lib/shared/viewer.js';
 
 type ProductUser = Viewer;
 
 // The room payload shape is shared with the page component that consumes it.
 export type { GalleryRoomContent };
-
-const SCALABLE_GALLERY_PAGE_SIZE = 24;
-
-const roomDiscoveryRequest = (roomId: GalleryRoomId, user?: ProductUser) => {
-	if (roomId === 'hall-of-fame') {
-		return { cursor: null, limit: 12, sort: 'top' as const, window: 'all' as const };
-	}
-
-	if (roomId === 'hot-wall') {
-		return { cursor: null, limit: SCALABLE_GALLERY_PAGE_SIZE, sort: 'hot' as const, window: null };
-	}
-
-	if (roomId === 'your-studio' && user) {
-		return {
-			authorId: user.id,
-			cursor: null,
-			limit: SCALABLE_GALLERY_PAGE_SIZE,
-			sort: 'recent' as const,
-			window: null
-		};
-	}
-
-	return { cursor: null, limit: SCALABLE_GALLERY_PAGE_SIZE, sort: 'recent' as const, window: null };
-};
 
 // The Hot Wall is deliberately absent: it renders its own two-line empty state
 // (`HotWallRoom.svelte`) and the page never falls back to this copy for it, so a
@@ -47,30 +27,6 @@ const emptyStateMessageForRoom = (roomId: GalleryRoomId) =>
 	roomId === 'your-studio'
 		? 'You have not published any artworks yet.'
 		: 'No artworks have reached this gallery room yet.';
-
-/*
- * A missing anon key degrades silently: the browser never opens a realtime
- * channel, so live votes and comments simply stop arriving with no error
- * anywhere. Warn once per isolate so a misconfigured deployment is visible in
- * `wrangler tail`. The latch is module scope rather than a hooks check because
- * hooks run per request on Workers, and `$env/dynamic/private` is empty at
- * module init under adapter-cloudflare, so the read has to happen in here.
- */
-let warnedAboutMissingAnonKey = false;
-
-const resolveRealtimeConfig = () => {
-	const anonKey = env.PUBLIC_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || env.ANON_KEY || null;
-	const url = env.PUBLIC_SUPABASE_URL || env.SUPABASE_PUBLIC_URL || null;
-
-	if (!anonKey && !warnedAboutMissingAnonKey) {
-		warnedAboutMissingAnonKey = true;
-		console.warn(
-			'[gallery] SUPABASE_ANON_KEY is not set: realtime votes and comments are disabled for browsers.'
-		);
-	}
-
-	return { anonKey, url };
-};
 
 // The shell resolves without touching the database, so navigations render
 // the room chrome immediately while the artwork content streams in.
@@ -84,25 +40,42 @@ export const loadGalleryRoomShell = (roomId: string, user?: ProductUser) => {
 	}
 
 	return {
-		realtimeConfig: resolveRealtimeConfig(),
 		room: getGalleryRoom(roomId),
 		roomId: roomId as GalleryRoomId,
 		viewer: user ?? null
 	};
 };
 
+type RoomFirstPage = Awaited<ReturnType<typeof listArtworkDiscovery>>;
+
+// A room's first page is the same for every signed-out visitor, so the edge
+// shares it as it shares the pages after it: a wave of visitors reads the
+// database once per room and datacenter, not once each. Nothing purges it, so
+// the shared TTL is what bounds it. A signed-in artist always reads the
+// database: the page carries their own votes, and must show what they just did.
+const listRoomFirstPage = async (
+	roomId: GalleryRoomId,
+	request: GalleryDiscoveryRequest,
+	user: ProductUser | undefined,
+	origin: string
+): Promise<RoomFirstPage> => {
+	const read = () => listArtworkDiscovery({ ...request, cursor: null }, { user });
+	// `toGalleryArtwork` takes the shared copy's dates as text as well.
+	return user ? read() : sharedAtTheEdge(roomFirstPageEdgeCacheKey(origin, roomId), read);
+};
+
 export const loadGalleryRoomContent = async (
 	roomId: GalleryRoomId,
-	user?: ProductUser,
+	user: ProductUser | undefined,
 	// The root layout already read the viewer's preference row for this
 	// request; when the caller passes it down, the room content stops issuing
 	// the identical single-row query a second time (on Workers, on its own
 	// connection). Omitting it falls back to reading the row here.
-	options: { adultContentEnabled?: boolean } = {}
+	options: { adultContentEnabled?: boolean; origin: string }
 ): Promise<GalleryRoomContent> => {
-	const discoveryRequest = roomDiscoveryRequest(roomId, user);
+	const discoveryRequest = galleryRoomDiscoveryRequest(roomId, user?.id ?? null);
 	const [discovery, viewerContentPreferences] = await Promise.all([
-		listArtworkDiscovery(discoveryRequest, { user }),
+		listRoomFirstPage(roomId, discoveryRequest, user, options.origin),
 		options.adultContentEnabled !== undefined
 			? Promise.resolve({ adultContentEnabled: options.adultContentEnabled })
 			: user
@@ -120,15 +93,7 @@ export const loadGalleryRoomContent = async (
 		artworks: visibleItems.map((item, index) =>
 			toGalleryArtwork(item, roomId === 'hall-of-fame' ? index + 1 : undefined)
 		),
-		discovery: {
-			pageInfo: discovery.pageInfo,
-			request: {
-				authorId: (roomId === 'your-studio' && user?.id) || null,
-				limit: discoveryRequest.limit,
-				sort: discoveryRequest.sort,
-				window: discoveryRequest.window
-			}
-		},
+		discovery: { pageInfo: discovery.pageInfo, request: discoveryRequest },
 		emptyStateMessage: visibleItems.length === 0 ? emptyStateMessageForRoom(roomId) : null,
 		adultContentEnabled: viewerContentPreferences.adultContentEnabled
 	};

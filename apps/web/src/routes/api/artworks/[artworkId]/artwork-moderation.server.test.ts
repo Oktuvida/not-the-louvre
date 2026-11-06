@@ -1,12 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+
+// Handlers reach the Cloudflare runtime through #lib/server/platform.js; each
+// test registers the cache and waitUntil it would have found there.
+type FakePlatform = {
+	caches?: { default?: unknown };
+	context?: { waitUntil?: (promise: Promise<unknown>) => void };
+};
+const fakePlatform = vi.hoisted(() => ({ current: undefined as FakePlatform | undefined }));
+vi.mock('#lib/server/platform.js', () => ({
+	edgeCache: () => fakePlatform.current?.caches?.default,
+	hyperdriveConnectionString: () => undefined,
+	runAfterResponse: (promise: Promise<unknown>) =>
+		fakePlatform.current?.context?.waitUntil?.(promise)
+}));
+const usePlatform = (platform: FakePlatform) => {
+	fakePlatform.current = platform;
+	return platform;
+};
+beforeEach(() => {
+	fakePlatform.current = undefined;
+});
 
 const mocked = {
-	getIp: vi.fn(() => '127.0.0.1'),
+	getIP: vi.fn(() => '127.0.0.1'),
 	moderateArtwork: vi.fn()
 };
 
-vi.mock('$lib/server/artwork/service', () => ({
+vi.mock('#lib/server/artwork/service.js', () => ({
 	moderateComment: vi.fn(),
 	submitContentReport: vi.fn(),
 	moderateArtwork: mocked.moderateArtwork,
@@ -147,7 +168,7 @@ describe('artwork moderation endpoint', () => {
 		await PATCH({
 			locals: { user: { id: 'moderator-1', role: 'moderator' } },
 			params: { artworkId: 'artwork-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil } }),
 			request: new Request('https://gallery.test/api/artworks/artwork-1/moderation', {
 				body: JSON.stringify({ action: 'hide' }),
 				headers: { 'content-type': 'application/json' },
@@ -170,7 +191,7 @@ describe('artwork moderation endpoint', () => {
 		await DELETE({
 			locals: { user: { id: 'moderator-1', role: 'moderator' } },
 			params: { artworkId: 'artwork-1' },
-			platform: { caches: { default: edgeCache }, context: { waitUntil: vi.fn() } },
+			platform: usePlatform({ caches: { default: edgeCache }, context: { waitUntil: vi.fn() } }),
 			request: new Request('https://gallery.test/api/artworks/artwork-1/moderation', {
 				method: 'DELETE'
 			}),

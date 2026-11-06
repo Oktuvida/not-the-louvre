@@ -1,0 +1,60 @@
+/*
+ * The gallery grid, defined once and only here. How many columns a screen gets
+ * is whatever this template resolves to: the virtualized grid reads the count
+ * back from the browser instead of working out its own, and the skeletons
+ * stand in on the same template, so nothing moves when the artworks arrive.
+ *
+ * - A phone gets one artwork per row.
+ * - Wider screens fit as many columns as hold a card of at least 19rem with
+ *   4.5rem of wall between cards: the room breathes, and nothing fixes the
+ *   count (a tablet gets two, a laptop three, a 2560px monitor four). The
+ *   gallery's rem grows on screens wider than 1440px (GalleryLayoutFrame), so
+ *   a big screen gets bigger cards and gaps as well as more columns.
+ *
+ * - From a laptop up the artworks hang with wall on either side instead of
+ *   running edge to edge: the margin grows with the screen, from nothing on
+ *   a tablet (two columns of 19rem barely fit there) to 6rem, and stays
+ *   within what keeps a laptop's three columns and a 2560px monitor's four.
+ *
+ * A room can space its cards differently by setting --gallery-gap and
+ * --gallery-gap-phone on an ancestor.
+ */
+
+.gallery-grid-host {
+	--gallery-grid-gap: var(--gallery-gap, 4.5rem);
+	padding-inline: clamp(0px, (100vw - 800px) * 0.14, 6rem);
+}
+
+.gallery-grid {
+	display: grid;
+	gap: var(--gallery-grid-gap);
+	grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr));
+}
+
+/* Each row ends with the gap to the next, so a row's height is the distance
+ * from one row of cards to the next, in the plain grid and the virtual one. */
+.gallery-grid-row {
+	padding-bottom: var(--gallery-grid-gap);
+}
+
+/* An empty grid on the template, read for its column count. */
+.gallery-grid-probe {
+	height: 0;
+	overflow: hidden;
+}
+
+@media (max-width: 639.98px) {
+	.gallery-grid-host {
+		--gallery-grid-gap: var(--gallery-gap-phone, 2rem);
+	}
+
+	.gallery-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+/* Your Studio's grid breathes a little wider than the other rooms. */
+.gallery-grid-roomy {
+	--gallery-gap: 5.25rem;
+	--gallery-gap-phone: 2.5rem;
+}

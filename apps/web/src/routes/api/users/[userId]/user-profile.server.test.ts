@@ -4,7 +4,7 @@ const mocked = vi.hoisted(() => ({
 	findUserAvatarRefById: vi.fn()
 }));
 
-vi.mock('$lib/server/user/repository', () => ({
+vi.mock('#lib/server/user/repository.js', () => ({
 	userRepository: {
 		findUserAvatarRefById: mocked.findUserAvatarRefById,
 		updateUserAvatarUrl: vi.fn()

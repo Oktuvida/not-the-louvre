@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 const mocked = vi.hoisted(() => ({
 	getViewerContentPreferences: vi.fn(),
@@ -7,7 +7,7 @@ const mocked = vi.hoisted(() => ({
 	setViewerAmbientAudioEnabled: vi.fn()
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	getViewerContentPreferences: mocked.getViewerContentPreferences,
 	setViewerAdultContentEnabled: mocked.setViewerAdultContentEnabled,
 	setViewerAmbientAudioEnabled: mocked.setViewerAmbientAudioEnabled

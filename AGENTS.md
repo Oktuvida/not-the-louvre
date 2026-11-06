@@ -18,6 +18,14 @@ If it is not reproducible, it is a future bug wearing a disguise.
 
 ---
 
+## Remaster In Progress
+
+All remaster work happens on the long-lived `remaster` branch, which is merged into `main` only when the owner decides it is ready. The plan, the decisions already made and the phase checklist live in [`docs/remaster/README.md`](docs/remaster/README.md); the technical evidence behind them is in `docs/remaster/informe-stack.md`.
+
+Never trigger the deploy workflow manually (`workflow_dispatch`) from `remaster`: that path deploys to production. A draft pull request from `remaster` to `main` runs the quality jobs without deploying.
+
+---
+
 ## Development Methodology
 
 ### Test-Driven Development (Test-First)
@@ -42,41 +50,58 @@ Business-scenario-first test modeling:
 
 If code exists before a failing scenario test, the process is out of order.
 
+### Test Strategy
+
+Write each test at the level where the behavior actually lives:
+
+- **SQL** runs against a real Postgres in the contract suites. Never verify SQL with fakes that reimplement it.
+- **User journeys** are Playwright e2e tests.
+- **Unit tests** cover pure logic only.
+- **Component specs** are for interaction-heavy widgets, and query by role and text, not by class names or test ids.
+- **No source-text tests.** A test that greps code or CSS, or pins generated SQL as its only guard, passes while the product is broken.
+
 ### Automated Quality Gates
 
 All quality checks run as scripts — never rely on manual review alone.
 
 After every change, run `bun run format`, `bun run lint`, `bun run check`, and `bun run test` before considering the work complete.
 
-| Script | What it checks |
-| --- | --- |
-| `bun run format` | Code formatting (Prettier) |
-| `bun run lint` | Lint rules (ESLint + Prettier check) |
-| `bun run check` | Type-checking (svelte-check + TypeScript) |
-| `bun run test:unit` | Unit & component tests (Vitest) |
-| `bun run test:e2e` | End-to-end tests (Playwright) |
-| `bun run test` | Unit + e2e combined |
-| `bun run --filter @not-the-louvre/web test:integration` | Contract suites against the real database (release step, see below) |
+| Script                                                  | What it checks                                                                             |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `bun run format`                                        | Code formatting (Prettier)                                                                 |
+| `bun run lint`                                          | Lint rules (ESLint + Prettier check)                                                       |
+| `bun run check`                                         | Type-checking (svelte-check + TypeScript)                                                  |
+| `bun run test:unit`                                     | Unit & component tests (Vitest)                                                            |
+| `bun run test:e2e`                                      | End-to-end tests (Playwright)                                                              |
+| `bun run test`                                          | Unit + e2e combined                                                                        |
+| `bun run --filter @not-the-louvre/web test:integration` | Integration suites against a real Postgres and wrangler's local R2 (runs in CI, see below) |
 
 Before pushing code, all of the above must pass. Prefer running them in order: format → lint → check → test.
 
-The integration suites (`*.integration.test.ts` and `db.contract.integration.test.ts`) are
-gated on `RUN_INTEGRATION=1` and skip everywhere else, including CI, because they need the
-local Supabase stack. They are where the raw SQL this app ships — fork lineage, keyset
-paging, the rate-limit upsert — is actually executed, so **run them by hand against a local
-stack before a release**: `bun run db:start`, then
-`bun run --filter @not-the-louvre/web test:integration`.
+The integration suites (`*.integration.test.ts`) are gated on `RUN_INTEGRATION=1` and skip
+everywhere else. The SQL contract suite (`db.contract.integration.test.ts`) is where the raw
+SQL this app ships — fork lineage, keyset paging, the rate-limit upsert — is actually
+executed; the media and avatar suites publish and read images through the app's R2 bucket (`BUCKET`),
+which each suite emulates with wrangler's `getPlatformProxy`. They need only Postgres and
+run in CI's `database` job. To run them locally against any plain Postgres, set
+`DATABASE_URL` and run `db:platform-objects` (plain Postgres only, never Supabase),
+`db:migrate` and `test:integration` with `bun run --filter @not-the-louvre/web`.
+The e2e suite builds the Worker and serves it on workerd with `wrangler dev`, using the same
+`DATABASE_URL` through Wrangler's local Hyperdrive emulation and a local R2 bucket, so it
+exercises the production runtime rather than Node.
 
 ### Reproducibility (Everything-as-Code)
 
 Local development must be reproducible from a clean clone:
 
-- **Infrastructure**: `compose.yaml` defines all services. `bun run db:start` brings up only the ones the app talks to (`db`, `kong`, `rest`, `storage`, `imgproxy`, `realtime`). Supabase Studio, GoTrue, postgres-meta, logflare and the edge runtime sit behind the `tools` profile: `docker compose --env-file .env.supabase --profile tools up -d`.
+- **Infrastructure**: `compose.yaml` defines one Postgres, the only service the app needs locally; images, drawings and live updates run on Cloudflare bindings that `wrangler dev` emulates. `bun run db:start` serves it on port 55432 and applies the platform objects and migrations (`bun run db:reset` starts from empty). Any plain Postgres works too: set `DATABASE_URL`, then run `db:platform-objects` and `db:migrate`.
+- **Workers**: three deploy together. The web Worker (`apps/web/wrangler.jsonc`) serves the app; the renderer Worker (`apps/web/wrangler.renderer.jsonc`, entry `src/workers/renderer.ts`) turns drawings into images over RPC, so only it carries the WebAssembly codecs, and `bun run check:bundle` fails if any reach the web Worker; the realtime Worker (`apps/realtime`) holds the live-update Durable Objects. Dev servers and tests render in process. The e2e suite runs all three in one `wrangler dev`.
+- **Live updates**: votes and comments reach open artworks through the realtime Worker in `apps/realtime` (one Durable Object per artwork). The e2e suite starts it with the others, which is the tested path. `bun run dev` serves the app without it and live updates stay off; running `bun run --filter @not-the-louvre/realtime dev` alongside should connect them through wrangler's dev registry, but that path is untested.
 - **Commit hooks**: run `bun run hooks:install` once per clone to enable the commit-message hook (`git config core.hooksPath .githooks`).
 - **Dependencies**: `bun install` from root. Lockfile is committed.
 - **Environment**: `.env.example` documents every required variable.
 - **Schema**: Drizzle migrations define the database state (see below).
-- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check`, `test:unit:server` and `test:unit:client` on every pull request and before every deploy; the database-backed integration suites are the one gate CI cannot run, so they stay a manual release step (above).
+- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check`, `test:unit:server` and `test:unit:client` on every pull request and before every deploy, plus, in its `database` job, the integration suites and the e2e suite against a Postgres service container.
 
 ---
 
@@ -133,15 +158,15 @@ This outputs to `apps/web/src/lib/server/db/auth.schema.ts`. Do not edit that fi
 
 Skills live in `.agents/skills/` and provide domain-specific knowledge to AI agents working on this codebase.
 
-| Skill | When to use |
-| --- | --- |
-| `brainstorming` | Before any creative work — creating features, building components, adding functionality, or modifying behavior. Explores intent and design before implementation. |
-| `drizzle-orm` | When working with Drizzle ORM — schema definitions, queries, migrations, or related TypeScript database code. |
-| `frontend-design` | When building web components, pages, dashboards, or styling/beautifying any web UI. Produces distinctive, production-grade interfaces. |
-| `rest-api-design` | When creating new APIs, designing endpoints, or improving existing API architecture. Covers resource modeling, HTTP methods, status codes, and versioning. |
-| `supabase-postgres-best-practices` | When writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations. |
-| `svelte-code-writer` | When creating, editing, or analyzing any Svelte component (`.svelte`) or Svelte module (`.svelte.ts` / `.svelte.js`). |
-| `threlte-official-docs` | When answering Threlte-specific questions or locating Threlte APIs, guides, or package docs. Restricts evidence to official Threlte docs and the official `threlte/threlte` repo. |
+| Skill                              | When to use                                                                                                                                                                       |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `brainstorming`                    | Before any creative work — creating features, building components, adding functionality, or modifying behavior. Explores intent and design before implementation.                 |
+| `drizzle-orm`                      | When working with Drizzle ORM — schema definitions, queries, migrations, or related TypeScript database code.                                                                     |
+| `frontend-design`                  | When building web components, pages, dashboards, or styling/beautifying any web UI. Produces distinctive, production-grade interfaces.                                            |
+| `rest-api-design`                  | When creating new APIs, designing endpoints, or improving existing API architecture. Covers resource modeling, HTTP methods, status codes, and versioning.                        |
+| `supabase-postgres-best-practices` | When writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations.                                                                              |
+| `svelte-code-writer`               | When creating, editing, or analyzing any Svelte component (`.svelte`) or Svelte module (`.svelte.ts` / `.svelte.js`).                                                             |
+| `threlte-official-docs`            | When answering Threlte-specific questions or locating Threlte APIs, guides, or package docs. Restricts evidence to official Threlte docs and the official `threlte/threlte` repo. |
 
 ---
 
@@ -167,19 +192,19 @@ This repository uses Angular-style Conventional Commits with a required emoji pr
 
 ### Types
 
-| Emoji | Type | Use |
-| --- | --- | --- |
-| ✨ | `feat` | New feature |
-| 🐛 | `fix` | Bug fix |
-| 📝 | `docs` | Documentation changes |
-| 💄 | `style` | Formatting or visual-only changes |
-| ♻️ | `refactor` | Internal refactor with no behavior change |
-| ⚡ | `perf` | Performance improvement |
-| ✅ | `test` | Tests added or updated |
-| 🏗️ | `build` | Build system or dependency changes |
-| 👷 | `ci` | CI/CD changes |
-| 🧹 | `chore` | Maintenance tasks |
-| ⏪ | `revert` | Revert a previous commit |
+| Emoji | Type       | Use                                       |
+| ----- | ---------- | ----------------------------------------- |
+| ✨    | `feat`     | New feature                               |
+| 🐛    | `fix`      | Bug fix                                   |
+| 📝    | `docs`     | Documentation changes                     |
+| 💄    | `style`    | Formatting or visual-only changes         |
+| ♻️    | `refactor` | Internal refactor with no behavior change |
+| ⚡    | `perf`     | Performance improvement                   |
+| ✅    | `test`     | Tests added or updated                    |
+| 🏗️    | `build`    | Build system or dependency changes        |
+| 👷    | `ci`       | CI/CD changes                             |
+| 🧹    | `chore`    | Maintenance tasks                         |
+| ⏪    | `revert`   | Revert a previous commit                  |
 
 ### Examples
 

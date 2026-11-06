@@ -1,11 +1,10 @@
-import { json, type Handle, type RequestEvent } from '@sveltejs/kit';
-import { building } from '$app/environment';
-import { auth } from '$lib/server/auth';
-import { resolveSessionContext } from '$lib/server/auth/service';
-import { runWithRequestDbConnection } from '$lib/server/db';
-import { logSecurityEvent } from '$lib/server/security/logging';
-import { getTrustedOriginDecision } from '$lib/server/security/trusted-origin';
-import { svelteKitHandler } from 'better-auth/svelte-kit';
+import { type RequestEvent } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
+import { resolveSessionContext } from '#lib/server/auth/service.js';
+import { runWithRequestDbConnection } from '#lib/server/db/index.js';
+import { logSecurityEvent } from '#lib/server/security/logging.js';
+import { getTrustedOriginDecision } from '#lib/server/security/trusted-origin.js';
+import { hyperdriveConnectionString } from '#lib/server/platform.js';
 
 // Reads whose answer depends only on the route params: the media reader ignores
 // the viewer entirely and the avatar/favicon readers key off the userId in the
@@ -37,7 +36,7 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 			trustedOrigin: trustedOriginDecision.trustedOrigin
 		});
 
-		return json(
+		return Response.json(
 			{
 				code: 'FORBIDDEN',
 				message: 'Trusted origin required for state-changing API requests'
@@ -66,11 +65,13 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 		event.locals.user = sessionContext.user;
 	}
 
-	return svelteKitHandler({ event, resolve, auth, building });
+	// Better Auth's own HTTP endpoints (/api/auth/*) stay unmounted. Sign-up and
+	// sign-in go through the product's form actions, which apply the lockout
+	// and create the gallery profile; the raw endpoints skipped both.
+	return resolve(event);
 };
 
 export const handle: Handle = (input) =>
 	runWithRequestDbConnection(async () => handleBetterAuth(input), {
-		connectionString: input.event.platform?.env?.HYPERDRIVE?.connectionString,
-		context: input.event.platform?.context
+		connectionString: hyperdriveConnectionString()
 	});

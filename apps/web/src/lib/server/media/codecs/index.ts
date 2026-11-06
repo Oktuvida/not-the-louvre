@@ -1,29 +1,18 @@
 import decodeAvifImage, { init as initAvifDecode } from '@jsquash/avif/decode';
-import encodeAvifImage, { init as initAvifEncode } from '@jsquash/avif/encode';
 import decodeJpegImage, { init as initJpegDecode } from '@jsquash/jpeg/decode';
 import decodePngImage, { init as initPngDecode } from '@jsquash/png/decode';
 import encodePngImage, { init as initPngEncode } from '@jsquash/png/encode';
 import resizeImageData, { initResize } from '@jsquash/resize';
 import decodeWebpImage, { init as initWebpDecode } from '@jsquash/webp/decode';
+import encodeWebpImage, { init as initWebpEncode } from '@jsquash/webp/encode';
 import { initWasm as initResvg, Resvg } from '@resvg/resvg-wasm';
 import { ensureImageDataGlobal, loadCodecWasmModule } from './loader';
-import {
-	blitWithAlpha,
-	createSolidImage,
-	cropCenter,
-	type RawImage,
-	type RgbColor
-} from './raster';
+import { cropCenter, type RawImage } from './raster';
 
-export type { RawImage, RgbColor };
-export { applyRoundedRectAlpha, cropCenter, parseHexColor } from './raster';
+export type { RawImage };
+export { applyRoundedRectAlpha, cropCenter } from './raster';
 
 export type ImageFormat = 'avif' | 'jpeg' | 'png' | 'webp';
-
-export type AvifEncodeSettings = {
-	chromaSubsampling: '4:2:0' | '4:4:4';
-	quality: number;
-};
 
 ensureImageDataGlobal();
 
@@ -60,14 +49,6 @@ const ensureAvifDecode = () =>
 		initAvifDecode as unknown as InitWithWasmModule
 	);
 
-const ensureAvifEncode = () =>
-	ensureCodec(
-		'avif-encode',
-		'@jsquash/avif/codec/enc/avif_enc.wasm',
-		() => importWasmModule(() => import('@jsquash/avif/codec/enc/avif_enc.wasm')),
-		initAvifEncode as unknown as InitWithWasmModule
-	);
-
 const ensureJpegDecode = () =>
 	ensureCodec(
 		'jpeg-decode',
@@ -82,6 +63,16 @@ const ensurePngDecode = () =>
 		'@jsquash/png/codec/pkg/squoosh_png_bg.wasm',
 		() => importWasmModule(() => import('@jsquash/png/codec/pkg/squoosh_png_bg.wasm')),
 		(wasmModule) => initPngDecode(wasmModule)
+	);
+
+// The encoder picks its SIMD build wherever WebAssembly SIMD exists, which
+// covers Workers and Node, so that is the module it is handed.
+const ensureWebpEncode = () =>
+	ensureCodec(
+		'webp-encode',
+		'@jsquash/webp/codec/enc/webp_enc_simd.wasm',
+		() => importWasmModule(() => import('@jsquash/webp/codec/enc/webp_enc_simd.wasm')),
+		initWebpEncode as unknown as InitWithWasmModule
 	);
 
 const ensurePngEncode = () =>
@@ -141,18 +132,6 @@ const readAscii = (input: Uint8Array, start: number, length: number) =>
 const matchesMagicBytes = (input: Uint8Array, magicBytes: ReadonlyArray<number>) =>
 	input.byteLength >= magicBytes.length && magicBytes.every((byte, index) => input[index] === byte);
 
-const containsAscii = (input: Uint8Array, marker: string) => {
-	const markerBytes = marker.split('').map((character) => character.charCodeAt(0));
-
-	for (let offset = 0; offset + markerBytes.length <= input.byteLength; offset += 1) {
-		if (markerBytes.every((byte, index) => input[offset + index] === byte)) {
-			return true;
-		}
-	}
-
-	return false;
-};
-
 const collectIsoBmffBrands = (input: Uint8Array) => {
 	const brands = new Set<string>();
 
@@ -176,13 +155,13 @@ const collectIsoBmffBrands = (input: Uint8Array) => {
 	return brands;
 };
 
-export const hasAvifMagicBytes = (input: Uint8Array) => {
+const hasAvifMagicBytes = (input: Uint8Array) => {
 	const brands = collectIsoBmffBrands(input);
 
 	return brands.has(AVIF_STILL_BRAND) || brands.has(AVIF_SEQUENCE_BRAND);
 };
 
-export const hasWebpMagicBytes = (input: Uint8Array) =>
+const hasWebpMagicBytes = (input: Uint8Array) =>
 	input.byteLength >= 12 && readAscii(input, 0, 4) === 'RIFF' && readAscii(input, 8, 4) === 'WEBP';
 
 export const sniffImageFormat = (input: Uint8Array): ImageFormat | null => {
@@ -204,27 +183,6 @@ export const sniffImageFormat = (input: Uint8Array): ImageFormat | null => {
 
 	return null;
 };
-
-// sharp exposed multi-frame inputs through `metadata.pages`; without it we
-// reject animated containers from their structure before decoding.
-export const isAnimatedImage = (input: Uint8Array, format: ImageFormat) => {
-	if (format === 'webp') {
-		return containsAscii(input, 'ANIM') || containsAscii(input, 'ANMF');
-	}
-
-	if (format === 'avif') {
-		return collectIsoBmffBrands(input).has(AVIF_SEQUENCE_BRAND);
-	}
-
-	if (format === 'png') {
-		return containsAscii(input, 'acTL');
-	}
-
-	return false;
-};
-
-export const mimeTypeForImageFormat = (format: ImageFormat) =>
-	format === 'jpeg' ? 'image/jpeg' : `image/${format}`;
 
 const toImageData = (image: RawImage) =>
 	new ImageData(new Uint8ClampedArray(image.data), image.width, image.height);
@@ -274,28 +232,14 @@ export const decodeImage = async (input: Uint8Array, format: ImageFormat): Promi
 	return fromImageData(await decodeJpegImage(buffer));
 };
 
-const AVIF_CHROMA_SUBSAMPLING_VALUES = {
-	'4:2:0': 1,
-	'4:4:4': 3
-} as const;
+// libwebp's own lossless defaults. On 768px drawings, effort 100 cost 4 to 14
+// times the CPU of effort 75 for files under 1% smaller.
+const LOSSLESS_WEBP_OPTIONS = { lossless: 1, method: 4, quality: 75 } as const;
 
-// Matches the previous sharp pipeline's `effort: 4` middle ground; jSquash
-// speed runs 0 (slowest) to 10 and defaults to 6.
-const AVIF_ENCODE_SPEED = 6;
+export const encodeLosslessWebp = async (image: RawImage): Promise<Uint8Array> => {
+	await ensureWebpEncode();
 
-export const encodeAvif = async (
-	image: RawImage,
-	settings: AvifEncodeSettings
-): Promise<Uint8Array> => {
-	await ensureAvifEncode();
-
-	const encoded = await encodeAvifImage(toImageData(image), {
-		quality: settings.quality,
-		speed: AVIF_ENCODE_SPEED,
-		subsample: AVIF_CHROMA_SUBSAMPLING_VALUES[settings.chromaSubsampling]
-	});
-
-	return new Uint8Array(encoded);
+	return new Uint8Array(await encodeWebpImage(toImageData(image), LOSSLESS_WEBP_OPTIONS));
 };
 
 export const encodePng = async (image: RawImage): Promise<Uint8Array> => {
@@ -321,26 +265,6 @@ export const resizeImage = async (
 			width: target.width
 		})
 	);
-};
-
-export const containOnBackground = async (
-	image: RawImage,
-	target: { background: RgbColor; height: number; width: number }
-): Promise<RawImage> => {
-	const scale = Math.min(target.width / image.width, target.height / image.height);
-	const scaledWidth = Math.max(1, Math.round(image.width * scale));
-	const scaledHeight = Math.max(1, Math.round(image.height * scale));
-	const scaled = await resizeImage(image, { height: scaledHeight, width: scaledWidth });
-	const canvas = createSolidImage(target.width, target.height, target.background);
-
-	blitWithAlpha(
-		canvas,
-		scaled,
-		Math.floor((target.width - scaledWidth) / 2),
-		Math.floor((target.height - scaledHeight) / 2)
-	);
-
-	return canvas;
 };
 
 export const coverResize = async (

@@ -1,7 +1,6 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { toApiErrorResponse } from '$lib/server/http/errors';
-import { avatarService } from '$lib/server/user/avatar.service';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
+import { avatarService } from '#lib/server/user/avatar.service.js';
 
 const AVATAR_MODERATION_ERROR = {
 	fallbackCode: 'AVATAR_MODERATION_FAILED',
@@ -23,7 +22,7 @@ export const PATCH: RequestHandler = async (event) => {
 
 		// The admin UI refreshes its own list from this call, so the response only
 		// needs the moderated flags — never the target's avatar drawing document.
-		return json({
+		return Response.json({
 			user: {
 				avatarIsHidden: user.avatarIsHidden,
 				avatarIsNsfw: user.avatarIsNsfw,

@@ -1,11 +1,11 @@
 import { eq } from 'drizzle-orm';
 import { APIError } from 'better-auth/api';
 import { hashPassword } from 'better-auth/crypto';
-import { auth } from '$lib/server/auth';
-import { db } from '$lib/server/db';
-import { account, users } from '$lib/server/db/schema';
-import { checkTextModeration } from '$lib/server/moderation/service';
-import { logSecurityEvent } from '$lib/server/security/logging';
+import { auth } from '#lib/server/auth.js';
+import { db } from '#lib/server/db/index.js';
+import { account, users } from '#lib/server/db/schema.js';
+import { checkTextModeration } from '#lib/server/moderation/service.js';
+import { logSecurityEvent } from '#lib/server/security/logging.js';
 import { AuthFlowError } from './errors';
 import { generateRecoveryKey, hashRecoveryKey, verifyRecoveryKey } from './recovery';
 import { AuthRateLimitError, assertRateLimit, recordFailure, recordSuccess } from './rate-limit';

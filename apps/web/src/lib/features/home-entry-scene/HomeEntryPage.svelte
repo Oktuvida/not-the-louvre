@@ -1,30 +1,37 @@
 <script lang="ts">
 	import { Paintbrush } from 'lucide-svelte';
 	import { onMount, type Snippet } from 'svelte';
-	import { browser } from '$app/environment';
-	import { goto, replaceState } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { browser } from '$app/env';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { gsap } from '$lib/client/gsap';
-	import type { HomeAuthUser } from '$lib/features/home-entry-scene/auth-contract';
+	import { gsap } from '#lib/client/gsap.js';
+	import { reloadIntoNewRelease } from '#lib/client/new-release.js';
+	import type { HomeAuthUser } from '#lib/features/home-entry-scene/auth-contract.js';
 	import type {
 		HomePreviewCard,
 		HomeSceneArtworkSlot
-	} from '$lib/features/home-entry-scene/state/home-entry.svelte';
-	import HomeHeroOverlay from '$lib/features/home-entry-scene/components/HomeHeroOverlay.svelte';
-	import PersistentNav from '$lib/features/home-entry-scene/components/PersistentNav.svelte';
-	import StudioLoadingFallback from '$lib/features/shared-3d-world/components/StudioLoadingFallback.svelte';
+	} from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
+	import HomeHeroOverlay from '#lib/features/home-entry-scene/components/HomeHeroOverlay.svelte';
+	import PersistentNav from '#lib/features/home-entry-scene/components/PersistentNav.svelte';
+	import StudioLoadingFallback from '#lib/features/shared-3d-world/components/StudioLoadingFallback.svelte';
+	import { browserSupportsWebGL } from '#lib/features/shared-3d-world/webgl-support.js';
 	import {
 		homeGalleryTarget,
+		homeHallOfFameTarget,
 		homeStudioTarget,
 		warmNavigationTargetWhenIdle
-	} from '$lib/features/home-entry-scene/navigation-warmup';
-	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
-	import type { EntryFlowState } from '$lib/features/home-entry-scene/state/entry-state.svelte';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import PageFadeOverlay from '$lib/features/shared-ui/components/PageFadeOverlay.svelte';
-	import { PAGE_FADE_DURATION_MS } from '$lib/features/shared-ui/page-fade';
-	import { scheduleStudioBackgroundWarmup } from '$lib/features/shared-ui/studio-background-warmup';
+	} from '#lib/features/home-entry-scene/navigation-warmup.js';
+	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import { STUDIO_MODEL_URL } from '#lib/features/home-entry-scene/scene/studio-model.js';
+	import type { EntryFlowState } from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import PageFadeOverlay from '#lib/features/shared-ui/components/PageFadeOverlay.svelte';
+	import {
+		readyStudioBackground,
+		scheduleStudioBackgroundWarmup
+	} from '#lib/features/shared-ui/studio-background-warmup.js';
+	import { handOverBook } from '#lib/features/shared-ui/studio-handoff.js';
 
 	let {
 		children,
@@ -39,7 +46,9 @@
 		adultContentEnabled?: boolean;
 		entryState?: EntryFlowState;
 		onAvatarSaved?: (payload: {
-			avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
+			avatarDrawingDocument?:
+				| import('#lib/features/stroke-json/document.js').DrawingDocumentV2
+				| null;
 			avatarOnboardingCompletedAt: Date;
 			avatarUrl: string;
 		}) => void;
@@ -48,8 +57,6 @@
 		user?: HomeAuthUser | null;
 	} = $props();
 
-	/** The shared veil's own duration, in the seconds GSAP's timeline speaks. */
-	const FADE_DURATION_S = PAGE_FADE_DURATION_MS / 1000;
 	const GALLERY_EXIT_HOLD = 2;
 	const TOP_CLOSE_DURATION = 2;
 	/** A beat of reverse camera move before the veil starts lifting. */
@@ -57,7 +64,7 @@
 	/** Hard ceiling on the returning veil, whatever the state machine does. */
 	const RETURN_FADE_SAFETY_MS = 1000;
 
-	const returnOrigin = browser ? $page.url?.searchParams?.get('from') : null;
+	const returnOrigin = browser ? page.url?.searchParams?.get('from') : null;
 	const returningFromGallery = returnOrigin === 'gallery';
 	const returningFromStudio = returnOrigin === 'studio';
 	const isReturning = returningFromGallery || returningFromStudio;
@@ -76,21 +83,59 @@
 	let returnVeilVisible = $state(isReturning);
 	let exitVeilVisible = $state(false);
 	let exitTarget = $state<string | null>(null);
+	// The postcard the gallery opens on arrival, when a best piece was picked.
+	let exitState: App.PageState = {};
 
 	/*
 	 * three.js + threlte + GLTF + DRACO are ~344KB gz — three times the rest of
 	 * the app — and none of it is needed for the controls the visitor actually
 	 * clicks first. The scene is imported after mount so Come In and the nav
-	 * hydrate ahead of it; the loading card below is rendered from first paint so
-	 * the frame is never an empty hole while the chunk is in flight.
+	 * hydrate ahead of it; the room's pencil sketch below is there from first
+	 * paint, so the frame is never an empty hole while the chunk is in flight.
 	 */
 	let SceneComponent = $state<
-		typeof import('$lib/features/home-entry-scene/scene/StudioScene.svelte').default | null
+		typeof import('#lib/features/home-entry-scene/scene/StudioScene.svelte').default | null
 	>(null);
-	let sceneMediaState = $state<'error' | 'loaded' | 'pending'>('pending');
 
+	let sceneMediaState = $state<'error' | 'loaded' | 'pending'>('pending');
 	const sceneReady = $derived(sceneMediaState === 'loaded');
 	const sceneFailed = $derived(sceneMediaState === 'error');
+	/** Each try at the real room mounts the scene afresh, with its own loader cache. */
+	let sceneAttempt = $state(0);
+	/** Without WebGL another try could only fail again. */
+	let sceneCanRetry = $state(true);
+	let sceneLoadAbandoned = false;
+
+	/*
+	 * The scene's code and model are hashed files, and a tab opened before a
+	 * release asks for ones the server no longer has. The sketch stays on
+	 * loading while that is checked; when a release is out, the page reloads
+	 * into it.
+	 */
+	const sceneFailedToLoad = async () => {
+		if (await reloadIntoNewRelease()) return;
+		sceneMediaState = 'error';
+	};
+
+	const loadSceneCode = () => {
+		void import('#lib/features/home-entry-scene/scene/StudioScene.svelte')
+			.then((module) => {
+				if (!sceneLoadAbandoned) {
+					SceneComponent = module.default;
+				}
+			})
+			.catch(() => {
+				if (!sceneLoadAbandoned) {
+					void sceneFailedToLoad();
+				}
+			});
+	};
+
+	const retryScene = () => {
+		sceneMediaState = 'pending';
+		sceneAttempt += 1;
+		if (!SceneComponent) loadSceneCode();
+	};
 
 	let exitDelayedCall: gsap.core.Tween | null = null;
 	let returnFadeSafetyHandle: ReturnType<typeof setTimeout> | null = null;
@@ -98,35 +143,31 @@
 
 	/** Clean the ?from= param from the URL without triggering navigation. */
 	if (browser && isReturning) {
-		replaceState(resolve('/'), window.history.state);
+		goto(resolve('/'), { shallow: true, replace: true, state: window.history.state });
 	}
 
 	onMount(() => {
-		let cancelled = false;
-
 		/*
-		 * The 109KB /draw table background used to be warmed by the root layout,
-		 * so /gallery and /admin paid for it too. The Studio button below is the
-		 * primary path to /draw, so the warm-up belongs here; the module-level
+		 * The /draw desk used to be warmed by the root layout, so /gallery and
+		 * /admin paid for it too. The Studio button below is the primary path
+		 * to /draw, so the warm-up belongs here; the module-level
 		 * guard in the helper keeps this and the gallery's own warm-up from
 		 * fetching it twice.
 		 */
 		const cancelStudioBackgroundWarmup = scheduleStudioBackgroundWarmup();
 
-		void import('$lib/features/home-entry-scene/scene/StudioScene.svelte')
-			.then((module) => {
-				if (!cancelled) {
-					SceneComponent = module.default;
-				}
-			})
-			.catch(() => {
-				if (!cancelled) {
-					sceneMediaState = 'error';
-				}
-			});
+		// Without WebGL the scene could only fail, after downloading three.js to
+		// find out; the sketch is the whole answer.
+		if (!browserSupportsWebGL()) {
+			sceneCanRetry = false;
+			sceneMediaState = 'error';
+			return cancelStudioBackgroundWarmup;
+		}
+
+		loadSceneCode();
 
 		return () => {
-			cancelled = true;
+			sceneLoadAbandoned = true;
 			cancelStudioBackgroundWarmup();
 		};
 	});
@@ -140,6 +181,7 @@
 	 */
 	$effect(() => () => {
 		exitDelayedCall?.kill();
+		exitDelayedCall = null;
 
 		if (returnFadeSafetyHandle !== null) {
 			clearTimeout(returnFadeSafetyHandle);
@@ -189,16 +231,17 @@
 	});
 
 	/** Drops the veil over the page; navigation happens when it is down. */
-	const startExitTo = (target: string) => {
+	const startExitTo = (target: string, state: App.PageState = {}) => {
 		exitTarget = target;
+		exitState = state;
 		exitVeilVisible = true;
 	};
 
 	const completeExit = () => {
 		if (!exitTarget) return;
 
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- both targets are resolved routes, extended with query params in navigation-warmup
-		void goto(exitTarget);
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the targets are resolved routes, extended with query params in navigation-warmup
+		void goto(exitTarget, { state: exitState });
 	};
 
 	/** Called by PersistentNav when the GALLERY button is clicked. */
@@ -221,23 +264,52 @@
 		});
 	};
 
-	/** Called when the Studio button is clicked — plays top-close animation then navigates to /draw. */
-	const handleStudioNavigate = () => {
+	/*
+	 * Called when a best piece on the right wall is picked: the same walk into
+	 * the gallery, into the Hall of Fame those pieces hang in, which opens the
+	 * artwork's postcard on arrival.
+	 */
+	const handleArtworkNavigate = (artworkId: string) => {
+		if (isExiting) return;
+		isExiting = true;
+		scenePose = 'left-wall';
+		warmNavigationTargetWhenIdle(homeHallOfFameTarget);
+
+		const holdSeconds = prefersReducedMotion() ? 0 : GALLERY_EXIT_HOLD;
+		exitDelayedCall = gsap.delayedCall(holdSeconds, () => {
+			startExitTo(homeHallOfFameTarget, {
+				galleryDetail: { artworkId, roomId: 'hall-of-fame', source: 'external' }
+			});
+		});
+	};
+
+	/*
+	 * Called when the Studio button is clicked. The camera ends on the side
+	 * table's sketchbook, lying where the studio lays its own closed book, on
+	 * the desk the studio is drawn on (shared-ui/studio-handoff.ts): the room
+	 * itself is the way in, so no veil drops over it. The studio is shown once
+	 * the move is over and its desk is ready to paint.
+	 */
+	const handleStudioNavigate = (wishId?: string) => {
 		if (isExiting) return;
 		isExiting = true;
 		scenePose = 'top-close';
 
+		const studioTarget = wishId
+			? `${homeStudioTarget}?wish=${encodeURIComponent(wishId)}`
+			: homeStudioTarget;
+
 		warmNavigationTargetWhenIdle(homeStudioTarget);
+		const deskReady = readyStudioBackground();
+		const moveSeconds = prefersReducedMotion() ? 0 : TOP_CLOSE_DURATION;
 
-		// Start the fade overlay near the end of the camera animation so
-		// navigation overlaps with the final stretch: the veil takes
-		// FADE_DURATION_S, so we begin it (duration − veil − 0.15)s in.
-		const fadeDelay = prefersReducedMotion()
-			? 0
-			: Math.max(0, TOP_CLOSE_DURATION - FADE_DURATION_S - 0.15);
-
-		exitDelayedCall = gsap.delayedCall(fadeDelay, () => {
-			startExitTo(homeStudioTarget);
+		exitDelayedCall = gsap.delayedCall(moveSeconds, () => {
+			void deskReady.then(() => {
+				if (!exitDelayedCall) return;
+				handOverBook();
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- it starts from a resolved route
+				void goto(studioTarget);
+			});
 		});
 	};
 </script>
@@ -248,49 +320,69 @@
 		requested once the scene chunk executes, and the decoder only once the GLB
 		header has been parsed. Prefetching overlaps both with hydration.
 	-->
-	<link rel="prefetch" href="/models/studio-transformed.glb" />
+	<link rel="prefetch" href={STUDIO_MODEL_URL} />
 	<link rel="prefetch" href="/draco/draco_wasm_wrapper.js" />
 	<link rel="prefetch" href="/draco/draco_decoder.wasm" />
 </svelte:head>
 
 <div
-	class="relative h-screen w-full overflow-hidden bg-gradient-to-br from-shell via-paper-bright to-[#e8e0d5]"
+	class="home-entry-page relative h-dvh w-full overflow-hidden bg-gradient-to-br from-shell via-paper-bright to-[#e8e0d5]"
+	data-visitor={user ? 'signed-in' : 'guest'}
 >
 	<div class="absolute inset-0 flex items-center justify-center">
-		<div class="relative h-full w-full opacity-80">
+		<div class="relative h-full w-full">
 			<div
 				class="relative h-full w-full overflow-hidden border-[var(--border-frame)] bg-[radial-gradient(circle_at_50%_18%,_rgba(255,255,255,0.44),_transparent_30%),linear-gradient(180deg,_#ccb194_0%,_#8b6f57_100%)] shadow-strong"
 			>
+				<!-- The sketch fades out as the room fades in over it, then leaves the page. -->
 				<div
 					aria-hidden={sceneReady}
-					class={`absolute inset-0 z-10 transition-opacity duration-500 ${sceneReady ? 'opacity-0' : 'opacity-100'}`}
+					class={`absolute inset-0 z-10 transition-[opacity,visibility] duration-500 ${sceneReady ? 'invisible opacity-0' : 'opacity-100'}`}
 				>
-					<StudioLoadingFallback failed={sceneFailed} />
+					<StudioLoadingFallback
+						failed={sceneFailed}
+						onRetry={sceneCanRetry ? retryScene : undefined}
+					/>
 				</div>
 				{#if SceneComponent}
-					<SceneComponent
-						{entryState}
-						{initialPose}
-						{scenePose}
-						avatarUrl={user?.avatarUrl ?? null}
-						artworkSlots={sceneArtworks}
-						onMediaStateChange={(state) => {
-							sceneMediaState = state;
-						}}
-					/>
+					<!--
+						The scene is decoration. Without a WebGL context three.js throws while
+						the canvas mounts, and an uncaught error there stopped the whole page:
+						Come In never opened the auth overlay. The boundary keeps the failure
+						inside the frame and leaves the sketch in its place.
+					-->
+					{#key sceneAttempt}
+						<svelte:boundary
+							onerror={() => {
+								void sceneFailedToLoad();
+							}}
+						>
+							<SceneComponent
+								{entryState}
+								{initialPose}
+								{scenePose}
+								avatarUrl={user?.avatarUrl ?? null}
+								artworkSlots={sceneArtworks}
+								onMediaStateChange={(state) => {
+									if (state === 'error') void sceneFailedToLoad();
+									else sceneMediaState = state;
+								}}
+							/>
+							{#snippet failed()}{/snippet}
+						</svelte:boundary>
+					{/key}
 				{/if}
 			</div>
-			<div
-				class="bg-gradient-radial absolute inset-0 from-transparent via-transparent to-shell"
-			></div>
 		</div>
 	</div>
-	<HomeHeroOverlay {isExiting} />
+	<HomeHeroOverlay {isExiting} isInside={Boolean(user)} />
 	<PersistentNav
 		{adultContentEnabled}
 		{isExiting}
 		{onAvatarSaved}
+		onArtworkNavigate={handleArtworkNavigate}
 		onGalleryNavigate={handleGalleryNavigate}
+		onWishTaken={handleStudioNavigate}
 		{previewCards}
 		{user}
 	/>
@@ -305,7 +397,7 @@
 				variant="primary"
 				size="hero"
 				className="shadow-[0_16px_40px_rgba(0,0,0,0.35)]"
-				onclick={handleStudioNavigate}
+				onclick={() => handleStudioNavigate()}
 			>
 				<Paintbrush size={28} />
 				<span>Studio</span>
@@ -325,3 +417,34 @@
 
 <!-- Leaving for one: the veil drops over the camera move, then we navigate. -->
 <PageFadeOverlay direction="in" onComplete={completeExit} visible={exitVeilVisible} />
+
+<style>
+	/* A big screen gets a bigger front door, as the gallery does: past 1440px
+	 * the page's rem grows with the window, up to half as big again. */
+	:global(html:has(.home-entry-page)) {
+		font-size: clamp(100%, 100vw / 90, 150%);
+	}
+
+	/*
+	 * Where a signed-in artist's badge and Logout stand (PersistentNav). The
+	 * badge is drawn in em: full size on a tall screen, smaller where room is
+	 * short.
+	 */
+	.home-entry-page {
+		--account-top: 1rem;
+		--account-em: 0.7rem;
+	}
+
+	@media (orientation: landscape) and (min-width: 48rem) and (min-height: 40rem) {
+		.home-entry-page {
+			--account-top: 2rem;
+			--account-em: 0.8rem;
+		}
+	}
+
+	@media (orientation: landscape) and (min-width: 48rem) and (min-height: 56rem) {
+		.home-entry-page {
+			--account-em: 1rem;
+		}
+	}
+</style>

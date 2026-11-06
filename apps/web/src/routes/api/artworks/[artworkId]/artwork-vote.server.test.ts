@@ -1,32 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 const mocked = vi.hoisted(() => ({
 	applyArtworkVote: vi.fn(),
-	getIp: vi.fn(() => '127.0.0.1'),
+	getIP: vi.fn(() => '127.0.0.1'),
 	removeArtworkVote: vi.fn()
 }));
 
-vi.mock('$lib/server/artwork/service', () => ({
+vi.mock('#lib/server/artwork/service.js', () => ({
 	applyArtworkVote: mocked.applyArtworkVote,
 	removeArtworkVote: mocked.removeArtworkVote
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		options: {}
 	}
 }));
 
 vi.mock('better-auth/api', () => ({
-	getIp: mocked.getIp
+	getIP: mocked.getIP
 }));
 
 describe('artwork vote endpoint', () => {
 	beforeEach(() => {
 		mocked.applyArtworkVote.mockReset();
 		mocked.removeArtworkVote.mockReset();
-		mocked.getIp.mockClear();
+		mocked.getIP.mockClear();
 	});
 
 	it('applies authenticated vote transitions', async () => {

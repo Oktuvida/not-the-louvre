@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 const mocked = vi.hoisted(() => ({
 	moderateAvatar: vi.fn()
 }));
 
-vi.mock('$lib/server/user/avatar.service', async () => {
-	const actual = await vi.importActual<object>('$lib/server/user/avatar.service');
+vi.mock('#lib/server/user/avatar.service.js', async () => {
+	const actual = await vi.importActual<object>('#lib/server/user/avatar.service.js');
 	return {
 		...actual,
 		avatarService: {

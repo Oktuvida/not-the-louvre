@@ -30,7 +30,7 @@ const isProtectedProductMutation = (request: Request) => {
 	}
 
 	const { pathname } = new URL(request.url);
-	return pathname.startsWith('/api/') && !pathname.startsWith('/api/auth');
+	return pathname.startsWith('/api/');
 };
 
 export const getTrustedOriginDecision = (request: Request) => {

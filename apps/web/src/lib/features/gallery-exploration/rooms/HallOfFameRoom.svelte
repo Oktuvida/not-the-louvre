@@ -1,27 +1,35 @@
 <script lang="ts">
-	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
-	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
-	import ScrollSentinel from '$lib/features/gallery-exploration/components/ScrollSentinel.svelte';
-	import VirtualizedGrid from '$lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import ArtworkFrame from '#lib/features/artwork-presentation/components/ArtworkFrame.svelte';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import { resolveArtworkFrame } from '#lib/features/artwork-presentation/model/frame.js';
+	import NsfwImage from '#lib/features/gallery-exploration/components/NsfwImage.svelte';
+	import ScrollSentinel from '#lib/features/gallery-exploration/components/ScrollSentinel.svelte';
+	import VirtualizedGrid from '#lib/features/gallery-exploration/components/VirtualizedGrid.svelte';
+	import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
 	import type {
 		GalleryPageInfo,
 		LoadMoreArtworks
-	} from '$lib/features/gallery-exploration/model/discovery';
-	import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
-	import { createSeededAccumulator } from '$lib/features/gallery-exploration/use-seeded-accumulator.svelte';
-	import PolaroidCard from '$lib/features/shared-ui/components/PolaroidCard.svelte';
-	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
-	import WaxSealMedal from '$lib/features/shared-ui/components/WaxSealMedal.svelte';
+	} from '#lib/features/gallery-exploration/model/discovery.js';
+	import type { GalleryRoomId } from '#lib/features/gallery-exploration/model/rooms.js';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import { createSeededAccumulator } from '#lib/features/gallery-exploration/use-seeded-accumulator.svelte.js';
+	import PolaroidCard from '#lib/features/shared-ui/components/PolaroidCard.svelte';
+	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import AwardMark from '#lib/features/shared-ui/components/AwardMark.svelte';
+	import type { AwardStyle } from '#lib/features/shared-ui/award-style.js';
 	import { writable, type Writable } from 'svelte/store';
 
 	interface Props {
 		artworks: Artwork[];
 		pageInfo: GalleryPageInfo;
 		adultContentEnabled: boolean;
+		/** The award style this visit to the gallery drew. */
+		awardStyle?: AwardStyle;
 		feedCacheKey?: GalleryRoomId | null;
+		/** The seed is one the room already had, standing in until the server's fresh page lands. */
+		seedIsRemembered?: boolean;
+		/** The room came drawn by the server, with the page, rather than built in the browser. */
+		serverRendered?: boolean;
 		loadMoreArtworks?: LoadMoreArtworks;
 		onPrefetch?: (artworkId: string) => void;
 		onSelect: (artwork: Artwork) => void;
@@ -33,7 +41,10 @@
 		artworks,
 		pageInfo,
 		adultContentEnabled,
+		awardStyle = 'stamps',
 		feedCacheKey = null,
+		seedIsRemembered = false,
+		serverRendered = true,
 		loadMoreArtworks,
 		onPrefetch,
 		onSelect,
@@ -71,44 +82,51 @@
 			revealedIds: $revealedIds
 		});
 
+	// Each place is engraved on the metal of its frame: brass, nickel, copper.
 	const podiumMeta = {
 		1: {
+			awardTilt: -9,
 			height: 'h-76 md:h-[22rem]',
-			label: 'CHAMPION',
+			label: 'Champion',
 			width: 'w-76 md:w-[22rem]',
-			bannerBg: 'linear-gradient(180deg, #e2bb55, #c89a35)',
-			bannerInk: '#4a3408',
-			plateBg: 'linear-gradient(170deg, #dcbd72 0%, #c2a04a 45%, #a8862e 100%)',
-			plateBorder: '#7a5c1d',
-			plateInk: '#3a2a08',
-			plateSoft: '#5c451a',
-			plateHi: 'rgba(255, 244, 208, 0.55)'
+			plateBg: 'linear-gradient(135deg, #f6dd92 0%, #d5a645 38%, #f0cf72 55%, #b48630 100%)',
+			plateInk: '#4a3008',
+			plateHi: 'rgb(255 240 190 / 0.75)',
+			plateRuleLight: 'rgb(255 244 200 / 0.55)',
+			plateRuleDark: 'rgb(120 82 24 / 0.35)',
+			screwLight: '#fff2c0',
+			screwDark: '#9a7224'
 		},
 		2: {
+			awardTilt: 7,
 			height: 'h-68 md:h-[19rem]',
-			label: 'RUNNER UP',
+			label: 'Runner up',
 			width: 'w-68 md:w-[19rem]',
-			bannerBg: 'linear-gradient(180deg, #cdd1d9, #aab0bc)',
-			bannerInk: '#32363f',
-			plateBg: 'linear-gradient(170deg, #dfe1e6 0%, #bfc3cb 45%, #9fa5b1 100%)',
-			plateBorder: '#767c88',
-			plateInk: '#23262d',
-			plateSoft: '#43474f',
-			plateHi: 'rgba(255, 255, 255, 0.5)'
+			plateBg: 'linear-gradient(135deg, #f1f3f6 0%, #c3c8d0 38%, #e6e9ee 55%, #9aa1ac 100%)',
+			plateInk: '#2b2f36',
+			plateHi: 'rgb(255 255 255 / 0.75)',
+			plateRuleLight: 'rgb(255 255 255 / 0.6)',
+			plateRuleDark: 'rgb(70 76 88 / 0.35)',
+			screwLight: '#ffffff',
+			screwDark: '#747b88'
 		},
 		3: {
+			awardTilt: -4,
 			height: 'h-60 md:h-[16rem]',
-			label: 'BRONZE STAR',
+			label: 'Bronze star',
 			width: 'w-60 md:w-[16rem]',
-			bannerBg: 'linear-gradient(180deg, #cf9357, #ad6e33)',
-			bannerInk: '#42250c',
-			plateBg: 'linear-gradient(170deg, #d49a64 0%, #b07238 45%, #8d5524 100%)',
-			plateBorder: '#6b3f17',
-			plateInk: '#2f1a06',
-			plateSoft: '#53300f',
-			plateHi: 'rgba(255, 225, 196, 0.45)'
+			plateBg: 'linear-gradient(135deg, #f3c69a 0%, #c9824a 38%, #e8b27f 55%, #9a5a2c 100%)',
+			plateInk: '#3e1f08',
+			plateHi: 'rgb(255 226 196 / 0.7)',
+			plateRuleLight: 'rgb(255 230 205 / 0.5)',
+			plateRuleDark: 'rgb(100 50 20 / 0.35)',
+			screwLight: '#ffe0c2',
+			screwDark: '#8a4f24'
 		}
 	} as const;
+
+	// UTC, so the server and the browser engrave the same year.
+	const yearOf = (artwork: Artwork) => new Date(artwork.timestamp).getUTCFullYear();
 
 	const podiumArtworks = $derived([
 		{ artwork: artworks[0], position: 1 as const },
@@ -122,18 +140,26 @@
 	// The podium owns the top three; the grid below it starts at the fourth. The
 	// seed identity is still computed on the whole list, so a reorder confined to
 	// the podium keeps reseeding the grid underneath it.
+	// The grid's measured rows travel with the feed, so coming back lands on
+	// the same card rather than on the same pixel of an estimated layout.
+	let grid = $state<{ snapshotLayout(): GridLayoutSnapshot | null }>();
+
 	const accumulator = createSeededAccumulator({
 		getFeedCacheKey: () => feedCacheKey,
+		getSeedIsRemembered: () => seedIsRemembered,
 		getArtworks: () => artworks,
+		getLayout: () => grid?.snapshotLayout() ?? null,
 		getLoadMoreArtworks: () => loadMoreArtworks,
 		getPageInfo: () => pageInfo,
 		transformSeed: (items) => items.slice(3)
 	});
 </script>
 
+<!-- The podium stands in a row from xl: its three frames need 62rem, more
+     than a 1024px screen holds beside its margins, so narrower ones stack it. -->
 <div class="space-y-12">
 	<div
-		class="mb-16 flex flex-col items-center justify-center gap-8 lg:flex-row lg:items-end lg:gap-10"
+		class="mb-16 flex flex-col items-center justify-center gap-8 xl:flex-row xl:items-end xl:gap-10"
 	>
 		{#each podiumArtworks as entry (`podium-${entry.position}-${entry.artwork?.id ?? 'empty'}`)}
 			{@const artwork = entry.artwork}
@@ -142,18 +168,8 @@
 				{@const meta = podiumMeta[position]}
 				{@const frame = frameForArtwork(artwork.id, position)}
 				<div class="relative flex flex-col items-center gap-5">
-					<div class="relative mb-5 flex flex-col items-center gap-3">
-						<WaxSealMedal
-							className={position === 2 ? 'rotate-2' : '-rotate-3'}
-							{position}
-							size={position === 1 ? 'large' : position === 2 ? 'medium' : 'small'}
-						/>
-						<div
-							class="podium-banner"
-							style={`--banner-bg:${meta.bannerBg};--banner-ink:${meta.bannerInk};--banner-tilt:${position === 2 ? 1 : -1.4}deg;`}
-						>
-							{meta.label}
-						</div>
+					<div class="podium-award" style={`rotate: ${meta.awardTilt}deg;`}>
+						<AwardMark {awardStyle} place={position} />
 					</div>
 
 					<button
@@ -181,7 +197,6 @@
 									<NsfwImage
 										src={artwork.imageUrl}
 										alt={artwork.title}
-										placeholder={artwork.imagePlaceholder}
 										blurred={isPodiumBlurred(artwork)}
 										ariaLabel={viewerId
 											? 'Sensitive artwork, click to reveal'
@@ -206,21 +221,20 @@
 						</div>
 					</button>
 
-					<!-- Engraved plate on a walnut backing, like a proper museum award -->
+					<!-- An engraved plate screwed to a walnut block, as a museum labels its prizes. -->
 					<div
 						class="podium-plaque"
 						data-testid={`podium-plaque-${position}`}
-						style={`--plate-bg:${meta.plateBg};--plate-border:${meta.plateBorder};--plate-ink:${meta.plateInk};--plate-soft:${meta.plateSoft};--plate-hi:${meta.plateHi};--plaque-tilt:${position === 2 ? 0.5 : position === 3 ? -0.4 : -0.7}deg;`}
+						style={`--plate-bg:${meta.plateBg};--plate-ink:${meta.plateInk};--plate-hi:${meta.plateHi};--plate-rule-light:${meta.plateRuleLight};--plate-rule-dark:${meta.plateRuleDark};--screw-light:${meta.screwLight};--screw-dark:${meta.screwDark};--plaque-tilt:${position === 2 ? 0.5 : position === 3 ? -0.4 : -0.7}deg;`}
 					>
 						<div class="plaque-plate">
 							<span class="plaque-screw screw-tl" aria-hidden="true"></span>
 							<span class="plaque-screw screw-tr" aria-hidden="true"></span>
 							<span class="plaque-screw screw-bl" aria-hidden="true"></span>
 							<span class="plaque-screw screw-br" aria-hidden="true"></span>
-							<div class="plaque-title">{artwork.title}</div>
-							<div class="plaque-divider" aria-hidden="true"></div>
-							<div class="plaque-artist">{artwork.artist}</div>
-							<div class="plaque-score">⭐ {artwork.score}</div>
+							<p class="plaque-title">{artwork.title}</p>
+							<p class="plaque-artist">{artwork.artist} · {yearOf(artwork)}</p>
+							<p class="plaque-place">{meta.label} · ★ {artwork.score}</p>
 						</div>
 					</div>
 				</div>
@@ -229,7 +243,12 @@
 	</div>
 
 	<div class="w-full">
-		<VirtualizedGrid items={accumulator.allArtworks}>
+		<VirtualizedGrid
+			bind:this={grid}
+			items={accumulator.allArtworks}
+			restoredLayout={accumulator.restoredLayout}
+			{serverRendered}
+		>
 			{#snippet renderCard(artwork)}
 				<PolaroidCard
 					{artwork}
@@ -249,161 +268,102 @@
 			error={accumulator.error}
 			hasMore={accumulator.hasMore}
 			isLoading={accumulator.isLoading}
-			rootMargin="500px"
 			onRetry={() => accumulator.retry()}
 			skeletonCount={3}
-			skeletonGridClassName="grid gap-12 py-6"
 			onTrigger={() => accumulator.loadMore()}
 		/>
 	</div>
 </div>
 
 <style>
-	/* award ribbon under the rosette — notched ends, engraved lettering */
-	.podium-banner {
-		padding: 0.42rem 1.35rem;
-		rotate: var(--banner-tilt, -1.4deg);
-		background:
-			linear-gradient(
-				104deg,
-				transparent 0 44%,
-				rgba(0, 0, 0, 0.08) 48%,
-				rgba(255, 255, 255, 0.05) 50%,
-				transparent 55%
-			),
-			var(--banner-bg);
-		color: var(--banner-ink);
-		font-family: var(--font-display);
-		font-size: 0.68rem;
-		font-weight: 700;
-		letter-spacing: 0.18em;
-		text-transform: uppercase;
-		text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
-		clip-path: polygon(0 0, 100% 0, calc(100% - 9px) 50%, 100% 100%, 0 100%, 9px 50%);
-		box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+	.podium-award {
+		margin-bottom: 0.75rem;
 	}
 
-	/* walnut backing */
+	/* The walnut block, its grain running nearly level. */
 	.podium-plaque {
 		rotate: var(--plaque-tilt, -0.7deg);
-		padding: 5px;
-		border-radius: var(--radius-chip);
-		border: 1px solid #2c1d0e;
-		background: linear-gradient(135deg, #4a3522 0%, #3a2817 55%, #2e1f10 100%);
-		box-shadow:
-			0 6px 16px rgba(0, 0, 0, 0.4),
-			inset 0 1px 0 rgba(255, 235, 200, 0.12);
+		padding: 0.875rem;
+		border-radius: 6px;
+		background-image:
+			repeating-linear-gradient(8deg, rgb(255 255 255 / 0.04) 0 2px, transparent 2px 9px),
+			linear-gradient(160deg, #6b4128, #4a2a18 60%, #3a2012);
+		box-shadow: 0 8px 16px rgb(30 15 5 / 0.45);
 	}
 
-	/* brushed, engraved metal plate */
+	/* The engraved plate: a bevelled edge and an inner rule, the lettering cut in. */
 	.plaque-plate {
 		position: relative;
-		min-width: 11rem;
-		max-width: 16rem;
-		padding: 0.7rem 1.4rem 0.65rem;
-		text-align: center;
-		border-radius: var(--radius-hairline);
-		border: 1px solid var(--plate-border);
-		background:
-			repeating-linear-gradient(
-				90deg,
-				rgba(255, 255, 255, 0.045) 0 1px,
-				rgba(0, 0, 0, 0.025) 1px 3px
-			),
-			var(--plate-bg);
+		/* As wide as its title needs, between a label and a plaque's worth. */
+		width: max-content;
+		min-width: 13.375rem;
+		max-width: min(17rem, calc(100vw - 4rem));
+		padding: 1rem 1.125rem 0.875rem;
+		border-radius: 3px;
+		background: var(--plate-bg);
 		box-shadow:
-			inset 0 1px 0 var(--plate-hi),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.22),
-			inset 1px 0 0 var(--plate-hi),
-			inset -1px 0 0 rgba(0, 0, 0, 0.12);
-	}
-
-	/* tarnish creeping in from the corners and the bottom edge */
-	.plaque-plate::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		border-radius: inherit;
-		pointer-events: none;
-		background:
-			radial-gradient(circle at 6% 8%, rgba(56, 38, 12, 0.16), transparent 26%),
-			radial-gradient(circle at 95% 90%, rgba(40, 26, 8, 0.2), transparent 32%),
-			radial-gradient(ellipse at 50% 108%, rgba(46, 30, 10, 0.14), transparent 42%);
-	}
-
-	.plaque-screw {
-		position: absolute;
-		width: 4px;
-		height: 4px;
-		border-radius: 50%;
-		background: radial-gradient(circle at 35% 30%, var(--plate-hi), var(--plate-border) 75%);
-		box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.35);
-	}
-
-	.screw-tl {
-		top: 5px;
-		left: 5px;
-	}
-	.screw-tr {
-		top: 5px;
-		right: 5px;
-	}
-	.screw-bl {
-		bottom: 5px;
-		left: 5px;
-	}
-	.screw-br {
-		bottom: 5px;
-		right: 5px;
-	}
-
-	/* engraved (letterpress) text */
-	.plaque-title {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-family: var(--font-display);
-		font-size: 0.84rem;
-		font-weight: 700;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
+			inset 0 0 0 2px var(--plate-rule-light),
+			inset 0 0 0 5px var(--plate-rule-dark),
+			0 2px 3px rgb(0 0 0 / 0.4);
+		text-align: center;
 		color: var(--plate-ink);
 		text-shadow: 0 1px 0 var(--plate-hi);
 	}
 
-	.plaque-divider {
-		margin: 0.35rem auto;
-		height: 1px;
-		width: 72%;
-		background: linear-gradient(
-			90deg,
-			transparent,
-			var(--plate-border) 25%,
-			var(--plate-border) 75%,
-			transparent
-		);
-		box-shadow: 0 1px 0 var(--plate-hi);
+	.plaque-screw {
+		position: absolute;
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: radial-gradient(circle at 35% 35%, var(--screw-light), var(--screw-dark));
 	}
 
-	.plaque-artist {
+	.screw-tl {
+		top: 7px;
+		left: 7px;
+	}
+	.screw-tr {
+		top: 7px;
+		right: 7px;
+	}
+	.screw-bl {
+		bottom: 7px;
+		left: 7px;
+	}
+	.screw-br {
+		right: 7px;
+		bottom: 7px;
+	}
+
+	.plaque-title {
+		margin: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-size: 0.74rem;
-		font-weight: 600;
-		font-style: italic;
-		letter-spacing: 0.06em;
-		color: var(--plate-soft);
-		text-shadow: 0 1px 0 var(--plate-hi);
+		font-family: var(--font-display);
+		font-size: 0.9375rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
 	}
 
-	.plaque-score {
-		margin-top: 0.3rem;
-		font-family: var(--font-display);
-		font-size: 0.62rem;
+	.plaque-artist {
+		margin: 0.25rem 0 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-family: var(--font-hand);
+		font-size: 1.25rem;
 		font-weight: 700;
-		letter-spacing: 0.16em;
-		color: var(--plate-soft);
-		text-shadow: 0 1px 0 var(--plate-hi);
+		line-height: 1.1;
+	}
+
+	.plaque-place {
+		margin: 0.375rem 0 0;
+		font-family: var(--font-display);
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.2em;
+		text-transform: uppercase;
 	}
 </style>

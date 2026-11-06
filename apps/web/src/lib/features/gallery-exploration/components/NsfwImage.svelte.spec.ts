@@ -7,11 +7,9 @@ import NsfwImage from './NsfwImage.svelte';
 // way they do against the media route.
 const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-const placeholderLayer = () => document.querySelector('.nsfw-placeholder');
-
 describe('NsfwImage', () => {
 	it('applies blur classes when blurred prop is true', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: 'https://example.com/nsfw.avif',
 			alt: 'Sensitive artwork',
 			blurred: true,
@@ -25,7 +23,7 @@ describe('NsfwImage', () => {
 	});
 
 	it('renders normally without blur when blurred prop is false', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: 'https://example.com/safe.avif',
 			alt: 'Safe artwork',
 			blurred: false
@@ -38,7 +36,7 @@ describe('NsfwImage', () => {
 	});
 
 	it('shows 18+ badge overlay when blurred', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: 'https://example.com/nsfw.avif',
 			alt: 'Sensitive artwork',
 			blurred: true
@@ -50,7 +48,7 @@ describe('NsfwImage', () => {
 	});
 
 	it('does not show 18+ badge overlay when not blurred', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: 'https://example.com/safe.avif',
 			alt: 'Safe artwork',
 			blurred: false
@@ -62,7 +60,7 @@ describe('NsfwImage', () => {
 	});
 
 	it('keeps the blur but drops the badge when the caller paints its own scrim', async () => {
-		render(NsfwImage, {
+		await render(NsfwImage, {
 			src: 'https://example.com/nsfw.avif',
 			alt: 'Sensitive artwork',
 			blurred: true,
@@ -79,58 +77,33 @@ describe('NsfwImage', () => {
 		expect(document.querySelector('.nsfw-scrim')).toBeNull();
 	});
 
-	it('keeps the placeholder mounted but drops its blur once the photo is opaque', async () => {
-		render(NsfwImage, {
-			src: PIXEL,
-			alt: 'Retired placeholder artwork',
-			placeholder: PIXEL
+	// A photo that never arrived used to leave the browser's broken-image icon
+	// and the bare title on the polaroid.
+	it('shows a calm pencil note instead of a broken picture when the photo will not come', async () => {
+		// Eager: a lazy photo is only asked for once the page has painted, and a
+		// busy machine can keep a spec's page from painting for as long as it likes.
+		await render(NsfwImage, {
+			alt: 'Ocean Breeze',
+			loading: 'eager',
+			src: '/no-such-artwork.webp'
 		});
 
-		const image = page.getByAltText('Retired placeholder artwork');
-		await expect.element(image).toBeInTheDocument();
-
-		await vi.waitFor(() => {
-			expect(image.element().className).toContain('is-loaded');
-		});
-		await vi.waitFor(
-			() => {
-				const layer = placeholderLayer();
-				expect(layer).not.toBeNull();
-				expect(layer?.className).toContain('is-retired');
-			},
-			{ timeout: 2000 }
-		);
-	});
-
-	it('never retires the placeholder under a sensitive photo, so no sharp LQIP leaks', async () => {
-		render(NsfwImage, {
-			src: PIXEL,
-			alt: 'Sensitive placeholder artwork',
-			blurred: true,
-			placeholder: PIXEL
-		});
-
-		const image = page.getByAltText('Sensitive placeholder artwork');
-		await expect.element(image).toBeInTheDocument();
-
-		await vi.waitFor(() => {
-			expect(image.element().className).toContain('is-loaded');
-		});
-
-		const layer = placeholderLayer();
-		expect(layer?.className).toContain('is-sensitive');
-		expect(layer?.className).not.toContain('is-retired');
+		await expect.element(page.getByText(/didn.t develop/i)).toBeVisible();
+		// Not drawn, so no broken picture shows; still named for a screen reader.
+		await expect
+			.element(page.getByRole('img', { name: 'Ocean Breeze' }))
+			.toHaveStyle({ opacity: '0' });
 	});
 
 	it('re-shows a recycled card instantly instead of replaying the fade', async () => {
-		const first = render(NsfwImage, { src: PIXEL, alt: 'First mount' });
+		const first = await render(NsfwImage, { src: PIXEL, alt: 'First mount' });
 
 		await vi.waitFor(() => {
 			expect(page.getByAltText('First mount').element().className).toContain('is-loaded');
 		});
 		first.unmount();
 
-		render(NsfwImage, { src: PIXEL, alt: 'Recycled mount' });
+		await render(NsfwImage, { src: PIXEL, alt: 'Recycled mount' });
 
 		// Same source, already decoded this session: opaque on the first frame.
 		expect(page.getByAltText('Recycled mount').element().className).toContain('is-loaded');

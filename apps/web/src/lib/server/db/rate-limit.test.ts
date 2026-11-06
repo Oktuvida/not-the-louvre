@@ -126,27 +126,41 @@ describe('rate-limit counting rule', () => {
 	 */
 	const render = (fragment: SQL) => dialect.sqlToQuery(fragment).sql.replace(/\s+/g, ' ').trim();
 
+	// The stored row is always table-qualified: a bare `"blocked_until"` in
+	// `do update set` matches both the table and `excluded`, and Postgres
+	// rejects the statement as ambiguous (42702) before it ever runs.
+	const stored = (column: string) => `"app"."artwork_engagement_rate_limits"."${column}"`;
+	const isBlocked = `${stored('blocked_until')} is not null and ${stored('blocked_until')} > excluded."last_attempt_at"`;
+
+	it('never leaves a stored column unqualified', () => {
+		const set = rateLimitAttemptSet(artworkEngagementRateLimits, policy);
+		const clauses = [set.attemptCount, set.blockedUntil, set.windowStartedAt].map((fragment) =>
+			render(fragment as SQL)
+		);
+
+		for (const clause of clauses) {
+			expect(clause).not.toMatch(/(^|[\s(])"(attempt_count|blocked_until|window_started_at)"/);
+		}
+	});
+
 	it('renders the freeze, the bump and the fresh window into the shipped clause', () => {
 		const set = rateLimitAttemptSet(artworkEngagementRateLimits, policy);
 		const attemptCount = render(set.attemptCount as SQL);
 		const windowStartedAt = render(set.windowStartedAt as SQL);
 
-		const isBlocked =
-			'"blocked_until" is not null and "blocked_until" > excluded."last_attempt_at"';
-		const isWithinWindow =
-			'excluded."last_attempt_at" <= "window_started_at" + make_interval(secs => $1::double precision)';
+		const isWithinWindow = `excluded."last_attempt_at" <= ${stored('window_started_at')} + make_interval(secs => $1::double precision)`;
 
 		// Frozen while blocked: the stored count is kept, not bumped.
-		expect(attemptCount).toContain(`when ${isBlocked} then "attempt_count"`);
+		expect(attemptCount).toContain(`when ${isBlocked} then ${stored('attempt_count')}`);
 		// Inside the window it bumps, outside it starts a fresh window at 1.
-		expect(attemptCount).toContain(`when ${isWithinWindow} then "attempt_count" + 1`);
+		expect(attemptCount).toContain(`when ${isWithinWindow} then ${stored('attempt_count')} + 1`);
 		expect(attemptCount).toContain('else 1 end');
 
 		// The window is kept in both of those cases and only re-anchored on the
 		// attempt that opens a new one, so hammering can neither extend a block
 		// nor reset it early.
 		expect(windowStartedAt).toContain(`when ${isBlocked} or ${isWithinWindow}`);
-		expect(windowStartedAt).toContain('then "window_started_at"');
+		expect(windowStartedAt).toContain(`then ${stored('window_started_at')}`);
 		expect(windowStartedAt).toContain('else excluded."window_started_at" end');
 	});
 
@@ -160,9 +174,7 @@ describe('rate-limit counting rule', () => {
 		);
 
 		// An actor already blocked keeps the block they have.
-		expect(artworkBlockedUntil).toContain(
-			'when "blocked_until" is not null and "blocked_until" > excluded."last_attempt_at" then "blocked_until"'
-		);
+		expect(artworkBlockedUntil).toContain(`when ${isBlocked} then ${stored('blocked_until')}`);
 		expect(artworkBlockedUntil).toContain('else null end');
 
 		// Artwork limits anchor at the start of the window that filled up…

@@ -1,11 +1,15 @@
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-import type { GalleryPageInfo } from '$lib/features/gallery-exploration/model/discovery';
-import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+import type {
+	GalleryArtworkPage,
+	GalleryPageInfo
+} from '#lib/features/gallery-exploration/model/discovery.js';
+import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
+import type { GalleryWallId } from '#lib/features/gallery-exploration/model/rooms.js';
 
 /*
  * Per-room feed memory.
  *
- * A room lives inside the `{#key roomId}` block of the gallery layout, so
+ * A room lives inside the keyed room stage of the gallery layout, so
  * switching tabs destroys it along with everything infinite scroll had paged
  * in. Scrolling two hundred artworks deep into the Hot Wall, glancing at the
  * Hall of Fame and coming back used to restart at the first twenty-four, at the
@@ -15,21 +19,30 @@ import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/room
  * This cache lives at module scope, outside every keyed block and every
  * `{#await}`, for the lifetime of the SPA session. A full reload starts empty,
  * which is what we want: a reload is the user asking for fresh data.
+ *
+ * Coming back, the room goes straight up as it was left, from here, while the
+ * server's fresh first page streams; the fresh page then merges into it.
  */
 
 export type RoomFeedSnapshot = {
 	artworks: Artwork[];
+	/** The grid's measured rows, so the saved scroll lands on the same card. */
+	layout?: GridLayoutSnapshot | null;
 	pageInfo: GalleryPageInfo;
 	scrollY: number;
+	/**
+	 * The server's first page as the room last drew it. The room's own feed
+	 * leaves out what it hands elsewhere (the Hall of Fame's podium), and the
+	 * page reads the rest of its state from the seed, so the room is put back
+	 * up from both.
+	 */
+	seed: GalleryArtworkPage;
 };
-
-/** Only the two most recently visited rooms are worth holding on to. */
-const MAX_CACHED_ROOMS = 2;
 
 /** Ten pages of 24. Beyond that, restoring costs more than refetching. */
 const MAX_CACHED_ARTWORKS = 240;
 
-const snapshots = new Map<GalleryRoomId, RoomFeedSnapshot>();
+const snapshots = new Map<GalleryWallId, RoomFeedSnapshot>();
 
 /*
  * A refresh re-streams the room, which unmounts and remounts it — and an
@@ -37,17 +50,17 @@ const snapshots = new Map<GalleryRoomId, RoomFeedSnapshot>();
  * quietly restore the feed the visitor just asked to replace, and Refresh would
  * look like it did nothing.
  */
-const suppressed = new Set<GalleryRoomId>();
+const suppressed = new Set<GalleryWallId>();
 
-export const suppressNextRoomFeedSnapshot = (roomId: GalleryRoomId): void => {
+export const suppressNextRoomFeedSnapshot = (roomId: GalleryWallId): void => {
 	suppressed.add(roomId);
 	snapshots.delete(roomId);
 };
 
-export const readRoomFeedSnapshot = (roomId: GalleryRoomId): RoomFeedSnapshot | null =>
+export const readRoomFeedSnapshot = (roomId: GalleryWallId): RoomFeedSnapshot | null =>
 	snapshots.get(roomId) ?? null;
 
-export const writeRoomFeedSnapshot = (roomId: GalleryRoomId, snapshot: RoomFeedSnapshot): void => {
+export const writeRoomFeedSnapshot = (roomId: GalleryWallId, snapshot: RoomFeedSnapshot): void => {
 	if (suppressed.delete(roomId)) {
 		snapshots.delete(roomId);
 		return;
@@ -72,19 +85,37 @@ export const writeRoomFeedSnapshot = (roomId: GalleryRoomId, snapshot: RoomFeedS
 		return;
 	}
 
-	// Re-inserting moves the room to the end of the Map's insertion order, so
-	// the first key is always the least recently left room.
-	snapshots.delete(roomId);
+	// Every room the visitor walks through is kept: there are four, and the cap
+	// above bounds each of them.
 	snapshots.set(roomId, {
 		artworks: [...snapshot.artworks],
+		layout: snapshot.layout ?? null,
 		pageInfo: { ...snapshot.pageInfo },
-		scrollY: Math.max(0, snapshot.scrollY)
+		scrollY: Math.max(0, snapshot.scrollY),
+		seed: { artworks: [...snapshot.seed.artworks], pageInfo: { ...snapshot.seed.pageInfo } }
 	});
+};
 
-	while (snapshots.size > MAX_CACHED_ROOMS) {
-		const oldest = snapshots.keys().next();
-		if (oldest.done) break;
-		snapshots.delete(oldest.value);
+/*
+ * A room left behind keeps the artworks as they were when the visitor walked
+ * out, and goes back up with them. The server's fresh first page patches what
+ * it holds once it lands, but the pages below it are never refetched, so a
+ * vote cast or a comment left in another room since would show up stale there.
+ * Every change goes into the cached copies too.
+ */
+export const patchCachedArtwork = (artworkId: string, patch: Partial<Artwork>): void => {
+	for (const [roomId, snapshot] of snapshots) {
+		const holds = (artworks: Artwork[]) => artworks.some((artwork) => artwork.id === artworkId);
+		if (!holds(snapshot.artworks) && !holds(snapshot.seed.artworks)) continue;
+
+		const patched = (artworks: Artwork[]) =>
+			artworks.map((artwork) => (artwork.id === artworkId ? { ...artwork, ...patch } : artwork));
+
+		snapshots.set(roomId, {
+			...snapshot,
+			artworks: patched(snapshot.artworks),
+			seed: { ...snapshot.seed, artworks: patched(snapshot.seed.artworks) }
+		});
 	}
 };
 

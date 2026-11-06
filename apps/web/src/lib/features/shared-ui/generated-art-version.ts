@@ -4,4 +4,4 @@
 // segment of each /generated/* filename, which is what makes the immutable
 // cache header on those files true: change a builder and the URLs change,
 // so nobody is served the previous artwork from a cache.
-export const GENERATED_ART_VERSION = '4f42978e519e';
+export const GENERATED_ART_VERSION = '038be8585b8d';

@@ -23,6 +23,7 @@ export class ArtworkFlowError extends Error {
 			| 'INVALID_SORT'
 			| 'INVALID_WINDOW'
 			| 'INVALID_TITLE'
+			| 'INVALID_WISH'
 			| 'INVALID_VOTE'
 			| 'VALIDATION_ERROR'
 			| 'MEDIA_TOO_LARGE'
@@ -37,17 +38,18 @@ export class ArtworkFlowError extends Error {
 	}
 }
 
-// Diagnostic fields postgres.js and drizzle attach to their errors.
+// Diagnostic fields node-postgres and drizzle attach to their errors.
 const ERROR_DETAIL_KEYS = [
 	'code',
-	'column_name',
-	'constraint_name',
+	'column',
+	'constraint',
 	'detail',
 	'hint',
 	'position',
 	'query',
+	'schema',
 	'severity',
-	'table_name',
+	'table',
 	'where'
 ] as const;
 
