@@ -2,7 +2,9 @@ import { access, cp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 
 const DEFAULT_CLOUDFLARE_BUILD_DIR = join('.svelte-kit', 'cloudflare');
-const DEFAULT_CLOUDFLARE_MANIFEST_PATH = join('.svelte-kit', 'cloudflare-tmp', 'manifest.js');
+// The server instance the Worker imports, with the route manifest inlined:
+// adapter-cloudflare 8 no longer writes a manifest.js beside it.
+const DEFAULT_CLOUDFLARE_MANIFEST_PATH = join('.svelte-kit', 'cloudflare-tmp', 'server.js');
 const DEFAULT_SVELTEKIT_OUTPUT_DIR = join('.svelte-kit', 'output');
 
 const collectJavaScriptFiles = async (directory: string): Promise<string[]> => {
