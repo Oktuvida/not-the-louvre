@@ -1,61 +1,57 @@
 /// <reference types="node" />
 
-import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { NodeIO } from '@gltf-transform/core';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { draco, prune, textureCompress } from '@gltf-transform/functions';
+import draco3d from 'draco3dgltf';
+import sharp from 'sharp';
+
+/*
+ * The home page's studio, from the scene as it was modelled
+ * (`assets/models/studio.glb`) to the file the page loads. Run it with
+ * `bun run model:transform:studio` after changing the model.
+ *
+ * - prune drops what nothing in the scene uses;
+ * - draco compresses the geometry, which the page decodes with the decoder
+ *   `scripts/copy-draco-decoder.ts` ships;
+ * - the floor's parquet, the model's one image, goes from PNG to near-lossless
+ *   WebP: no channel of any pixel moves by more than 2/255, at 40% of the
+ *   bytes. Lossy WebP was smaller still, but moved pixels by up to 25/255.
+ *
+ * Nothing else changes: the scene keeps every node, mesh and material as
+ * modelled, because the page finds the artwork slots and the side table's
+ * sketchbook by name, and lays its surfaces out in each mesh's own space.
+ *
+ * The output lives in `src/lib/assets`, where Vite names it after its bytes,
+ * so it can be cached for good and a new model always arrives under a new URL.
+ */
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(scriptDir, '..');
-const sourceModelPath = resolve(appRoot, 'assets/models/studio.glb');
-const generatedComponentPath = resolve(appRoot, 'studio.svelte');
-const generatedTransformedPath = resolve(appRoot, 'studio-transformed.glb');
-const finalTransformedPath = resolve(appRoot, 'static/models/studio-transformed.glb');
-const deprecatedTransformedPath = resolve(
-	appRoot,
-	'static/models/not-the-louvre-studio-transformed.glb'
+const sourcePath = resolve(appRoot, 'assets/models/studio.glb');
+const outputPath = resolve(appRoot, 'src/lib/assets/studio-model/studio.glb');
+
+const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({
+	'draco3d.decoder': await draco3d.createDecoderModule(),
+	'draco3d.encoder': await draco3d.createEncoderModule()
+});
+
+const document = await io.read(sourcePath);
+
+await document.transform(
+	prune(),
+	draco(),
+	// sharp reads `quality` as the near-lossless preprocessing level here.
+	textureCompress({ encoder: sharp, nearLossless: true, quality: 60, targetFormat: 'webp' })
 );
 
-function runTransformCommand(args: string[]) {
-	execFileSync('bunx', ['@gltf-transform/cli', ...args], {
-		cwd: appRoot,
-		stdio: 'inherit'
-	});
-}
+mkdirSync(dirname(outputPath), { recursive: true });
+await io.write(outputPath, document);
 
-if (!existsSync(sourceModelPath)) {
-	throw new Error(`Missing source model at ${sourceModelPath}`);
-}
-
-rmSync(generatedComponentPath, { force: true });
-rmSync(generatedTransformedPath, { force: true });
-rmSync(finalTransformedPath, { force: true });
-
-copyFileSync(sourceModelPath, finalTransformedPath);
-
-runTransformCommand([
-	'prune',
-	'static/models/studio-transformed.glb',
-	'static/models/studio-transformed.glb'
-]);
-runTransformCommand([
-	'draco',
-	'static/models/studio-transformed.glb',
-	'static/models/studio-transformed.glb'
-]);
-
-if (!existsSync(finalTransformedPath)) {
-	throw new Error(`Expected transformed model at ${finalTransformedPath}`);
-}
-
-rmSync(generatedComponentPath, { force: true });
-rmSync(generatedTransformedPath, { force: true });
-rmSync(deprecatedTransformedPath, { force: true });
-
-const sourceSize = statSync(sourceModelPath).size;
-const transformedSize = statSync(finalTransformedPath).size;
-const reductionPercent = Math.round((1 - transformedSize / sourceSize) * 100);
-
+const kilobytes = (path: string) => Math.round(statSync(path).size / 1024);
 console.log(
-	`Optimized studio.glb -> studio-transformed.glb with selective prune+draco (${Math.round(sourceSize / 1024)} KB -> ${Math.round(transformedSize / 1024)} KB, ${reductionPercent}% smaller)`
+	`assets/models/studio.glb (${kilobytes(sourcePath)} KB) -> src/lib/assets/studio-model/studio.glb (${kilobytes(outputPath)} KB)`
 );

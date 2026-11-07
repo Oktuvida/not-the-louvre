@@ -1,10 +1,9 @@
-import { json } from '@sveltejs/kit';
-import { getIp } from 'better-auth/api';
+import { getIP } from 'better-auth/api';
 import type { RequestHandler } from './$types';
-import { auth } from '$lib/server/auth';
-import { applyArtworkVote, removeArtworkVote } from '$lib/server/artwork/service';
-import { toApiErrorResponse } from '$lib/server/http/errors';
-import type { ArtworkVoteValue } from '$lib/shared/content/votes';
+import { auth } from '#lib/server/auth.js';
+import { applyArtworkVote, removeArtworkVote } from '#lib/server/artwork/service.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
+import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
 
 const VOTE_ERROR = {
 	fallbackCode: 'VOTE_FAILED',
@@ -17,10 +16,10 @@ export const POST: RequestHandler = async (event) => {
 		const body = (await event.request.json()) as { value?: string };
 		const result = await applyArtworkVote(
 			{ artworkId: event.params.artworkId, value: body.value as ArtworkVoteValue },
-			{ ipAddress: getIp(event.request, auth.options), user: event.locals.user }
+			{ ipAddress: getIP(event.request, auth.options), user: event.locals.user }
 		);
 
-		return json(result);
+		return Response.json(result);
 	} catch (error) {
 		return toApiErrorResponse(error, VOTE_ERROR);
 	}
@@ -30,10 +29,10 @@ export const DELETE: RequestHandler = async (event) => {
 	try {
 		const result = await removeArtworkVote(
 			{ artworkId: event.params.artworkId },
-			{ ipAddress: getIp(event.request, auth.options), user: event.locals.user }
+			{ ipAddress: getIP(event.request, auth.options), user: event.locals.user }
 		);
 
-		return json(result);
+		return Response.json(result);
 	} catch (error) {
 		return toApiErrorResponse(error, VOTE_ERROR);
 	}

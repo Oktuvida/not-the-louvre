@@ -1,6 +1,6 @@
 <script lang="ts">
-	import ArtworkFrame from '$lib/features/artwork-presentation/components/ArtworkFrame.svelte';
-	import { resolveArtworkFrame } from '$lib/features/artwork-presentation/model/frame';
+	import ArtworkFrame from '#lib/features/artwork-presentation/components/ArtworkFrame.svelte';
+	import { resolveArtworkFrame } from '#lib/features/artwork-presentation/model/frame.js';
 
 	let {
 		artworkId,

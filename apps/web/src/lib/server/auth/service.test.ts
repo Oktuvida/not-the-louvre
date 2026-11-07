@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { StoredRateLimit } from '$lib/server/db/fixtures/rate-limit';
+import type { StoredRateLimit } from '#lib/server/db/fixtures/rate-limit.js';
 
 type StoredAuthRateLimit = StoredRateLimit & { kind: 'login' | 'recovery' };
 
@@ -113,7 +113,7 @@ const mocked = vi.hoisted(() => {
 				// rule the SQL clause does — that rule lives in the shared fixture.
 				const upsertRateLimit = async () => {
 					const { AUTH_RATE_LIMITS } = await import('./config');
-					const { applyRateLimitAttempt } = await import('$lib/server/db/fixtures/rate-limit');
+					const { applyRateLimitAttempt } = await import('#lib/server/db/fixtures/rate-limit.js');
 
 					const kind = values.kind as 'login' | 'recovery';
 					const actorKey = String(values.actorKey);
@@ -250,7 +250,7 @@ vi.mock('drizzle-orm', () => ({
 	sql: drizzle.sql
 }));
 
-vi.mock('$lib/server/db/schema', () => ({
+vi.mock('#lib/server/db/schema.js', () => ({
 	users: mocked.schema.users,
 	account: mocked.schema.account,
 	authRateLimits: mocked.schema.authRateLimits,
@@ -259,11 +259,11 @@ vi.mock('$lib/server/db/schema', () => ({
 	}
 }));
 
-vi.mock('$lib/server/db', () => ({
+vi.mock('#lib/server/db/index.js', () => ({
 	db: mocked.db
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		api: mocked.state.authApi
 	}
@@ -284,9 +284,9 @@ vi.mock('better-auth/crypto', () => ({
 	)
 }));
 
-vi.mock('$lib/server/security/logging', () => securityLogging);
+vi.mock('#lib/server/security/logging.js', () => securityLogging);
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	checkTextModeration: moderation.checkTextModeration
 }));
 

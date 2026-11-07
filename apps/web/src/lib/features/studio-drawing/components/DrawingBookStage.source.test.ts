@@ -54,7 +54,9 @@ describe('sketchbook cover press feedback', () => {
 
 		expect(declarations).not.toBeNull();
 		expect(declarations).toContain('scale: 1;');
-		expect(declarations).toContain('transform: none;');
+		// The face keeps its resting stand-off from the cover's plane, which
+		// Safari needs to keep the label (see `.cover-front`).
+		expect(declarations).toContain('transform: translateZ(0.1px);');
 		// Unlayered scoped CSS already beats `@layer base`; `!important` here
 		// would only make the rule impossible to override from a call site.
 		expect(declarations).not.toContain('!important');

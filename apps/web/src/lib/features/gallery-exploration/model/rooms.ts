@@ -1,10 +1,15 @@
 // Room identity and hrefs are shared vocabulary (the server loaders resolve
 // route params with them); this module keeps the presentation config and
 // re-exports the vocabulary so the existing importers keep working.
-import type { GalleryRoomId } from '$lib/shared/gallery/rooms';
+import type { GalleryRoomId } from '#lib/shared/gallery/rooms.js';
 
-export { galleryRoomIds, isGalleryRoomId, roomHref } from '$lib/shared/gallery/rooms';
-export type { GalleryRoomId } from '$lib/shared/gallery/rooms';
+export {
+	galleryRoomIds,
+	isGalleryRoomId,
+	roomHref,
+	roomIdForPath
+} from '#lib/shared/gallery/rooms.js';
+export type { GalleryRoomId, GalleryWallId } from '#lib/shared/gallery/rooms.js';
 
 export type GalleryRoomConfig = {
 	color: string;
@@ -36,12 +41,21 @@ export const galleryRooms: GalleryRoomConfig[] = [
 		color: '#c84f4f'
 	},
 	{
+		id: 'wet-paint',
+		name: 'Wet Paint',
+		shortName: 'Wet',
+		postItAttachment: 'tape',
+		postItColor: '#fbcf9c',
+		description: 'Just hung, newest first: no votes needed to make it onto this wall.',
+		color: '#e0913f'
+	},
+	{
 		id: 'mystery',
 		name: 'Mystery Room',
 		shortName: 'Mystery',
 		postItAttachment: 'tape',
 		postItColor: '#9bd3f7',
-		description: 'Spin through a shuffled set of real gallery discoveries.',
+		description: 'Nothing on this line has developed yet. Spin, and one comes up.',
 		color: '#8b9d91'
 	},
 	{

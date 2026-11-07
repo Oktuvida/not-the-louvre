@@ -1,10 +1,10 @@
-import { requestJson } from '$lib/client/api';
-import { TEXT_MODERATION_BLOCKED_MESSAGES } from '$lib/shared/moderation/messages';
+import { requestJson } from '#lib/client/api.js';
+import { TEXT_MODERATION_BLOCKED_MESSAGES } from '#lib/shared/moderation/messages.js';
 import type { TextContentChecker, TextFilterContext } from './types';
 
 // The text-policy module carries the full profanity wordlist, so it loads on
 // the first validation instead of riding in every page's entry chunk.
-type TextPolicyModule = typeof import('$lib/shared/moderation/text-policy');
+type TextPolicyModule = typeof import('#lib/shared/moderation/text-policy.js');
 type PhraseMatcher = ReturnType<TextPolicyModule['buildPhraseMatcher']>;
 type MatcherMap = Record<TextFilterContext, PhraseMatcher>;
 
@@ -14,7 +14,7 @@ let matcherPromise: Promise<MatcherMap> | null = null;
 
 const getTextPolicyModule = () => {
 	if (!textPolicyModulePromise) {
-		textPolicyModulePromise = import('$lib/shared/moderation/text-policy').catch((error) => {
+		textPolicyModulePromise = import('#lib/shared/moderation/text-policy.js').catch((error) => {
 			textPolicyModulePromise = null;
 			throw error;
 		});
@@ -35,9 +35,6 @@ const getBaselineMatcher = () => {
 
 	return baselineMatcherPromise;
 };
-
-const shouldBypassClientContentFilters = () =>
-	typeof window !== 'undefined' && Boolean(window.__ntlBypassClientContentFilters);
 
 const createMatchers = async (): Promise<MatcherMap> => {
 	const { buildPhraseMatcher } = await getTextPolicyModule();
@@ -75,10 +72,6 @@ const getMatchers = async () => {
 };
 
 export const checkTextContent: TextContentChecker = async (value, context) => {
-	if (shouldBypassClientContentFilters()) {
-		return { status: 'allowed' };
-	}
-
 	try {
 		const baselineMatcher = await getBaselineMatcher();
 

@@ -1,23 +1,43 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { tick } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import { Download, GitFork } from 'lucide-svelte';
-	import { ApiError, requestJson } from '$lib/client/api';
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import ArtworkSafetyActions from '$lib/features/artwork-presentation/components/ArtworkSafetyActions.svelte';
+	import {
+		Clapperboard,
+		Download,
+		GitFork,
+		MessageCircle,
+		PenLine,
+		ThumbsDown,
+		ThumbsUp
+	} from 'lucide-svelte';
+	import '@fontsource/special-elite/latin-400.css';
+	import { ApiError, requestJson } from '#lib/client/api.js';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import ArtworkSafetyActions from '#lib/features/artwork-presentation/components/ArtworkSafetyActions.svelte';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
-	} from '$lib/client/content-filter';
+	} from '#lib/client/content-filter/index.js';
 	import { resolve } from '$app/paths';
-	import NsfwImage from '$lib/features/gallery-exploration/components/NsfwImage.svelte';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
-	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import WaxSealAvatar from '$lib/features/shared-ui/components/WaxSealAvatar.svelte';
-	import type { ArtworkVoteValue } from '$lib/shared/content/votes';
-	import type { Viewer } from '$lib/shared/viewer';
+	import NsfwImage from '#lib/features/gallery-exploration/components/NsfwImage.svelte';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import InkStamp from '#lib/features/shared-ui/components/InkStamp.svelte';
+	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
+	import WaxSealAvatar from '#lib/features/shared-ui/components/WaxSealAvatar.svelte';
+	import { saveBlob } from '#lib/client/save-blob.js';
+	import WishReport from '#lib/features/mailbox/components/WishReport.svelte';
+	import WishSlip from '#lib/features/shared-ui/components/WishSlip.svelte';
+	import TimelapsePlayer from '#lib/features/timelapse/TimelapsePlayer.svelte';
+	import { decodeDrawingV3, type InkDocument } from '#lib/stroke/v3.js';
+	import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
+	import type { Viewer } from '#lib/shared/viewer.js';
+	import AwardMark from '#lib/features/shared-ui/components/AwardMark.svelte';
+	import { hashString } from '#lib/features/artwork-presentation/model/frame.js';
+	import type { AwardStyle } from '#lib/features/shared-ui/award-style.js';
 
 	/* The visitor never reads a stack trace. Codes whose server message is
 	 * already written for them (moderation reasons, rate-limit countdowns) pass
@@ -32,10 +52,13 @@
 		UNAUTHENTICATED: 'Sign in to interact with artworks.'
 	};
 
-	const VOTE_FAILED_MESSAGE = 'That vote did not make it onto the ledger. Please try again.';
-	const COMMENT_FAILED_MESSAGE = "The visitor's book would not take that entry. Please try again.";
-	const DOWNLOAD_FAILED_MESSAGE = 'Artwork could not be downloaded.';
-	const ADULT_PREFERENCE_FAILED_MESSAGE = '18+ artwork preference could not be updated.';
+	// What the stamp's slip says; its Try again sticker says what to do.
+	const VOTE_FAILED_MESSAGE = "Your vote didn't make it onto the ledger.";
+	const COMMENT_FAILED_MESSAGE = "The visitor's book didn't take your entry.";
+	const DOWNLOAD_FAILED_MESSAGE = "The download didn't start. Try again in a moment.";
+	const TIMELAPSE_FAILED_MESSAGE = "The timelapse wouldn't play. Try again in a moment.";
+	const VIDEO_FAILED_MESSAGE = "The video didn't come out. Try again in a moment.";
+	const ADULT_PREFERENCE_FAILED_MESSAGE = "Your 18+ setting didn't save. Try again in a moment.";
 
 	/* Thrown with copy that is already safe to show; anything else that reaches
 	 * a catch block (a dropped connection, a parser blow-up) gets the fallback
@@ -54,9 +77,22 @@
 		return HOUSE_ERROR_MESSAGES[error.code] ?? fallback;
 	};
 
+	/* A failure that doing it again can fix: the answer was not one of the
+	 * API's own explanations (a 500, a proxy's error page, a dropped
+	 * connection). An explanation — sign in, slow down, this piece is gone —
+	 * is a notice instead: trying again would only get it again. */
+	const isWorthRetrying = (error: unknown) =>
+		!(error instanceof ActionFailure) &&
+		!(
+			error instanceof ApiError &&
+			error.code &&
+			(PASS_THROUGH_ERROR_CODES.has(error.code) || error.code in HOUSE_ERROR_MESSAGES)
+		);
+
 	let {
 		artwork,
 		adultContentEnabled = false,
+		awardStyle = 'stamps',
 		checkTextContent = defaultCheckTextContent,
 		isHydrating = false,
 		onAdultContentToggle,
@@ -66,9 +102,18 @@
 		onClose,
 		onNotify,
 		revealedArtworkIds
+
+		/**
+		 * Hands every transient outcome to the host page instead of the panel's
+		 * own notice. The gallery owns a status region that outlives the dialog,
+		 * so a failure raised on the last click is still readable after the panel
+		 * closes; without this the panel keeps saying it itself.
+		 */
 	}: {
 		artwork: Artwork | null;
 		adultContentEnabled?: boolean;
+		/** The award style this visit to the gallery drew, for a top-three artwork. */
+		awardStyle?: AwardStyle;
 		checkTextContent?: TextContentChecker;
 		isHydrating?: boolean;
 		onAdultContentToggle?: (enabled: boolean) => Promise<void> | void;
@@ -79,23 +124,34 @@
 			patch: Partial<Pick<Artwork, 'isHidden' | 'isNsfw'>>
 		) => void;
 		onClose?: () => void;
-		/**
-		 * Hands every transient outcome to the host page instead of the panel's
-		 * own notice. The gallery owns a status region that outlives the dialog,
-		 * so a failure raised on the last click is still readable after the panel
-		 * closes; without this the panel keeps saying it itself.
-		 */
 		onNotify?: (message: string | null) => void;
 		revealedArtworkIds?: import('svelte/store').Writable<Set<string>>;
 	} = $props();
 
 	let commentBody = $state('');
+	/* A vote or a comment that did not save, stamped on the postcard it was
+	 * for until it is tried again or put away. */
+	let actionFailure = $state<{
+		artworkId: string;
+		label: string;
+		message: string;
+		retry: () => void;
+	} | null>(null);
+	/** Why the comment on the line was not taken, pencilled under it. */
+	let commentError = $state('');
 	let actionError = $state<string | null>(null);
 	let avatarPreviewArtworkId = $state<string | null>(null);
 	let isUpdatingAdultContentPreference = $state(false);
 	let isSubmittingComment = $state(false);
 	let isSubmittingVote = $state(false);
 	let isDownloading = $state(false);
+	// The replay shown in place of the photo, for the artwork it belongs to.
+	let timelapse = $state.raw<{
+		artworkId: string;
+		backdropUrl: string | null;
+		drawing: InkDocument;
+	} | null>(null);
+	let isLoadingTimelapse = $state(false);
 	let commentInput: HTMLInputElement | undefined = $state();
 	let dialogElement: HTMLDivElement | undefined = $state();
 	let avatarTriggerElement: HTMLButtonElement | undefined = $state();
@@ -112,6 +168,21 @@
 		}
 
 		actionError = message;
+	};
+
+	const stampFailure = (artworkId: string, message: string, retry: () => void) => {
+		actionFailure = { artworkId, label: 'Not sent', message, retry };
+	};
+
+	// Another postcard opened in the same panel does not inherit the stamp.
+	const visibleFailure = $derived(
+		actionFailure && artwork && actionFailure.artworkId === artwork.id ? actionFailure : null
+	);
+
+	const retryFailedAction = () => {
+		const retry = visibleFailure?.retry;
+		actionFailure = null;
+		retry?.();
 	};
 
 	// --- Postcard flip + tilt ---
@@ -148,9 +219,18 @@
 		const date = new Date(artwork.timestamp);
 		return {
 			day: `${MONTH_STAMPS[date.getMonth()]} ${date.getDate()}`,
+			hung: `${date.getDate()} ${MONTH_STAMPS[date.getMonth()]} ${date.getFullYear()}`,
 			year: `${date.getFullYear()}`
 		};
 	});
+	/** The piece's number in the museum's catalogue, the same every time it is opened. */
+	const catalogueNumber = $derived(
+		artwork ? String(hashString(artwork.id) % 10000).padStart(4, '0') : ''
+	);
+	/* Each visitor signs the book in their own pen: blue-black, sepia, black,
+	 * green-black or oxblood, kept by their name. */
+	const GUESTBOOK_INKS = ['#2c4a7a', '#6b4423', '#2a2622', '#3d5e46', '#6a2f3f'];
+	const inkFor = (author: string) => GUESTBOOK_INKS[hashString(author) % GUESTBOOK_INKS.length];
 	const artworkDate = $derived(
 		artwork
 			? new Date(artwork.timestamp).toLocaleDateString('en-US', {
@@ -393,7 +473,7 @@
 		notify(null);
 		if (!requireViewer()) return;
 
-		await goto(resolve(`/draw?fork=${artwork.id}`));
+		await goto(resolve(`draw?fork=${artwork.id}`));
 	};
 
 	const downloadExtensions: Record<string, string> = {
@@ -403,6 +483,12 @@
 		'image/png': 'png',
 		'image/webp': 'webp'
 	};
+
+	const fileNameFor = (title: string) =>
+		title
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/(^-|-$)/g, '') || 'artwork';
 
 	const downloadArtwork = async () => {
 		if (!artwork || isDownloading) return;
@@ -418,18 +504,7 @@
 
 			const blob = await response.blob();
 			const extension = downloadExtensions[blob.type] ?? 'png';
-			const safeTitle =
-				artwork.title
-					.toLowerCase()
-					.replace(/[^a-z0-9]+/g, '-')
-					.replace(/(^-|-$)/g, '') || 'artwork';
-
-			const objectUrl = URL.createObjectURL(blob);
-			const anchor = document.createElement('a');
-			anchor.href = objectUrl;
-			anchor.download = `${safeTitle}.${extension}`;
-			anchor.click();
-			URL.revokeObjectURL(objectUrl);
+			saveBlob(blob, `${fileNameFor(artwork.title)}.${extension}`);
 		} catch (error) {
 			notify(toActionError(error, DOWNLOAD_FAILED_MESSAGE));
 		} finally {
@@ -437,10 +512,34 @@
 		}
 	};
 
+	const openTimelapse = async () => {
+		if (!artwork || isLoadingTimelapse) return;
+
+		const artworkId = artwork.id;
+		isLoadingTimelapse = true;
+		notify(null);
+
+		try {
+			const body = await requestJson<{ backdropUrl: string | null; drawing: unknown }>(
+				`/api/artworks/${artworkId}/timelapse`
+			);
+			timelapse = {
+				artworkId,
+				backdropUrl: body.backdropUrl,
+				drawing: decodeDrawingV3(body.drawing)
+			};
+		} catch (error) {
+			notify(toActionError(error, TIMELAPSE_FAILED_MESSAGE));
+		} finally {
+			isLoadingTimelapse = false;
+		}
+	};
+
 	const submitVote = async (value: ArtworkVoteValue) => {
 		if (!artwork || isSubmittingVote) return;
 
 		notify(null);
+		actionFailure = null;
 		if (!requireViewer()) return;
 
 		isSubmittingVote = true;
@@ -477,27 +576,41 @@
 			}
 		} catch (error) {
 			syncArtwork(previousArtwork);
-			notify(toActionError(error, VOTE_FAILED_MESSAGE));
+			if (isWorthRetrying(error)) {
+				stampFailure(previousArtwork.id, VOTE_FAILED_MESSAGE, () => void submitVote(value));
+			} else {
+				notify(toActionError(error, VOTE_FAILED_MESSAGE));
+			}
 		} finally {
 			isSubmittingVote = false;
 		}
+	};
+
+	/* What is wrong with the comment itself belongs to its line, not to the
+	 * gallery's notices: the cursor goes back there to fix it. */
+	const markComment = async (message: string) => {
+		commentError = message;
+		await tick();
+		commentInput?.focus();
 	};
 
 	const submitComment = async () => {
 		if (!artwork || isSubmittingComment) return;
 
 		notify(null);
+		commentError = '';
+		actionFailure = null;
 		if (!requireViewer()) return;
 
 		const body = commentBody.trim();
 		if (!body) {
-			notify('Comment cannot be empty.');
+			void markComment('Write something first.');
 			return;
 		}
 
 		const moderationResult = await checkTextContent(body, 'comment');
 		if (moderationResult.status !== 'allowed') {
-			notify(moderationResult.message);
+			void markComment(moderationResult.message);
 			return;
 		}
 
@@ -513,25 +626,37 @@
 				};
 			}>(`/api/artworks/${artwork.id}/comments`, { json: { body }, method: 'POST' });
 
-			syncArtwork({
-				...artwork,
-				commentCount: (artwork.commentCount ?? artwork.comments.length) + 1,
-				comments: [
-					...artwork.comments,
-					{
-						author: payload.comment.author.nickname,
-						id: payload.comment.id,
-						text: payload.comment.body,
-						timestamp: payload.comment.createdAt
-							? Date.parse(payload.comment.createdAt)
-							: Date.now()
-					}
-				]
-			});
+			// The live copy of this comment can land before this answer does.
+			if (!artwork.comments.some((comment) => comment.id === payload.comment.id)) {
+				syncArtwork({
+					...artwork,
+					commentCount: (artwork.commentCount ?? artwork.comments.length) + 1,
+					comments: [
+						...artwork.comments,
+						{
+							author: payload.comment.author.nickname,
+							id: payload.comment.id,
+							text: payload.comment.body,
+							timestamp: payload.comment.createdAt
+								? Date.parse(payload.comment.createdAt)
+								: Date.now()
+						}
+					]
+				});
+			}
 			commentBody = '';
 			commentInput?.focus();
 		} catch (error) {
-			notify(toActionError(error, COMMENT_FAILED_MESSAGE));
+			if (error instanceof ApiError && error.code === 'INVALID_COMMENT') {
+				void markComment(error.message);
+				return;
+			}
+			// The words stay on the line, so Try again writes the same comment.
+			if (isWorthRetrying(error)) {
+				stampFailure(artwork.id, COMMENT_FAILED_MESSAGE, () => void submitComment());
+			} else {
+				notify(toActionError(error, COMMENT_FAILED_MESSAGE));
+			}
 		} finally {
 			isSubmittingComment = false;
 		}
@@ -570,7 +695,8 @@
 		</button>
 
 		<div
-			class="relative m-auto"
+			class="relative isolate m-auto"
+			class:postcard-with-wish={Boolean(artwork.wish)}
 			style="width: clamp(16rem, calc(100dvh - 12rem), 30rem); max-width: 100%;"
 			role="presentation"
 			transition:scale={{ duration: transitionDuration, start: 0.96 }}
@@ -586,6 +712,20 @@
 				handleEscape();
 			}}
 		>
+			<!-- The slip it answers, tucked behind the card: never on the drawing. -->
+			{#if artwork.wish}
+				<aside class="postcard-wish" aria-label="Drawn for a slip from the mailbox">
+					<WishSlip
+						text={artwork.wish.text}
+						byline={`left by ${artwork.wish.author}`}
+						tilt={-3.4}
+					/>
+					{#if viewer}
+						<WishReport wish={artwork.wish} />
+					{/if}
+				</aside>
+			{/if}
+
 			<!-- The postcard -->
 			<div
 				class="postcard-scene"
@@ -600,12 +740,12 @@
 				>
 					<div class="postcard" class:is-flipped={isFlipped} class:is-lifting={isLifting}>
 						<!-- FRONT: the photo side -->
-						<div class="postcard-face postcard-front paper-sheet paper-noise" inert={isFlipped}>
+						<div class="postcard-face postcard-front paper-sheet polaroid-paper" inert={isFlipped}>
 							<div class="postcard-stain postcard-stain-front-a" aria-hidden="true"></div>
 							<div class="postcard-stain postcard-stain-front-b" aria-hidden="true"></div>
 							<div class="relative">
-								<span class="photo-tape photo-tape-left" aria-hidden="true"></span>
-								<span class="photo-tape photo-tape-right" aria-hidden="true"></span>
+								<span class="photo-tape photo-tape-left tape" aria-hidden="true"></span>
+								<span class="photo-tape photo-tape-right tape" aria-hidden="true"></span>
 								<!-- Unmounted while flipped or mid-flip: the positioned wrapper gets
 								     its own compositor layer, which ignores the face's
 								     backface-visibility and would ghost mirrored through the back. -->
@@ -629,13 +769,24 @@
 										className="postcard-photo-layer"
 										src={artwork.imageUrl}
 										alt={artwork.title}
-										placeholder={artwork.imagePlaceholder ?? null}
 										blurred={isSensitiveBlurred}
 										showScrim={false}
 										loading="eager"
 										decoding="async"
 										fetchpriority="high"
 									/>
+									{#if timelapse && timelapse.artworkId === artwork.id && !isSensitiveBlurred}
+										<div class="postcard-photo-layer">
+											<TimelapsePlayer
+												backdropUrl={timelapse.backdropUrl}
+												drawing={timelapse.drawing}
+												label={`Timelapse of ${artwork.title}`}
+												onClose={() => (timelapse = null)}
+												onVideoFailed={() => notify(VIDEO_FAILED_MESSAGE)}
+												videoName={fileNameFor(artwork.title)}
+											/>
+										</div>
+									{/if}
 									{#if isSensitiveBlurred}
 										<div
 											class="postcard-photo-scrim absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-paper-bright"
@@ -662,16 +813,14 @@
 									{/if}
 								</div>
 								{#if artwork.rank && artwork.rank <= 3}
-									<div
-										class="absolute -top-3 -left-3 animate-[bob_1.8s_ease-in-out_infinite] text-4xl md:text-5xl"
-									>
-										{{ 1: '🥇', 2: '🥈', 3: '🥉' }[artwork.rank as 1 | 2 | 3]}
+									<div class={`postcard-award postcard-award-${awardStyle}`}>
+										<AwardMark {awardStyle} corner place={artwork.rank as 1 | 2 | 3} />
 									</div>
 								{/if}
 							</div>
 
-							<!-- Caption strip -->
-							<div class="flex items-start gap-3 px-1 pt-3 pb-1">
+							<!-- Caption strip: written in pen, the postage stuck in the corner -->
+							<div class="postcard-caption">
 								{#if artwork.artistAvatar}
 									<button
 										bind:this={avatarTriggerElement}
@@ -695,20 +844,64 @@
 									{#if artworkDate}
 										<p class="postcard-meta">{artworkDate}</p>
 									{/if}
+									{#if artwork.isHidden}
+										<!-- Seen only by its author and moderators; nobody else can open it. -->
+										<p class="postcard-pending ink-stamp">Hidden · pending review</p>
+									{/if}
 									{#if forkAttribution}
 										<p
-											class="truncate text-[0.62rem] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
+											class="truncate text-[0.75rem] font-semibold tracking-[0.08em] text-[#8a6a42] uppercase"
 										>
-											{forkAttribution}
+											{#if artwork.lineage?.parent}
+												<a
+													class="postcard-lineage focus-ring"
+													href={resolve('/gallery/forks/[artworkId]', {
+														artworkId: artwork.lineage.parent.id
+													})}
+												>
+													{forkAttribution}
+												</a>
+											{:else}
+												{forkAttribution}
+											{/if}
 										</p>
 									{/if}
-								</div>
-								<div class="flex shrink-0 flex-col items-end gap-0.5 pr-1 text-right">
-									<p class="postcard-signature max-w-[10rem] truncate">by {artwork.artist}</p>
-									<p class="font-display text-sm font-semibold text-muted-ink">
-										<span class="text-base leading-none">⭐</span>
-										{artwork.score}
+									<p class="postcard-signature truncate">
+										by
+										<a
+											class="postcard-artist focus-ring"
+											href={resolve('/gallery/artist/[nickname]', { nickname: artwork.artist })}
+										>
+											<span class="postcard-artist-name">{artwork.artist}</span>
+											<span class="postcard-artist-go">
+												<span class="hidden sm:inline">see the studio</span> →
+											</span>
+										</a>
 									</p>
+								</div>
+								<!-- The postage: the artwork as its own stamp, its stars the value. -->
+								<div class="postcard-postage">
+									<div class="postcard-stamp postcard-stamp-front">
+										<img
+											class={isSensitiveBlurred ? 'blur-md saturate-0' : ''}
+											src={artwork.imageUrl}
+											alt=""
+										/>
+										<span class="postcard-stamp-value">★ {artwork.score}</span>
+									</div>
+									<svg class="postcard-front-postmark" viewBox="0 0 92 64" aria-hidden="true">
+										<g stroke="currentColor" fill="none">
+											<circle cx="32" cy="32" r="24" stroke-width="2.2"></circle>
+											<path
+												d="M60 20 q 7 -5 14 0 t 14 0 M60 31 q 7 -5 14 0 t 14 0 M60 42 q 7 -5 14 0 t 14 0"
+												stroke-width="1.8"
+											></path>
+										</g>
+										<g fill="currentColor" class="postmark-small">
+											<text x="32" y="30" text-anchor="middle">NOT THE</text>
+											<text x="32" y="39" text-anchor="middle">LOUVRE</text>
+										</g>
+									</svg>
 								</div>
 							</div>
 							<!-- Action row: sticker buttons, hand-applied on the card -->
@@ -724,7 +917,11 @@
 										ariaPressed={artwork.viewerVote === 'up'}
 										className={artwork.viewerVote === 'up' ? 'vote-cast' : ''}
 										disabled={isSubmittingVote}
-										onclick={() => submitVote('up')}>👍 {artwork.upvotes}</GameButton
+										onclick={() => submitVote('up')}
+										><ThumbsUp class="vote-icon" aria-hidden="true" /><span class="sr-only"
+											>Upvote</span
+										>
+										{artwork.upvotes}</GameButton
 									>
 									<GameButton
 										variant="danger"
@@ -732,7 +929,11 @@
 										ariaPressed={artwork.viewerVote === 'down'}
 										className={artwork.viewerVote === 'down' ? 'vote-cast' : ''}
 										disabled={isSubmittingVote}
-										onclick={() => submitVote('down')}>👎 {artwork.downvotes}</GameButton
+										onclick={() => submitVote('down')}
+										><ThumbsDown class="vote-icon" aria-hidden="true" /><span class="sr-only"
+											>Downvote</span
+										>
+										{artwork.downvotes}</GameButton
 									>
 									<span class="postcard-actions-spacer"></span>
 									<GameButton variant="primary" size="sm" onclick={goToFork}>
@@ -742,6 +943,18 @@
 								{:else}
 									<p class="postcard-signin-note">Sign in to vote, fork, or leave a comment.</p>
 									<span class="postcard-actions-spacer"></span>
+								{/if}
+								{#if !isSensitiveBlurred && artwork.hasReplay !== false}
+									<GameButton
+										variant="secondary"
+										size="sm"
+										className="postcard-timelapse"
+										disabled={isLoadingTimelapse}
+										onclick={openTimelapse}
+									>
+										<Clapperboard class="h-4 w-4" />
+										<span class="sr-only">Watch it being drawn</span>
+									</GameButton>
 								{/if}
 								<GameButton
 									variant="accent"
@@ -755,14 +968,17 @@
 								</GameButton>
 							</div>
 							<div class="postcard-footer">
-								<span class="postcard-edge-print">Not the Louvre · Gallery Post</span>
+								<span class="postcard-edge-print" aria-hidden="true"
+									>Not the Louvre · Gallery Post</span
+								>
 								<button
 									type="button"
 									class="flip-tape focus-ring"
 									aria-label="Read the comments"
 									onclick={toggleFlip}
 								>
-									💬 <span class="flip-tape-count"
+									<MessageCircle class="flip-tape-icon" aria-hidden="true" />
+									<span class="flip-tape-count"
 										>{artwork.commentCount ?? artwork.comments.length}</span
 									>
 									comments
@@ -776,8 +992,8 @@
 										stroke-linejoin="round"
 										aria-hidden="true"
 									>
-										<path d="M2 15 Q 14 2 28 8" />
-										<path d="M22 4.5 28 8l-6.5 4" />
+										<path d="M2 15 Q 14 2 28 8"></path>
+										<path d="M22 4.5 28 8l-6.5 4"></path>
 									</svg>
 								</button>
 							</div>
@@ -795,15 +1011,15 @@
 							</header>
 
 							<div class="postcard-back-grid">
-								<!-- Correspondence: the visitor's book -->
-								<div class="flex min-h-0 flex-col">
+								<!-- Correspondence: the visitor's book, each visitor in their own ink -->
+								<div class="guestbook">
 									<p class="guestbook-label">Visitor's Book</p>
 									{#if artwork.comments.length > 0}
 										<div
 											class="guestbook-pages min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
 										>
 											{#each artwork.comments as comment (comment.id)}
-												<p class="guestbook-entry">
+												<p class="guestbook-entry" style={`--entry-ink: ${inkFor(comment.author)}`}>
 													{comment.text}
 													<span class="guestbook-author">— {comment.author}</span>
 												</p>
@@ -816,7 +1032,7 @@
 											aria-hidden="true"
 										>
 											{#each [0, 1, 2] as index (index)}
-												<div class="flex h-[26px] items-center">
+												<div class="flex h-[30px] items-center">
 													<div
 														class="h-3 animate-pulse rounded-full bg-[#e3d5bd]"
 														style={`width: ${[78, 58, 66][index]}%;`}
@@ -825,86 +1041,60 @@
 											{/each}
 										</div>
 									{:else}
-										<div class="guestbook-pages flex min-h-0 flex-1 items-start">
-											<p class="guestbook-entry guestbook-empty">
-												The visitor's book is empty — be the first to sign it.
-											</p>
+										<div class="guestbook-pages guestbook-blank min-h-0 flex-1">
+											<p class="guestbook-prompt">Nobody has written on the back yet.</p>
+											<p class="guestbook-prompt">Be the first.</p>
+											{#if viewer}
+												<svg
+													class="guestbook-prompt-arrow"
+													viewBox="0 0 60 120"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+												>
+													<path d="M10 4 C 44 26, 52 70, 22 112"></path>
+													<path d="M14 101 22 112l11-6"></path>
+												</svg>
+											{/if}
 										</div>
-									{/if}
-									{#if viewer}
-										<form
-											class="mt-2 flex shrink-0 items-end gap-2"
-											onsubmit={(event) => {
-												event.preventDefault();
-												submitComment();
-											}}
-										>
-											<input
-												bind:this={commentInput}
-												bind:value={commentBody}
-												id="artwork-comment-body"
-												name="commentBody"
-												type="text"
-												placeholder="Write a comment"
-												class="guestbook-input"
-											/>
-											<GameButton
-												type="submit"
-												variant="accent"
-												size="sm"
-												className="guestbook-send"
-												disabled={isSubmittingComment}
-												ariaLabel="Send comment"
-											>
-												Send
-											</GameButton>
-										</form>
 									{/if}
 								</div>
 
 								<div class="postcard-back-divider"></div>
 
-								<!-- Address + franking -->
-								<div class="flex min-h-0 flex-col">
+								<!-- The postage, and the museum's catalogue card for the piece -->
+								<div class="postcard-franking">
 									<div class="postcard-stamp-cluster">
-										<!-- Stamp: the artwork itself -->
-										<div class="postcard-stamp" aria-hidden="true">
-											<img
-												class={isSensitiveBlurred ? 'blur-md saturate-0' : ''}
-												src={artwork.imageUrl}
-												alt=""
-											/>
-											<span class="postcard-stamp-value">{artwork.score}★</span>
+										<div class="postcard-stamp postcard-stamp-back" aria-hidden="true">
+											<div class="postcard-stamp-picture">
+												<img
+													class={isSensitiveBlurred ? 'blur-md saturate-0' : ''}
+													src={artwork.imageUrl}
+													alt=""
+												/>
+												<span class="postcard-stamp-country">Not the Louvre</span>
+											</div>
 										</div>
-										<!-- Postmark + cancellation lines, franked below the stamp -->
-										<svg class="postcard-postmark" viewBox="0 0 220 96" aria-hidden="true">
+										<!-- Struck half over the stamp, half on the card -->
+										<svg class="postcard-postmark" viewBox="0 0 160 84" aria-hidden="true">
 											<defs>
-												<path id="postmark-arc-top" d="M 16 48 A 32 32 0 1 1 80 48" />
-												<path id="postmark-arc-bottom" d="M 19 48 A 29 29 0 1 0 77 48" />
+												<path id="postmark-arc-top" d="M 12 42 A 30 30 0 1 1 72 42"></path>
+												<path id="postmark-arc-bottom" d="M 15 42 A 27 27 0 1 0 69 42"></path>
 											</defs>
-											<g stroke="currentColor" fill="none" opacity="0.62">
-												<circle cx="48" cy="48" r="40" stroke-width="2" />
-												<circle cx="48" cy="48" r="22" stroke-width="1.2" />
-												<path
-													d="M86 30 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
-													stroke-width="2.4"
-												/>
-												<path
-													d="M86 44 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
-													stroke-width="2.4"
-												/>
-												<path
-													d="M86 58 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
-													stroke-width="2.4"
-												/>
-												<path
-													d="M86 72 q 11 -7 22 0 t 22 0 t 22 0 t 22 0 t 22 0"
-													stroke-width="2.4"
-												/>
+											<g stroke="currentColor" fill="none">
+												<circle cx="42" cy="42" r="38" stroke-width="2"></circle>
+												<circle cx="42" cy="42" r="21" stroke-width="1.2"></circle>
+												<path d="M84 25 q 9 -6 18 0 t 18 0 t 18 0 t 18 0" stroke-width="2.2"></path>
+												<path d="M84 37 q 9 -6 18 0 t 18 0 t 18 0 t 18 0" stroke-width="2.2"></path>
+												<path d="M84 49 q 9 -6 18 0 t 18 0 t 18 0 t 18 0" stroke-width="2.2"></path>
+												<path d="M84 61 q 9 -6 18 0 t 18 0 t 18 0 t 18 0" stroke-width="2.2"></path>
 											</g>
-											<g fill="currentColor" opacity="0.68">
+											<g fill="currentColor">
 												<text class="postmark-text">
-													<textPath href="#postmark-arc-top" startOffset="8%"
+													<textPath href="#postmark-arc-top" startOffset="7%"
 														>NOT THE LOUVRE</textPath
 													>
 												</text>
@@ -913,57 +1103,124 @@
 														>GALLERY POST</textPath
 													>
 												</text>
-												<text x="48" y="46" text-anchor="middle" class="postmark-date"
+												<text x="42" y="40" text-anchor="middle" class="postmark-date"
 													>{postmark?.day}</text
 												>
-												<text x="48" y="57" text-anchor="middle" class="postmark-date"
+												<text x="42" y="51" text-anchor="middle" class="postmark-date"
 													>{postmark?.year}</text
 												>
 											</g>
 										</svg>
 									</div>
 
-									<div class="postcard-address">
-										<p class="postcard-address-line">
-											<span class="postcard-address-field">To:</span> every gallery visitor
+									<div class="catalogue-card">
+										<span class="catalogue-pin" aria-hidden="true"></span>
+										<p class="catalogue-number">Catalogue No. {catalogueNumber}</p>
+										<p class="catalogue-row catalogue-row-title">
+											<span class="catalogue-key">Title</span>
+											<span class="catalogue-hand">{artwork.title}</span>
 										</p>
-										<p class="postcard-address-line">
-											<span class="postcard-address-field">From:</span>
-											{artwork.artist}
+										<p class="catalogue-row">
+											<span class="catalogue-key">Artist</span>
+											<span class="catalogue-hand">{artwork.artist}</span>
 										</p>
-										<p class="postcard-address-line postcard-address-blank">&nbsp;</p>
+										<p class="catalogue-row">
+											<span class="catalogue-key">Hung</span>
+											<span class="catalogue-typed">{postmark?.hung}</span>
+										</p>
+										<p class="catalogue-row">
+											<span class="catalogue-key">Votes</span>
+											<span class="catalogue-hand catalogue-votes">
+												<svg viewBox="0 0 24 24" aria-hidden="true"
+													><path
+														d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9z"
+													></path></svg
+												>
+												{artwork.score}
+											</span>
+										</p>
+										<p class="catalogue-row catalogue-row-last">
+											{#if artwork.forkCount}
+												<a
+													class="catalogue-forks-link focus-ring"
+													href={resolve('/gallery/forks/[artworkId]', { artworkId: artwork.id })}
+												>
+													<span class="catalogue-key">Forks</span>
+													<span class="catalogue-hand catalogue-forks">{artwork.forkCount} →</span>
+												</a>
+											{:else}
+												<span class="catalogue-key">Forks</span>
+												<span class="catalogue-hand catalogue-forks">0</span>
+											{/if}
+										</p>
+										{#if artwork.rank && artwork.rank <= 3}
+											<span class="catalogue-honour" aria-hidden="true">Hall of Fame</span>
+										{/if}
 									</div>
+								</div>
 
-									<div class="postcard-ink-stamps">
-										<span class="postcard-ink-stamp ink-stamp-star">⭐ {artwork.score}</span>
-										<span class="postcard-ink-stamp ink-stamp-forks"
-											>{artwork.forkCount ?? 0} forks</span
+								{#if viewer}
+									<form
+										class="guestbook-form"
+										onsubmit={(event) => {
+											event.preventDefault();
+											submitComment();
+										}}
+									>
+										<label class="guestbook-line" for="artwork-comment-body">
+											<PenLine class="guestbook-pen" aria-hidden="true" />
+											<input
+												bind:this={commentInput}
+												bind:value={commentBody}
+												aria-describedby={commentError ? 'artwork-comment-note' : undefined}
+												aria-invalid={commentError ? 'true' : undefined}
+												id="artwork-comment-body"
+												name="commentBody"
+												type="text"
+												placeholder="Write on the back…"
+												class="guestbook-input"
+											/>
+										</label>
+										<GameButton
+											type="submit"
+											variant="accent"
+											size="sm"
+											className="guestbook-send"
+											disabled={isSubmittingComment}
+											ariaLabel="Send comment"
 										>
-									</div>
+											Send
+										</GameButton>
+										{#if commentError}
+											<div class="guestbook-note">
+												<PencilNote id="artwork-comment-note" message={commentError} />
+											</div>
+										{/if}
+									</form>
+								{/if}
 
-									<div class="flex justify-end pb-1">
-										<button
-											type="button"
-											class="flip-tape flip-tape-back focus-ring"
-											aria-label="Show the artwork"
-											onclick={toggleFlip}
+								<div class="postcard-back-turn">
+									<button
+										type="button"
+										class="flip-tape flip-tape-back focus-ring"
+										aria-label="Show the artwork"
+										onclick={toggleFlip}
+									>
+										<svg
+											class="doodle-arrow doodle-arrow-mirrored"
+											viewBox="0 0 34 20"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
 										>
-											<svg
-												class="doodle-arrow doodle-arrow-mirrored"
-												viewBox="0 0 34 20"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												aria-hidden="true"
-											>
-												<path d="M2 15 Q 14 2 28 8" />
-												<path d="M22 4.5 28 8l-6.5 4" />
-											</svg>
-											🖼 the artwork
-										</button>
-									</div>
+											<path d="M2 15 Q 14 2 28 8"></path>
+											<path d="M22 4.5 28 8l-6.5 4"></path>
+										</svg>
+										the artwork
+									</button>
 								</div>
 							</div>
 
@@ -972,6 +1229,17 @@
 					</div>
 				</div>
 			</div>
+
+			<!-- The stamp lies over the postcard but outside the card, so it stays
+			     put while the card turns over. -->
+			{#if visibleFailure}
+				<InkStamp
+					label={visibleFailure.label}
+					message={visibleFailure.message}
+					onDismiss={() => (actionFailure = null)}
+					onRetry={retryFailedAction}
+				/>
+			{/if}
 
 			<!-- One notice for the whole dialog, outside the card so it neither
 			     changes face with the flip nor pushes the postcard around, and
@@ -1056,6 +1324,58 @@
 		color: rgba(253, 251, 247, 0.6);
 	}
 
+	/* Beside the card where there is room; under it where there is not, with
+	 * the room for it kept below the card. */
+	.postcard-with-wish {
+		--wish-room: 3.5rem;
+		padding-bottom: var(--wish-room);
+	}
+
+	.postcard-wish {
+		--slip-padding: 1.6rem 1.1rem 0.5rem 1.2rem;
+		--slip-text: 1.38rem;
+		position: absolute;
+		top: calc(100% - var(--wish-room) - 1.4rem);
+		right: 0.5rem;
+		left: 0.5rem;
+		z-index: -1;
+		display: flex;
+		gap: 0.3rem;
+		align-items: flex-end;
+	}
+
+	/* The slip lies low on the screen, so the reasons open upwards. */
+	.postcard-wish {
+		--report-top: auto;
+		--report-bottom: calc(100% + 0.4rem);
+	}
+
+	.postcard-wish :global(.wish-slip) {
+		flex: 0 1 auto;
+		min-width: 0;
+	}
+
+	/* The reasons come out over the card, not behind it. */
+	.postcard-wish:has(:global([aria-expanded='true'])) {
+		z-index: 1;
+	}
+
+	@media (orientation: landscape) and (min-width: 64rem) {
+		.postcard-with-wish {
+			--wish-room: 0rem;
+		}
+
+		.postcard-wish {
+			--slip-padding: 0.85rem 1.5rem 0.65rem 3.4rem;
+			--slip-text: 1.7rem;
+			top: 57%;
+			right: auto;
+			left: calc(100% - 2.75rem);
+			width: max-content;
+			max-width: calc(50vw - 50% - 0.5rem);
+		}
+	}
+
 	.postcard-scene {
 		perspective: 1600px;
 		/* the card hangs a touch crooked, like everything else on the wall */
@@ -1128,6 +1448,17 @@
 		z-index: 2;
 		padding: 14px 14px 10px;
 		transform: translateZ(0.1px);
+		/* The polaroid it was on the wall, its corners yellowing the way old
+		 * postcards do: the same stock and grain as the closed card. */
+		background-color: var(--polaroid-paper);
+		background-image:
+			radial-gradient(ellipse at 100% 100%, rgb(160 120 70 / 0.16), transparent 45%),
+			radial-gradient(ellipse at 0% 0%, rgb(160 120 70 / 0.1), transparent 40%),
+			var(--polaroid-grain);
+		background-size:
+			100% 100%,
+			100% 100%,
+			4px 4px;
 	}
 
 	.postcard.is-flipped .postcard-front {
@@ -1183,15 +1514,12 @@
 		background: radial-gradient(closest-side, rgba(113, 145, 127, 0.13), transparent 72%);
 	}
 
-	/* Masking tape holding the photo onto the card — same as PolaroidCard */
+	/* Masking tape holding the photo onto the card — same tape as PolaroidCard */
 	.photo-tape {
 		position: absolute;
 		z-index: 3;
-		height: 17px;
-		width: 52px;
-		background: rgba(255, 255, 240, 0.55);
-		border: 1px solid rgba(200, 190, 170, 0.3);
-		box-shadow: 0 1px 2px rgba(45, 36, 32, 0.08);
+		height: 18px;
+		width: 56px;
 		pointer-events: none;
 	}
 
@@ -1207,19 +1535,46 @@
 		rotate: 9deg;
 	}
 
+	/* The Hall of Fame's award on a top-three postcard: a stamp pressed over
+	 * the photo's bottom corner, or a doodle drawn over its top one. */
+	.postcard-award {
+		position: absolute;
+		z-index: 5;
+		pointer-events: none;
+	}
+
+	.postcard-award-stamps {
+		right: -0.75rem;
+		bottom: -0.75rem;
+		rotate: -12deg;
+	}
+
+	.postcard-award-doodles {
+		top: -1.75rem;
+		left: -1rem;
+		rotate: -16deg;
+	}
+
+	.postcard-pending {
+		margin: 0.35rem 0 0.15rem;
+		font-size: 0.62rem;
+		rotate: -3deg;
+	}
+
+	/* Written in ballpoint, in the pen's navy. */
 	.postcard-title {
 		margin: 0;
 		font-family: var(--font-hand);
-		font-size: 1.65rem;
-		font-weight: 600;
-		line-height: 1.05;
-		color: var(--color-ink-warm);
+		font-size: 1.75rem;
+		font-weight: 700;
+		line-height: 1;
+		color: #1f2a44;
 	}
 
 	.postcard-meta {
 		margin: 2px 0 0;
 		font-family: var(--font-display);
-		font-size: 0.62rem;
+		font-size: 0.75rem;
 		font-weight: 600;
 		letter-spacing: 0.16em;
 		text-transform: uppercase;
@@ -1227,11 +1582,101 @@
 	}
 
 	.postcard-signature {
+		margin: 4px 0 0;
 		font-family: var(--font-hand);
-		font-size: 1.45rem;
+		font-size: 1.2rem;
 		line-height: 1.1;
-		color: #6b4226;
-		transform: rotate(-2deg);
+		color: #1f2a44;
+	}
+
+	.postcard-artist {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.postcard-lineage {
+		color: inherit;
+		text-decoration: underline dotted currentColor;
+		text-decoration-thickness: 1.5px;
+		text-underline-offset: 3px;
+	}
+
+	.catalogue-forks-link {
+		display: contents;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.catalogue-forks-link .catalogue-forks {
+		text-decoration: underline dotted currentColor;
+		text-decoration-thickness: 1.5px;
+		text-underline-offset: 3px;
+	}
+
+	.postcard-artist-name {
+		text-decoration: underline dotted rgb(31 42 68 / 0.55);
+		text-decoration-thickness: 1.5px;
+		text-underline-offset: 3px;
+	}
+
+	.postcard-artist-go {
+		margin-left: 0.15rem;
+		color: var(--color-pencil);
+		font-size: 0.85em;
+		white-space: nowrap;
+	}
+
+	.postcard-caption {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+		padding: 12px 4px 4px;
+	}
+
+	.postcard-postage {
+		position: relative;
+		flex-shrink: 0;
+		width: 5.25rem;
+		height: 5.5rem;
+	}
+
+	/* The front's stamp, smaller than the back's and stuck on a little crooked;
+	 * its value, the artwork's stars, printed in the margin under the picture. */
+	.postcard-stamp-front {
+		position: absolute;
+		top: 0;
+		right: 2px;
+		width: 3.75rem;
+		rotate: 3deg;
+	}
+
+	.postcard-stamp-front .postcard-stamp-value {
+		position: static;
+		display: block;
+		padding-top: 2px;
+		text-align: right;
+		font-size: 0.75rem;
+		line-height: 1.1;
+		color: #1f2a44;
+		text-shadow: none;
+	}
+
+	/* The postmark struck half over the stamp, half on the card. */
+	.postcard-front-postmark {
+		position: absolute;
+		top: 1.5rem;
+		left: -1.5rem;
+		width: 5.25rem;
+		color: #5a3a6e;
+		opacity: 0.7;
+		rotate: -12deg;
+		pointer-events: none;
+	}
+
+	.postmark-small {
+		font-family: var(--font-display);
+		font-size: 6.5px;
+		font-weight: 700;
 	}
 
 	/* Sticker action row. GameButtons normally carry a 140px min-width;
@@ -1245,6 +1690,12 @@
 
 	.postcard-actions-spacer {
 		flex: 1;
+	}
+
+	.postcard-actions :global(.vote-icon) {
+		width: 1rem;
+		height: 1rem;
+		flex-shrink: 0;
 	}
 
 	.postcard-actions :global(.sticker-btn) {
@@ -1311,7 +1762,8 @@
 		padding-inline: 2px;
 	}
 
-	.postcard-actions :global(.sticker-btn.postcard-download) {
+	.postcard-actions :global(.sticker-btn.postcard-download),
+	.postcard-actions :global(.sticker-btn.postcard-timelapse) {
 		width: 48px;
 		padding-inline: 0;
 	}
@@ -1325,6 +1777,8 @@
 	}
 
 	.postcard-edge-print {
+		min-width: 0;
+		overflow: hidden;
 		font-family: var(--font-display);
 		font-size: 0.56rem;
 		font-weight: 500;
@@ -1334,34 +1788,44 @@
 		white-space: nowrap;
 	}
 
+	/* On a phone-wide card the printed line gives way to the comments tape,
+	 * which would otherwise be pushed off the card's edge. */
+	@media (max-width: 30rem) {
+		.postcard-edge-print {
+			display: none;
+		}
+
+		.postcard-footer {
+			justify-content: flex-end;
+		}
+	}
+
 	/* Washi tape with writing on it — the flip affordance. It names WHY you
-		* flip (the comments live on the back) and reuses the 💬 N chip language
-		* of the polaroid cards. In-flow and filter-free on purpose (preserve-3d).
+		* flip (the comments live on the back) and reuses the comment-count chip
+		* language of the polaroid cards. In-flow and filter-free on purpose (preserve-3d).
 		* If the clip-path torn ends ever ghost through the flip, drop the
 		* clip-path line — the rest survives. */
 	.flip-tape {
 		position: relative;
+		flex-shrink: 0;
 		border: 0;
 		cursor: pointer;
 		display: inline-flex;
 		align-items: center;
 		gap: 7px;
-		padding: 9px 20px 9px 16px;
+		min-height: 40px;
+		padding: 0 20px 0 16px;
 		font-family: var(--font-display);
-		font-size: 0.78rem;
-		font-weight: 600;
-		letter-spacing: 0.05em;
+		font-size: 0.8125rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
 		white-space: nowrap;
-		color: #4a3a2c;
+		color: #3d3530;
 		background:
-			repeating-linear-gradient(
-				115deg,
-				rgba(212, 131, 74, 0.13) 0 9px,
-				rgba(212, 131, 74, 0) 9px 18px
-			),
-			rgba(255, 248, 230, 0.94);
+			repeating-linear-gradient(45deg, rgb(212 131 74 / 0.22) 0 6px, transparent 6px 13px),
+			rgb(241 226 188 / 0.95);
 		box-shadow: 1px 2.5px 5px rgba(45, 36, 32, 0.22);
-		rotate: -2.5deg;
+		rotate: -2deg;
 		/* overhangs the card edge like real tape */
 		margin-right: -6px;
 		clip-path: polygon(
@@ -1409,7 +1873,7 @@
 		border-radius: 9999px;
 		border: 2px solid #4a3a2c;
 		background: var(--color-paper-card);
-		font-size: 0.72rem;
+		font-size: 0.75rem;
 		font-weight: 700;
 	}
 
@@ -1479,15 +1943,41 @@
 		flex: 1;
 		min-height: 0;
 		display: grid;
-		grid-template-columns: minmax(0, 1.55fr) 1px minmax(0, 0.95fr);
-		/* Cap the row at the available space so a long visitor's book
+		grid-template-columns: minmax(0, 1.4fr) 1px minmax(0, 1fr);
+		/* Cap the first row at the available space so a long visitor's book
 		 * scrolls instead of growing past the card. */
-		grid-template-rows: minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr) auto;
+		grid-template-areas:
+			'book rule card'
+			'form rule turn';
 		gap: 0 14px;
 		padding: 2px 18px 12px;
 	}
 
+	.guestbook {
+		grid-area: book;
+		display: flex;
+		min-height: 0;
+		flex-direction: column;
+	}
+
+	.postcard-franking {
+		grid-area: card;
+		display: flex;
+		min-height: 0;
+		flex-direction: column;
+	}
+
+	.postcard-back-turn {
+		grid-area: turn;
+		display: flex;
+		align-items: flex-end;
+		justify-content: flex-end;
+		padding-bottom: 4px;
+	}
+
 	.postcard-back-divider {
+		grid-area: rule;
 		background: linear-gradient(
 			180deg,
 			rgba(141, 110, 78, 0.1),
@@ -1501,64 +1991,11 @@
 		flex-shrink: 0;
 		margin: 0 0 4px;
 		font-family: var(--font-display);
-		font-size: 0.62rem;
+		font-size: 0.75rem;
 		font-weight: 700;
 		letter-spacing: 0.2em;
 		text-transform: uppercase;
 		color: var(--color-muted-ink);
-	}
-
-	/* Ruled guestbook: 26px line rhythm shared with the entries. The lines
-		* scroll WITH the writing (background-attachment: local). */
-	.guestbook-pages {
-		overflow-y: auto;
-		overscroll-behavior: contain;
-		background-image: repeating-linear-gradient(
-			transparent,
-			transparent 25px,
-			rgba(141, 113, 78, 0.3) 25px,
-			rgba(141, 113, 78, 0.3) 26px
-		);
-		background-attachment: local;
-	}
-
-	.guestbook-entry {
-		margin: 0;
-		font-family: var(--font-hand);
-		font-size: 1.12rem;
-		font-weight: 500;
-		line-height: 26px;
-		color: #3f3329;
-		overflow-wrap: anywhere;
-	}
-
-	.guestbook-author {
-		font-size: 0.95rem;
-		color: var(--color-muted-ink);
-		white-space: nowrap;
-	}
-
-	.guestbook-empty {
-		color: var(--color-muted-ink);
-	}
-
-	/* writing directly on the card, not a UI pill */
-	.guestbook-input {
-		flex: 1;
-		min-width: 0;
-		border: 0;
-		border-bottom: 2px solid rgba(93, 78, 55, 0.4);
-		background: transparent;
-		padding: 2px 2px 3px;
-		font-family: var(--font-hand);
-		font-size: 1.15rem;
-		font-weight: 600;
-		color: var(--color-ink-warm);
-		outline: none;
-	}
-
-	.guestbook-input:focus {
-		border-bottom-color: var(--color-olive);
 	}
 
 	.guestbook-input::placeholder {
@@ -1576,7 +2013,7 @@
 		min-width: 0;
 		flex-shrink: 0;
 		padding-inline: 13px;
-		font-size: 11px;
+		font-size: 0.75rem;
 		/* The sticker's motion is three separate properties (transform, rotate
 		 * and the standalone scale the global `button:active` press also uses),
 		 * so all three have to be pinned or `transform: none` cancels none of it.
@@ -1602,14 +2039,6 @@
 		box-shadow:
 			inset 0 0 0 2px rgba(45, 36, 32, 0.85),
 			inset 0 2px 5px rgba(45, 36, 32, 0.28);
-	}
-
-	.postcard-stamp-cluster {
-		flex-shrink: 0;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 12px;
 	}
 
 	/* perforated edge via the scalloped background trick */
@@ -1647,14 +2076,6 @@
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 	}
 
-	.postcard-postmark {
-		width: 100%;
-		height: auto;
-		pointer-events: none;
-		color: #4a4663;
-		rotate: -3deg;
-	}
-
 	/* `geometricPrecision` used to sit on `body`, where it softened small text
 	 * across every route. Here it earns its place: 8.4px glyphs with 1.6px
 	 * tracking, laid along a 32px-radius `textPath`, are the one place the hinted
@@ -1676,67 +2097,332 @@
 		text-rendering: geometricPrecision;
 	}
 
-	.postcard-address {
-		margin-block: auto;
-		padding-top: 10px;
+	.flip-tape :global(.flip-tape-icon) {
+		width: 1rem;
+		height: 1rem;
+		flex-shrink: 0;
 	}
 
-	.postcard-address-line {
+	/* The visitor's book: each visitor writes in their own pen, straight on
+	 * the card, with no ruled lines waiting below the last entry. */
+	.guestbook-pages {
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+
+	.guestbook-entry {
+		margin: 0;
+		font-family: var(--font-hand);
+		font-size: 1.18rem;
+		font-weight: 600;
+		line-height: 1.3;
+		color: var(--entry-ink, #3f3329);
+		overflow-wrap: anywhere;
+	}
+
+	.guestbook-entry + .guestbook-entry {
+		margin-top: 9px;
+		padding-top: 9px;
+		border-top: 1px dashed rgb(141 113 78 / 0.32);
+	}
+
+	.guestbook-author {
+		display: block;
+		text-align: right;
+		font-size: 1rem;
+		font-weight: 500;
+	}
+
+	.guestbook-blank {
+		position: relative;
+	}
+
+	.guestbook-prompt {
+		margin: 0;
+		font-family: var(--font-hand);
+		font-size: 1.22rem;
+		font-weight: 500;
+		line-height: 1.35;
+		color: #66574a;
+	}
+
+	/* A pencil arrow from the empty page down to the line to write on. */
+	.guestbook-prompt-arrow {
+		position: absolute;
+		left: 30%;
+		bottom: 0.25rem;
+		width: 2.6rem;
+		height: min(5.2rem, calc(100% - 4.8rem));
+		color: #8a7660;
+	}
+
+	.guestbook-form {
+		grid-area: form;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 8px;
+		margin-top: 8px;
+	}
+
+	/* The pencil note runs under the line the comment was written on. */
+	.guestbook-note {
+		flex-basis: 100%;
+		margin-top: -6px;
+	}
+
+	/* writing directly on the card, not a UI pill */
+	.guestbook-line {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		border-bottom: 2px solid rgb(93 78 55 / 0.4);
+	}
+
+	.guestbook-line:focus-within {
+		border-bottom-color: var(--color-olive);
+	}
+
+	.guestbook-line :global(.guestbook-pen) {
+		width: 1rem;
+		height: 1rem;
+		flex-shrink: 0;
+		color: #7d6a54;
+	}
+
+	.guestbook-input {
+		flex: 1;
+		min-width: 0;
+		border: 0;
+		background: transparent;
+		padding: 2px 2px 3px;
+		font-family: var(--font-hand);
+		font-size: 1.1rem;
+		font-weight: 600;
+		color: var(--color-ink-warm);
+		outline: none;
+	}
+
+	/* The postage: the artwork as a perforated stamp, and the postmark struck
+	 * half over it, half on the card, its waves running across the stamp. */
+	.postcard-stamp-cluster {
+		position: relative;
+		flex-shrink: 0;
+		height: 7.4rem;
+	}
+
+	.postcard-stamp-back {
+		position: absolute;
+		top: 0;
+		right: 4px;
+		width: 5.8rem;
+		padding: 6px;
+	}
+
+	.postcard-stamp-picture {
+		position: relative;
+		padding: 11px 4px 4px;
+		border: 1px solid #ddd0ba;
+		background: #fffdf8;
+	}
+
+	.postcard-stamp-country {
+		position: absolute;
+		inset: 2px 0 auto;
+		text-align: center;
+		font-family: var(--font-display);
+		font-size: 6.5px;
+		font-weight: 700;
+		letter-spacing: 0.2em;
+		text-transform: uppercase;
+		white-space: nowrap;
+		color: #7a5a3a;
+	}
+
+	.postcard-postmark {
+		position: absolute;
+		top: 3.3rem;
+		left: 0;
+		width: min(9.4rem, 100%);
+		height: auto;
+		pointer-events: none;
+		color: #4a4663;
+		opacity: 0.78;
+		rotate: -8deg;
+	}
+
+	/* The museum's catalogue card for the piece, pinned to the postcard:
+	 * typed headings, the details filled in by hand. */
+	.catalogue-card {
+		position: relative;
+		margin-block: auto;
+		padding: 0.85rem 0.75rem 0.55rem;
+		border: 1px solid #d6c6ac;
+		background: #fbf7ee;
+		box-shadow: 0 2px 4px rgb(60 40 20 / 0.12);
+		rotate: -1deg;
+	}
+
+	.catalogue-pin {
+		position: absolute;
+		left: 50%;
+		top: -6px;
+		width: 12px;
+		height: 12px;
+		translate: -50% 0;
+		border-radius: 50%;
+		background: #2a2622;
+		box-shadow:
+			inset 0 0 0 3.5px #fbf7ee,
+			0 0 0 1px #d6c6ac;
+	}
+
+	.catalogue-number,
+	.catalogue-key,
+	.catalogue-typed {
+		font-family: 'Special Elite', 'Courier New', monospace;
+	}
+
+	.catalogue-number {
+		margin: 0 0 0.35rem;
+		font-size: 0.75rem;
+		letter-spacing: 0.06em;
+		white-space: nowrap;
+		text-transform: uppercase;
+		color: #5f4f3e;
+	}
+
+	.catalogue-row {
 		margin: 0;
 		display: flex;
 		align-items: baseline;
-		gap: 6px;
-		border-bottom: 1.5px dotted rgba(141, 110, 78, 0.55);
-		padding: 3px 2px 1px;
+		gap: 0.4rem;
+		padding: 0.22rem 0;
+		border-bottom: 1px dotted #b8a68c;
+	}
+
+	.catalogue-row-last {
+		border-bottom: 0;
+	}
+
+	.catalogue-key {
+		flex: none;
+		width: 3.7rem;
+		font-size: 0.75rem;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: #5f4f3e;
+	}
+
+	.catalogue-hand {
+		min-width: 0;
 		font-family: var(--font-hand);
-		font-size: 1.25rem;
+		font-size: 1.12rem;
 		font-weight: 600;
-		line-height: 1.3;
+		line-height: 1.1;
+		color: #3f3329;
+		/* A name breaks only when it cannot fit at all. */
+		overflow-wrap: break-word;
+	}
+
+	.catalogue-typed {
+		font-size: 0.78rem;
+		white-space: nowrap;
 		color: #3f3329;
 	}
 
-	.postcard-address-field {
-		font-family: var(--font-display);
-		font-size: 0.6rem;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-		color: var(--color-muted-ink);
-	}
-
-	.postcard-address-blank {
-		height: 34px;
-	}
-
-	.postcard-ink-stamps {
-		display: flex;
+	.catalogue-votes {
+		display: inline-flex;
 		align-items: center;
-		gap: 12px;
-		padding: 14px 2px 12px;
+		gap: 4px;
+		color: #a33a2f;
 	}
 
-	/* rubber stamps with uneven inking. If the mask ever ghosts through the
-		* flip, drop the mask-image line — the rest survives. */
-	.postcard-ink-stamp {
+	.catalogue-votes svg {
+		width: 0.95rem;
+		height: 0.95rem;
+		fill: currentColor;
+	}
+
+	.catalogue-forks {
+		color: #3f5e8c;
+	}
+
+	/* The trophy room's rubber stamp, with uneven inking. If the mask ever
+	 * ghosts through the flip, drop the mask-image line; the rest survives. */
+	.catalogue-honour {
+		position: absolute;
+		right: -0.4rem;
+		bottom: 0.8rem;
+		rotate: -14deg;
+		padding: 2px 8px;
+		border: 2.4px solid #a33a2f;
+		border-radius: 50%;
 		font-family: var(--font-display);
 		font-size: 0.66rem;
 		font-weight: 700;
 		letter-spacing: 0.14em;
 		text-transform: uppercase;
-		border: 2.5px solid currentColor;
-		border-radius: 5px;
-		padding: 4px 9px;
-		opacity: 0.78;
+		color: #a33a2f;
+		opacity: 0.85;
 		mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='40'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0.55'/%3E%3C/filter%3E%3Crect width='90' height='40' filter='url(%23m)'/%3E%3C/svg%3E");
 	}
 
-	.ink-stamp-star {
-		color: var(--color-danger-deep);
-		rotate: -4deg;
-	}
+	/* On a phone-wide card the line to write on runs the card's whole width,
+	 * and the catalogue card puts each heading over its entry. */
+	@media (max-width: 30rem) {
+		.postcard-back-grid {
+			grid-template-rows: minmax(0, 1fr) auto auto;
+			grid-template-areas:
+				'book rule card'
+				'form form form'
+				'turn turn turn';
+		}
 
-	.ink-stamp-forks {
-		color: #3f5e8c;
-		rotate: 2.5deg;
+		.postcard-back-turn {
+			padding-top: 8px;
+		}
+
+		.catalogue-card {
+			padding: 0.7rem 0.6rem 0.4rem;
+		}
+
+		.catalogue-row {
+			flex-direction: column;
+			gap: 0;
+			padding: 0.1rem 0;
+		}
+
+		.catalogue-key {
+			width: auto;
+		}
+
+		.catalogue-number {
+			letter-spacing: 0;
+			white-space: normal;
+		}
+
+		.postcard-stamp-cluster {
+			height: 6.4rem;
+		}
+
+		.postcard-stamp-back {
+			width: 4.8rem;
+		}
+
+		.postcard-stamp-country {
+			font-size: 5.5px;
+			letter-spacing: 0.08em;
+		}
+
+		.postcard-postmark {
+			top: 2.9rem;
+		}
+
+		.guestbook-form {
+			margin-top: 14px;
+		}
 	}
 </style>

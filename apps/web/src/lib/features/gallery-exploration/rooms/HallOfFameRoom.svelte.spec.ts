@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
-vi.mock('$lib/features/home-entry-scene/canvas/museum-canvas', () => ({
+vi.mock('#lib/features/home-entry-scene/canvas/museum-canvas.js', () => ({
 	museumWindowOpening: { x: 0, y: 0, width: 100, height: 100 },
 	museumWindowAspectRatio: '16/9'
 }));
@@ -12,7 +12,7 @@ vi.mock('$app/environment', () => ({
 	browser: true
 }));
 
-import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
+import { makeArtwork } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import HallOfFameRoom from './HallOfFameRoom.svelte';
 import RoomHarness from './RoomHarness.svelte';
 
@@ -42,7 +42,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a6', 50)
 		];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
 		});
@@ -51,6 +51,49 @@ describe('HallOfFameRoom', () => {
 		await expect.element(page.getByTestId('podium-artwork-1')).toBeVisible();
 		await expect.element(page.getByTestId('podium-artwork-2')).toBeVisible();
 		await expect.element(page.getByTestId('podium-artwork-3')).toBeVisible();
+	});
+
+	it('marks its top three with the award the visit drew', async () => {
+		const artworks = [
+			createArtwork('a1', 100, 1),
+			createArtwork('a2', 90, 2),
+			createArtwork('a3', 80, 3),
+			createArtwork('a4', 70)
+		];
+
+		await renderRoom({
+			artworks,
+			awardStyle: 'doodles',
+			pageInfo: { hasMore: false, nextCursor: null }
+		});
+
+		for (const name of [
+			'Champion, first place',
+			'Runner-up, second place',
+			'Bronze star, third place'
+		]) {
+			await expect
+				.element(page.getByRole('img', { name: `${name} (marker doodle)` }))
+				.toBeVisible();
+		}
+	});
+
+	it('labels each of the top three like a museum: the work, its artist and year, and the place it won', async () => {
+		const artworks = [
+			createArtwork('a1', 100, 1),
+			createArtwork('a2', 90, 2),
+			createArtwork('a3', 80, 3)
+		];
+
+		await renderRoom({ artworks, pageInfo: { hasMore: false, nextCursor: null } });
+
+		const champion = page.getByTestId('podium-plaque-1');
+		await expect.element(champion.getByText('Artwork a1')).toBeVisible();
+		await expect.element(champion.getByText('artist-a1 · 2023')).toBeVisible();
+		await expect.element(champion.getByText('Champion · ★ 100')).toBeVisible();
+		await expect
+			.element(page.getByTestId('podium-plaque-3').getByText('Bronze star · ★ 80'))
+			.toBeVisible();
 	});
 
 	it('renders podium above VirtualizedGrid with remaining artworks', async () => {
@@ -63,7 +106,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a6', 50)
 		];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -88,7 +131,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a4', 70)
 		];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
 			loadMoreArtworks
@@ -111,7 +154,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a6', 50)
 		];
 
-		const screen = renderRoom({
+		const screen = await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -155,7 +198,7 @@ describe('HallOfFameRoom', () => {
 			createArtwork('a4', 70)
 		];
 
-		const { unmount } = renderRoom({
+		const { unmount } = await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});

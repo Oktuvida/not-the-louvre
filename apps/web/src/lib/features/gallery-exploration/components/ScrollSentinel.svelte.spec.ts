@@ -12,7 +12,7 @@ describe('ScrollSentinel', () => {
 		it('renders a sentinel element that triggers onTrigger when it enters the viewport', async () => {
 			const onTrigger = vi.fn();
 
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger,
 				hasMore: true,
 				isLoading: false,
@@ -30,10 +30,28 @@ describe('ScrollSentinel', () => {
 			});
 		});
 
+		it('asks for the next page while the visitor is still two screens away from it', async () => {
+			// The sentinel sits a screen and a half below the bottom of the window.
+			const spacer = document.createElement('div');
+			spacer.style.height = `${Math.round(window.innerHeight * 2.5)}px`;
+			document.body.prepend(spacer);
+			const onTrigger = vi.fn();
+
+			try {
+				await render(ScrollSentinel, { onTrigger, hasMore: true, isLoading: false, error: null });
+
+				await vi.waitFor(() => {
+					expect(onTrigger).toHaveBeenCalled();
+				});
+			} finally {
+				spacer.remove();
+			}
+		});
+
 		it('does NOT call onTrigger when disabled is true', async () => {
 			const onTrigger = vi.fn();
 
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger,
 				disabled: true,
 				hasMore: true,
@@ -52,7 +70,7 @@ describe('ScrollSentinel', () => {
 		it('does NOT call onTrigger when hasMore is false', async () => {
 			const onTrigger = vi.fn();
 
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger,
 				hasMore: false,
 				isLoading: false,
@@ -69,7 +87,7 @@ describe('ScrollSentinel', () => {
 
 	describe('loading state', () => {
 		it('renders skeleton placeholder cards when isLoading is true', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				hasMore: true,
 				isLoading: true,
@@ -84,7 +102,7 @@ describe('ScrollSentinel', () => {
 		});
 
 		it('supports room-specific loading geometry and earlier trigger margins', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				hasMore: true,
 				isLoading: true,
@@ -103,7 +121,7 @@ describe('ScrollSentinel', () => {
 		});
 
 		it('does not render skeletons when isLoading is false', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				hasMore: true,
 				isLoading: false,
@@ -116,7 +134,7 @@ describe('ScrollSentinel', () => {
 
 	describe('error/retry', () => {
 		it('renders error message and retry button when error is set', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				onRetry: vi.fn(),
 				hasMore: true,
@@ -125,14 +143,16 @@ describe('ScrollSentinel', () => {
 			});
 
 			await expect.element(page.getByTestId('scroll-sentinel-error')).toBeVisible();
+			// Chalked on the easel at the foot of the wall, in the house voice.
+			await expect.element(page.getByText('The next wall is still being hung.')).toBeVisible();
 			await expect.element(page.getByText('Failed to load artworks')).toBeVisible();
-			await expect.element(page.getByRole('button', { name: /retry/i })).toBeVisible();
+			await expect.element(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 		});
 
 		it('calls onRetry when retry button is clicked', async () => {
 			const onRetry = vi.fn();
 
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				onRetry,
 				hasMore: true,
@@ -140,7 +160,7 @@ describe('ScrollSentinel', () => {
 				error: 'Failed to load artworks'
 			});
 
-			await page.getByRole('button', { name: /retry/i }).click();
+			await page.getByRole('button', { name: 'Try again' }).click();
 
 			expect(onRetry).toHaveBeenCalledOnce();
 		});
@@ -148,18 +168,21 @@ describe('ScrollSentinel', () => {
 
 	describe('end-of-list', () => {
 		it('renders end-of-list indicator when hasMore is false and not loading and no error', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				hasMore: false,
 				isLoading: false,
 				error: null
 			});
 
+			// The end of the wall is roped off, with its museum label.
 			await expect.element(page.getByTestId('scroll-sentinel-end')).toBeVisible();
+			await expect.element(page.getByText('End of the collection')).toBeVisible();
+			await expect.element(page.getByText('The rest is still being drawn')).toBeVisible();
 		});
 
 		it('does not render end-of-list when hasMore is true', async () => {
-			render(ScrollSentinel, {
+			await render(ScrollSentinel, {
 				onTrigger: vi.fn(),
 				hasMore: true,
 				isLoading: false,

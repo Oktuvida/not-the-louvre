@@ -3,14 +3,16 @@ import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
 const { beforeNavigate, navigate, resetNavigationCallbacks } = vi.hoisted(() => {
-	const callbacks = new Set<() => void>();
+	type Navigation = { shallow: boolean; type: string };
+	const callbacks = new Set<(navigation: Navigation) => void>();
 
 	return {
-		beforeNavigate: (callback: () => void) => {
+		beforeNavigate: (callback: (navigation: Navigation) => void) => {
 			callbacks.add(callback);
 		},
+		// A room tab is a full link navigation, not a shallow goto.
 		navigate: () => {
-			for (const callback of callbacks) callback();
+			for (const callback of callbacks) callback({ shallow: false, type: 'link' });
 		},
 		resetNavigationCallbacks: () => {
 			callbacks.clear();
@@ -18,16 +20,16 @@ const { beforeNavigate, navigate, resetNavigationCallbacks } = vi.hoisted(() => 
 	};
 });
 
-vi.mock('$app/navigation', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$app/navigation')>();
-	return { ...actual, beforeNavigate };
-});
+vi.mock('$app/navigation', async () => ({
+	...(await import('#lib/testing/fake-navigation.js')).fakeNavigation,
+	beforeNavigate
+}));
 
-import { makeArtworks } from '$lib/features/gallery-exploration/fixtures/artworks';
+import { makeArtworks } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import {
 	clearRoomFeedCache,
 	readRoomFeedSnapshot
-} from '$lib/features/gallery-exploration/model/feed-cache';
+} from '#lib/features/gallery-exploration/model/feed-cache.js';
 import HotWallRoom from './rooms/HotWallRoom.svelte';
 import RoomHarness from './rooms/RoomHarness.svelte';
 
@@ -50,7 +52,7 @@ describe('createSeededAccumulator feed memory', () => {
 	it('remembers where the reader was, not where the navigation left them', async () => {
 		const artworks = makeArtworks(6, { prefix: 'hot-' });
 
-		const room = render(RoomHarness, {
+		const room = await render(RoomHarness, {
 			props: {
 				component: HotWallRoom,
 				roomProps: {
@@ -65,9 +67,8 @@ describe('createSeededAccumulator feed memory', () => {
 
 		stubScrollY(5200);
 		// The room tab is a push navigation: SvelteKit scrolls the window back to
-		// the top two ticks after the DOM update, while the room itself is only
-		// destroyed once the layout's keyed out-transition has played. The offset
-		// has to be captured here, before either of those.
+		// the top as it lands, and the room is destroyed only once the next one
+		// has replaced it. The offset has to be captured here, before either.
 		navigate();
 		stubScrollY(0);
 
@@ -76,10 +77,36 @@ describe('createSeededAccumulator feed memory', () => {
 		expect(readRoomFeedSnapshot('hot-wall')?.scrollY).toBe(5200);
 	});
 
+	it('hands over the first page it was drawing along with its feed', async () => {
+		const artworks = makeArtworks(6, { prefix: 'hot-' });
+
+		const room = await render(RoomHarness, {
+			props: {
+				component: HotWallRoom,
+				roomProps: {
+					artworks,
+					feedCacheKey: 'hot-wall',
+					pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
+				}
+			}
+		});
+
+		await expect.element(page.getByTestId('hot-wall-room')).toBeVisible();
+
+		navigate();
+		room.unmount();
+
+		// The room goes back up from this before the server's fresh page lands.
+		expect(readRoomFeedSnapshot('hot-wall')?.seed).toEqual({
+			artworks,
+			pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
+		});
+	});
+
 	it('stores no offset for a room the reader never scrolled', async () => {
 		const artworks = makeArtworks(6, { prefix: 'hot-' });
 
-		const room = render(RoomHarness, {
+		const room = await render(RoomHarness, {
 			props: {
 				component: HotWallRoom,
 				roomProps: {

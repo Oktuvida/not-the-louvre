@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { banUser, listUsers, unbanUser, updateUserRole } from './admin.service';
-import type { CanonicalUser } from '$lib/server/auth/types';
+import type { CanonicalUser } from '#lib/server/auth/types.js';
 import type { UserRecord, UserRepository } from './types';
 
 const createAdmin = (overrides: Partial<CanonicalUser> = {}): CanonicalUser => ({
@@ -40,10 +40,6 @@ const createRepository = (record = createUserRecord()): UserRepository => {
 	let stored = record;
 
 	return {
-		appendUserAvatarDocumentChunk: vi.fn(async () => false),
-		finalizeUserAvatarDocument: vi.fn(async () => null),
-		findUserAvatarDocumentLength: vi.fn(async () => null),
-		findUserAvatarDocumentRef: vi.fn(async () => null),
 		findUserAvatarRefById: vi.fn(async (id) =>
 			stored.id === id
 				? {
@@ -59,7 +55,8 @@ const createRepository = (record = createUserRecord()): UserRepository => {
 				: null
 		),
 		findUserById: vi.fn(async (id) => (stored.id === id ? stored : null)),
-		listUsers: vi.fn(async () => [stored]),
+		countUsers: vi.fn(async () => ({ artists: 1, banned: 0, moderators: 0 })),
+		listUsers: vi.fn(async () => [{ ...stored, artworkCount: 0 }]),
 		updateAvatarModeration: vi.fn(async () => null),
 		updateBanState: vi.fn(async (id, input) => {
 			if (stored.id !== id) return null;
@@ -72,7 +69,7 @@ const createRepository = (record = createUserRecord()): UserRepository => {
 			};
 			return stored;
 		}),
-		updateUserAvatarUrl: vi.fn(async () => null),
+		updateUserAvatar: vi.fn(async () => null),
 		updateUserRole: vi.fn(async (id, role, updatedAt) => {
 			if (stored.id !== id) return null;
 			stored = { ...stored, role, updatedAt };

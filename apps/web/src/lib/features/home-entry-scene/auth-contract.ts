@@ -1,4 +1,4 @@
-import type { DrawingDocumentV2 } from '$lib/features/stroke-json/document';
+import type { DrawingDocumentV2 } from '#lib/features/stroke-json/document.js';
 
 export type HomeAuthUser = {
 	authUserId: string;
@@ -11,6 +11,8 @@ export type HomeAuthUser = {
 	name?: string;
 	nickname: string;
 	role: string;
+	/** The cases waiting on the staff desk; absent for anybody who is not staff. */
+	staffCases?: number | null;
 };
 
 export type HomeAuthBootstrap =

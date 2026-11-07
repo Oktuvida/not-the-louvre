@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { homeFloatingPaint } from '$lib/features/home-entry-scene/state/home-entry.svelte';
+	import { homeFloatingPaint } from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
 
 	let {
 		className = '',

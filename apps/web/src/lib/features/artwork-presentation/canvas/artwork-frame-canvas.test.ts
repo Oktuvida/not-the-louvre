@@ -3,7 +3,7 @@ import { getArtworkFrameOpening, getArtworkFrameOpeningRatio } from './artwork-f
 import {
 	premiumArtworkFramePresets,
 	standardArtworkFramePresets
-} from '$lib/features/artwork-presentation/model/frame';
+} from '#lib/features/artwork-presentation/model/frame.js';
 
 describe('getArtworkFrameOpeningRatio', () => {
 	it('matches the default moulding + inner lip + mat of the shipped presets', () => {

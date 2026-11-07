@@ -1,35 +1,102 @@
 <script lang="ts">
-	let { failed = false }: { failed?: boolean } = $props();
+	import {
+		COMPOSED_FOR,
+		SKETCH_FRAME
+	} from '#lib/features/home-entry-scene/scene/studio-framing.js';
+	import { STUDIO_SKETCH_URL } from '#lib/features/home-entry-scene/scene/studio-model.js';
+
+	/*
+	 * The studio drawn in pencil, where the 3D room will stand, while three.js
+	 * and the model are on their way: the drawing comes from the model itself
+	 * (scripts/sketch-studio-room.ts), seen from the camera the room rests at,
+	 * so the room fades in exactly over it. It sketches itself in, the long
+	 * lines of the room first.
+	 *
+	 * If the room never comes, the drawing stays: it is a room to look at, and
+	 * the page works without the 3D. `onRetry` adds a way to try the real one
+	 * again, when trying again can help.
+	 */
+	let { failed = false, onRetry }: { failed?: boolean; onRetry?: () => void } = $props();
 </script>
 
-<div
-	aria-live="polite"
-	class="pointer-events-none absolute inset-4 flex items-end justify-start sm:inset-6"
-	data-testid="studio-scene-fallback"
->
-	<div
-		class="max-w-[18rem] rounded-[1.8rem] border-4 border-ink bg-[linear-gradient(180deg,_rgba(251,247,240,0.92),_rgba(232,219,201,0.96))] px-5 py-4 text-ink shadow-card"
-	>
-		<p class="text-xs font-semibold tracking-[0.24em] text-[color:rgba(38,26,18,0.72)] uppercase">
-			{failed ? 'Scene preview paused' : 'Scene preview loading'}
-		</p>
-		<div class="mt-3 flex items-center gap-4">
-			<div
-				class={`h-14 w-14 rounded-full border-4 border-ink bg-primary shadow-card ${failed ? '' : 'animate-[bob_2s_ease-in-out_infinite]'}`}
-			></div>
-			<div class="space-y-2">
-				<p class="font-display text-lg tracking-[0.16em] uppercase">Loading Studio…</p>
-				<p class="text-sm leading-5 text-[color:rgba(38,26,18,0.76)]">
-					{failed
-						? 'The gallery is still open while the 3D studio preview takes a break.'
-						: 'The gallery is already open while the 3D studio preview finishes loading.'}
-				</p>
-			</div>
-		</div>
-		<div class="mt-4 h-3 overflow-hidden rounded-full border-2 border-ink bg-white/60">
-			<div
-				class={`h-full w-full bg-[linear-gradient(90deg,_var(--color-primary),_var(--color-accent),_var(--color-primary))] bg-[length:200%_100%] ${failed ? 'opacity-70' : 'animate-[shimmer_1.4s_linear_infinite]'}`}
-			></div>
-		</div>
-	</div>
+<div class="studio-sketch-frame" data-testid="studio-scene-fallback">
+	<!-- Placed in pixels of the composition every pose was made on, scaled the
+	     way the room is, so the drawing lies under it on any screen. -->
+	<img
+		alt=""
+		class="studio-sketch"
+		data-testid="studio-sketch"
+		decoding="async"
+		src={STUDIO_SKETCH_URL}
+		style:--composed-width={COMPOSED_FOR.width}
+		style:--composed-height={COMPOSED_FOR.height}
+		style:--sketch-left={SKETCH_FRAME.left - COMPOSED_FOR.width / 2}
+		style:--sketch-top={SKETCH_FRAME.top - COMPOSED_FOR.height / 2}
+		style:--sketch-width={SKETCH_FRAME.width}
+		style:--sketch-height={SKETCH_FRAME.height}
+	/>
+	<p class="sr-only" role="status">
+		{failed ? 'Only the sketch of the studio today.' : 'Setting up the studio…'}
+	</p>
+	{#if failed && onRetry}
+		<button class="sketch-note" onclick={onRetry} type="button">
+			only the sketch today… <span class="sketch-note-action">try the real room</span>
+		</button>
+	{/if}
 </div>
+
+<style>
+	.studio-sketch-frame {
+		position: absolute;
+		inset: 0;
+		container-type: size;
+		pointer-events: none;
+	}
+
+	.studio-sketch {
+		/* One pixel of the composition on this screen: the room's own scale. */
+		--unit: min(100cqw / var(--composed-width), 100cqh / var(--composed-height));
+		position: absolute;
+		left: calc(50% + var(--sketch-left) * var(--unit));
+		top: calc(50% + var(--sketch-top) * var(--unit));
+		width: calc(var(--sketch-width) * var(--unit));
+		height: calc(var(--sketch-height) * var(--unit));
+		max-width: none;
+		user-select: none;
+	}
+
+	/* A note pencilled on the drawing's left wall, clear of the doors out. */
+	.sketch-note {
+		position: absolute;
+		top: 44%;
+		left: max(1rem, 4%);
+		max-width: 14rem;
+		padding: 0.35rem 0.6rem;
+		border: 0;
+		background: rgb(251 247 238 / 0.92);
+		box-shadow: 0 1px 2px rgb(40 25 10 / 0.25);
+		rotate: -3deg;
+		color: var(--color-ink-warm, #2d2420);
+		font-family: var(--font-hand);
+		font-size: 1.25rem;
+		line-height: 1.15;
+		text-align: left;
+		pointer-events: auto;
+		cursor: pointer;
+	}
+
+	.sketch-note-action {
+		text-decoration: underline;
+		text-decoration-thickness: 1px;
+		text-underline-offset: 3px;
+	}
+
+	.sketch-note-action::after {
+		content: ' ↻';
+	}
+
+	.sketch-note:focus-visible {
+		outline: 2px solid var(--color-ink-warm, #2d2420);
+		outline-offset: 3px;
+	}
+</style>

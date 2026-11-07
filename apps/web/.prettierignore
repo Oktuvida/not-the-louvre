@@ -6,3 +6,5 @@ test-results
 drizzle
 static
 .generated
+# Answers recorded from the removed Rust runtime (see legacy.test.ts); never hand-edit
+src/lib/stroke/fixtures/legacy-rust-parity.json

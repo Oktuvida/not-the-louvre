@@ -1,20 +1,23 @@
 import { generateId } from 'better-auth';
-import { assertNotBanned } from '$lib/server/auth/guards';
+import { assertNotBanned } from '#lib/server/auth/guards.js';
 import {
 	ARTWORK_COMMENT_MAX_LENGTH,
 	ARTWORK_COMMENT_RATE_LIMIT,
 	ARTWORK_PUBLISH_RATE_LIMIT,
 	ARTWORK_VOTE_RATE_LIMIT,
-	CONTENT_REPORT_DETAILS_MAX_LENGTH
+	ARTWORK_WISH_RATE_LIMIT,
+	CONTENT_REPORT_DETAILS_MAX_LENGTH,
+	WISHES_REMEMBERED
 } from './config';
 import { ArtworkFlowError, logArtworkFlowFailure } from './errors';
 import { artworkRepository } from './repository';
-import { supabaseArtworkStorage } from './storage';
-import { checkTextModeration } from '$lib/server/moderation/service';
-import { isRateLimitBlocked, type RateLimitPolicy } from '$lib/server/db/rate-limit';
-import { isArtworkReportReason } from '$lib/shared/content/report-reasons';
-import { isArtworkVoteValue } from '$lib/shared/content/votes';
-import { prepareDrawingDocumentForStorage } from '$lib/features/stroke-json/runtime.server';
+import { artworkStorage } from './storage';
+import { checkTextModeration } from '#lib/server/moderation/service.js';
+import { isRateLimitBlocked, type RateLimitPolicy } from '#lib/server/db/rate-limit.js';
+import { isArtworkReportReason } from '#lib/shared/content/report-reasons.js';
+import { isArtworkVoteValue } from '#lib/shared/content/votes.js';
+import { WISHES_IN_HAND, WISH_MAX_LENGTH, type Wish } from '#lib/shared/content/wishes.js';
+import { prepareDrawingDocumentForStorage } from '#lib/server/drawing-document/storage.js';
 import type {
 	ArtworkActorContext,
 	ArtworkCommentView,
@@ -25,30 +28,26 @@ import type {
 	ArtworkStorage,
 	ArtworkVoteMutationResult,
 	ArtworkVoteRemovalResult,
+	ArtworkVoteSummary,
 	ContentReportStatus,
-	SanitizedMedia,
 	ArtworkVisibilityActor,
 	ArtworkVoteValue
 } from './types';
-import { sanitizeArtworkMedia } from '../media/sanitization';
 import {
-	CONNECTION_RETRY_DELAYS_MS,
-	DRAWING_DOCUMENT_CHUNK_CHARS,
-	isConnectionClosedError,
-	isRetryableConnectionError,
-	isUniqueViolation,
-	writeDrawingDocumentInChunks,
-	type DrawingDocumentChunkStore
-} from '$lib/server/drawing-document/chunked-write';
-import { createArtworkDrawingDocumentMedia } from '$lib/server/drawing-document/media';
+	drawingDocumentStore,
+	type DrawingDocumentStore
+} from '#lib/server/drawing-document/document-store.js';
+import { renderArtworkMedia } from '#lib/server/render/client.js';
+import { publishArtworkChange } from '#lib/server/realtime/artwork-topics.js';
+import type { ArtworkVoteTotals } from '#lib/shared/artwork/live-change.js';
 import { normalizePublishTitle, normalizeUpdatedTitle } from './validation';
 
 type PublishArtworkInput = {
 	drawingDocument?: string | null;
 	isNsfw?: boolean;
-	media?: File | null;
 	parentArtworkId?: string | null;
 	title?: string | null;
+	wishId?: string | null;
 };
 
 type UpdateArtworkTitleInput = {
@@ -84,6 +83,7 @@ type SubmitContentReportInput = {
 	commentId?: string | null;
 	details?: string | null;
 	reason: string;
+	wishId?: string | null;
 };
 
 type ModerateArtworkInput = {
@@ -97,42 +97,43 @@ type ModerateCommentInput = {
 	commentId: string;
 };
 
+type ModerateWishInput = {
+	action: 'delete' | 'dismiss' | 'hide' | 'unhide';
+	wishId: string;
+};
+
 type ServiceDependencies = {
-	drawingDocumentChunkChars?: number;
+	documents?: DrawingDocumentStore;
 	generateId?: () => string;
 	now?: () => Date;
 	randomSuffix?: () => number;
 	repository?: ArtworkRepository;
-	renderDrawingDocumentMedia?: typeof createArtworkDrawingDocumentMedia;
-	sanitizeMedia?: (file: File) => Promise<SanitizedMedia>;
-	sleep?: (ms: number) => Promise<void>;
+	renderDrawingDocumentMedia?: typeof renderArtworkMedia;
 	storage?: ArtworkStorage;
 };
 
-const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 const getDependencies = (dependencies: ServiceDependencies = {}) => ({
-	drawingDocumentChunkChars: dependencies.drawingDocumentChunkChars ?? DRAWING_DOCUMENT_CHUNK_CHARS,
+	documents: dependencies.documents ?? drawingDocumentStore,
 	generateId: dependencies.generateId ?? generateId,
 	now: dependencies.now ?? (() => new Date()),
 	randomSuffix: dependencies.randomSuffix ?? (() => Math.floor(Math.random() * 10000)),
 	repository: dependencies.repository ?? artworkRepository,
-	renderDrawingDocumentMedia:
-		dependencies.renderDrawingDocumentMedia ?? createArtworkDrawingDocumentMedia,
-	sanitizeMedia: dependencies.sanitizeMedia ?? sanitizeArtworkMedia,
-	sleep: dependencies.sleep ?? defaultSleep,
-	storage: dependencies.storage ?? supabaseArtworkStorage
+	renderDrawingDocumentMedia: dependencies.renderDrawingDocumentMedia ?? renderArtworkMedia,
+	storage: dependencies.storage ?? artworkStorage
 });
 
 // The gallery client renders from the media endpoint; the drawing document
 // (up to hundreds of KiB) only serves the server-side /draw fork loader, so it
 // stays off the wire while the response keeps its shape. Every HTTP handler
 // that serialises an artwork record goes through this.
-export const withoutDrawingDocument = <T extends { drawingDocument?: string | null }>(
+export const withoutDrawingDocument = <
+	T extends { drawingDocument?: string | null; drawingDocumentKey?: string | null }
+>(
 	artwork: T
 ) => ({
 	...artwork,
-	drawingDocument: null
+	drawingDocument: null,
+	drawingDocumentKey: null
 });
 
 const requireActor = (context: Partial<ArtworkActorContext>): ArtworkActorContext => {
@@ -171,6 +172,12 @@ const normalizeVoteValue = (value: string): ArtworkVoteValue => {
 
 	throw new ArtworkFlowError(400, 'Vote must be either up or down', 'INVALID_VOTE');
 };
+
+const toVoteTotals = ({ downvotes, score, upvotes }: ArtworkVoteSummary): ArtworkVoteTotals => ({
+	downvotes,
+	score,
+	upvotes
+});
 
 // Artwork limits block for exactly as long as the window they were counted in.
 const artworkRateLimitPolicy = (config: {
@@ -241,107 +248,6 @@ const recordPublishAttempt = async (
 	});
 };
 
-// A closed-mid-query insert is ambiguous — it may have committed with only the
-// ack lost — so every ambiguous exit re-reads the row (the id is generated per
-// request, so a found row or a unique violation can only be this request's own
-// insert) and the result reports whether the uploaded media may belong to a
-// committed row. The backoff schedule is shared with the chunked document write.
-const insertWithConnectionRetries = async <T>(
-	run: () => Promise<T>,
-	options: {
-		readBackCommittedRow: () => Promise<T | null>;
-		sleep: (ms: number) => Promise<void>;
-	}
-): Promise<{ artwork: T } | { error: unknown; mayHaveCommitted: boolean }> => {
-	const readBack = async () => {
-		try {
-			return await options.readBackCommittedRow();
-		} catch {
-			await options.sleep(1000);
-			return options.readBackCommittedRow();
-		}
-	};
-
-	const recovered = (artwork: T) => {
-		console.warn(JSON.stringify({ category: 'artwork', event: 'insert_recovered_from_lost_ack' }));
-		return { artwork };
-	};
-
-	let lastError: unknown;
-	let sawAmbiguousClose = false;
-
-	for (let attempt = 0; attempt <= CONNECTION_RETRY_DELAYS_MS.length; attempt += 1) {
-		if (attempt > 0) {
-			const delayMs = CONNECTION_RETRY_DELAYS_MS[attempt - 1]!;
-			console.warn(
-				JSON.stringify({
-					attempt,
-					category: 'artwork',
-					delayMs,
-					event: 'insert_retry_connection_closed'
-				})
-			);
-			await options.sleep(delayMs);
-		}
-
-		try {
-			return { artwork: await run() };
-		} catch (error) {
-			if (sawAmbiguousClose && isUniqueViolation(error)) {
-				// An earlier ambiguous attempt actually committed.
-				try {
-					const committed = await readBack();
-					if (committed) {
-						return recovered(committed);
-					}
-				} catch {
-					// proven committed but unreadable; fall through
-				}
-				return { error, mayHaveCommitted: true };
-			}
-
-			if (!isRetryableConnectionError(error)) {
-				return { error, mayHaveCommitted: false };
-			}
-			sawAmbiguousClose ||= isConnectionClosedError(error);
-			lastError = error;
-		}
-	}
-
-	if (!sawAmbiguousClose) {
-		return { error: lastError, mayHaveCommitted: false };
-	}
-
-	// Retries exhausted after at least one closed-mid-query attempt; the last
-	// such attempt may have committed, so resolve the ambiguity before the
-	// caller decides whether the uploaded media can be cleaned up.
-	try {
-		const committed = await readBack();
-		if (committed) {
-			return recovered(committed);
-		}
-		return { error: lastError, mayHaveCommitted: false };
-	} catch {
-		return { error: lastError, mayHaveCommitted: true };
-	}
-};
-
-// Binds the shared chunked-write ladder to the artworks table. The avatar path
-// implements the same three-method port over app.users.
-const createArtworkDrawingDocumentStore = (
-	repository: ArtworkRepository
-): DrawingDocumentChunkStore<ArtworkRecord> => ({
-	appendChunk: (id, chunk, expectedLength, updatedAt) =>
-		repository.appendArtworkDrawingDocumentChunk(id, chunk, expectedLength, updatedAt),
-	finalize: (id, version, expectedTotalLength, updatedAt) =>
-		repository.finalizeArtworkDrawingDocument(id, version, expectedTotalLength, updatedAt),
-	findDocumentLength: (id) => repository.findArtworkDrawingDocumentLength(id),
-	findFinalized: async (id, version) => {
-		const committed = await repository.findArtworkById(id);
-		return committed?.drawingVersion === version ? committed : null;
-	}
-});
-
 const getArtworkOrThrow = async (artworkId: string, repository: ArtworkRepository) => {
 	const artwork = await repository.findArtworkById(artworkId);
 	if (!artwork) {
@@ -395,44 +301,59 @@ const normalizeReportDetails = (details: string | null | undefined) => {
 	return trimmed;
 };
 
-const assertExactlyOneReportTarget = (artworkId?: string | null, commentId?: string | null) => {
+const assertExactlyOneReportTarget = (
+	artworkId?: string | null,
+	commentId?: string | null,
+	wishId?: string | null
+) => {
 	const normalizedArtworkId = artworkId?.trim() ? artworkId.trim() : null;
 	const normalizedCommentId = commentId?.trim() ? commentId.trim() : null;
-	const targetCount = Number(Boolean(normalizedArtworkId)) + Number(Boolean(normalizedCommentId));
+	const normalizedWishId = wishId?.trim() ? wishId.trim() : null;
+	const targetCount =
+		Number(Boolean(normalizedArtworkId)) +
+		Number(Boolean(normalizedCommentId)) +
+		Number(Boolean(normalizedWishId));
 
 	if (targetCount !== 1) {
 		throw new ArtworkFlowError(
 			400,
-			'Report must target exactly one artwork or comment',
+			'Report must target exactly one artwork, comment or slip',
 			'INVALID_REPORT_TARGET'
 		);
 	}
 
-	return { artworkId: normalizedArtworkId, commentId: normalizedCommentId };
+	return {
+		artworkId: normalizedArtworkId,
+		commentId: normalizedCommentId,
+		wishId: normalizedWishId
+	};
 };
 
+const PENDING_REPORT_UNIQUE_CONSTRAINTS = [
+	'content_reports_pending_artwork_reporter_unique',
+	'content_reports_pending_comment_reporter_unique',
+	'content_reports_pending_wish_reporter_unique'
+];
+
+// Drizzle wraps the driver's error in a DrizzleQueryError, so the SQLSTATE and
+// the constraint name live on its cause, never on the error the query rejects with.
 const isPendingReportUniqueViolation = (error: unknown) => {
-	if (!error || typeof error !== 'object') return false;
-
-	const candidate = error as {
-		code?: string;
-		constraint?: string;
-		constraint_name?: string;
-		message?: string;
-	};
-	const constraint = candidate.constraint_name ?? candidate.constraint ?? candidate.message ?? '';
-
-	return (
-		candidate.code === '23505' &&
-		(typeof constraint !== 'string'
-			? false
-			: constraint.includes('content_reports_pending_artwork_reporter_unique') ||
-				constraint.includes('content_reports_pending_comment_reporter_unique'))
-	);
+	for (let current: unknown = error; current instanceof Error; current = current.cause) {
+		const { code, constraint } = current as { code?: unknown; constraint?: unknown };
+		if (code === '23505') {
+			return (
+				typeof constraint === 'string' && PENDING_REPORT_UNIQUE_CONSTRAINTS.includes(constraint)
+			);
+		}
+	}
+	return false;
 };
 
 const getResolutionStatus = (
-	action: ModerateArtworkInput['action'] | ModerateCommentInput['action']
+	action:
+		| ModerateArtworkInput['action']
+		| ModerateCommentInput['action']
+		| ModerateWishInput['action']
 ): Exclude<ContentReportStatus, 'pending'> =>
 	action === 'hide' || action === 'delete' || action === 'mark_nsfw' ? 'actioned' : 'reviewed';
 
@@ -443,14 +364,12 @@ export const publishArtwork = async (
 ) => {
 	const actor = requireActor(context);
 	const {
-		drawingDocumentChunkChars,
+		documents,
 		generateId: nextId,
 		now: getNow,
 		randomSuffix,
 		repository,
 		renderDrawingDocumentMedia,
-		sanitizeMedia,
-		sleep,
 		storage
 	} = getDependencies(dependencies);
 	const now = getNow();
@@ -465,151 +384,110 @@ export const publishArtwork = async (
 
 	const parentArtworkId = input.parentArtworkId?.trim() ? input.parentArtworkId.trim() : null;
 
-	if (parentArtworkId) {
-		const parentArtwork = await repository.findArtworkById(parentArtworkId);
-		if (!parentArtwork) {
-			throw new ArtworkFlowError(400, 'Fork parent artwork not found', 'INVALID_FORK_PARENT');
-		}
+	const parentArtwork = parentArtworkId ? await repository.findArtworkById(parentArtworkId) : null;
+	if (parentArtworkId && !parentArtwork) {
+		throw new ArtworkFlowError(400, 'Fork parent artwork not found', 'INVALID_FORK_PARENT');
 	}
 
-	let media: SanitizedMedia;
-	let drawingDocument: string | null = null;
-	let drawingVersion: number | null = null;
-
+	// An artwork is its strokes: the image is rendered from them, never uploaded.
 	const providedDrawingDocument = input.drawingDocument?.trim() ?? '';
-	if (providedDrawingDocument) {
-		const preparedDocument = await prepareDrawingDocumentForStorage(providedDrawingDocument);
-		if (preparedDocument.document.kind !== 'artwork') {
-			throw new ArtworkFlowError(
-				400,
-				'Artwork publish requires an artwork drawing document',
-				'INVALID_MEDIA_FORMAT'
-			);
-		}
-
-		media = await renderDrawingDocumentMedia(preparedDocument.document);
-		drawingDocument = preparedDocument.compressedDocumentBase64;
-		drawingVersion = preparedDocument.version;
-	} else if (input.media instanceof File) {
-		media = await sanitizeMedia(input.media);
-	} else {
-		throw new ArtworkFlowError(400, 'Artwork media is required', 'INVALID_MEDIA_FORMAT');
+	if (!providedDrawingDocument) {
+		throw new ArtworkFlowError(400, 'Artwork drawing document is required', 'INVALID_MEDIA_FORMAT');
 	}
+
+	// A slip can leave the mailbox while it is being drawn; the drawing stands.
+	const wish = input.wishId?.trim() ? await repository.findWish(input.wishId.trim()) : null;
 
 	const artworkId = nextId();
-	const storageKey = `artworks/${actor.user.id}/${artworkId}.avif`;
 
-	await storage.upload(storageKey, media.file);
-
-	// The row is inserted without the drawing document so the INSERT's Bind
-	// stays small — Supavisor drops sessions that receive the full document in
-	// one message. The document follows in chunked appends below.
-	const outcome = await insertWithConnectionRetries(
-		() =>
-			repository.createArtwork({
-				authorId: actor.user.id,
-				commentCount: 0,
-				createdAt: now,
-				drawingDocument: null,
-				drawingVersion: null,
-				forkCount: 0,
-				id: artworkId,
-				isNsfw: Boolean(input.isNsfw),
-				mediaContentType: media.contentType,
-				mediaPlaceholder: media.placeholder ?? null,
-				mediaSizeBytes: media.sizeBytes,
-				nsfwLabeledAt: input.isNsfw ? now : null,
-				nsfwSource: input.isNsfw ? 'creator' : null,
-				parentId: parentArtworkId,
-				score: 0,
-				storageKey,
-				title,
-				updatedAt: now
-			}),
-		{
-			readBackCommittedRow: () => repository.findArtworkById(artworkId),
-			sleep
-		}
+	/*
+	 * A v3 fork holds only its own strokes, painted over the image of the
+	 * artwork it was drawn on. It keeps its own copy of that image, so nothing
+	 * that later happens to the parent's files reaches it, and names the
+	 * parent's drawing for a timelapse to follow back. (A v1/v2 fork from an
+	 * older client still carries a copy of the parent's strokes, as before.)
+	 */
+	const parentImageCopyKey = parentArtwork
+		? `artworks/${actor.user.id}/${artworkId}.parent.${parentArtwork.mediaContentType.replace('image/', '')}`
+		: null;
+	const preparedDocument = await prepareDrawingDocumentForStorage(
+		providedDrawingDocument,
+		parentArtwork && parentImageCopyKey
+			? {
+					parent: {
+						artwork: parentArtwork.id,
+						...(parentArtwork.drawingDocumentKey
+							? { document: parentArtwork.drawingDocumentKey }
+							: {}),
+						image: parentImageCopyKey
+					}
+				}
+			: {}
 	);
-
-	if ('error' in outcome) {
-		// Payload sizes discriminate a size-triggered pooler abort from pooler
-		// health issues; the content itself stays out of the logs.
-		console.error(
-			JSON.stringify({
-				artworkId,
-				category: 'artwork',
-				drawingDocumentChars: drawingDocument?.length ?? 0,
-				event: 'publish_persist_failed',
-				hasParent: Boolean(parentArtworkId),
-				mayHaveCommitted: outcome.mayHaveCommitted,
-				mediaContentType: media.contentType,
-				mediaSizeBytes: media.sizeBytes
-			})
+	if (preparedDocument.document.kind !== 'artwork') {
+		throw new ArtworkFlowError(
+			400,
+			'Artwork publish requires an artwork drawing document',
+			'INVALID_MEDIA_FORMAT'
 		);
-
-		// An orphaned storage object is recoverable; a committed artwork row
-		// pointing at deleted media is not.
-		if (!outcome.mayHaveCommitted) {
-			try {
-				await storage.delete(storageKey);
-			} catch {
-				// best effort cleanup after a partial publish failure
-			}
-		}
-
-		if (outcome.error instanceof ArtworkFlowError) {
-			throw outcome.error;
-		}
-
-		throw new ArtworkFlowError(500, 'Artwork publish failed', 'PUBLISH_FAILED', {
-			cause: outcome.error
-		});
 	}
 
-	let artwork = outcome.artwork;
+	const forkedByReference = parentArtwork !== null && preparedDocument.version === 3;
+	const parentImage = forkedByReference ? await storage.read(parentArtwork.storageKey) : undefined;
+	const media = await renderDrawingDocumentMedia(preparedDocument.document, parentImage);
 
-	// The artwork row is committed past this point: the drawing document and
-	// the rate-limit bookkeeping must not fail the publish, and above all must
-	// not delete the committed artwork's media from storage. A failed document
-	// write degrades to a doc-less artwork (it renders but cannot seed forks);
-	// readers ignore documents whose drawing_version was never set.
-	if (drawingDocument) {
-		try {
-			const finalized = await writeDrawingDocumentInChunks({
-				category: 'artwork',
-				chunkChars: drawingDocumentChunkChars,
-				documentBase64: drawingDocument,
-				logFields: { artworkId },
-				now,
-				sleep,
-				store: createArtworkDrawingDocumentStore(repository),
-				targetId: artworkId,
-				version: drawingVersion!
-			});
-			if (finalized) {
-				artwork = finalized;
-			} else {
-				console.error(
-					JSON.stringify({
-						artworkId,
-						category: 'artwork',
-						drawingDocumentChars: drawingDocument.length,
-						event: 'drawing_document_write_failed'
-					})
-				);
-			}
-		} catch (error) {
-			console.error(
-				JSON.stringify({
-					artworkId,
-					category: 'artwork',
-					drawingDocumentChars: drawingDocument.length,
-					event: 'drawing_document_write_failed'
-				})
-			);
-			logArtworkFlowFailure('drawing document write', error);
+	const extension = media.contentType.replace('image/', '');
+	const storageKey = `artworks/${actor.user.id}/${artworkId}.${extension}`;
+
+	// The drawing and its images go to object storage first; the row comes last
+	// and names them, so a reader never finds an artwork without its drawing.
+	if (parentImage && parentImageCopyKey) {
+		await storage.upload(
+			parentImageCopyKey,
+			new File([Uint8Array.from(parentImage)], 'parent', {
+				type: parentArtwork!.mediaContentType
+			})
+		);
+	}
+	const drawingDocumentKey = await documents.put(preparedDocument.compressed);
+	await storage.upload(storageKey, media.file);
+
+	let artwork: ArtworkRecord;
+	try {
+		artwork = await repository.createArtwork({
+			authorId: actor.user.id,
+			commentCount: 0,
+			createdAt: now,
+			drawingDocument: null,
+			drawingDocumentKey,
+			drawingVersion: preparedDocument.version,
+			forkCount: 0,
+			id: artworkId,
+			isNsfw: Boolean(input.isNsfw),
+			mediaContentType: media.contentType,
+			mediaSizeBytes: media.sizeBytes,
+			nsfwLabeledAt: input.isNsfw ? now : null,
+			nsfwSource: input.isNsfw ? 'creator' : null,
+			parentId: parentArtworkId,
+			score: 0,
+			storageKey,
+			title,
+			updatedAt: now,
+			wishId: wish?.id ?? null
+		});
+	} catch (error) {
+		// The images belong to this request alone. The drawing stays: it is named
+		// by its content, so another artwork may already share it.
+		await storage.delete(storageKey).catch(() => {});
+		if (parentImage && parentImageCopyKey) {
+			await storage.delete(parentImageCopyKey).catch(() => {});
 		}
+
+		if (error instanceof ArtworkFlowError) {
+			throw error;
+		}
+
+		throw new ArtworkFlowError(500, 'Artwork publish failed', 'PUBLISH_FAILED', { cause: error });
 	}
 
 	try {
@@ -703,6 +581,7 @@ export const applyArtworkVote = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 
+	publishArtworkChange(input.artworkId, { change: 'votes', votes: toVoteTotals(result.artwork) });
 	return result;
 };
 
@@ -719,6 +598,7 @@ export const removeArtworkVote = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 
+	publishArtworkChange(input.artworkId, { change: 'votes', votes: toVoteTotals(result.artwork) });
 	return result;
 };
 
@@ -760,8 +640,104 @@ export const createArtworkComment = async (
 		throw new ArtworkFlowError(404, 'Artwork not found', 'NOT_FOUND');
 	}
 
+	publishArtworkChange(input.artworkId, {
+		change: 'comments',
+		comment: {
+			author: comment.author.nickname,
+			id: comment.id,
+			text: comment.body,
+			timestamp: comment.createdAt.getTime()
+		}
+	});
 	return comment;
 };
+
+export const createWish = async (
+	input: { text: string },
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+): Promise<Pick<Wish, 'id' | 'text'>> => {
+	const actor = requireActor(context);
+	const { generateId: nextId, now: getNow, repository } = getDependencies(dependencies);
+	const now = getNow();
+
+	await recordEngagementAttempt(
+		'wish',
+		actor,
+		repository,
+		now,
+		nextId,
+		ARTWORK_WISH_RATE_LIMIT,
+		'Too many slips for now. Please wait before leaving another.'
+	);
+	const text = input.text.trim().replace(/\s+/gu, ' ');
+	if (!text || text.length > WISH_MAX_LENGTH) {
+		throw new ArtworkFlowError(
+			400,
+			`A slip takes between 1 and ${WISH_MAX_LENGTH} characters`,
+			'INVALID_WISH'
+		);
+	}
+
+	// Read by everybody, as a comment is, so it is held to the same words.
+	const textModeration = await checkTextModeration(text, 'comment');
+	if (textModeration.status !== 'allowed') {
+		throw new ArtworkFlowError(400, textModeration.message, 'INVALID_WISH');
+	}
+
+	const id = nextId();
+	await repository.createWish({ authorId: actor.user.id, body: text, createdAt: now, id });
+	return { id, text };
+};
+
+export const listWishes = async (
+	input: { seen: string[] },
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+) =>
+	getDependencies(dependencies).repository.listWishes({
+		limit: WISHES_IN_HAND,
+		seen: input.seen.slice(0, WISHES_REMEMBERED),
+		viewerId: context.user?.id ?? null
+	});
+
+export const moderateWish = async (
+	input: ModerateWishInput,
+	context: Partial<ArtworkActorContext>,
+	dependencies: ServiceDependencies = {}
+) => {
+	const actor = assertModerator(context);
+	const { now: getNow, repository } = getDependencies(dependencies);
+	const now = getNow();
+	const resolution = {
+		resolvedAt: now,
+		resolvedBy: actor.user.id,
+		status: getResolutionStatus(input.action),
+		targetId: input.wishId
+	} as const;
+
+	if (input.action === 'dismiss') {
+		await repository.resolveWishReports(resolution);
+		return;
+	}
+
+	const found =
+		input.action === 'delete'
+			? await repository.deleteWish(input.wishId)
+			: await repository.setWishHiddenState(input.wishId, {
+					hiddenAt: input.action === 'hide' ? now : null,
+					isHidden: input.action === 'hide'
+				});
+
+	if (!found) {
+		throw new ArtworkFlowError(404, 'Slip not found', 'NOT_FOUND');
+	}
+
+	await repository.resolveWishReports(resolution);
+};
+
+export const getWish = (id: string, dependencies: ServiceDependencies = {}) =>
+	getDependencies(dependencies).repository.findWish(id);
 
 export const listArtworkComments = async (
 	artworkId: string,
@@ -798,6 +774,7 @@ export const deleteArtworkComment = async (
 		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 	}
 
+	publishArtworkChange(deleted.artworkId, { change: 'comments' });
 	return {
 		artworkId: deleted.artworkId,
 		body: deleted.body,
@@ -815,12 +792,21 @@ export const submitContentReport = async (
 	const actor = requireActor(context);
 	const { generateId: nextId, now: getNow, repository } = getDependencies(dependencies);
 	const now = getNow();
-	const { artworkId, commentId } = assertExactlyOneReportTarget(input.artworkId, input.commentId);
+	const { artworkId, commentId, wishId } = assertExactlyOneReportTarget(
+		input.artworkId,
+		input.commentId,
+		input.wishId
+	);
 
 	if (artworkId) {
 		await getArtworkOrThrow(artworkId, repository);
 	}
 
+	if (wishId && !(await repository.findWish(wishId))) {
+		throw new ArtworkFlowError(404, 'Slip not found', 'NOT_FOUND');
+	}
+
+	let reportedCommentArtworkId: string | null = null;
 	if (commentId) {
 		const comment = await repository.findCommentById(commentId);
 		if (!comment) {
@@ -829,6 +815,7 @@ export const submitContentReport = async (
 		if (comment.isHidden) {
 			throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 		}
+		reportedCommentArtworkId = comment.artworkId;
 	}
 
 	const report = await repository
@@ -843,7 +830,8 @@ export const submitContentReport = async (
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: now
+			updatedAt: now,
+			wishId
 		})
 		.catch((error: unknown) => {
 			if (isPendingReportUniqueViolation(error)) {
@@ -856,6 +844,12 @@ export const submitContentReport = async (
 
 			throw error;
 		});
+
+	// Enough reports hide a comment inside the database, so whoever is watching
+	// the artwork rechecks its comments after every comment report.
+	if (reportedCommentArtworkId) {
+		publishArtworkChange(reportedCommentArtworkId, { change: 'comments' });
+	}
 
 	return report;
 };
@@ -968,6 +962,7 @@ export const moderateComment = async (
 			throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 		}
 
+		publishArtworkChange(input.artworkId, { change: 'comments' });
 		return deleted;
 	}
 
@@ -987,5 +982,6 @@ export const moderateComment = async (
 		throw new ArtworkFlowError(404, 'Comment not found', 'NOT_FOUND');
 	}
 
+	publishArtworkChange(input.artworkId, { change: 'comments' });
 	return updated;
 };

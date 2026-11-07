@@ -1,8 +1,8 @@
 import { error } from '@sveltejs/kit';
-import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
-import { listModerationQueue } from '$lib/server/artwork/read.service';
-import { getTextModerationSnapshot } from '$lib/server/moderation/service';
-import { listUsers } from '$lib/server/user/admin.service';
+import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
+import { listModerationQueue } from '#lib/server/artwork/read.service.js';
+import { getTextModerationSnapshot } from '#lib/server/moderation/service.js';
+import { listUsers } from '#lib/server/user/admin.service.js';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -28,7 +28,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	return {
 		// The root layout renders the only <title> in the document from
 		// `page.data.meta`; a page-level <svelte:head><title> would lose to it.
-		meta: { title: 'Ops' } satisfies RouteMeta,
+		meta: { title: 'Staff desk' } satisfies RouteMeta,
 		moderationPage,
 		permissions: {
 			canManageUsers,

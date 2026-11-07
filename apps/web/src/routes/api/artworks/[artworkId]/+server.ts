@@ -1,19 +1,19 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getArtworkDetail } from '$lib/server/artwork/read.service';
+import { getArtworkDetail } from '#lib/server/artwork/read.service.js';
 import {
+	ANONYMOUS_CACHE_CONTROL,
 	artworkDetailEdgeCacheKeys,
-	edgeCacheControl,
 	purgeFromEdgeCache,
 	readEdgeCache,
 	storeInEdgeCache
-} from '$lib/server/http/edge-cache';
-import { toApiErrorResponse } from '$lib/server/http/errors';
+} from '#lib/server/http/edge-cache.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
 import {
 	deleteArtwork,
 	updateArtworkTitle,
 	withoutDrawingDocument
-} from '$lib/server/artwork/service';
+} from '#lib/server/artwork/service.js';
+import { edgeCache } from '#lib/server/platform.js';
 
 const TITLE_UPDATE_ERROR = {
 	fallbackCode: 'ARTWORK_UPDATE_FAILED',
@@ -40,12 +40,8 @@ const DETAIL_ERROR = {
  * has gone, which for a hide is exactly the wrong direction.
  */
 const purgeArtworkDetailEdgeCache = (event: Parameters<RequestHandler>[0]) => {
-	if (!event.platform?.caches?.default) return;
-
-	purgeFromEdgeCache(
-		event.platform,
-		artworkDetailEdgeCacheKeys(event.url.origin, event.params.artworkId)
-	);
+	if (!edgeCache()) return;
+	purgeFromEdgeCache(artworkDetailEdgeCacheKeys(event.url.origin, event.params.artworkId));
 };
 
 export const PATCH: RequestHandler = async (event) => {
@@ -61,7 +57,7 @@ export const PATCH: RequestHandler = async (event) => {
 
 		purgeArtworkDetailEdgeCache(event);
 
-		return json({ artwork: withoutDrawingDocument(artwork) });
+		return Response.json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
 		return toApiErrorResponse(error, TITLE_UPDATE_ERROR);
 	}
@@ -76,7 +72,7 @@ export const DELETE: RequestHandler = async (event) => {
 
 		purgeArtworkDetailEdgeCache(event);
 
-		return json({ artwork: withoutDrawingDocument(artwork) });
+		return Response.json({ artwork: withoutDrawingDocument(artwork) });
 	} catch (error) {
 		return toApiErrorResponse(error, DELETE_ERROR);
 	}
@@ -91,21 +87,19 @@ export const DELETE: RequestHandler = async (event) => {
 // reaches the local datacenter — which is where the moderator is. The TTL is
 // what bounds a hidden artwork's readability in every other colo, so it stays
 // short.
-const ANONYMOUS_EDGE_TTL_SECONDS = 30;
-const ANONYMOUS_CACHE_CONTROL = edgeCacheControl(ANONYMOUS_EDGE_TTL_SECONDS, 120);
 const SIGNED_IN_CACHE_CONTROL = 'private, no-store';
 
 export const GET: RequestHandler = async (event) => {
 	const isAnonymous = !event.locals.user;
 
 	if (isAnonymous) {
-		const cached = await readEdgeCache(event.platform, event.request);
+		const cached = await readEdgeCache(event.request);
 		if (cached) return cached;
 	}
 
 	try {
 		const artwork = await getArtworkDetail(event.params.artworkId, { user: event.locals.user });
-		const response = json(
+		const response = Response.json(
 			{ artwork: withoutDrawingDocument(artwork) },
 			{
 				headers: {
@@ -115,7 +109,7 @@ export const GET: RequestHandler = async (event) => {
 		);
 
 		if (isAnonymous) {
-			storeInEdgeCache(event.platform, event.request, response);
+			storeInEdgeCache(event.request, response);
 		}
 
 		return response;

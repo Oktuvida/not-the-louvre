@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
-import { toApiErrorResponse } from '$lib/server/http/errors';
-import { listUsers } from '$lib/server/user/admin.service';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
+import { listUsers } from '#lib/server/user/admin.service.js';
 
 // Answers errors as `{ code, message }` like every other JSON route; the admin
 // dashboard used to need a content-type sniff because this one spoke text.
@@ -16,7 +16,13 @@ export const GET: RequestHandler = async (event) => {
 		const limitParam = event.url.searchParams.get('limit');
 		const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
-		const page = await listUsers({ cursor, limit }, { user: event.locals.user ?? null });
+		const filter = event.url.searchParams.get('filter');
+		const search = event.url.searchParams.get('search');
+
+		const page = await listUsers(
+			{ cursor, filter, limit, search },
+			{ user: event.locals.user ?? null }
+		);
 
 		return Response.json(page);
 	} catch (error) {

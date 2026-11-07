@@ -1,28 +1,30 @@
-import { page } from 'vitest/browser';
-import { PAGE_FADE_DURATION_MS } from '$lib/features/shared-ui/page-fade';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { page, userEvent } from 'vitest/browser';
+import { PAGE_FADE_DURATION_MS } from '#lib/features/shared-ui/page-fade.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import {
 	DRAWING_DOCUMENT_V2_VERSION,
 	createEmptyDrawingDocument,
 	normalizeDrawingDocumentToEditableV2
-} from '$lib/features/stroke-json/document';
+} from '#lib/features/stroke-json/document.js';
 
 const { goto } = vi.hoisted(() => ({ goto: vi.fn() }));
 
-vi.mock('$app/navigation', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$app/navigation')>();
-	return {
-		...actual,
-		goto
-	};
-});
+vi.mock('$app/navigation', async () => ({
+	...(await import('#lib/testing/fake-navigation.js')).fakeNavigation,
+	goto
+}));
 
 import {
 	buildDrawingDraftKey,
 	createIndexedDbDrawingDraftStore
-} from '$lib/features/stroke-json/drafts';
+} from '#lib/features/stroke-json/drafts.js';
+import { drawingTools } from '#lib/features/studio-drawing/state/drawing.svelte.js';
+import { STUDIO_DESK_IMAGE } from '#lib/features/shared-ui/studio-background-warmup.js';
 import StudioDrawingPage from './StudioDrawingPage.svelte';
+
+const deskPreload = () =>
+	document.head.querySelector('link[rel="preload"][as="image"][type="image/avif"]');
 
 const UNSAVED_DRAFT_MESSAGE = 'Latest local changes are not saved on this device yet.';
 
@@ -147,6 +149,19 @@ const createPointerEvent = (
 		...init
 	});
 
+/*
+ * Which layout the studio gets is studio-layout.css's call, from the window's
+ * shape, and the spec iframe is phone-sized, which has no cover. These specs
+ * follow the sketchbook from closed to open, so they show the cover the way a
+ * laptop's layout does; the one spec about coverless screens leaves it alone.
+ */
+const showTheCover = () => {
+	const style = document.createElement('style');
+	style.dataset.spec = 'show-the-cover';
+	style.textContent = 'html .studio-page { --studio-cover-display: block; }';
+	document.head.append(style);
+};
+
 async function openSketchbook() {
 	await page.getByRole('button', { name: 'Open sketchbook' }).click();
 	await expect.element(page.getByPlaceholder('Untitled genius')).toBeVisible();
@@ -161,16 +176,96 @@ describe('StudioDrawingPage', () => {
 		);
 		window.localStorage.clear();
 		await resetDrawingDraftDatabase();
+		// The brush and eraser are shared studio state; every test starts with the brush.
+		drawingTools.tool = 'brush';
+		document
+			.querySelectorAll('style[data-spec="show-the-cover"]')
+			.forEach((style) => style.remove());
+		showTheCover();
 	});
 
-	it('preloads the studio background image', () => {
-		render(StudioDrawingPage, { openingDurationMs: 1 });
+	// Where the drawing's notes lie on the open cover (the desk layout), the
+	// inside of the cover is the artist's own: a bookplate signed with their name.
+	it('signs the inside of the cover with the artist’s name, where the notes lie on it', async () => {
+		const style = document.createElement('style');
+		style.dataset.spec = 'show-the-cover';
+		style.textContent = 'html .studio-page { --studio-bookplate-display: block; }';
+		document.head.append(style);
 
-		const preloadLink = document.head.querySelector('link[rel="preload"][href="/table.avif"]');
+		await render(StudioDrawingPage, {
+			openingDurationMs: 1,
+			user: { nickname: 'journey_artist' }
+		});
+		await openSketchbook();
 
-		expect(preloadLink).not.toBeNull();
-		expect(preloadLink?.getAttribute('as')).toBe('image');
-		expect(preloadLink?.getAttribute('type')).toBe('image/avif');
+		const bookplate = page.getByRole('complementary', { name: 'Ex libris' });
+		await expect.element(bookplate).toBeVisible();
+		await expect.element(bookplate.getByText(/this sketchbook belongs to/)).toBeVisible();
+		await expect.element(bookplate.getByText('journey_artist', { exact: true })).toBeVisible();
+	});
+
+	// Below the notes, the inside of the cover carries a printed label with the
+	// studio's shortcuts, in the keys of the computer the artist is drawing on.
+	describe('the shortcuts inside the cover', () => {
+		const pretendToRunOn = (platform: string, hints?: string) => {
+			Object.defineProperty(navigator, 'platform', { configurable: true, value: platform });
+			Object.defineProperty(navigator, 'userAgentData', {
+				configurable: true,
+				value: hints ? { platform: hints } : undefined
+			});
+		};
+
+		const openTheStudio = async () => {
+			const style = document.createElement('style');
+			style.dataset.spec = 'show-the-cover';
+			style.textContent = 'html .studio-page { --studio-shortcuts-display: block; }';
+			document.head.append(style);
+
+			await render(StudioDrawingPage, {
+				openingDurationMs: 1,
+				user: { nickname: 'journey_artist' }
+			});
+			await openSketchbook();
+			return page.getByRole('complementary', { name: 'Shortcuts' });
+		};
+
+		afterEach(() => {
+			Reflect.deleteProperty(navigator, 'platform');
+			Reflect.deleteProperty(navigator, 'userAgentData');
+		});
+
+		it('gives an artist on Windows the Ctrl keys, and Ctrl + Y to redo', async () => {
+			pretendToRunOn('Win32', 'Windows');
+
+			const shortcuts = await openTheStudio();
+
+			await expect.element(shortcuts).toBeVisible();
+			await expect.element(shortcuts.getByText('pinch, or Ctrl + scroll')).toBeVisible();
+			await expect.element(shortcuts.getByText('Ctrl + Z')).toBeVisible();
+			await expect.element(shortcuts.getByText('Ctrl + Y')).toBeVisible();
+			await expect.element(shortcuts.getByText(/⌘/)).not.toBeInTheDocument();
+		});
+
+		it('gives an artist on a Mac the ⌘ keys', async () => {
+			pretendToRunOn('MacIntel');
+
+			const shortcuts = await openTheStudio();
+
+			await expect.element(shortcuts).toBeVisible();
+			await expect.element(shortcuts.getByText('pinch, or ⌘ + scroll')).toBeVisible();
+			await expect.element(shortcuts.getByText('⌘ Z', { exact: true })).toBeVisible();
+			await expect.element(shortcuts.getByText('⌘ ⇧ Z')).toBeVisible();
+			await expect.element(shortcuts.getByText(/Ctrl/)).not.toBeInTheDocument();
+		});
+	});
+
+	it('preloads the desk, at the size it is drawn', async () => {
+		await render(StudioDrawingPage, { openingDurationMs: 1 });
+
+		const preloadLink = deskPreload();
+
+		expect(preloadLink?.getAttribute('imagesrcset')).toBe(STUDIO_DESK_IMAGE.avif);
+		expect(preloadLink?.getAttribute('imagesizes')).toBe(STUDIO_DESK_IMAGE.sizes);
 	});
 
 	it('leaves the document title to the root layout instead of adding a second one', async () => {
@@ -181,16 +276,16 @@ describe('StudioDrawingPage', () => {
 		// assignment that races the layout's — so the page must not declare one.
 		const titleBeforeRender = document.title;
 
-		render(StudioDrawingPage, { openingDurationMs: 1 });
+		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await vi.waitFor(() => {
-			expect(document.head.querySelector('link[rel="preload"][href="/table.avif"]')).not.toBeNull();
+			expect(deskPreload()).not.toBeNull();
 		});
 		expect(document.title).toBe(titleBeforeRender);
 	});
 
 	it('starts with a closed sketchbook and hides active studio controls', async () => {
-		render(StudioDrawingPage, { openingDurationMs: 1 });
+		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await expect.element(page.getByTestId('ambient-particle-overlay')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Open sketchbook' })).toBeVisible();
@@ -199,35 +294,27 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('reveals the drawing controls after the sketchbook opens', async () => {
-		render(StudioDrawingPage, { openingDurationMs: 1 });
+		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await openSketchbook();
 
-		await expect.element(page.getByRole('button', { name: 'Clear' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Tear out this page' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 		await expect.element(page.getByPlaceholder('Untitled genius')).toBeVisible();
 	});
 
-	it('keeps the mobile studio canvas card square', async () => {
-		vi.stubGlobal(
-			'matchMedia',
-			vi.fn((query: string) => ({
-				addEventListener: vi.fn(),
-				addListener: vi.fn(),
-				dispatchEvent: vi.fn(),
-				matches: query === '(max-width: 700px)',
-				media: query,
-				onchange: null,
-				removeEventListener: vi.fn(),
-				removeListener: vi.fn()
-			}))
-		);
+	it('opens the page straight away on a screen with no room for the open book', async () => {
+		document
+			.querySelectorAll('style[data-spec="show-the-cover"]')
+			.forEach((style) => style.remove());
 
-		render(StudioDrawingPage, { openingDurationMs: 1 });
+		await render(StudioDrawingPage, { openingDurationMs: 1 });
 
-		const mobileCanvasCard = document.querySelector('[data-testid="studio-mobile-canvas-card"]');
-		expect(mobileCanvasCard).not.toBeNull();
-		expect(mobileCanvasCard?.className).toContain('studio-mobile-canvas-card');
+		await expect.element(page.getByPlaceholder('Untitled genius')).toBeEnabled();
+		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Open sketchbook' }))
+			.not.toBeInTheDocument();
 	});
 
 	it('cuts the sketchbook open when reduced motion is requested', async () => {
@@ -236,7 +323,7 @@ describe('StudioDrawingPage', () => {
 			vi.fn((query: string) => createMediaQueryListWithMotion(query, true))
 		);
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 300
 		});
 
@@ -255,7 +342,7 @@ describe('StudioDrawingPage', () => {
 			vi.fn((query: string) => createMediaQueryListWithMotion(query, false))
 		);
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 300
 		});
 
@@ -273,7 +360,7 @@ describe('StudioDrawingPage', () => {
 	it('closes the sketchbook before starting the exit fade', async () => {
 		goto.mockReset();
 
-		render(StudioDrawingPage, { openingDurationMs: 120 });
+		await render(StudioDrawingPage, { openingDurationMs: 120 });
 
 		await openSketchbook();
 		await page.getByRole('link', { name: 'Exit Studio' }).click();
@@ -293,7 +380,7 @@ describe('StudioDrawingPage', () => {
 	it('does not reopen or drop fork context while exiting a forked artwork', async () => {
 		goto.mockReset();
 
-		const { unmount } = render(StudioDrawingPage, {
+		const { unmount } = await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: normalizeDrawingDocumentToEditableV2(
 					createEmptyDrawingDocument('artwork')
@@ -328,7 +415,7 @@ describe('StudioDrawingPage', () => {
 					button.closest('[aria-hidden="true"], [inert]') === null
 			)
 		).toBe(false);
-		expect(document.body).toHaveTextContent('Forking Parent Artwork');
+		expect(document.body).toMatchTextContent('Forking Parent Artwork');
 		if (performance.now() - exitStartedAt < PAGE_FADE_DURATION_MS - 60) {
 			expect(goto).not.toHaveBeenCalled();
 		}
@@ -342,7 +429,7 @@ describe('StudioDrawingPage', () => {
 
 		unmount();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			user: { nickname: 'journey_artist' }
 		});
@@ -367,7 +454,7 @@ describe('StudioDrawingPage', () => {
 			success: true as const
 		}));
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload,
@@ -398,20 +485,273 @@ describe('StudioDrawingPage', () => {
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: false,
 			parentArtworkId: null,
-			title: 'My First Piece'
+			title: 'My First Piece',
+			wishId: null
 		});
 		expect(replaceStudioUrl).not.toHaveBeenCalled();
 	});
 
-	it('shows a retryable publish error without leaving the draw route', async () => {
-		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
-		const publishDrawing = vi.fn(async () => ({
-			code: 'INVALID_MEDIA_CONTENT',
-			message: 'Artwork media must decode safely',
-			success: false as const
-		}));
+	describe('taking lines back', () => {
+		const draftKey = buildDrawingDraftKey({
+			schemaVersion: DRAWING_DOCUMENT_V2_VERSION,
+			scope: 'new',
+			surface: 'artwork',
+			userKey: 'journey_artist'
+		});
 
-		render(StudioDrawingPage, {
+		const openStudio = async (props: Record<string, unknown> = {}) => {
+			await render(StudioDrawingPage, {
+				openingDurationMs: 1,
+				user: { nickname: 'journey_artist' },
+				...props
+			});
+			await openSketchbook();
+			// The canvas takes strokes once the local draft has loaded.
+			await expect
+				.element(page.getByLabelText('Drawing canvas'))
+				.toHaveAttribute('aria-disabled', 'false');
+
+			const canvas = page.getByLabelText('Drawing canvas').element() as HTMLCanvasElement;
+			vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+			vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+			vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+
+			const drawLine = (y: number) => {
+				const rect = canvas.getBoundingClientRect();
+				const at = (x: number) => ({
+					clientX: rect.left + (x / 768) * rect.width,
+					clientY: rect.top + (y / 768) * rect.height
+				});
+				canvas.dispatchEvent(createPointerEvent('pointerdown', at(100)));
+				canvas.dispatchEvent(createPointerEvent('pointermove', at(600)));
+				canvas.dispatchEvent(createPointerEvent('pointerup', { ...at(600), buttons: 0 }));
+			};
+
+			const savedLines = async () => (await readPersistedDrawingDraft(draftKey))?.tail ?? [];
+			// IndexedDB writes land asynchronously, and slowly on a busy machine.
+			const expectSaved = (check: (lines: Awaited<ReturnType<typeof savedLines>>) => void) =>
+				vi.waitFor(async () => check(await savedLines()), { timeout: 5000 });
+
+			return { drawLine, expectSaved, savedLines };
+		};
+
+		it('takes back the last line with Undo, puts it back with Redo, and the draft follows', async () => {
+			const { drawLine, expectSaved } = await openStudio();
+			const undo = page.getByRole('button', { name: 'Undo' });
+			const redo = page.getByRole('button', { name: 'Redo' });
+
+			await expect.element(undo).toBeDisabled();
+			drawLine(300);
+			drawLine(500);
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
+
+			await undo.click();
+			await expectSaved((lines) => expect(lines).toHaveLength(1));
+			await expect.element(redo).toBeEnabled();
+
+			await redo.click();
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
+			await expect.element(redo).toBeDisabled();
+		});
+
+		it('takes lines back from the keyboard, but not while the title is being typed', async () => {
+			const { drawLine, expectSaved, savedLines } = await openStudio();
+			drawLine(300);
+			drawLine(500);
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
+
+			await page.getByPlaceholder('Untitled genius').fill('Night Shift');
+			await userEvent.keyboard('{Control>}z{/Control}');
+			expect(page.getByRole('button', { name: 'Redo' }).element()).toBeDisabled();
+			expect(await savedLines()).toHaveLength(2);
+			(document.activeElement as HTMLElement | null)?.blur();
+
+			await userEvent.keyboard('{Control>}z{/Control}');
+			await expectSaved((lines) => expect(lines).toHaveLength(1));
+
+			await userEvent.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+			await expectSaved((lines) => expect(lines).toHaveLength(2));
+		});
+
+		it('says so when the drawing has run out of ink', async () => {
+			const { drawLine } = await openStudio({ inkLimits: { maxStrokes: 1 } });
+
+			drawLine(300);
+			drawLine(500);
+
+			await expect
+				.element(page.getByText('Out of ink. Undo a line to free some up, or publish.'))
+				.toBeVisible();
+			await expect
+				.element(page.getByRole('meter', { name: 'Ink left' }))
+				.toHaveAttribute('aria-valuenow', '0');
+		});
+
+		it('publishes the drawing as a v3 document that knows when it was drawn', async () => {
+			const publishDrawing = vi.fn(async () => ({
+				action: 'publish' as const,
+				artwork: { id: 'artwork-1', mediaUrl: '/api/artworks/artwork-1/media', title: 'Timed' },
+				success: true as const
+			}));
+			const { drawLine, expectSaved } = await openStudio({ publishDrawing });
+			drawLine(300);
+			await expectSaved((lines) => expect(lines).toHaveLength(1));
+
+			await page.getByPlaceholder('Untitled genius').fill('Timed');
+			await page.getByRole('button', { name: 'Publish' }).click();
+
+			await vi.waitFor(() => expect(publishDrawing).toHaveBeenCalledOnce());
+			const [payload] = publishDrawing.mock.calls[0] as unknown[];
+			const published = JSON.parse(String(payload));
+			expect(published).toMatchObject({ version: 3, xyScale: 4 });
+			expect(published.strokes).toHaveLength(1);
+			expect(published.strokes[0]).toMatchObject({ pointer: 'mouse', start: 0 });
+			expect(published.strokes[0].t).toHaveLength(published.strokes[0].x.length);
+		});
+
+		it('erases with the colour of the paper', async () => {
+			const { drawLine, expectSaved } = await openStudio();
+
+			await page.getByRole('button', { name: 'Eraser' }).click();
+			drawLine(300);
+
+			await expectSaved((lines) => expect(lines.at(-1)?.color).toBe('#fdfbf7'));
+		});
+	});
+
+	/*
+	 * On a tablet the hand holding the pen rests on the glass, and the pen
+	 * slips off the canvas now and then. Neither may press, select or focus
+	 * anything around the page while the artist draws.
+	 */
+	describe('out of the drawing hand’s way', () => {
+		// The paint is shared studio state; the specs after these start with the usual one.
+		const usualColor = drawingTools.activeColor;
+		afterEach(() => {
+			drawingTools.activeColor = usualColor;
+		});
+
+		const openStudio = async () => {
+			await render(StudioDrawingPage, {
+				openingDurationMs: 1,
+				user: { nickname: 'journey_artist' }
+			});
+			await openSketchbook();
+			await expect
+				.element(page.getByLabelText('Drawing canvas'))
+				.toHaveAttribute('aria-disabled', 'false');
+
+			const canvas = page.getByLabelText('Drawing canvas').element() as HTMLCanvasElement;
+			vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => undefined);
+			vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => undefined);
+			vi.spyOn(canvas, 'hasPointerCapture').mockReturnValue(true);
+			const rect = canvas.getBoundingClientRect();
+			const at = (x: number, y: number) => ({
+				clientX: rect.left + (x / 768) * rect.width,
+				clientY: rect.top + (y / 768) * rect.height
+			});
+
+			return { at, canvas };
+		};
+
+		const touchStart = (target: Element) => {
+			const touchstart = new Event('touchstart', { bubbles: true, cancelable: true });
+			target.dispatchEvent(touchstart);
+			return touchstart.defaultPrevented;
+		};
+
+		/** A finger's tap, as the browser reports it: down, up, then the click. */
+		const tap = (target: Element, pointerId: number) => {
+			const finger = { pointerId, pointerType: 'touch', cancelable: true };
+			target.dispatchEvent(createPointerEvent('pointerdown', finger));
+			target.dispatchEvent(createPointerEvent('pointerup', { ...finger, buttons: 0 }));
+			target.dispatchEvent(
+				new PointerEvent('click', {
+					bubbles: true,
+					cancelable: true,
+					pointerId,
+					pointerType: 'touch'
+				})
+			);
+		};
+
+		const afterThePenLifts = () => new Promise((resolve) => setTimeout(resolve, 400));
+
+		it('starts no magnifier, selection or Scribble on the page around the canvas, but leaves its buttons pressable', async () => {
+			await render(StudioDrawingPage, {
+				openingDurationMs: 1,
+				user: { nickname: 'journey_artist' }
+			});
+			expect(touchStart(page.getByRole('button', { name: 'Open sketchbook' }).element())).toBe(
+				false
+			);
+
+			await openSketchbook();
+			const tagline = page.getByText('U might get a very expensive frame', { exact: false });
+
+			expect(touchStart(tagline.element())).toBe(true);
+		});
+
+		it('lets the hand resting on the paints press nothing while the pen draws, nor just after', async () => {
+			const { at, canvas } = await openStudio();
+			const red = page.getByRole('button', { name: 'Select color #E63030' }).element();
+			const blue = page.getByRole('button', { name: 'Select color #2563EB' }).element();
+			drawingTools.activeColor = '#1A1A1A';
+			const pen = { pointerId: 2, pointerType: 'pen' };
+
+			canvas.dispatchEvent(createPointerEvent('pointerdown', { ...pen, ...at(100, 100) }));
+			canvas.dispatchEvent(createPointerEvent('pointermove', { ...pen, ...at(300, 300) }));
+			expect(touchStart(red)).toBe(true);
+			tap(red, 11);
+			expect(drawingTools.activeColor).toBe('#1A1A1A');
+
+			canvas.dispatchEvent(
+				createPointerEvent('pointerup', { ...pen, ...at(300, 300), buttons: 0 })
+			);
+			tap(red, 12);
+			expect(drawingTools.activeColor).toBe('#1A1A1A');
+
+			// Once the pen has been up a moment, a finger picks a paint as ever.
+			await afterThePenLifts();
+			expect(touchStart(blue)).toBe(false);
+			tap(blue, 13);
+			expect(drawingTools.activeColor).toBe('#2563EB');
+		});
+
+		it('lets go of the title once a line starts, so the keyboard goes away', async () => {
+			const { at, canvas } = await openStudio();
+			const title = page.getByPlaceholder('Untitled genius').element() as HTMLInputElement;
+			title.focus();
+			expect(document.activeElement).toBe(title);
+
+			canvas.dispatchEvent(createPointerEvent('pointerdown', at(100, 100)));
+			canvas.dispatchEvent(createPointerEvent('pointermove', at(300, 300)));
+			canvas.dispatchEvent(createPointerEvent('pointerup', { ...at(300, 300), buttons: 0 }));
+
+			expect(document.activeElement).not.toBe(title);
+		});
+	});
+
+	it('stamps a drawing that did not make it to the wall, and publishes it again from the stamp', async () => {
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const publishDrawing = vi
+			.fn()
+			.mockResolvedValueOnce({
+				code: 'PUBLISH_FAILED',
+				message: 'Artwork publish failed',
+				success: false as const
+			})
+			.mockResolvedValueOnce({
+				action: 'publish' as const,
+				artwork: {
+					id: 'artwork-retried',
+					mediaUrl: '/api/artworks/artwork-retried/media',
+					title: 'Second Try'
+				},
+				success: true as const
+			});
+
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -419,19 +759,29 @@ describe('StudioDrawingPage', () => {
 			user: { nickname: 'journey_artist' }
 		});
 		await openSketchbook();
-		await page.getByPlaceholder('Untitled genius').fill('Problem Piece');
+		await page.getByPlaceholder('Untitled genius').fill('Second Try');
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
-		await expect.element(page.getByText('Artwork media must decode safely')).toBeVisible();
-		await expect.element(page.getByText(/Artwork published as/)).not.toBeInTheDocument();
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not published' });
+		await expect
+			.element(stamp.getByText("Your drawing didn't make it to the wall. It's still here."))
+			.toBeVisible();
+		// The server's own wording stays in the logs.
+		await expect.element(page.getByText('Artwork publish failed')).not.toBeInTheDocument();
+
+		await page.getByRole('button', { name: 'Try again' }).click();
+
+		await expect.element(page.getByText('Artwork published as Second Try')).toBeVisible();
+		await expect.element(stamp).not.toBeInTheDocument();
+		expect(publishDrawing).toHaveBeenCalledTimes(2);
 	});
 
 	it('shows a local preparation error when the drawing payload cannot be created', async () => {
 		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
 		const publishDrawing = vi.fn();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => null,
@@ -444,7 +794,12 @@ describe('StudioDrawingPage', () => {
 		await page.getByRole('button', { name: 'Publish' }).click();
 
 		await expect
-			.element(page.getByText('This browser could not prepare your drawing. Please try again.'))
+			.element(
+				page
+					.getByRole('alert')
+					.filter({ hasText: 'Not published' })
+					.getByText("Your browser couldn't get the drawing ready.")
+			)
 			.toBeVisible();
 		expect(checkTextContent).toHaveBeenCalledWith('Export Trouble', 'artwork_title');
 		expect(publishDrawing).not.toHaveBeenCalled();
@@ -454,7 +809,7 @@ describe('StudioDrawingPage', () => {
 		const checkTextContent = vi.fn();
 		const publishDrawing = vi.fn();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -466,7 +821,13 @@ describe('StudioDrawingPage', () => {
 
 		await page.getByRole('button', { name: 'Publish' }).click();
 
-		await expect.element(page.getByText('Title is required before publishing')).toBeVisible();
+		// Marked on the title note in red pencil, and the cursor is put there.
+		const titleField = page.getByRole('textbox', { name: 'Title your masterpiece' });
+		await expect.element(titleField).toHaveAttribute('aria-invalid', 'true');
+		await expect
+			.element(titleField)
+			.toHaveAccessibleDescription('Give it a title before you publish.');
+		await expect.element(titleField).toHaveFocus();
 		expect(checkTextContent).not.toHaveBeenCalled();
 		expect(publishDrawing).not.toHaveBeenCalled();
 	});
@@ -484,7 +845,7 @@ describe('StudioDrawingPage', () => {
 			success: true as const
 		}));
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -514,7 +875,8 @@ describe('StudioDrawingPage', () => {
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: false,
 			parentArtworkId: 'artwork-parent',
-			title: 'Forked Piece'
+			title: 'Forked Piece',
+			wishId: null
 		});
 		expect(window.localStorage.getItem('studio-fork-context:journey_artist')).toBeNull();
 
@@ -540,7 +902,7 @@ describe('StudioDrawingPage', () => {
 			]
 		});
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			createArtworkPayload,
 			forkParent: {
 				drawingDocument: forkParentDocument,
@@ -599,9 +961,10 @@ describe('StudioDrawingPage', () => {
 				throw new Error('Expected the responsive artwork draft to be persisted');
 			}
 			expect(persistedDraft.tail).toHaveLength(2);
+			// To the quarter pixel: an 800x600 box over the 768 px canvas.
 			expect(persistedDraft.tail[1]?.points).toEqual([
-				[192, 282],
-				[250, 358]
+				[192, 281.5],
+				[249.5, 358.5]
 			]);
 		});
 	});
@@ -609,7 +972,7 @@ describe('StudioDrawingPage', () => {
 	it('does not rewrite the draft until a large responsive stroke is committed', async () => {
 		const forkParentDocument = createLargeEditableArtworkDocument();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: forkParentDocument,
 				id: 'artwork-parent',
@@ -676,9 +1039,9 @@ describe('StudioDrawingPage', () => {
 				throw new Error('Expected the committed artwork draft to be persisted');
 			}
 			expect(persistedDraft.tail.at(-1)?.points).toEqual([
-				[192, 282],
-				[230, 333],
-				[269, 384]
+				[192, 281.5],
+				[230.5, 332.75],
+				[268.75, 384]
 			]);
 		});
 	});
@@ -686,7 +1049,7 @@ describe('StudioDrawingPage', () => {
 	it('appends exactly one journal entry when a large responsive artwork stroke is committed', async () => {
 		const forkParentDocument = createLargeEditableArtworkDocument();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: forkParentDocument,
 				id: 'artwork-parent',
@@ -743,15 +1106,15 @@ describe('StudioDrawingPage', () => {
 
 		await vi.waitFor(async () => {
 			expect(await readPersistedJournalEntries(draftKey)).toEqual([
-				{
+				expect.objectContaining({
 					color: '#1A1A1A',
 					points: [
-						[192, 282],
-						[230, 333],
-						[269, 384]
+						[192, 281.5],
+						[230.5, 332.75],
+						[268.75, 384]
 					],
 					size: 6
-				}
+				})
 			]);
 		});
 	});
@@ -769,7 +1132,7 @@ describe('StudioDrawingPage', () => {
 		const publishDrawing = vi.fn(async () => ({ message: 'Retry later', success: false as const }));
 		const forkParentDocument = createLargeEditableArtworkDocument();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			checkTextContent,
 			createArtworkPayload,
 			draftStore: failingStore,
@@ -869,7 +1232,7 @@ describe('StudioDrawingPage', () => {
 		});
 		window.localStorage.setItem(draftKey, JSON.stringify(forkDraftDocument));
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: forkParentDocument,
 				id: 'artwork-parent',
@@ -941,7 +1304,7 @@ describe('StudioDrawingPage', () => {
 			})
 		);
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			user: { nickname: 'journey_artist' }
 		});
@@ -949,7 +1312,8 @@ describe('StudioDrawingPage', () => {
 		await expect.element(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 		await expect.element(page.getByPlaceholder('Untitled genius')).toBeEnabled();
 
-		await page.getByRole('button', { name: 'Clear' }).click();
+		await page.getByRole('button', { name: 'Tear out this page' }).click();
+		await page.getByRole('button', { name: 'Sure? Tap again' }).click();
 
 		await vi.waitFor(async () => {
 			const persistedDraft = await readPersistedDrawingDraft(draftKey);
@@ -959,7 +1323,7 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('stores only lightweight fork resume metadata in localStorage', async () => {
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: normalizeDrawingDocumentToEditableV2(
 					createEmptyDrawingDocument('artwork')
@@ -1012,7 +1376,7 @@ describe('StudioDrawingPage', () => {
 		}));
 		const replaceStudioUrl = vi.fn();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -1053,13 +1417,14 @@ describe('StudioDrawingPage', () => {
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: false,
 			parentArtworkId: null,
-			title: 'Fresh Start'
+			title: 'Fresh Start',
+			wishId: null
 		});
 		window.localStorage.clear();
 	});
 
 	it('lets the closed sketchbook paint before auto-opening it for a fork', async () => {
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: normalizeDrawingDocumentToEditableV2(
 					createEmptyDrawingDocument('artwork')
@@ -1085,7 +1450,7 @@ describe('StudioDrawingPage', () => {
 	it('drops the exit fade tween when the studio unmounts mid-fade', async () => {
 		goto.mockReset();
 
-		const { unmount } = render(StudioDrawingPage, { openingDurationMs: 1 });
+		const { unmount } = await render(StudioDrawingPage, { openingDurationMs: 1 });
 
 		await openSketchbook();
 		await page.getByRole('link', { name: 'Exit Studio' }).click();
@@ -1098,7 +1463,7 @@ describe('StudioDrawingPage', () => {
 	});
 
 	it('auto-opens the sketchbook for a fork once the parent artwork preload is ready', async () => {
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			forkParent: {
 				drawingDocument: normalizeDrawingDocumentToEditableV2(
 					createEmptyDrawingDocument('artwork')
@@ -1122,7 +1487,7 @@ describe('StudioDrawingPage', () => {
 		}));
 		const publishDrawing = vi.fn();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -1145,7 +1510,7 @@ describe('StudioDrawingPage', () => {
 		}));
 		const publishDrawing = vi.fn();
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -1178,7 +1543,7 @@ describe('StudioDrawingPage', () => {
 			success: true as const
 		}));
 
-		render(StudioDrawingPage, {
+		await render(StudioDrawingPage, {
 			openingDurationMs: 1,
 			checkTextContent,
 			createArtworkPayload: async () => JSON.stringify(createEmptyDrawingDocument('artwork')),
@@ -1196,7 +1561,8 @@ describe('StudioDrawingPage', () => {
 		expect(publishDrawing).toHaveBeenCalledWith(expect.any(String), {
 			isNsfw: true,
 			parentArtworkId: null,
-			title: 'Figure Study'
+			title: 'Figure Study',
+			wishId: null
 		});
 	});
 });

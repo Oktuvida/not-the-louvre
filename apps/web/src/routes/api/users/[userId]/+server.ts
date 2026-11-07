@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
-import { userRepository } from '$lib/server/user/repository';
-import { resolveUserAvatarUrl } from '$lib/shared/user/avatar-url';
+import { userRepository } from '#lib/server/user/repository.js';
+import { resolveUserAvatarUrl } from '#lib/shared/user/avatar-url.js';
 
 export const GET: RequestHandler = async (event) => {
 	const user = await userRepository.findUserAvatarRefById(event.params.userId);

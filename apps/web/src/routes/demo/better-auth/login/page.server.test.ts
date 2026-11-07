@@ -3,31 +3,31 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Actions } from './$types';
 
 type LoginActionEvent = Parameters<Actions['signUp']>[0];
-import { AuthFlowError } from '$lib/server/auth/errors';
+import { AuthFlowError } from '#lib/server/auth/errors.js';
 
 const mocked = vi.hoisted(() => ({
 	getNicknameAvailability: vi.fn(),
 	recoverAccount: vi.fn(),
 	signInWithNickname: vi.fn(),
 	signUpWithNickname: vi.fn(),
-	getIp: vi.fn(() => '127.0.0.1')
+	getIP: vi.fn(() => '127.0.0.1')
 }));
 
-vi.mock('$lib/server/auth/service', () => ({
+vi.mock('#lib/server/auth/service.js', () => ({
 	getNicknameAvailability: mocked.getNicknameAvailability,
 	recoverAccount: mocked.recoverAccount,
 	signInWithNickname: mocked.signInWithNickname,
 	signUpWithNickname: mocked.signUpWithNickname
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		options: {}
 	}
 }));
 
 vi.mock('better-auth/api', () => ({
-	getIp: mocked.getIp
+	getIP: mocked.getIP
 }));
 
 const createEvent = (fields: Record<string, string>) => {
@@ -64,7 +64,7 @@ describe('nickname auth page actions', () => {
 		mocked.recoverAccount.mockReset();
 		mocked.signInWithNickname.mockReset();
 		mocked.signUpWithNickname.mockReset();
-		mocked.getIp.mockClear();
+		mocked.getIP.mockClear();
 	});
 
 	it('rejects invalid nickname signup input before calling the signup service', async () => {

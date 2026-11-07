@@ -7,6 +7,7 @@ const { goto } = vi.hoisted(() => ({ goto: vi.fn() }));
 
 vi.mock('$app/navigation', () => ({ goto }));
 
+import { encodeDrawingV3 } from '#lib/stroke/v3.js';
 import ArtworkDetailPanel from './ArtworkDetailPanel.svelte';
 
 const artwork = {
@@ -47,10 +48,31 @@ describe('ArtworkDetailPanel', () => {
 		);
 	};
 
+	it('tells its author or a moderator when the artwork is hidden pending review', async () => {
+		await render(ArtworkDetailPanel, {
+			artwork: { ...artwork, isHidden: true },
+			viewer: { id: 'user-test', role: 'user' }
+		});
+
+		await expect.element(page.getByText('Hidden · pending review')).toBeVisible();
+	});
+
+	it('wears the award the gallery visit drew in the corner of a top-three postcard', async () => {
+		await render(ArtworkDetailPanel, {
+			artwork: { ...artwork, rank: 2 },
+			awardStyle: 'stamps',
+			viewer: null
+		});
+
+		await expect
+			.element(page.getByRole('img', { name: 'Runner-up, second place (rubber stamp)' }))
+			.toBeVisible();
+	});
+
 	it('links forking into the draw studio with the parent artwork id', async () => {
 		goto.mockReset();
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'user-1', role: 'user' }
 		});
@@ -62,13 +84,33 @@ describe('ArtworkDetailPanel', () => {
 		await expect.element(page.getByRole('button', { name: 'Download' })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Dismiss details' })).toBeVisible();
 
-		// The fork count is franked on the back of the postcard
+		// The fork count is on the catalogue card, on the back of the postcard
 		await page.getByRole('button', { name: 'Read the comments' }).click();
-		await expect.element(page.getByText('2 forks')).toBeVisible();
+		await expect.element(page.getByText(/^Forks 2/)).toBeVisible();
+	});
+
+	// The back of the postcard files the artwork like a museum catalogue card,
+	// and the visitor's book is handwritten: no emoji anywhere on the way there
+	// and back.
+	it('files the artwork on a catalogue card on the back of the postcard', async () => {
+		await render(ArtworkDetailPanel, { artwork, viewer: { id: 'user-1', role: 'user' } });
+
+		const emoji = /\p{Extended_Pictographic}/u;
+		const toComments = page.getByRole('button', { name: 'Read the comments' });
+		expect(toComments.element().textContent).not.toMatch(emoji);
+		await toComments.click();
+
+		await expect.element(page.getByText('Votes 4')).toBeVisible();
+		await expect.element(page.getByText(/^Forks 2/)).toBeVisible();
+		await expect.element(page.getByText(/^Artist journey_artist$/)).toBeVisible();
+		await expect.element(page.getByText('Nobody has written on the back yet.')).toBeVisible();
+		expect(
+			page.getByRole('button', { name: 'Show the artwork' }).element().textContent
+		).not.toMatch(emoji);
 	});
 
 	it('shows fork attribution when the artwork comes from a parent artwork', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: {
 				...artwork,
 				lineage: {
@@ -89,7 +131,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('opens an enlarged author avatar preview from the detail view', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: {
 				...artwork,
 				artistAvatar: '/avatars/journey.png'
@@ -110,20 +152,20 @@ describe('ArtworkDetailPanel', () => {
 	it('renders artwork detail as read-only for signed-out visitors', async () => {
 		goto.mockReset();
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: null
 		});
 
 		await expect.element(page.getByRole('button', { name: 'Fork' })).not.toBeInTheDocument();
-		await expect.element(page.getByPlaceholder('Write a comment')).not.toBeInTheDocument();
+		await expect.element(page.getByPlaceholder('Write on the back…')).not.toBeInTheDocument();
 		await expect
 			.element(page.getByText('Sign in to vote, fork, or leave a comment.'))
 			.toBeVisible();
 	});
 
 	it('keeps the visitor book scrollable inside the postcard back', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: {
 				...artwork,
 				comments: [{ author: 'visitor_one', id: 'comment-1', text: 'hello', timestamp: Date.now() }]
@@ -160,23 +202,23 @@ describe('ArtworkDetailPanel', () => {
 			)
 		);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			checkTextContent,
 			artwork,
 			onArtworkChange,
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		expect(document.querySelector('input[placeholder="Write a comment"]')?.id).toBe(
+		expect(document.querySelector('input[placeholder="Write on the back…"]')?.id).toBe(
 			'artwork-comment-body'
 		);
 		expect(
-			document.querySelector('input[placeholder="Write a comment"]')?.getAttribute('name')
+			document.querySelector('input[placeholder="Write on the back…"]')?.getAttribute('name')
 		).toBe('commentBody');
 
 		// The comment form lives on the back of the postcard
 		await openCommentsSide();
-		await page.getByPlaceholder('Write a comment').fill('Great work');
+		await page.getByPlaceholder('Write on the back…').fill('Great work');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 
 		await vi.waitFor(() => {
@@ -199,7 +241,7 @@ describe('ArtworkDetailPanel', () => {
 		}));
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			checkTextContent,
 			artwork,
 			onArtworkChange,
@@ -207,12 +249,39 @@ describe('ArtworkDetailPanel', () => {
 		});
 
 		await openCommentsSide();
-		await page.getByPlaceholder('Write a comment').fill('blocked text');
+		await page.getByPlaceholder('Write on the back…').fill('blocked text');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 
-		await expect.element(page.getByText('This comment breaks the gallery rules.')).toBeVisible();
+		// The reason is pencilled under the line the comment was written on.
+		const commentField = page.getByPlaceholder('Write on the back…');
+		await expect.element(commentField).toHaveAttribute('aria-invalid', 'true');
+		await expect
+			.element(commentField)
+			.toHaveAccessibleDescription('This comment breaks the gallery rules.');
 		expect(fetchSpy).not.toHaveBeenCalled();
 		expect(onArtworkChange).not.toHaveBeenCalled();
+	});
+
+	it('asks for words before an empty comment goes in the book', async () => {
+		const fetchSpy = vi.fn();
+		vi.stubGlobal('fetch', fetchSpy);
+		const onNotify = vi.fn();
+
+		await render(ArtworkDetailPanel, {
+			artwork,
+			onNotify,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await openCommentsSide();
+		await page.getByRole('button', { name: 'Send comment' }).click();
+
+		const commentField = page.getByPlaceholder('Write on the back…');
+		await expect.element(commentField).toHaveAccessibleDescription('Write something first.');
+		await expect.element(commentField).toHaveFocus();
+		// It is the field's own note, not a message for the gallery to carry.
+		expect(onNotify).not.toHaveBeenCalledWith('Write something first.');
+		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
 	it('blocks comment submission when the text filter is unavailable', async () => {
@@ -224,7 +293,7 @@ describe('ArtworkDetailPanel', () => {
 		}));
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			checkTextContent,
 			artwork,
 			onArtworkChange,
@@ -232,7 +301,7 @@ describe('ArtworkDetailPanel', () => {
 		});
 
 		await openCommentsSide();
-		await page.getByPlaceholder('Write a comment').fill('retry later');
+		await page.getByPlaceholder('Write on the back…').fill('retry later');
 		await page.getByRole('button', { name: 'Send comment' }).click();
 
 		await expect
@@ -254,7 +323,7 @@ describe('ArtworkDetailPanel', () => {
 			);
 		vi.stubGlobal('fetch', fetchSpy);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			onArtworkChange,
 			viewer: { id: 'admin-1', role: 'admin' }
@@ -278,7 +347,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('blurs NSFW artwork for viewers without the 18+ preference', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, isNsfw: true },
 			viewer: { id: 'user-other', role: 'user' }
 		});
@@ -287,7 +356,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('never blurs the author viewing their own NSFW artwork', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, isNsfw: true },
 			viewer: { id: 'user-test', role: 'user' }
 		});
@@ -296,19 +365,19 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('shows a comments skeleton while the detail is hydrating', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			isHydrating: true
 		});
 
 		await expect.element(page.getByTestId('artwork-comments-loading')).toBeInTheDocument();
 		await expect
-			.element(page.getByText("The visitor's book is empty — be the first to sign it."))
+			.element(page.getByText('Nobody has written on the back yet.'))
 			.not.toBeInTheDocument();
 	});
 
 	it('never carries the lift or the tilt of the previous artwork into the next one', async () => {
-		const { rerender } = render(ArtworkDetailPanel, {
+		const { rerender } = await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'admin-1', role: 'admin' }
 		});
@@ -329,26 +398,20 @@ describe('ArtworkDetailPanel', () => {
 		await expect.element(page.getByRole('button', { name: 'Report artwork' })).toBeVisible();
 	});
 
-	it('opens the postcard window onto the LQIP instead of blank paper', async () => {
-		render(ArtworkDetailPanel, {
-			artwork: { ...artwork, imagePlaceholder: 'data:image/webp;base64,lqip' }
-		});
+	it('asks for the postcard photo before anything else on the page', async () => {
+		await render(ArtworkDetailPanel, { artwork });
 
 		const photo = page.getByAltText('Detail artwork');
 
 		await expect.element(photo).toHaveAttribute('loading', 'eager');
 		await expect.element(photo).toHaveAttribute('decoding', 'async');
 		await expect.element(photo).toHaveAttribute('fetchpriority', 'high');
-
-		const placeholder = document.querySelector('.nsfw-placeholder');
-		expect(placeholder?.getAttribute('src')).toBe('data:image/webp;base64,lqip');
 	});
 
 	it('censors the detail with the same treatment as every grid card', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: {
 				...artwork,
-				imagePlaceholder: 'data:image/webp;base64,lqip',
 				isNsfw: true
 			},
 			viewer: { id: 'user-other', role: 'user' }
@@ -356,10 +419,8 @@ describe('ArtworkDetailPanel', () => {
 
 		await expect.element(page.getByText('Sensitive artwork')).toBeVisible();
 
-		// The photo and the LQIP under it both carry the shared blur, so no sharp
-		// thumbnail reads around the scrim.
+		// The photo carries the shared blur, so nothing sharp reads around the scrim.
 		expect(page.getByAltText('Detail artwork').element().className).toContain('is-sensitive');
-		expect(document.querySelector('.nsfw-placeholder')?.className).toContain('is-sensitive');
 
 		// The panel paints its own scrim — the one with the reveal CTA — so the
 		// shared component's badge must not be announced underneath it.
@@ -369,7 +430,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('stops censoring a piece the visitor revealed in the grid', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, isNsfw: true },
 			revealedArtworkIds: writable(new Set(['artwork-1'])),
 			viewer: { id: 'user-other', role: 'user' }
@@ -384,13 +445,13 @@ describe('ArtworkDetailPanel', () => {
 			vi.fn(() => new Promise(() => undefined))
 		);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, upvotes: 3, viewerVote: 'up' as const },
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		const upvote = page.getByRole('button', { name: /👍/ });
-		const downvote = page.getByRole('button', { name: /👎/ });
+		const upvote = page.getByRole('button', { name: /^Upvote/ });
+		const downvote = page.getByRole('button', { name: /^Downvote/ });
 
 		await expect.element(upvote).toBeVisible();
 		expect(upvote.element().className).toContain('vote-cast');
@@ -403,7 +464,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('exposes the cast vote as a pressed toggle, not only as a ring', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, upvotes: 3, viewerVote: 'up' as const },
 			viewer: { id: 'user-1', role: 'user' }
 		});
@@ -411,10 +472,10 @@ describe('ArtworkDetailPanel', () => {
 		// The ring is the only visual signal of the viewer's own vote, so without
 		// aria-pressed a screen reader hears nothing at all about it.
 		await expect
-			.element(page.getByRole('button', { name: /👍/ }))
+			.element(page.getByRole('button', { name: /^Upvote/ }))
 			.toHaveAttribute('aria-pressed', 'true');
 		await expect
-			.element(page.getByRole('button', { name: /👎/ }))
+			.element(page.getByRole('button', { name: /^Downvote/ }))
 			.toHaveAttribute('aria-pressed', 'false');
 	});
 
@@ -429,37 +490,129 @@ describe('ArtworkDetailPanel', () => {
 			)
 		);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await page.getByRole('button', { name: /👍/ }).click();
+		await page.getByRole('button', { name: /^Upvote/ }).click();
 
 		await expect.element(page.getByText('This piece has left the wall.')).toBeVisible();
 		await expect.element(page.getByText('Artwork not found')).not.toBeInTheDocument();
 	});
 
-	it('keeps one notice for both faces of the postcard', async () => {
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async () => new Response(JSON.stringify({ code: 'PUBLISH_FAILED' }), { status: 500 }))
-		);
+	it('stamps a vote that did not go through on the postcard, and Try again sends it once more', async () => {
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ code: 'PUBLISH_FAILED' }), { status: 500 })
+			)
+			.mockResolvedValueOnce(new Response(JSON.stringify({ artwork: { score: 5 } })));
+		vi.stubGlobal('fetch', fetchSpy);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await page.getByRole('button', { name: /👍/ }).click();
+		const upvote = page.getByRole('button', { name: /^Upvote/ });
+		await upvote.click();
 
-		const notice = page.getByRole('alert');
-		await expect.element(notice).toBeVisible();
-		expect(document.querySelectorAll('.postcard-notice')).toHaveLength(1);
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not sent' });
+		await expect
+			.element(stamp.getByText("Your vote didn't make it onto the ledger."))
+			.toBeVisible();
+		// The vote that did not land is not shown as cast.
+		await expect.element(upvote).toHaveAttribute('aria-pressed', 'false');
 
-		// The message survives the flip instead of changing face with the card.
+		// The stamp is on the postcard, not on one face of it: it is still there
+		// once the card turns over.
 		await openCommentsSide();
-		await expect.element(notice).toBeVisible();
+		await expect.element(stamp).toBeVisible();
+
+		await page.getByRole('button', { name: 'Try again' }).click();
+
+		await expect.element(stamp).not.toBeInTheDocument();
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		expect(fetchSpy.mock.calls[1]?.[0]).toBe('/api/artworks/artwork-1/vote');
+		expect(fetchSpy.mock.calls[1]?.[1]).toMatchObject({ method: 'POST' });
+	});
+
+	it('stamps the postcard even where the gallery carries the other notices', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify({}), { status: 502 }))
+		);
+		const onNotify = vi.fn();
+
+		await render(ArtworkDetailPanel, {
+			artwork,
+			onNotify,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await page.getByRole('button', { name: /^Upvote/ }).click();
+
+		await expect.element(page.getByRole('alert').filter({ hasText: 'Not sent' })).toBeVisible();
+		// Said once, where it happened.
+		expect(onNotify).not.toHaveBeenCalledWith(expect.stringContaining('ledger'));
+
+		await page.getByRole('button', { name: 'Put the notice away' }).click();
+		await expect
+			.element(page.getByRole('alert').filter({ hasText: 'Not sent' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('stamps a comment the book did not take, and writes the same words again', async () => {
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 500 }))
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						comment: {
+							author: { nickname: 'journey_artist' },
+							body: 'Lovely lines',
+							createdAt: new Date().toISOString(),
+							id: 'comment-1'
+						}
+					}),
+					{ status: 201 }
+				)
+			);
+		vi.stubGlobal('fetch', fetchSpy);
+		const checkTextContent = vi.fn(async () => ({ status: 'allowed' as const }));
+		const onArtworkChange = vi.fn();
+
+		await render(ArtworkDetailPanel, {
+			artwork,
+			checkTextContent,
+			onArtworkChange,
+			viewer: { id: 'user-1', role: 'user' }
+		});
+
+		await openCommentsSide();
+		await page.getByPlaceholder('Write on the back…').fill('Lovely lines');
+		await page.getByRole('button', { name: 'Send comment' }).click();
+
+		const stamp = page.getByRole('alert').filter({ hasText: 'Not sent' });
+		await expect
+			.element(stamp.getByText("The visitor's book didn't take your entry."))
+			.toBeVisible();
+		// The words are still on the line, ready to go again.
+		await expect.element(page.getByPlaceholder('Write on the back…')).toHaveValue('Lovely lines');
+
+		await page.getByRole('button', { name: 'Try again' }).click();
+
+		await expect.element(stamp).not.toBeInTheDocument();
+		await vi.waitFor(() => {
+			expect(onArtworkChange).toHaveBeenCalledWith(
+				expect.objectContaining({
+					comments: [expect.objectContaining({ id: 'comment-1', text: 'Lovely lines' })]
+				})
+			);
+		});
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
 	});
 
 	it('hands failures to the host status region when one is wired up', async () => {
@@ -474,13 +627,13 @@ describe('ArtworkDetailPanel', () => {
 		);
 		const onNotify = vi.fn();
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			onNotify,
 			viewer: { id: 'user-1', role: 'user' }
 		});
 
-		await page.getByRole('button', { name: /👍/ }).click();
+		await page.getByRole('button', { name: /^Upvote/ }).click();
 
 		await vi.waitFor(() => {
 			expect(onNotify).toHaveBeenCalledWith('The attendants will not let you do that.');
@@ -494,7 +647,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('keeps Tab inside the dialog instead of walking into the gallery behind it', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			viewer: { id: 'user-1', role: 'user' }
 		});
@@ -520,7 +673,7 @@ describe('ArtworkDetailPanel', () => {
 	it('dismisses on Escape even when focus sits inside the postcard', async () => {
 		const onClose = vi.fn();
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			onClose,
 			viewer: { id: 'user-1', role: 'user' }
@@ -539,7 +692,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('hands focus back to the avatar that opened the seal preview', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, artistAvatar: '/avatars/journey.png' }
 		});
 
@@ -562,7 +715,7 @@ describe('ArtworkDetailPanel', () => {
 		document.body.append(opener);
 		opener.focus();
 
-		const { rerender } = render(ArtworkDetailPanel, { artwork });
+		const { rerender } = await render(ArtworkDetailPanel, { artwork });
 
 		await vi.waitFor(() => {
 			expect(document.activeElement).not.toBe(opener);
@@ -581,7 +734,7 @@ describe('ArtworkDetailPanel', () => {
 	});
 
 	it('announces async work in a live region', async () => {
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork,
 			isHydrating: true
 		});
@@ -607,7 +760,7 @@ describe('ArtworkDetailPanel', () => {
 			.spyOn(HTMLAnchorElement.prototype, 'click')
 			.mockImplementation(() => undefined);
 
-		render(ArtworkDetailPanel, {
+		await render(ArtworkDetailPanel, {
 			artwork: { ...artwork, title: 'Detail Artwork!' }
 		});
 
@@ -618,8 +771,75 @@ describe('ArtworkDetailPanel', () => {
 		});
 		expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/media');
 		expect(createObjectURL).toHaveBeenCalledTimes(1);
-		expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
 
 		anchorClick.mockRestore();
+	});
+
+	it('replays how the artwork was drawn in place of the picture, and goes back to it', async () => {
+		const fetchSpy = vi.fn(async () =>
+			Response.json({
+				backdropUrl: null,
+				drawing: encodeDrawingV3({
+					background: '#fdfbf7',
+					height: 768,
+					kind: 'artwork',
+					strokes: [
+						{
+							brush: 'round@1',
+							color: '#1d3557',
+							pointer: 'mouse',
+							points: [
+								[100, 100],
+								[600, 600]
+							],
+							size: 40,
+							start: 0,
+							times: [0, 50]
+						}
+					],
+					width: 768
+				})
+			})
+		);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		await render(ArtworkDetailPanel, { artwork });
+
+		await page.getByRole('button', { name: 'Watch it being drawn' }).click();
+
+		await expect.element(page.getByLabelText('Timelapse of Detail artwork')).toBeVisible();
+		expect(fetchSpy).toHaveBeenCalledWith('/api/artworks/artwork-1/timelapse', expect.anything());
+
+		await page.getByRole('button', { name: 'Close timelapse' }).click();
+
+		await expect
+			.element(page.getByLabelText('Timelapse of Detail artwork'))
+			.not.toBeInTheDocument();
+		await expect.element(page.getByRole('img', { name: 'Detail artwork' })).toBeVisible();
+	});
+
+	it('offers no replay of an artwork whose drawing was lost', async () => {
+		await render(ArtworkDetailPanel, { artwork: { ...artwork, hasReplay: false } });
+
+		await expect.element(page.getByRole('button', { name: 'Download' })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Watch it being drawn' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('keeps the picture and says so when the timelapse cannot be had', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () =>
+				Response.json({ code: 'NOT_FOUND', message: 'Drawing not found' }, { status: 404 })
+			)
+		);
+
+		await render(ArtworkDetailPanel, { artwork });
+
+		await page.getByRole('button', { name: 'Watch it being drawn' }).click();
+
+		await expect.element(page.getByText('This piece has left the wall.')).toBeVisible();
+		await expect.element(page.getByRole('img', { name: 'Detail artwork' })).toBeVisible();
 	});
 });

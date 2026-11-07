@@ -1,4 +1,7 @@
 import { z } from 'zod';
+// Relative, not `#lib`: the Playwright suites import this module directly.
+import { DRAWING_LIMITS } from '../../shared/artwork/drawing-limits';
+import { BRUSH_IDS, POINTER_KINDS } from '../../stroke/v3';
 
 export const ARTWORK_DRAWING_DIMENSIONS = {
 	background: '#fdfbf7',
@@ -17,15 +20,20 @@ export const DRAWING_DOCUMENT_V2_VERSION = 2 as const;
 
 export const drawingColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 
-const drawingPointSchema = z.tuple([
-	z.number().int().nonnegative(),
-	z.number().int().nonnegative()
-]);
+// Document pixels, to the quarter (v1/v2 drawings hold whole pixels).
+const drawingPointSchema = z.tuple([z.number().nonnegative(), z.number().nonnegative()]);
 
 const drawingStrokeSchema = z.object({
 	color: drawingColorSchema,
 	points: z.array(drawingPointSchema),
-	size: z.number().int().min(1).max(64)
+	size: z.number().int().min(1).max(64),
+	// What the studio records since v3 (see stroke/v3.ts); a stroke from an
+	// older drawing has none of it.
+	brush: z.enum(BRUSH_IDS).optional(),
+	pointer: z.enum(POINTER_KINDS).optional(),
+	pressures: z.array(z.number().min(0).max(1)).optional(),
+	start: z.number().nonnegative().optional(),
+	times: z.array(z.number().nonnegative()).optional()
 });
 
 const createV1KindSchema = (
@@ -119,12 +127,15 @@ export const DrawingDocumentSchema = baseDrawingDocumentSchema.superRefine((docu
 	}
 });
 
+const toQuarter = (value: number) => Math.round(value * 4) / 4;
+
+/** A point inside the document, to the quarter pixel the v3 document keeps. */
 export const clampDrawingPoint = (
 	point: [number, number],
 	dimensions: Pick<DrawingDocument, 'height' | 'width'>
 ): DrawingPoint => [
-	Math.max(0, Math.min(dimensions.width, Math.round(point[0]))),
-	Math.max(0, Math.min(dimensions.height, Math.round(point[1])))
+	Math.max(0, Math.min(dimensions.width, toQuarter(point[0]))),
+	Math.max(0, Math.min(dimensions.height, toQuarter(point[1])))
 ];
 
 export const getDrawingPointWithinBounds = (
@@ -149,13 +160,7 @@ export type DrawingDocumentLimits = {
 
 export const DEFAULT_DRAWING_DOCUMENT_LIMITS: Required<
 	Omit<DrawingDocumentLimits, 'compressedBytes'>
-> = {
-	maxCompressedBytes: 256 * 1024,
-	maxDecompressedBytes: 1024 * 1024,
-	maxPointsPerStroke: 5000,
-	maxStrokes: 5000,
-	maxTotalPoints: 100_000
-};
+> = DRAWING_LIMITS;
 
 const getDimensionsForKind = (kind: DrawingKind) =>
 	kind === 'artwork' ? ARTWORK_DRAWING_DIMENSIONS : AVATAR_DRAWING_DIMENSIONS;
@@ -187,10 +192,15 @@ export const createEmptyDrawingDocumentV2 = (kind: DrawingKind): DrawingDocument
 	};
 };
 
-const cloneDrawingStroke = (stroke: DrawingStroke): DrawingStroke => ({
+export const cloneDrawingStroke = (stroke: DrawingStroke): DrawingStroke => ({
 	color: stroke.color,
 	points: stroke.points.map((point) => [point[0], point[1]] as DrawingPoint),
-	size: stroke.size
+	size: stroke.size,
+	...(stroke.brush ? { brush: stroke.brush } : {}),
+	...(stroke.pointer ? { pointer: stroke.pointer } : {}),
+	...(stroke.pressures ? { pressures: [...stroke.pressures] } : {}),
+	...(stroke.start !== undefined ? { start: stroke.start } : {}),
+	...(stroke.times ? { times: [...stroke.times] } : {})
 });
 
 export const cloneDrawingDocument = (document: DrawingDocumentV1): DrawingDocumentV1 => ({
@@ -283,10 +293,17 @@ export const parseDrawingDocumentV2 = (input: string): DrawingDocumentV2 =>
 export const parseEditableDrawingDocumentV2 = (input: string): DrawingDocumentV2 =>
 	normalizeDrawingDocumentToEditableV2(parseVersionedDrawingDocument(input));
 
+// The v3 fields ride along when a stroke has them: this JSON is the studio's
+// own (drafts, change detection); what is published is v3 (ink-document.ts).
 const toSerializableStroke = (stroke: DrawingStroke) => ({
 	color: stroke.color,
 	size: stroke.size,
-	points: stroke.points.map((point) => [point[0], point[1]])
+	points: stroke.points.map((point) => [point[0], point[1]]),
+	...(stroke.brush ? { brush: stroke.brush } : {}),
+	...(stroke.pointer ? { pointer: stroke.pointer } : {}),
+	...(stroke.pressures ? { pressures: stroke.pressures } : {}),
+	...(stroke.start !== undefined ? { start: stroke.start } : {}),
+	...(stroke.times ? { times: stroke.times } : {})
 });
 
 const toSerializableDocumentV1 = (document: DrawingDocumentV1) => ({
@@ -329,6 +346,16 @@ export const serializeEditableDrawingDocument = (document: DrawingDocument) =>
 			normalizeDrawingDocumentToEditableV2(DrawingDocumentSchema.parse(document))
 		)
 	);
+
+/** The document with one more finished stroke at the end of its tail. */
+export const appendCommittedStroke = (
+	document: DrawingDocumentV2,
+	stroke: DrawingStroke
+): DrawingDocumentV2 => {
+	const nextDocument = cloneDrawingDocumentV2(document);
+	nextDocument.tail.push(cloneDrawingStroke(stroke));
+	return nextDocument;
+};
 
 export const countDrawingPoints = (document: DrawingDocument) =>
 	getRenderableDrawingStrokes(document).reduce((total, stroke) => total + stroke.points.length, 0);

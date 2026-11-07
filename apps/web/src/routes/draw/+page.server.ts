@@ -1,12 +1,12 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { getIp } from 'better-auth/api';
+import { getIP } from 'better-auth/api';
 import type { Actions, PageServerLoad } from './$types';
-import { auth } from '$lib/server/auth';
-import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/features/stroke-json/runtime.server';
-import type { RouteMeta } from '$lib/features/shared-ui/site-meta';
-import { getArtworkDetail } from '$lib/server/artwork/read.service';
-import { publishArtwork } from '$lib/server/artwork/service';
-import { toActionFailure } from '$lib/server/http/errors';
+import { auth } from '#lib/server/auth.js';
+import type { RouteMeta } from '#lib/features/shared-ui/site-meta.js';
+import { getArtworkDetail } from '#lib/server/artwork/read.service.js';
+import { getWish, publishArtwork } from '#lib/server/artwork/service.js';
+import { toActionFailure } from '#lib/server/http/errors.js';
+import { resolveArtworkMediaUrl } from '#lib/shared/artwork/media-url.js';
 
 const toFailure = (errorValue: unknown, fallback: string) =>
 	toActionFailure(errorValue, {
@@ -14,25 +14,6 @@ const toFailure = (errorValue: unknown, fallback: string) =>
 		fallbackMessage: fallback,
 		scope: 'publish action'
 	});
-
-/**
- * Coarse "is this a phone" read for the first paint only. Chromium sends the
- * low-entropy `sec-ch-ua-mobile` hint by default, so no Accept-CH round trip is
- * needed; everything else falls back to a user-agent test. The client's
- * `matchMedia('(max-width: 700px)')` sync stays the authority and corrects a
- * wrong guess on mount — exactly what used to happen on every mobile visit,
- * except now it usually has nothing to correct.
- */
-const isMobileRequest = (request: Request) => {
-	const mobileHint = request.headers.get('sec-ch-ua-mobile');
-	if (mobileHint) {
-		return mobileHint.trim() === '?1';
-	}
-
-	return /Android|iPhone|iPod|IEMobile|Opera Mini|Mobile Safari/i.test(
-		request.headers.get('user-agent') ?? ''
-	);
-};
 
 export const load: PageServerLoad = async (event) => {
 	if (event.locals.integrityFailure) {
@@ -44,16 +25,11 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const forkArtworkId = event.url.searchParams.get('fork');
+	// A fork is drawn over the image of its parent, so the studio needs the
+	// image, not the parent's drawing (hundreds of KiB on a phone).
 	const forkParent = forkArtworkId
-		? await getArtworkDetail(forkArtworkId, {
-				user: event.locals.user,
-				// The studio is the only reader of the drawing document: every
-				// other detail read leaves that column in Postgres.
-				withDrawingDocument: true
-			}).then(async (artwork) => ({
-				drawingDocument: artwork.drawingDocument
-					? await decodeCompressedDrawingDocumentToEditableDocument(artwork.drawingDocument)
-					: null,
+		? await getArtworkDetail(forkArtworkId, { user: event.locals.user }).then((artwork) => ({
+				drawingDocument: null,
 				id: artwork.id,
 				isNsfw: artwork.isNsfw,
 				mediaUrl: artwork.mediaUrl,
@@ -61,13 +37,15 @@ export const load: PageServerLoad = async (event) => {
 			}))
 		: null;
 
+	const wishId = event.url.searchParams.get('wish');
+
 	return {
 		forkParent,
-		initialIsMobile: isMobileRequest(event.request),
 		// The root layout renders the only <title> in the document from
 		// `page.data.meta`; a page-level <svelte:head><title> would lose to it.
 		meta: { title: 'Studio' } satisfies RouteMeta,
-		user: event.locals.user
+		user: event.locals.user,
+		wish: wishId ? await getWish(wishId) : null
 	};
 };
 
@@ -75,16 +53,16 @@ export const actions: Actions = {
 	publish: async (event) => {
 		const formData = await event.request.formData();
 		const drawingDocument = formData.get('drawingDocument')?.toString() ?? '';
-		const media = formData.get('media');
 		const title = formData.get('title')?.toString() ?? '';
 		const parentArtworkId = formData.get('parentArtworkId')?.toString() ?? null;
 		const isNsfw = formData.get('isNsfw')?.toString() === 'true';
+		const wishId = formData.get('wishId')?.toString() ?? null;
 
-		if (!drawingDocument && !(media instanceof File)) {
+		if (!drawingDocument) {
 			return fail(400, {
 				action: 'publish',
 				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Artwork media or drawing document is required'
+				message: 'Artwork drawing document is required'
 			});
 		}
 
@@ -93,12 +71,12 @@ export const actions: Actions = {
 				{
 					drawingDocument,
 					isNsfw,
-					media: media instanceof File ? media : null,
 					parentArtworkId,
-					title
+					title,
+					wishId
 				},
 				{
-					ipAddress: getIp(event.request, auth.options),
+					ipAddress: getIP(event.request, auth.options),
 					user: event.locals.user
 				}
 			);
@@ -108,7 +86,7 @@ export const actions: Actions = {
 				artwork: {
 					id: artwork.id,
 					isNsfw: artwork.isNsfw,
-					mediaUrl: `/api/artworks/${artwork.id}/media`,
+					mediaUrl: resolveArtworkMediaUrl(artwork.id, artwork.mediaContentType),
 					title: artwork.title
 				},
 				success: true

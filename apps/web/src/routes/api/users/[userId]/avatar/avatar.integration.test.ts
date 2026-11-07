@@ -1,53 +1,27 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
+import { getPlatformProxy, type PlatformProxy } from 'wrangler';
+import type { AppBucket } from '#lib/server/platform.js';
 import {
 	createEmptyDrawingDocument,
+	getRenderableDrawingStrokes,
 	serializeDrawingDocument
-} from '$lib/features/stroke-json/document';
-
-const testFileDirectory = dirname(fileURLToPath(import.meta.url));
-const appRoot = resolve(testFileDirectory, '../../../../../../');
-const workspaceRoot = resolve(testFileDirectory, '../../../../../../../../');
-
-const loadEnvFile = (filePath: string) => {
-	if (!existsSync(filePath)) {
-		return;
-	}
-
-	const fileContents = readFileSync(filePath, 'utf8');
-	for (const rawLine of fileContents.split(/\r?\n/)) {
-		const line = rawLine.trim();
-		if (!line || line.startsWith('#')) {
-			continue;
-		}
-
-		const separatorIndex = line.indexOf('=');
-		if (separatorIndex <= 0) {
-			continue;
-		}
-
-		const key = line.slice(0, separatorIndex).trim();
-		const rawValue = line.slice(separatorIndex + 1).trim();
-		const normalizedValue = rawValue.replace(/^['"]|['"]$/g, '');
-
-		if (!process.env[key]) {
-			process.env[key] = normalizedValue;
-		}
-	}
-};
-
-loadEnvFile(resolve(appRoot, '.env'));
-loadEnvFile(resolve(workspaceRoot, '.env.supabase'));
+} from '#lib/features/stroke-json/document.js';
 
 const DATABASE_URL = process.env.DATABASE_URL;
-// Opt-in only: these suites talk to the local Supabase stack over TCP, so they
-// must skip (not fail) on a machine that has not started it. The env files above
-// still supply the connection details once RUN_INTEGRATION is set.
-const describeWithStorage = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
+// Same opt-in flag as the other integration suites: `bun run test:integration`.
+const describeWithDatabase = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
+
+// Vitest's workers never see the platform proxy Vite starts, so the suite runs
+// its own: the R2 bucket is wrangler's local emulation of the real one.
+const platform = vi.hoisted(() => ({ bucket: undefined as unknown }));
+vi.mock('#lib/server/platform.js', () => ({
+	edgeCache: () => undefined,
+	hyperdriveConnectionString: () => undefined,
+	appBucket: () => platform.bucket,
+	runAfterResponse: () => {}
+}));
 
 type DbClient = Sql<Record<string, unknown>>;
 
@@ -133,15 +107,19 @@ const makeLocalUser = (id: string) => ({
 	updatedAt: new Date('2026-03-28T19:30:00.000Z')
 });
 
-describeWithStorage('avatar backend integration', () => {
+describeWithDatabase('avatar backend integration', () => {
 	let sql: DbClient;
+	let proxy: PlatformProxy<{ BUCKET: AppBucket }>;
 
-	beforeAll(() => {
+	beforeAll(async () => {
+		proxy = await getPlatformProxy<{ BUCKET: AppBucket }>({ persist: false });
+		platform.bucket = proxy.env.BUCKET;
 		sql = createDbClient();
 	});
 
 	afterAll(async () => {
-		await sql.end({ timeout: 5 });
+		await sql?.end({ timeout: 5 });
+		await proxy?.dispose();
 	});
 
 	it('uploads avatar media, streams it back through the backend endpoint, and deletes it', async () => {
@@ -167,28 +145,30 @@ describeWithStorage('avatar backend integration', () => {
 
 			expect(uploadResponse.status).toBe(200);
 			const uploadPayload = (await uploadResponse.json()) as { avatarUrl: string };
-			expect(uploadPayload.avatarUrl).toMatch(new RegExp(`^/api/users/${userId}/avatar\\?v=\\d+$`));
+			expect(uploadPayload.avatarUrl).toMatch(
+				new RegExp(`^/api/users/${userId}/avatar\\?v=[0-9a-f]{16}$`)
+			);
 
-			const [storedUser] = await sql<
-				Array<{ avatar_document: string | null; avatar_url: string | null }>
-			>`
-				select avatar_document, avatar_url
+			const [storedUser] = await sql<Array<{ avatar_url: string | null }>>`
+				select avatar_url
 				from app.users
 				where id = ${userId}
 			`;
 
-			expect(storedUser?.avatar_document).toBeTruthy();
-			expect(storedUser?.avatar_url).toBe(`avatars/${userId}.avif`);
+			expect(storedUser?.avatar_url).toMatch(new RegExp(`^avatars/${userId}/[0-9a-f]{16}\\.webp$`));
 
 			const getResponse = await avatarModule.GET({
 				locals: {},
-				params: { userId }
+				params: { userId },
+				request: new Request(`http://localhost${uploadPayload.avatarUrl}`)
 			} as never);
 			const avatarBytes = new Uint8Array(await getResponse.arrayBuffer());
 
 			expect(getResponse.status).toBe(200);
-			expect(getResponse.headers.get('content-type')).toBe('image/avif');
-			expect(getResponse.headers.get('cache-control')).toBe('public, max-age=300');
+			expect(getResponse.headers.get('content-type')).toBe('image/webp');
+			expect(getResponse.headers.get('cache-control')).toBe(
+				'public, max-age=31536000, immutable, s-maxage=3600'
+			);
 			expect(avatarBytes.byteLength).toBeGreaterThan(0);
 
 			const deleteResponse = await avatarModule.DELETE({
@@ -210,7 +190,8 @@ describeWithStorage('avatar backend integration', () => {
 
 			const missingResponse = await avatarModule.GET({
 				locals: {},
-				params: { userId }
+				params: { userId },
+				request: new Request(`http://localhost${uploadPayload.avatarUrl}`)
 			} as never);
 
 			expect(missingResponse.status).toBe(404);
@@ -218,6 +199,68 @@ describeWithStorage('avatar backend integration', () => {
 				code: 'NOT_FOUND',
 				message: 'Avatar not found'
 			});
+		} finally {
+			await deleteUser(sql, userId);
+		}
+	});
+	it('reopens a saved avatar drawing in the editor, kept out of its row', async () => {
+		const userId = `avatar-doc-user-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+		const strokes = [
+			{
+				color: '#2d2420',
+				points: [
+					[40, 40],
+					[128, 160],
+					[220, 90]
+				] as [number, number][],
+				size: 10
+			}
+		];
+
+		try {
+			await insertUser(sql, userId);
+			const formData = new FormData();
+			formData.append(
+				'drawingDocument',
+				JSON.stringify({ ...createEmptyDrawingDocument('avatar'), strokes })
+			);
+
+			const avatarModule = await import('./+server');
+			const uploadResponse = await avatarModule.PUT({
+				locals: { user: makeLocalUser(userId) },
+				params: { userId },
+				request: new Request('http://localhost/api/users/avatar', { body: formData, method: 'PUT' })
+			} as never);
+			expect(uploadResponse.status).toBe(200);
+
+			// The row only names the drawing; the bytes live in object storage.
+			const [row] = await sql<
+				Array<{
+					avatar_document: string | null;
+					avatar_document_key: string | null;
+					avatar_url: string | null;
+				}>
+			>`select avatar_document, avatar_document_key, avatar_url from app.users where id = ${userId}`;
+			expect(row?.avatar_document).toBeNull();
+			expect(row?.avatar_document_key).toMatch(/^documents\/[0-9a-f]{64}\.json\.gz$/);
+
+			const { load } = await import('../../../../+page.server');
+			const data = (await load({
+				locals: {
+					user: {
+						...makeLocalUser(userId),
+						avatarOnboardingCompletedAt: new Date(),
+						avatarUrl: row?.avatar_url ?? null
+					}
+				},
+				parent: async () => ({ adultContentEnabled: false })
+			} as never)) as {
+				auth: {
+					user: { avatarDrawingDocument: Parameters<typeof getRenderableDrawingStrokes>[0] };
+				};
+			};
+
+			expect(getRenderableDrawingStrokes(data.auth.user.avatarDrawingDocument)).toEqual(strokes);
 		} finally {
 			await deleteUser(sql, userId);
 		}

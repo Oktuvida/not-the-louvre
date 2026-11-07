@@ -1,20 +1,26 @@
 import { untrack } from 'svelte';
 import { beforeNavigate } from '$app/navigation';
-import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 import {
 	createArtworkAccumulator,
 	type ArtworkAccumulator
-} from '$lib/features/gallery-exploration/artwork-accumulator.svelte';
+} from '#lib/features/gallery-exploration/artwork-accumulator.svelte.js';
 import type {
+	GalleryArtworkPage,
 	GalleryPageInfo,
 	LoadMoreArtworks
-} from '$lib/features/gallery-exploration/model/discovery';
+} from '#lib/features/gallery-exploration/model/discovery.js';
+
 import {
 	readRoomFeedSnapshot,
 	restoreRoomFeedScroll,
 	writeRoomFeedSnapshot
-} from '$lib/features/gallery-exploration/model/feed-cache';
-import type { GalleryRoomId } from '$lib/features/gallery-exploration/model/rooms';
+} from '#lib/features/gallery-exploration/model/feed-cache.js';
+import type { GridLayoutSnapshot } from '#lib/features/gallery-exploration/model/grid.js';
+import {
+	roomIdForPath,
+	type GalleryRoomId
+} from '#lib/features/gallery-exploration/model/rooms.js';
 
 /*
  * The seed reconciliation every room needs, written once.
@@ -54,6 +60,20 @@ export type SeededAccumulatorOptions = {
 	getFeedCacheKey?: () => GalleryRoomId | null | undefined;
 	/** The reel has no scroll of its own. */
 	restoreScroll?: boolean;
+	/** Reads the room grid's measured rows (VirtualizedGrid's `snapshotLayout`). */
+	getLayout?: () => GridLayoutSnapshot | null;
+	/**
+	 * True while the seed is one the room already had (the one it was left
+	 * with, or the one on the wall when it was handed its stream again),
+	 * standing in until the server's fresh first page lands. The feed merges
+	 * the fresh page rather than reseeding from it.
+	 */
+	getSeedIsRemembered?: () => boolean;
+};
+
+export type SeededAccumulator = ArtworkAccumulator & {
+	/** The grid layout the room had when it was left, for its grid to remount with. */
+	readonly restoredLayout: GridLayoutSnapshot | null;
 };
 
 const EMPTY_PAGE_INFO: GalleryPageInfo = { hasMore: false, nextCursor: null };
@@ -62,7 +82,7 @@ const seedIdentity = (items: Artwork[]) => items.map((artwork) => artwork.id).jo
 
 const pageInfoIdentity = (info: GalleryPageInfo) => `${info.hasMore}:${info.nextCursor ?? ''}`;
 
-export function createSeededAccumulator(options: SeededAccumulatorOptions): ArtworkAccumulator {
+export function createSeededAccumulator(options: SeededAccumulatorOptions): SeededAccumulator {
 	const transformSeed = options.transformSeed ?? ((artworks: Artwork[]) => artworks);
 	const watchPageInfo = options.watchPageInfo ?? true;
 
@@ -93,13 +113,12 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Artw
 	 * The reconciliation baseline.
 	 *
 	 * A room mounted from the props alone can take it at construction. A
-	 * restored room cannot: the gallery page starts its `artworks` state empty
-	 * and fills it from an effect, while the room itself is built synchronously
-	 * inside the resolved `{#await}` branch — so at construction the seed is
-	 * still `[]`, and one flush later the real seed would look like a fresh
-	 * navigation and reseed the restored pages away. A restored room therefore
-	 * establishes its baseline on the first reactive run and merges the seed
-	 * into the feed it kept.
+	 * restored room cannot: it goes up before the server's fresh first page
+	 * has landed, holding the seed it was left with (or, until the gallery page
+	 * has filled its own `artworks` state from an effect, `[]`). Taking either
+	 * as the baseline would make the fresh page look like a new navigation and
+	 * reseed the restored pages away. A restored room therefore establishes its
+	 * baseline on the fresh seed and merges it into the feed it kept.
 	 */
 	let pendingRestoreMerge = restored !== null;
 	let lastSeedIdentity = seedIdentity(initialArtworks);
@@ -112,10 +131,17 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Artw
 		const identity = seedIdentity(artworks);
 		const nextPageInfoIdentity = watchPageInfo ? pageInfoIdentity(pageInfo) : lastPageInfoIdentity;
 
+		// A remembered seed stands in for a fresh one on its way: the feed stays
+		// as it is, and the fresh seed merges into it rather than reseeding it.
+		if (options.getSeedIsRemembered?.()) {
+			pendingRestoreMerge = true;
+			return;
+		}
+
 		if (pendingRestoreMerge) {
 			// An empty seed here is the page's state before its own effect has
 			// filled it, not a room that emptied out: adopting it as the baseline
-			// would hand the reseed branch the real seed a flush later.
+			// would hand the reseed branch the fresh seed a flush later.
 			if (artworks.length === 0) return;
 
 			pendingRestoreMerge = false;
@@ -145,31 +171,52 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Artw
 	if (feedCacheKey) {
 		/*
 		 * `beforeNavigate` fires while this room still owns the scroll position.
-		 * The teardown below cannot read it: the room sits inside the gallery
-		 * layout's `{#key roomId}` block, so its destroy runs behind the block's
-		 * out-transition (~225ms) — long after SvelteKit has scrolled the window
-		 * back to the top, two ticks after the DOM update of a push navigation.
-		 * Reading `window.scrollY` there always stored 0, and a stored 0 makes
-		 * the restore a no-op.
+		 * The teardown below cannot be trusted with it: by then SvelteKit may
+		 * have scrolled the window back to the top for the next room, and a
+		 * stored 0 makes the restore a no-op.
 		 */
 		let lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
-		beforeNavigate(() => {
-			lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
+		// Read with the scroll: by teardown the grid has already gone.
+		let lastLayout: GridLayoutSnapshot | null = null;
+		// And so is the seed: by teardown the route's data belongs to the room
+		// that replaced this one, and reading the seed there stores its page.
+		let lastSeed: GalleryArtworkPage | null = null;
+
+		const readSeed = (): GalleryArtworkPage => ({
+			artworks: $state.snapshot(untrack(() => options.getArtworks())),
+			pageInfo: $state.snapshot(untrack(() => options.getPageInfo()))
 		});
 
-		// Teardown-only: hand the feed to the cache as the room leaves.
-		$effect(() => () => {
+		const handOverFeed = () =>
 			writeRoomFeedSnapshot(feedCacheKey, {
 				artworks: $state.snapshot(accumulator.allArtworks),
+				layout: lastLayout,
 				pageInfo: $state.snapshot(accumulator.pageInfo),
-				scrollY: lastScrollY
+				scrollY: lastScrollY,
+				seed: lastSeed ?? readSeed()
 			});
+
+		beforeNavigate(({ from, shallow, type }) => {
+			if (shallow && type === 'goto') return;
+			// Only a navigation away from this room is this room's to record.
+			if (from && roomIdForPath(from.url.pathname) !== feedCacheKey) return;
+
+			lastScrollY = typeof window === 'undefined' ? 0 : window.scrollY;
+			lastLayout = options.getLayout?.() ?? null;
+			lastSeed = readSeed();
+			// Handed over now as well as at teardown: the stage builds the next
+			// room before it tears this one down, so a quick Back would build
+			// the next copy of this room with nothing yet to restore.
+			handOverFeed();
 		});
+
+		// Teardown covers the leaves that are not navigations (a refresh).
+		$effect(() => () => handOverFeed());
 
 		if (restored && options.restoreScroll !== false) {
 			$effect(() => restoreRoomFeedScroll(restored.scrollY));
 		}
 	}
 
-	return accumulator;
+	return Object.assign(accumulator, { restoredLayout: restored?.layout ?? null });
 }

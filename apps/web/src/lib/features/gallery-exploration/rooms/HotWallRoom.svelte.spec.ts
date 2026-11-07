@@ -7,8 +7,8 @@ vi.mock('$app/environment', () => ({
 	browser: true
 }));
 
-import { makeArtwork } from '$lib/features/gallery-exploration/fixtures/artworks';
-import { clearRoomFeedCache } from '$lib/features/gallery-exploration/model/feed-cache';
+import { makeArtwork } from '#lib/features/gallery-exploration/fixtures/artworks.js';
+import { clearRoomFeedCache } from '#lib/features/gallery-exploration/model/feed-cache.js';
 import HotWallRoom from './HotWallRoom.svelte';
 import RoomHarness from './RoomHarness.svelte';
 
@@ -33,7 +33,7 @@ describe('HotWallRoom', () => {
 			createArtwork('h5', 60)
 		];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' }
 		});
@@ -56,7 +56,7 @@ describe('HotWallRoom', () => {
 			createArtwork('h7', 40)
 		];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -87,7 +87,7 @@ describe('HotWallRoom', () => {
 			createArtwork('h5', 60)
 		];
 
-		renderRoom({
+		await renderRoom({
 			artworks,
 			pageInfo: { hasMore: true, nextCursor: 'cursor-1' },
 			loadMoreArtworks
@@ -103,7 +103,7 @@ describe('HotWallRoom', () => {
 	it('reseeds accumulator when artworks prop changes so refreshed data is shown', async () => {
 		const artworks = [createArtwork('h1', 100), createArtwork('h2', 90), createArtwork('h3', 80)];
 
-		const screen = renderRoom({
+		const screen = await renderRoom({
 			artworks,
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -138,7 +138,7 @@ describe('HotWallRoom', () => {
 	});
 
 	it('renders empty state when no artworks are provided', async () => {
-		renderRoom({
+		await renderRoom({
 			artworks: [],
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
@@ -154,7 +154,7 @@ describe('HotWallRoom', () => {
 		const onPrefetch = vi.fn();
 		const lead = makeArtwork({ authorId: 'user-1', id: 'h1', isNsfw: true, score: 100 });
 
-		renderRoom({
+		await renderRoom({
 			adultContentEnabled: false,
 			artworks: [lead, createArtwork('h2', 90)],
 			onPrefetch,
@@ -195,7 +195,7 @@ describe('HotWallRoom', () => {
 			pageInfo: { hasMore: false, nextCursor: null }
 		});
 
-		const first = renderRoom({
+		const first = await renderRoom({
 			artworks: seed,
 			feedCacheKey: 'hot-wall',
 			loadMoreArtworks,
@@ -215,7 +215,7 @@ describe('HotWallRoom', () => {
 		// Leaving the room hands the paged-in feed to the cache…
 		first.unmount();
 
-		renderRoom({
+		await renderRoom({
 			artworks: seed,
 			feedCacheKey: 'hot-wall',
 			loadMoreArtworks,

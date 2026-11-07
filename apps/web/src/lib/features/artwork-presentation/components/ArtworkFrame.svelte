@@ -1,10 +1,10 @@
 <script lang="ts" module>
-	import { getCanvasContext, getFrequentReadCanvasContext } from '$lib/client/canvas-2d';
+	import { getCanvasContext, getFrequentReadCanvasContext } from '#lib/client/canvas-2d.js';
 	import {
 		drawArtworkFrame,
 		getArtworkFrameOpeningRatio
-	} from '$lib/features/artwork-presentation/canvas/artwork-frame-canvas';
-	import type { ArtworkFrameRenderOptions } from '$lib/features/artwork-presentation/model/frame';
+	} from '#lib/features/artwork-presentation/canvas/artwork-frame-canvas.js';
+	import type { ArtworkFrameRenderOptions } from '#lib/features/artwork-presentation/model/frame.js';
 
 	type FrameOpening = { h: number; w: number; x: number; y: number };
 	type PaintedFrame = { opening: FrameOpening; source: HTMLCanvasElement };
@@ -61,7 +61,7 @@
 
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import type { ArtworkFrameDescriptor } from '$lib/features/artwork-presentation/model/frame';
+	import type { ArtworkFrameDescriptor } from '#lib/features/artwork-presentation/model/frame.js';
 
 	let {
 		children,
@@ -104,7 +104,12 @@
 			return;
 		}
 
-		const bounds = host.getBoundingClientRect();
+		/* The host's layout box, which a transform does not change. Its bounding
+		 * rect would be the box around a tilted frame — the home wall hangs them
+		 * a few degrees askew — larger than the frame itself: the canvas drew the
+		 * frame that large, spilling right and down past the opening the artwork
+		 * sits in. */
+		const bounds = { height: host.offsetHeight, width: host.offsetWidth };
 
 		if (bounds.width === 0 || bounds.height === 0) {
 			return;

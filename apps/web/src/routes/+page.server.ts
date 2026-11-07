@@ -1,31 +1,32 @@
 import { fail } from '@sveltejs/kit';
-import { decodeCompressedDrawingDocumentToEditableDocument } from '$lib/features/stroke-json/runtime.server';
+import { openStoredDrawingDocument } from '#lib/server/drawing-document/document-store.js';
 import type { Actions, PageServerLoad } from './$types';
-import { auth } from '$lib/server/auth';
-import { listArtworkDiscovery } from '$lib/server/artwork/read.service';
-import { avatarService } from '$lib/server/user/avatar.service';
-import { userRepository } from '$lib/server/user/repository';
-import { toActionFailure } from '$lib/server/http/errors';
+import { auth } from '#lib/server/auth.js';
+import { countModerationCases, listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
+import { avatarService } from '#lib/server/user/avatar.service.js';
+import { userRepository } from '#lib/server/user/repository.js';
+import { homeBestPiecesEdgeCacheKey, sharedAtTheEdge } from '#lib/server/http/edge-cache.js';
+import { toActionFailure } from '#lib/server/http/errors.js';
 import {
 	homeSceneArtworkSlotNames,
 	toHomePreviewCards,
 	toHomeSceneArtworkSlots
-} from '$lib/features/home-entry-scene/state/home-entry.svelte';
+} from '#lib/features/home-entry-scene/state/home-entry.svelte.js';
 import {
 	getNicknameAvailability,
 	recoverAccount,
 	signInWithNickname,
 	signOutCurrentSession,
 	signUpWithNickname
-} from '$lib/server/auth/service';
+} from '#lib/server/auth/service.js';
 import {
 	availabilitySchema,
 	recoverSchema,
 	signInSchema,
 	signupSchema
-} from '$lib/server/auth/validation';
-import { getIp } from 'better-auth/api';
-import { resolveUserAvatarUrl } from '$lib/user/avatar-url';
+} from '#lib/server/auth/validation.js';
+import { getIP } from 'better-auth/api';
+import { resolveUserAvatarUrl } from '#lib/user/avatar-url.js';
 
 const INTEGRITY_FAILURE_MESSAGE = 'Authenticated session is missing its product user profile';
 
@@ -43,12 +44,16 @@ const toFailure = (action: HomeActionName, error: unknown, fallback: string) =>
 		scope: `home ${action} action`
 	});
 
-export const load: PageServerLoad = async ({ locals, parent }) => {
-	const [topDiscovery, parentData, studioDiscovery, avatarUserRecord] = await Promise.all([
+export const load: PageServerLoad = async ({ locals, parent, url }) => {
+	const readBestPieces = () =>
 		listArtworkDiscovery(
 			{ cursor: null, limit: 3, sort: 'top', window: 'all' },
 			{ user: locals.user }
-		),
+		);
+	const [topDiscovery, parentData, studioDiscovery, avatarUserRecord] = await Promise.all([
+		locals.user
+			? readBestPieces()
+			: sharedAtTheEdge(homeBestPiecesEdgeCacheKey(url.origin), readBestPieces),
 		parent(),
 		locals.user
 			? listArtworkDiscovery(
@@ -112,19 +117,18 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
 			status: 'authenticated',
 			user: {
 				...locals.user,
-				// avatar_document_version is written last by the chunked write, so a
-				// document without one is a torn write and must read as absent.
-				avatarDrawingDocument:
-					avatarUserRecord?.avatarDocument && avatarUserRecord.avatarDocumentVersion !== null
-						? await decodeCompressedDrawingDocumentToEditableDocument(
-								avatarUserRecord.avatarDocument
-							)
-						: null,
-				avatarUrl: resolveUserAvatarUrl(
-					locals.user.id,
-					locals.user.avatarUrl,
-					locals.user.avatarUrl ? locals.user.updatedAt.getTime() : null
-				)
+				avatarDrawingDocument: avatarUserRecord
+					? await openStoredDrawingDocument({
+							key: avatarUserRecord.avatarDocumentKey ?? null,
+							legacyBase64: avatarUserRecord.avatarDocument ?? null,
+							version: avatarUserRecord.avatarDocumentVersion ?? null
+						})
+					: null,
+				avatarUrl: resolveUserAvatarUrl(locals.user.id, locals.user.avatarUrl),
+				staffCases:
+					locals.user.role === 'user' || locals.user.isBanned
+						? null
+						: await countModerationCases({ user: locals.user })
 			}
 		},
 		adultContentEnabled,
@@ -171,7 +175,7 @@ export const actions: Actions = {
 		}
 
 		try {
-			const result = await recoverAccount(parsed.data, getIp(event.request, auth.options));
+			const result = await recoverAccount(parsed.data, getIP(event.request, auth.options));
 
 			return {
 				action: 'recover',
@@ -210,12 +214,7 @@ export const actions: Actions = {
 
 			return {
 				action: 'saveAvatar',
-				avatarUrl:
-					resolveUserAvatarUrl(
-						updatedUser.id,
-						updatedUser.avatarUrl,
-						updatedUser.updatedAt.getTime()
-					) ?? '',
+				avatarUrl: resolveUserAvatarUrl(updatedUser.id, updatedUser.avatarUrl) ?? '',
 				onboarding: 'complete',
 				success: true
 			};
@@ -240,7 +239,7 @@ export const actions: Actions = {
 		try {
 			const result = await signInWithNickname(
 				parsed.data,
-				getIp(event.request, auth.options),
+				getIP(event.request, auth.options),
 				event.request.headers
 			);
 

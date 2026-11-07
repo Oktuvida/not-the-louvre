@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyRateLimitAttempt } from '$lib/server/db/fixtures/rate-limit';
-import type { ProductRole } from '$lib/shared/viewer';
+import { applyRateLimitAttempt } from '#lib/server/db/fixtures/rate-limit.js';
+import type { ProductRole } from '#lib/shared/viewer.js';
 import { ArtworkFlowError } from './errors';
 import {
 	ARTWORK_COMMENT_MAX_LENGTH,
@@ -28,7 +28,7 @@ const moderation = vi.hoisted(() => ({
 }));
 
 vi.mock('./storage', () => ({
-	supabaseArtworkStorage: {
+	artworkStorage: {
 		delete: vi.fn(async () => undefined),
 		upload: vi.fn(async () => undefined)
 	}
@@ -38,16 +38,20 @@ vi.mock('./repository', () => ({
 	artworkRepository: {}
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	checkTextModeration: moderation.checkTextModeration
 }));
+
+const realtime = vi.hoisted(() => ({ publishArtworkChange: vi.fn() }));
+
+vi.mock('#lib/server/realtime/artwork-topics.js', () => realtime);
 
 beforeEach(() => {
 	moderation.checkTextModeration.mockReset();
 	moderation.checkTextModeration.mockResolvedValue({ status: 'allowed' });
 });
 
-type EngagementKind = 'comment' | 'vote';
+type EngagementKind = 'comment' | 'vote' | 'wish';
 
 type EngagementRateLimitRecord = {
 	attemptCount: number;
@@ -104,15 +108,23 @@ const createUser = (id: string, role: ProductRole = 'user') => {
 	};
 };
 
-// Mirrors the narrowed SELECT the vote transaction now issues: the five
-// columns the vote endpoints serialise, never the drawing document.
-const toVoteSummary = (artwork: ArtworkWithSummary) => ({
-	commentCount: artwork.commentCount,
-	forkCount: artwork.forkCount,
-	id: artwork.id,
-	score: artwork.score,
-	updatedAt: artwork.updatedAt
-});
+// Mirrors the narrowed SELECT the vote transaction now issues: the columns the
+// vote endpoints serialise and the live totals, never the drawing document.
+const toVoteSummary = (artwork: ArtworkWithSummary, votes: Map<string, ArtworkVoteRecord>) => {
+	const values = Array.from(votes.values())
+		.filter((vote) => vote.artworkId === artwork.id)
+		.map((vote) => vote.value);
+
+	return {
+		commentCount: artwork.commentCount,
+		downvotes: values.filter((value) => value === 'down').length,
+		forkCount: artwork.forkCount,
+		id: artwork.id,
+		score: artwork.score,
+		updatedAt: artwork.updatedAt,
+		upvotes: values.filter((value) => value === 'up').length
+	};
+};
 
 const createRepository = () => {
 	const artworks = new Map<string, ArtworkWithSummary>();
@@ -135,14 +147,15 @@ const createRepository = () => {
 			);
 
 			if (duplicate) {
-				const error = new Error('duplicate pending report') as Error & {
-					code: string;
-					constraint_name: string;
-				};
-				error.code = '23505';
-				error.constraint_name = input.artworkId
-					? 'content_reports_pending_artwork_reporter_unique'
-					: 'content_reports_pending_comment_reporter_unique';
+				// Shaped like production: Drizzle's wrapper with the pg error as its cause.
+				const error = new Error('Failed query: insert into "app"."content_reports"', {
+					cause: Object.assign(new Error('duplicate key value violates unique constraint'), {
+						code: '23505',
+						constraint: input.artworkId
+							? 'content_reports_pending_artwork_reporter_unique'
+							: 'content_reports_pending_comment_reporter_unique'
+					})
+				});
 				throw error;
 			}
 
@@ -191,7 +204,7 @@ const createRepository = () => {
 				});
 
 				return {
-					artwork: toVoteSummary(artworks.get(input.artworkId)!),
+					artwork: toVoteSummary(artworks.get(input.artworkId)!, votes),
 					vote: nextVote
 				};
 			}
@@ -203,7 +216,7 @@ const createRepository = () => {
 			const key = voteKey(artworkId, userId);
 			const current = votes.get(key) ?? null;
 			if (!current) {
-				return { artwork: toVoteSummary(artwork), removed: null };
+				return { artwork: toVoteSummary(artwork, votes), removed: null };
 			}
 
 			votes.delete(key);
@@ -214,7 +227,7 @@ const createRepository = () => {
 			});
 
 			return {
-				artwork: toVoteSummary(artworks.get(artworkId)!),
+				artwork: toVoteSummary(artworks.get(artworkId)!, votes),
 				removed: current
 			};
 		}),
@@ -418,6 +431,45 @@ describe('artwork engagement service', () => {
 		expect(votes.has('artwork-1:user-1')).toBe(false);
 	});
 
+	it('tells whoever is watching the artwork its fresh vote totals and each new comment', async () => {
+		const { applyArtworkVote, createArtworkComment, removeArtworkVote } = await import('./service');
+		const { artworks, repository } = createRepository();
+		artworks.set('artwork-1', createArtworkRecord());
+		const now = new Date('2026-03-26T12:00:00.000Z');
+		const actor = { ipAddress: '127.0.0.1', user: createUser('user-1') };
+
+		await applyArtworkVote({ artworkId: 'artwork-1', value: 'up' }, actor, {
+			generateId: () => 'vote-1',
+			now: () => now,
+			repository
+		});
+		expect(realtime.publishArtworkChange).toHaveBeenLastCalledWith('artwork-1', {
+			change: 'votes',
+			votes: { downvotes: 0, score: 1, upvotes: 1 }
+		});
+
+		await removeArtworkVote({ artworkId: 'artwork-1' }, actor, { now: () => now, repository });
+		expect(realtime.publishArtworkChange).toHaveBeenLastCalledWith('artwork-1', {
+			change: 'votes',
+			votes: { downvotes: 0, score: 0, upvotes: 0 }
+		});
+
+		await createArtworkComment({ artworkId: 'artwork-1', body: 'Realtime hello' }, actor, {
+			generateId: () => 'comment-1',
+			now: () => now,
+			repository
+		});
+		expect(realtime.publishArtworkChange).toHaveBeenLastCalledWith('artwork-1', {
+			change: 'comments',
+			comment: {
+				author: 'user-1_nick',
+				id: 'comment-1',
+				text: 'Realtime hello',
+				timestamp: now.getTime()
+			}
+		});
+	});
+
 	it('keeps vote responses free of the artwork drawing document', async () => {
 		const { applyArtworkVote, removeArtworkVote } = await import('./service');
 		const { artworks, repository } = createRepository();
@@ -440,10 +492,12 @@ describe('artwork engagement service', () => {
 
 		expect(Object.keys(upvote.artwork).sort()).toEqual([
 			'commentCount',
+			'downvotes',
 			'forkCount',
 			'id',
 			'score',
-			'updatedAt'
+			'updatedAt',
+			'upvotes'
 		]);
 		expect(Object.keys(removal.artwork)).not.toContain('drawingDocument');
 	});
@@ -830,7 +884,11 @@ describe('artwork engagement service', () => {
 					generateId: () => `report-delete-${index}`,
 					now: () => new Date(`2026-03-26T15:0${index}:00.000Z`),
 					repository,
-					storage: { delete: async () => undefined, upload: async () => undefined }
+					storage: {
+						delete: async () => undefined,
+						read: async () => new Uint8Array(),
+						upload: async () => undefined
+					}
 				}
 			);
 		}
@@ -840,7 +898,11 @@ describe('artwork engagement service', () => {
 			{ user: createUser('user-1') },
 			{
 				repository,
-				storage: { delete: async () => undefined, upload: async () => undefined }
+				storage: {
+					delete: async () => undefined,
+					read: async () => new Uint8Array(),
+					upload: async () => undefined
+				}
 			}
 		);
 
@@ -900,7 +962,8 @@ describe('artwork engagement service', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: new Date('2026-03-26T16:59:00.000Z')
+			updatedAt: new Date('2026-03-26T16:59:00.000Z'),
+			wishId: null
 		});
 
 		const hidden = await moderateArtwork(
@@ -909,7 +972,11 @@ describe('artwork engagement service', () => {
 			{
 				now: () => now,
 				repository,
-				storage: { delete: async () => undefined, upload: async () => undefined }
+				storage: {
+					delete: async () => undefined,
+					read: async () => new Uint8Array(),
+					upload: async () => undefined
+				}
 			}
 		);
 
@@ -931,7 +998,8 @@ describe('artwork engagement service', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: new Date('2026-03-26T17:01:00.000Z')
+			updatedAt: new Date('2026-03-26T17:01:00.000Z'),
+			wishId: null
 		});
 
 		const unhidden = await moderateArtwork(
@@ -940,7 +1008,11 @@ describe('artwork engagement service', () => {
 			{
 				now: () => new Date('2026-03-26T17:05:00.000Z'),
 				repository,
-				storage: { delete: async () => undefined, upload: async () => undefined }
+				storage: {
+					delete: async () => undefined,
+					read: async () => new Uint8Array(),
+					upload: async () => undefined
+				}
 			}
 		);
 
@@ -1008,7 +1080,8 @@ describe('artwork engagement service', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: new Date('2026-03-26T16:55:00.000Z')
+			updatedAt: new Date('2026-03-26T16:55:00.000Z'),
+			wishId: null
 		});
 		reports.set('report-comment-delete', {
 			artworkId: null,
@@ -1021,9 +1094,14 @@ describe('artwork engagement service', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: new Date('2026-03-26T16:56:00.000Z')
+			updatedAt: new Date('2026-03-26T16:56:00.000Z'),
+			wishId: null
 		});
-		const storage = { delete: vi.fn(async () => undefined), upload: async () => undefined };
+		const storage = {
+			delete: vi.fn(async () => undefined),
+			read: async () => new Uint8Array(),
+			upload: async () => undefined
+		};
 
 		const deletedArtwork = await moderateArtwork(
 			{ action: 'delete', artworkId: 'artwork-1' },
@@ -1079,7 +1157,8 @@ describe('artwork engagement service', () => {
 			reviewedAt: null,
 			reviewedBy: null,
 			status: 'pending',
-			updatedAt: new Date('2026-03-26T16:56:00.000Z')
+			updatedAt: new Date('2026-03-26T16:56:00.000Z'),
+			wishId: null
 		});
 
 		const result = await moderateComment(
@@ -1115,7 +1194,14 @@ describe('artwork engagement service', () => {
 			moderateArtwork(
 				{ action: 'hide', artworkId: 'artwork-1' },
 				{ user: createUser('user-1') },
-				{ repository, storage: { delete: async () => undefined, upload: async () => undefined } }
+				{
+					repository,
+					storage: {
+						delete: async () => undefined,
+						read: async () => new Uint8Array(),
+						upload: async () => undefined
+					}
+				}
 			)
 		).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403 });
 

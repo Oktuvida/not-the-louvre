@@ -1,9 +1,9 @@
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { assertNotBanned } from '$lib/server/auth/guards';
-import type { CanonicalUser, ProductRole } from '$lib/server/auth/types';
-import { resolveUserAvatarUrl } from '$lib/shared/user/avatar-url';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import { assertNotBanned } from '#lib/server/auth/guards.js';
+import type { CanonicalUser, ProductRole } from '#lib/server/auth/types.js';
+import { resolveUserAvatarUrl } from '#lib/shared/user/avatar-url.js';
 import { userRepository as defaultRepository } from './repository';
-import type { UserRecord, UserRepository } from './types';
+import type { ListedUser, UserRecord, UserRepository, UserStanding, UserTotals } from './types';
 
 type AdminContext = {
 	user?: CanonicalUser | null;
@@ -40,11 +40,13 @@ const toPublicProfile = (record: UserRecord): PublicUserProfile => ({
 });
 
 type UserListPage = {
-	items: PublicUserProfile[];
+	items: (PublicUserProfile & { artworkCount: number })[];
 	pageInfo: {
 		hasMore: boolean;
 		nextCursor: string | null;
 	};
+	/** The whole museum, whatever this page was asked to find. */
+	totals: UserTotals;
 };
 
 const DEFAULT_LIMIT = 20;
@@ -87,8 +89,18 @@ const encodeCursor = (record: UserRecord): string =>
 
 type ListUsersInput = {
 	cursor?: string | null;
+	filter?: string | null;
 	limit?: number;
+	search?: string | null;
 };
+
+const toStanding = (filter: string | null | undefined): UserStanding | null =>
+	filter === 'banned' || filter === 'moderators' ? filter : null;
+
+const toListedUser = (record: ListedUser) => ({
+	...toPublicProfile(record),
+	artworkCount: record.artworkCount
+});
 
 export const listUsers = async (
 	input: ListUsersInput,
@@ -101,15 +113,24 @@ export const listUsers = async (
 	const limit = !input.limit ? DEFAULT_LIMIT : Math.min(input.limit, MAX_LIMIT);
 	const cursor = decodeCursor(input.cursor);
 
-	const records = await repository.listUsers({ cursor, limit: limit + 1 });
+	const [records, totals] = await Promise.all([
+		repository.listUsers({
+			cursor,
+			limit: limit + 1,
+			search: input.search?.trim() || null,
+			standing: toStanding(input.filter)
+		}),
+		repository.countUsers()
+	]);
 	const hasMore = records.length > limit;
 	const visible = hasMore ? records.slice(0, limit) : records;
 	const last = visible[visible.length - 1];
 	const nextCursor = hasMore && last ? encodeCursor(last) : null;
 
 	return {
-		items: visible.map(toPublicProfile),
-		pageInfo: { hasMore, nextCursor }
+		items: visible.map(toListedUser),
+		pageInfo: { hasMore, nextCursor },
+		totals
 	};
 };
 

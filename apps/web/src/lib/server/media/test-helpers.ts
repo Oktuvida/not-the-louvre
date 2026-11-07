@@ -16,10 +16,6 @@ const AVIF_SIGNATURE_BYTES = new Uint8Array([
 	0x6d, 0x69, 0x66, 0x31
 ]);
 
-const WEBP_SIGNATURE_BYTES = new Uint8Array([
-	0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50
-]);
-
 const createPixelData = (width: number, height: number, pattern: AvifTestPattern) => {
 	const bytes = new Uint8Array(width * height * 4);
 
@@ -75,27 +71,6 @@ export const createAvifTestFile = async ({
 	return new File([Uint8Array.from(buffer)], name, { type: 'image/avif' });
 };
 
-export const createJpegTestFile = async ({
-	height,
-	name = 'image.jpg',
-	pattern = 'blocks',
-	quality = 95,
-	width
-}: Omit<CreateAvifTestFileOptions, 'effort'>) => {
-	const pixelData = createPixelData(width, height, pattern);
-	const buffer = await sharp(pixelData, {
-		raw: {
-			channels: 4,
-			height,
-			width
-		}
-	})
-		.jpeg({ quality })
-		.toBuffer();
-
-	return new File([Uint8Array.from(buffer)], name, { type: 'image/jpeg' });
-};
-
 export const createWebpTestFile = async ({
 	height,
 	name = 'image.webp',
@@ -146,17 +121,6 @@ export const createMalformedAvifFile = (size = 128, name = 'invalid.avif') => {
 	}
 
 	return new File([bytes], name, { type: 'image/avif' });
-};
-
-export const createMalformedWebpFile = (size = 128, name = 'invalid.webp') => {
-	const bytes = new Uint8Array(size);
-	bytes.set(WEBP_SIGNATURE_BYTES);
-
-	for (let index = WEBP_SIGNATURE_BYTES.length; index < size; index += 1) {
-		bytes[index] = (index * 61) % 256;
-	}
-
-	return new File([bytes], name, { type: 'image/webp' });
 };
 
 export const fileToBytes = async (file: File) => new Uint8Array(await file.arrayBuffer());

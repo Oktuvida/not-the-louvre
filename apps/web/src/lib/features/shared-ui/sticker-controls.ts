@@ -1,4 +1,4 @@
-import type { StickerVariant } from '$lib/features/home-entry-scene/canvas/museum-canvas';
+import type { StickerVariant } from '#lib/features/home-entry-scene/canvas/museum-canvas.js';
 
 export type StickerControlVariant = StickerVariant;
 export type StickerControlSize = 'hero' | 'lg' | 'md' | 'sm';
@@ -37,13 +37,17 @@ const getStickerTextColor = (variant: StickerControlVariant) => STICKER_TEXT_COL
 export const getStickerControlVars = (size: StickerControlSize, variant: StickerControlVariant) => {
 	const preset = getStickerControlPreset(size);
 
+	// In rem (the presets are px at the default 16px), so a sticker grows with
+	// the page wherever the page grows: the gallery on a big screen.
+	const rem = (px: number) => `${px / 16}rem`;
+
 	return [
-		`--sticker-height:${preset.height}px`,
-		`--sticker-min-width:${preset.minWidth}px`,
-		`--sticker-padding-x:${preset.paddingX}px`,
-		`--sticker-gap:${preset.gap}px`,
-		`--sticker-font-size:${preset.fontSize}px`,
-		`--sticker-icon-size:${preset.iconSize}px`,
+		`--sticker-height:${rem(preset.height)}`,
+		`--sticker-min-width:${rem(preset.minWidth)}`,
+		`--sticker-padding-x:${rem(preset.paddingX)}`,
+		`--sticker-gap:${rem(preset.gap)}`,
+		`--sticker-font-size:${rem(preset.fontSize)}`,
+		`--sticker-icon-size:${rem(preset.iconSize)}`,
 		`--sticker-text-color:${getStickerTextColor(variant)}`
 	].join(';');
 };

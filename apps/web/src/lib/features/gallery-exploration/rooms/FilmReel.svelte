@@ -1,559 +1,608 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
+	import { untrack } from 'svelte';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { writable, type Writable } from 'svelte/store';
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
-	import { isArtworkBlurred } from '$lib/features/gallery-exploration/model/sensitivity';
-
-	/*
-	 * gsap is 27KB gzipped and the reel is the only thing in the whole gallery
-	 * tree that uses it, so a static import made /gallery, /gallery/hot-wall and
-	 * /gallery/your-studio pay for an animation they never show. Every call site
-	 * already runs after mount behind a `browser` guard, so one memoised dynamic
-	 * import costs a microtask on the first idle cycle and nothing after that.
-	 */
-	let gsapModule: Promise<typeof import('$lib/client/gsap')> | null = null;
-	const loadGsap = () => (gsapModule ??= import('$lib/client/gsap'));
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
+	import { isArtworkBlurred } from '#lib/features/gallery-exploration/model/sensitivity.js';
+	import ReelFramePhoto from './ReelFramePhoto.svelte';
 
 	let {
 		adultContentEnabled = false,
-		artworks,
-		onIdleCycleComplete,
-		onIdleProgress,
+		held = false,
+		onDeveloped,
 		onLand,
+		onOpen,
 		revealedArtworkIds,
 		viewerId = null
 	}: {
 		adultContentEnabled?: boolean;
-		artworks: Artwork[];
-		onIdleCycleComplete?: () => void;
-		onIdleProgress?: (fraction: number) => void;
-		onLand: (artwork: Artwork) => void;
+		/** Keeps the line where it is, for as long as the postcard is what is being looked at. */
+		held?: boolean;
+		/** The photo has come up all the way. */
+		onDeveloped: (artwork: Artwork) => void;
+		/** The line has stopped, with the artwork in the ring. */
+		onLand?: (artwork: Artwork) => void;
+		/** The visitor pressed the photo, developed or not. */
+		onOpen?: (artwork: Artwork) => void;
 		revealedArtworkIds?: Writable<Set<string>>;
 		viewerId?: string | null;
 	} = $props();
 
-	let viewportEl: HTMLDivElement | undefined = $state();
-	let viewportWidth = $state(0);
-	let viewportResizeObserver: ResizeObserver | null = null;
-
-	const BUFFER = 3;
-	const IDLE_DURATION_PER_FRAME = 4;
 	/*
-	 * Travel is capped so the spin does not scale with the pool: at three full
-	 * cycles a 200-artwork pool would fling ~75 frames a second past the
-	 * viewport, creating and destroying a DOM node for each one.
+	 * A line of undeveloped polaroids, run by the browser.
+	 *
+	 * This was the heaviest thing in the gallery: gsap wrote a number on every
+	 * frame, and from it every photo on screen was worked out again, its size
+	 * and its opacity, with real photos fading in and out over the wall. Now
+	 * the frames are one still strip with no photos in it, painted once, and
+	 * spinning is a transform on that strip, which the compositor animates on
+	 * its own: no script and no style run while it moves, whatever the main
+	 * thread is doing. At rest the stylesheet keeps it drifting the same way.
+	 * Nothing is fetched until the spin has an artwork, and that one photo lies
+	 * over the strip instead of in it, so the strip is never painted again.
+	 *
+	 * The frames repeat every PATTERN, and the strip is long enough for the
+	 * line to stop TRAVEL frames on. That is a whole number of patterns, so a
+	 * stopped strip can go back to where it started without a pixel changing,
+	 * ready for the next spin.
 	 */
-	const MAX_SPIN_FRAMES = 12;
+	const PATTERN = 4;
+	const TRAVEL = PATTERN * 2;
+	const FRAMES_BESIDE = 6;
+	const FRAME_COUNT = FRAMES_BESIDE * 2 + TRAVEL + 1;
 
-	/*
-	 * `free-spinning` is the gap the visitor used to stare at: the artwork the
-	 * reel lands on comes from the network, and until it answered the reel sat
-	 * perfectly still with the button disabled. The reel now leaves at a
-	 * constant velocity on the click and `spinToArtwork` retargets that motion
-	 * into its decelerating landing when the artwork arrives.
-	 */
-	type ReelState = 'idle' | 'free-spinning' | 'spinning' | 'stopped';
-	// The only thing this component ever does with a tween handle is kill it,
-	// so it needs no gsap type — which keeps the module out of the type graph
-	// as well as out of the bundle.
-	type ReelTween = { kill: () => void };
-	let reelState = $state<ReelState>('idle');
-	let idleTween: ReelTween | null = null;
-	let freeSpinTween: ReelTween | null = null;
-	let spinTween: ReelTween | null = null;
-	let idleRestartTimer: ReturnType<typeof setTimeout> | null = null;
+	// In frames a millisecond. Each stretch of the spin meets the next at this
+	// speed: an easing's slope where it joins the steady run says how long the
+	// stretch has to be for that.
+	const TOP_SPEED = 10 / 1000;
+	const RUN_UP_EASING = 'cubic-bezier(0.4, 0, 0.8, 0.6)';
+	const RUN_UP_MS = (2 * PATTERN) / TOP_SPEED;
+	const LAP_MS = PATTERN / TOP_SPEED;
+	const LANDING_EASING = 'cubic-bezier(0.15, 0.6, 0.1, 1)';
+	const LANDING_SLOPE = 4;
+	const WIND_DOWN_MS = 700;
+	const DEVELOP_MS = 1000;
 
-	// Brisk but not a blur, and long enough that no realistic round trip
-	// outlives it.
-	const FREE_SPIN_FRAMES_PER_SECOND = 8;
-	const FREE_SPIN_FRAMES = 600;
+	type ReelState = 'resting' | 'spinning' | 'landing' | 'developing' | 'developed' | 'stopping';
+	let reelState = $state<ReelState>('resting');
+
+	let stripElement = $state<HTMLDivElement>();
+	let revealElement = $state<HTMLButtonElement>();
+	/** The strip's one running animation. */
+	let movement: Animation | null = null;
+	/** Read once a spin, from the frames: the stylesheet sizes them. */
+	let frameStep = 0;
+
+	/** What is up on the line, or on its way to landing there. */
+	let artwork = $state<Artwork | null>(null);
+	/** The artwork to land on, once the run-up is over. */
+	let arrival: Artwork | null = null;
+	/** The photo, once it has come from the network. */
+	let photoElement = $state<HTMLImageElement | null>(null);
 
 	const fallbackRevealedIds = writable<Set<string>>(new Set());
 	const revealedIds = $derived(revealedArtworkIds ?? fallbackRevealedIds);
 
-	/*
-	 * Virtual-window approach for efficient circular scrolling.
-	 *
-	 * `offset` is a continuously-growing logical pixel position.
-	 * From it we derive which artwork indices are in view and render
-	 * only those (~9-13 DOM nodes regardless of total artwork count).
-	 * GSAP animates a plain proxy number; Svelte reactivity maps it
-	 * to the visible slot positions each frame.
+	const after = (animation: Animation, then: () => void) => {
+		// A cancelled animation rejects: whoever cancelled it has moved on.
+		animation.finished.then(then, () => {});
+	};
+
+	const at = (frames: number) => ({
+		transform: `translate3d(${-(FRAMES_BESIDE + frames) * frameStep}px, 0, 0)`
+	});
+
+	/** Where the line is within its pattern. One style read, only at a hand-over. */
+	const framesRun = (strip: HTMLElement) => {
+		const run = -new DOMMatrix(getComputedStyle(strip).transform).m41 / frameStep - FRAMES_BESIDE;
+		return ((run % PATTERN) + PATTERN) % PATTERN;
+	};
+
+	const land = (landed: Artwork) => {
+		movement = null;
+		reelState = 'developing';
+		onLand?.(landed);
+	};
+
+	const startLanding = (strip: HTMLElement, landing: Artwork) => {
+		const from = framesRun(strip);
+		movement?.cancel();
+		// Mounted now so the photo is on its way while the line slows down.
+		artwork = landing;
+		reelState = 'landing';
+		const slowing = strip.animate([at(from), at(TRAVEL)], {
+			duration: (LANDING_SLOPE * (TRAVEL - from)) / TOP_SPEED,
+			easing: LANDING_EASING
+		});
+		movement = slowing;
+		after(slowing, () => land(landing));
+	};
+
+	/**
+	 * Sets the line going on the click, before the artwork is known: waiting
+	 * for the round trip left the button disabled over a line standing still.
+	 * `spinToArtwork` brings it down, `cancelFreeSpin` if nothing arrives.
 	 */
-	let offset = $state(0);
+	export const startFreeSpin = () => {
+		const strip = stripElement;
+		if (!strip || reelState === 'spinning' || reelState === 'landing') return;
 
-	// A spun-to artwork that is not in the pool yet is appended locally instead
-	// of mutating the `artworks` prop owned by the parent accumulator.
-	let injectedArtwork = $state<Artwork | null>(null);
+		const reveal = revealElement;
+		arrival = null;
+		photoElement = null;
 
-	const reelArtworks = $derived.by(() => {
-		const injected = injectedArtwork;
-		if (!injected || artworks.some((artwork) => artwork.id === injected.id)) {
-			return artworks;
+		// Less motion: the line stays still and the photo simply goes.
+		if (prefersReducedMotion.current) {
+			reelState = 'spinning';
+			artwork = null;
+			return;
 		}
-		return [...artworks, injected];
-	});
 
-	// A boolean, not a length: growing the pool must not tear down a running
-	// idle tween, but going from empty to non-empty must still start one.
-	const hasReelArtworks = $derived(reelArtworks.length > 0);
+		const [first, second] = strip.children as unknown as [HTMLElement, HTMLElement];
+		frameStep = second.offsetLeft - first.offsetLeft;
 
-	const reelMetrics = $derived.by(() => {
-		const width = viewportWidth || 768;
-		const isNarrow = width < 640;
-		const frameSize = isNarrow ? Math.max(156, Math.min(200, Math.floor(width * 0.46))) : 256;
-		const frameGap = isNarrow ? 10 : 14;
-		const viewportHeight = frameSize + (isNarrow ? 20 : 24);
-		const highlightSize = frameSize + (isNarrow ? 16 : 24);
+		// Read while the drift still holds them: it stops with the state.
+		const from = framesRun(strip);
+		const carried = reveal ? new DOMMatrix(getComputedStyle(reveal).transform).m41 : 0;
+		movement?.cancel();
+		reelState = 'spinning';
 
-		return {
-			frameGap,
-			frameSize,
-			frameStep: frameSize + frameGap,
-			highlightSize,
-			viewportHeight
-		};
-	});
+		// The last photo keeps the strip's pace, so it leaves with the line.
+		const runUp = { duration: RUN_UP_MS, easing: RUN_UP_EASING, fill: 'forwards' } as const;
+		const rising = strip.animate([at(from), at(from + PATTERN)], runUp);
+		reveal?.animate(
+			[
+				{ transform: `translate3d(${carried}px, 0, 0)` },
+				{ transform: `translate3d(${carried - PATTERN * frameStep}px, 0, 0)` }
+			],
+			runUp
+		);
+		movement = rising;
 
-	/*
-	 * Only `transform` and `opacity` change per tick; the box itself (position,
-	 * offsets, size) lives in the stylesheet and is driven by a custom property
-	 * that changes once per metrics change. Rebuilding a whole `style`
-	 * attribute — including layout properties — for 9-13 elements on every one
-	 * of a four-second spin's frames was the file's own stated goal to avoid.
-	 */
-	const visibleSlots = $derived.by(() => {
-		if (!viewportEl || viewportWidth === 0 || reelArtworks.length === 0) return [];
-
-		const { frameSize, frameStep } = reelMetrics;
-		const vpWidth = viewportWidth;
-		const centerX = vpWidth / 2;
-		const totalSlots = Math.ceil(vpWidth / frameStep) + BUFFER * 2;
-
-		const firstSlotLogical = Math.floor(offset / frameStep) - BUFFER;
-		const slots: Array<{
-			artwork: Artwork;
-			key: number;
-			opacity: string;
-			transform: string;
-		}> = [];
-
-		for (let i = 0; i < totalSlots; i++) {
-			const slotIndex = firstSlotLogical + i;
-			let artworkIndex = slotIndex % reelArtworks.length;
-			if (artworkIndex < 0) artworkIndex += reelArtworks.length;
-
-			const x = slotIndex * frameStep - offset;
-			const frameCenterX = x + frameSize / 2;
-			const distFromCenter = Math.min(Math.abs(frameCenterX - centerX) / (vpWidth / 2), 1);
-
-			slots.push({
-				artwork: reelArtworks[artworkIndex]!,
-				key: slotIndex,
-				opacity: (1 - distFromCenter * 0.85).toFixed(3),
-				transform: `translate3d(${x.toFixed(1)}px, -50%, 0) scale(${(1 - distFromCenter * 0.35).toFixed(3)})`
+		after(rising, () => {
+			artwork = null;
+			if (arrival) {
+				startLanding(strip, arrival);
+				return;
+			}
+			rising.cancel();
+			movement = strip.animate([at(from), at(from + PATTERN)], {
+				duration: LAP_MS,
+				iterations: Infinity
 			});
-		}
-
-		return slots;
-	});
-
-	/* Proxy object that GSAP tweens — we read .value in onUpdate */
-	const proxy = { value: 0 };
-
-	const stopIdleRestart = () => {
-		if (idleRestartTimer !== null) {
-			clearTimeout(idleRestartTimer);
-			idleRestartTimer = null;
-		}
-	};
-
-	const scheduleIdleRestart = (delayMs = 0) => {
-		stopIdleRestart();
-		idleRestartTimer = setTimeout(() => {
-			idleRestartTimer = null;
-			if (reelState !== 'idle') return;
-			void startIdle();
-		}, delayMs);
-	};
-
-	const startIdle = async () => {
-		if (!browser || reelArtworks.length === 0) return;
-		// Ambient auto-scroll is decorative; honor reduced-motion users.
-		if (prefersReducedMotion.current) return;
-
-		const { gsap } = await loadGsap();
-		// The reel may have been spun or destroyed while the module loaded.
-		if (reelState !== 'idle' || reelArtworks.length === 0) return;
-
-		const { frameStep } = reelMetrics;
-		const poolSize = reelArtworks.length;
-
-		proxy.value = offset;
-
-		idleTween = gsap.to(proxy, {
-			value: `+=${poolSize * frameStep}`,
-			duration: poolSize * IDLE_DURATION_PER_FRAME,
-			ease: 'none',
-			repeat: 0,
-			onUpdate() {
-				offset = proxy.value;
-				// Report idle scroll progress as fraction (0-1) of the current cycle
-				if (onIdleProgress && poolSize > 0) {
-					const cycleLength = poolSize * frameStep;
-					const startOffset = proxy.value - (proxy.value % cycleLength || cycleLength);
-					const cycleProgress = (proxy.value - startOffset) / cycleLength;
-					onIdleProgress(Math.min(1, Math.max(0, cycleProgress)));
-				}
-			},
-			onComplete() {
-				offset = proxy.value;
-				idleTween = null;
-				onIdleCycleComplete?.();
-				// Restart idle asynchronously with whatever artworks are current now.
-				// This avoids re-entrant recursion under immediate-complete test mocks.
-				scheduleIdleRestart();
-			}
 		});
-	};
-
-	const stopIdle = () => {
-		stopIdleRestart();
-		if (idleTween) {
-			idleTween.kill();
-			idleTween = null;
-		}
-	};
-
-	const stopFreeSpin = () => {
-		if (!freeSpinTween) return;
-		freeSpinTween.kill();
-		freeSpinTween = null;
 	};
 
 	/**
-	 * Leaves the gate at a constant velocity while the caller fetches the
-	 * artwork to land on. Safe to call and forget: `spinToArtwork` takes the
-	 * motion over, and `cancelFreeSpin` puts the reel back if nothing arrives.
+	 * Brings a spinning line down onto the artwork. Returns false when no spin
+	 * is under way, so the caller can stop pretending one is.
 	 */
-	export const startFreeSpin = async () => {
-		if (reelState !== 'idle' || reelArtworks.length === 0 || !viewportEl) return;
-		// A constant-velocity blur is precisely what reduced motion asks us not
-		// to do; those visitors get the short landing tween and nothing else.
-		if (prefersReducedMotion.current) return;
+	export const spinToArtwork = (next: Artwork): boolean => {
+		const strip = stripElement;
+		if (!strip || reelState !== 'spinning') return false;
 
-		reelState = 'free-spinning';
-		stopIdle();
-
-		const { gsap } = await loadGsap();
-		// The reel may have been retargeted, cancelled or destroyed while the
-		// module loaded.
-		if (reelState !== 'free-spinning') return;
-
-		const { frameStep } = reelMetrics;
-		proxy.value = offset;
-
-		freeSpinTween = gsap.to(proxy, {
-			value: `+=${FREE_SPIN_FRAMES * frameStep}`,
-			duration: FREE_SPIN_FRAMES / FREE_SPIN_FRAMES_PER_SECOND,
-			ease: 'none',
-			onUpdate() {
-				offset = proxy.value;
-			},
-			onComplete() {
-				offset = proxy.value;
-				freeSpinTween = null;
-			}
-		});
-	};
-
-	/** Puts a free-spinning reel back to idle when the artwork never arrives. */
-	export const cancelFreeSpin = () => {
-		if (reelState !== 'free-spinning') return;
-		stopFreeSpin();
-		reelState = 'idle';
-	};
-
-	const runSpin = async (targetIndex: number, pool: Artwork[], landOn: Artwork) => {
-		const { frameSize, frameStep } = reelMetrics;
-		const vpWidth = viewportWidth || viewportEl?.offsetWidth || 0;
-		const centerX = vpWidth / 2;
-
-		/* We want the chosen artwork centered:
-		 *   targetIndex * FRAME_STEP - targetOffset + FRAME_SIZE/2 = centerX
-		 * plus a bounded run-up of full frames for the visual spin effect. */
-		const fullCycles = Math.min(3 * pool.length, MAX_SPIN_FRAMES) * frameStep;
-		const baseTarget = targetIndex * frameStep - centerX + frameSize / 2;
-
-		const minTarget = offset + fullCycles;
-		const cycleLen = pool.length * frameStep;
-		const remainder = (baseTarget - minTarget) % cycleLen;
-		const adjustedRemainder = remainder < 0 ? remainder + cycleLen : remainder;
-		const targetOffset = minTarget + adjustedRemainder;
-
-		const { gsap } = await loadGsap();
-		if (reelState !== 'spinning') return;
-
-		proxy.value = offset;
-
-		spinTween = gsap.to(proxy, {
-			value: targetOffset,
-			duration: prefersReducedMotion.current ? 0.8 : 4,
-			ease: 'power4.out',
-			onUpdate() {
-				offset = proxy.value;
-			},
-			onComplete: () => {
-				spinTween = null;
-				reelState = 'stopped';
-				onLand(landOn);
-			}
-		});
-	};
-
-	export const spin = () => {
-		if (reelState === 'spinning' || reelArtworks.length === 0 || !viewportEl) return;
-		const pool = reelArtworks;
-
-		reelState = 'spinning';
-		stopIdle();
-
-		const randomIndex = Math.floor(Math.random() * pool.length);
-		void runSpin(randomIndex, pool, pool[randomIndex]!);
-	};
-
-	export const resetToIdle = () => {
-		reelState = 'idle';
-		// The $effect watching reelState + hasReelArtworks will start the idle tween.
-	};
-
-	export const isSpinning = () => reelState === 'spinning';
-
-	/**
-	 * Retargets whatever the reel is doing — resting or free-spinning — onto a
-	 * decelerating landing. Returns false when the reel cannot take the artwork,
-	 * so the caller can stop pretending a spin is under way.
-	 */
-	export const spinToArtwork = (artwork: Artwork): boolean => {
-		if (reelState === 'spinning' || reelArtworks.length === 0 || !viewportEl) return false;
-
-		// Check if artwork is already in the pool; otherwise append it locally
-		let targetIndex = reelArtworks.findIndex((a) => a.id === artwork.id);
-
-		if (targetIndex === -1) {
-			injectedArtwork = artwork;
-			targetIndex = reelArtworks.findIndex((a) => a.id === artwork.id);
-			if (targetIndex === -1) return false;
+		if (prefersReducedMotion.current) {
+			artwork = next;
+			land(next);
+			return true;
 		}
 
-		const pool = reelArtworks;
-		reelState = 'spinning';
-		stopIdle();
-		// Freeze the run-up before runSpin reads `offset` to compute the landing.
-		stopFreeSpin();
-
-		void runSpin(targetIndex, pool, artwork);
+		arrival = next;
+		// Still in the run-up, its end picks the artwork up.
+		if (movement?.effect?.getComputedTiming().iterations === Infinity) {
+			startLanding(strip, next);
+		}
 		return true;
 	};
 
-	$effect(() => {
-		if (!browser || !viewportEl) return;
+	/** Winds the line down when the artwork never arrives. */
+	export const cancelFreeSpin = () => {
+		const strip = stripElement;
+		if (!strip || reelState !== 'spinning') return;
 
-		viewportWidth = viewportEl.offsetWidth;
-		viewportResizeObserver?.disconnect();
-		viewportResizeObserver = new ResizeObserver(() => {
-			if (!viewportEl) return;
-			viewportWidth = viewportEl.offsetWidth;
+		arrival = null;
+		artwork = null;
+		if (!movement) {
+			reelState = 'resting';
+			return;
+		}
+
+		const from = framesRun(strip);
+		movement.cancel();
+		reelState = 'stopping';
+		const stopping = strip.animate([at(from), at(TRAVEL)], {
+			duration: WIND_DOWN_MS,
+			easing: LANDING_EASING
 		});
-		viewportResizeObserver.observe(viewportEl);
+		movement = stopping;
+		after(stopping, () => {
+			movement = null;
+			reelState = 'resting';
+		});
+	};
 
-		return () => {
-			viewportResizeObserver?.disconnect();
-			viewportResizeObserver = null;
+	// Decoded before it counts as here, off the main thread: the one moment the
+	// visitor is staring at must not start with a stall.
+	const photoArrived = ({ target }: Event) => {
+		if (!(target instanceof HTMLImageElement)) return;
+		const ready = () => {
+			if (target.isConnected) photoElement = target;
 		};
-	});
+		target.decode().then(ready, ready);
+	};
 
+	const open = () => {
+		if (!artwork) return;
+		if (reelState === 'developing') reelState = 'developed';
+		onOpen?.(artwork);
+	};
+
+	// The drift has carried the photo off the far side of the window.
+	const carriedAway = (event: AnimationEvent) => {
+		if (event.target !== event.currentTarget) return;
+		artwork = null;
+		photoElement = null;
+		reelState = 'resting';
+	};
+
+	// The photo comes up in front of the visitor once the line has stopped and
+	// the photo is here, whichever is last. Only its opacity moves, so this too
+	// stays on the compositor.
 	$effect(() => {
-		if (!browser || !hasReelArtworks || !viewportEl || viewportWidth === 0) return;
+		const photo = photoElement;
+		if (reelState !== 'developing' || !photo) return;
 
-		// Only start idle scrolling when the reel is in the idle state.
-		// Idle restarts are scheduled at the end of each cycle after it fires
-		// onIdleCycleComplete (so the parent can swap the pool) then
-		// restarts with the current artworks.
-		if (reelState !== 'idle') return;
-
-		scheduleIdleRestart(100);
-
-		return () => {
-			stopIdle();
+		const developed = () => {
+			reelState = 'developed';
+			onDeveloped(untrack(() => artwork)!);
 		};
+		if (prefersReducedMotion.current) {
+			developed();
+			return;
+		}
+
+		const comingUp = photo.animate(
+			{ opacity: [0, 1] },
+			{ duration: DEVELOP_MS, easing: 'ease-out', fill: 'forwards' }
+		);
+		after(comingUp, developed);
+		return () => comingUp.cancel();
 	});
 
-	/*
-	 * Destroy-only teardown. The idle effect above returns early while the reel
-	 * is spinning, so its last run registers no cleanup at all — leaving the
-	 * four-second spin tween alive after the room is gone, still writing
-	 * `offset` and finally calling `onLand`, which pushes detail history for an
-	 * artwork under whatever room the visitor moved on to.
-	 */
+	// Destroy-only: nothing should be left to call back after the room is gone.
 	$effect(() => () => {
-		stopIdle();
-		stopFreeSpin();
-		spinTween?.kill();
-		spinTween = null;
+		movement?.cancel();
 	});
 </script>
 
 <div
 	class="reel-container"
-	data-reel-orientation="horizontal"
+	data-reel-held={held || undefined}
 	data-reel-state={reelState}
 	data-testid="film-reel"
 >
-	<div
-		class="reel-viewport"
-		bind:this={viewportEl}
-		data-testid="film-reel-track"
-		style={`--reel-frame-size:${reelMetrics.frameSize}px; --reel-highlight-size:${reelMetrics.highlightSize}px; --reel-viewport-height:${reelMetrics.viewportHeight}px;`}
-	>
-		{#each visibleSlots as slot (slot.key)}
-			{@const isSensitiveBlurred = isArtworkBlurred(slot.artwork, {
+	<div class="reel-viewport" style:--reel-lap={PATTERN} style:--reel-rest={FRAMES_BESIDE}>
+		<div
+			bind:this={stripElement}
+			class="reel-strip"
+			aria-hidden="true"
+			data-testid="film-reel-track"
+		>
+			{#each { length: FRAME_COUNT }, index (index)}
+				<div class="reel-frame polaroid-paper">
+					<span class="reel-frame-photo"></span>
+					<span class="reel-frame-mark">?</span>
+				</div>
+			{/each}
+		</div>
+
+		{#if artwork}
+			{@const blurred = isArtworkBlurred(artwork, {
 				adultContentEnabled,
 				id: viewerId,
 				revealedIds: $revealedIds
 			})}
-			<div class="reel-frame" style:opacity={slot.opacity} style:transform={slot.transform}>
-				<img
-					src={slot.artwork.imageUrl}
-					alt={slot.artwork.title}
-					class="reel-frame-image"
-					class:nsfw-blurred={isSensitiveBlurred}
-					width={reelMetrics.frameSize}
-					height={reelMetrics.frameSize}
-				/>
-				{#if isSensitiveBlurred}
-					<div class="nsfw-overlay">
-						<span class="nsfw-badge">18+</span>
-					</div>
-				{/if}
-			</div>
-		{/each}
+			<button
+				bind:this={revealElement}
+				type="button"
+				class="reel-reveal focus-ring"
+				aria-label={`Open ${artwork.title}`}
+				onanimationend={carriedAway}
+				onclick={open}
+				onloadcapture={photoArrived}
+			>
+				<span class="reel-reveal-photo">
+					<ReelFramePhoto alt={artwork.title} {blurred} src={artwork.imageUrl} />
+				</span>
+				<span class="reel-reveal-caption">
+					<span class="reel-reveal-title">{artwork.title}</span>
+					<span class="reel-reveal-artist">{artwork.artist}</span>
+				</span>
+			</button>
+		{/if}
 
-		<!-- Subtle center highlight -->
-		<div class="center-highlight"></div>
+		<!-- A red pencil ring on the wall: whatever stops inside it is the one. -->
+		<svg class="reel-ring" viewBox="0 0 300 340" preserveAspectRatio="none" aria-hidden="true">
+			<path
+				d="M62 13 C 120 6, 214 5, 262 12 C 287 17, 293 34, 293 74 C 295 140, 296 214, 291 278 C 288 316, 272 329, 232 330 C 170 333, 96 335, 42 329 C 15 325, 8 306, 8 262 C 5 196, 6 118, 10 58 C 12 26, 30 11, 78 8 C 120 5, 170 4, 214 7"
+			></path>
+		</svg>
 	</div>
 </div>
 
 <style>
 	.reel-container {
+		container: reel / inline-size;
 		width: 100%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
 	}
 
+	/* A big polaroid, as tall as the window allows and as wide as a phone
+	 * leaves room for its neighbours to show. All of it hangs from the size. */
 	.reel-viewport {
+		--reel-frame-size: clamp(11rem, min(46dvh, 64cqw), 30rem);
+		--reel-gap: clamp(1.1rem, 3cqw, 2.25rem);
+		--reel-step: calc(var(--reel-frame-size) + var(--reel-gap));
+		--reel-card-height: calc(var(--reel-frame-size) * 1.16);
+		--reel-inset: calc(var(--reel-frame-size) * 0.035);
+		--reel-card-top: 1.75rem;
 		position: relative;
-		width: 100%;
-		height: var(--reel-viewport-height, 280px);
+		height: calc(var(--reel-card-top) + var(--reel-card-height) + 2rem);
 		overflow: hidden;
-		border-radius: 12px;
-		/* Static edge fade replaces the old per-frame blur depth cue */
-		-webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14%, #000 86%, transparent);
-		mask-image: linear-gradient(90deg, transparent 0, #000 14%, #000 86%, transparent);
 	}
 
-	.reel-frame {
+	/* The twine does not move: it looks the same whether it runs or not. */
+	.reel-viewport::before {
+		content: '';
 		position: absolute;
+		top: 1rem;
+		right: 0;
 		left: 0;
-		top: 50%;
-		width: var(--reel-frame-size, 256px);
-		height: var(--reel-frame-size, 256px);
-		border-radius: var(--radius-panel);
-		overflow: hidden;
-		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-		background: var(--color-frame-line);
+		height: 3px;
+		background: repeating-linear-gradient(112deg, #8f7048 0 3px, #bb9a68 3px 5px, #7a5d3a 5px 7px);
+		box-shadow: 0 3px 3px rgb(40 25 10 / 0.3);
 	}
 
-	/*
-	 * The compositor hint follows the reel's state instead of living on
-	 * `.reel-frame` forever. There are `ceil(viewportWidth / frameStep) + 6`
-	 * frames on screen, and `stopped` is a genuinely still reel — no tween is
-	 * touching `transform` or `opacity` — so holding a layer per frame there is
-	 * pure GPU memory. The three moving states keep it: the idle ambient scroll,
-	 * the flick and the button spin all rewrite exactly these two properties on
-	 * every frame.
-	 */
-	.reel-container[data-reel-state='idle'] .reel-frame,
-	.reel-container[data-reel-state='free-spinning'] .reel-frame,
-	.reel-container[data-reel-state='spinning'] .reel-frame {
-		will-change: transform, opacity;
+	.reel-strip {
+		position: absolute;
+		top: var(--reel-card-top);
+		left: calc(50% - var(--reel-frame-size) / 2);
+		display: flex;
+		gap: var(--reel-gap);
+		transform: translate3d(calc(var(--reel-step) * var(--reel-rest) * -1), 0, 0);
 	}
 
-	/*
-	 * Under reduced motion the ambient idle scroll never starts and the flick
-	 * spin is refused (both bail on `prefersReducedMotion.current`), so an
-	 * `idle` reel is a still reel. Only the deliberate button spin still moves,
-	 * and it keeps its hint from the rule above.
-	 */
-	@media (prefers-reduced-motion: reduce) {
-		.reel-container[data-reel-state='idle'] .reel-frame,
-		.reel-container[data-reel-state='free-spinning'] .reel-frame {
-			will-change: auto;
+	/* At rest the line drifts, a pattern of frames at a time and for ever: it
+	 * looks the same where it ends as where it began. A running CSS animation of
+	 * a transform needs no script, so standing idle costs nothing but the
+	 * compositor's frames. A photo that is up goes with it, off the far side. */
+	.reel-container[data-reel-state='resting'] .reel-strip,
+	.reel-container[data-reel-state='developed'] .reel-strip {
+		animation: reel-drift 16s linear infinite;
+	}
+
+	.reel-container[data-reel-state='developed'] .reel-reveal {
+		animation: reel-photo-drift 16s linear forwards;
+	}
+
+	.reel-container[data-reel-held] .reel-strip,
+	.reel-container[data-reel-held] .reel-reveal {
+		animation-play-state: paused;
+	}
+
+	@keyframes reel-drift {
+		to {
+			transform: translate3d(
+				calc(var(--reel-step) * (var(--reel-rest) + var(--reel-lap)) * -1),
+				0,
+				0
+			);
 		}
 	}
 
-	.reel-frame-image {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		display: block;
+	@keyframes reel-photo-drift {
+		to {
+			transform: translate3d(calc(var(--reel-step) * var(--reel-lap) * -1), 0, 0);
+		}
 	}
 
-	/* The one censoring treatment, defined in routes/layout.css. The reel cannot
-	 * use <NsfwImage> — its slots are recycled mid-spin and the per-src fade
-	 * would blank frames — so it reads the same two properties instead of
-	 * carrying its own blur radius and scrim alpha. */
-	.nsfw-blurred {
-		scale: 1.04;
-		filter: blur(var(--nsfw-blur, 20px)) saturate(0);
+	@media (prefers-reduced-motion: reduce) {
+		.reel-container[data-reel-state='resting'] .reel-strip,
+		.reel-container[data-reel-state='developed'] .reel-strip,
+		.reel-container[data-reel-state='developed'] .reel-reveal {
+			animation: none;
+		}
 	}
 
-	.nsfw-overlay {
+	/* A layer only while it moves: at rest the strip is part of the page. */
+	.reel-container[data-reel-state='spinning'] .reel-strip,
+	.reel-container[data-reel-state='landing'] .reel-strip,
+	.reel-container[data-reel-state='stopping'] .reel-strip {
+		will-change: transform;
+	}
+
+	.reel-frame {
+		position: relative;
+		flex: none;
+		box-sizing: border-box;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: var(--reel-frame-size);
+		height: var(--reel-card-height);
+		padding: var(--reel-inset) var(--reel-inset) 0;
+		rotate: var(--reel-tilt, 0deg);
+		transform-origin: 50% -0.5rem;
+	}
+
+	/* A clothes peg on the twine. */
+	.reel-frame::before {
+		content: '';
 		position: absolute;
-		inset: 0;
+		top: -1.35rem;
+		left: 50%;
+		width: 0.8rem;
+		height: 2.2rem;
+		translate: -50% 0;
+		border-radius: 2px 2px 3px 3px;
+		background:
+			linear-gradient(180deg, transparent 44%, rgb(70 50 30 / 0.55) 44% 50%, transparent 50%),
+			linear-gradient(90deg, #b48d5c, #d9b98a 45%, #c9a673 60%, #a57f50);
+		box-shadow: 0 2px 3px rgb(40 25 10 / 0.4);
+	}
+
+	.reel-frame:nth-child(4n + 1) {
+		--reel-tilt: -1.4deg;
+		--reel-cloud: 30% 34%;
+		--reel-cloud-two: 68% 72%;
+	}
+
+	.reel-frame:nth-child(4n + 2) {
+		--reel-tilt: 1.1deg;
+		--reel-cloud: 62% 28%;
+		--reel-cloud-two: 34% 66%;
+	}
+
+	/* The frame the line rests and stops on hangs straight in the ring. */
+	.reel-frame:nth-child(4n + 3) {
+		--reel-cloud: 44% 56%;
+		--reel-cloud-two: 74% 30%;
+	}
+
+	.reel-frame:nth-child(4n + 4) {
+		--reel-tilt: -0.8deg;
+		--reel-cloud: 70% 60%;
+		--reel-cloud-two: 26% 30%;
+	}
+
+	/* Film that has not come up yet: milky grey-green, with clouds of paler
+	 * chemistry. Drawn, not a photo, so it costs nothing to fetch or decode. */
+	.reel-frame-photo {
+		display: block;
+		flex: none;
+		width: 100%;
+		aspect-ratio: 1;
+		background:
+			radial-gradient(38% 30% at var(--reel-cloud), rgb(214 212 196 / 0.62), transparent 100%),
+			radial-gradient(30% 36% at var(--reel-cloud-two), rgb(198 200 186 / 0.48), transparent 100%),
+			radial-gradient(120% 120% at 50% 50%, transparent 52%, rgb(52 56 50 / 0.42) 100%), #8e9186;
+		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+	}
+
+	/* Faded in its colour, not with opacity: Safari clips an element with
+	 * opacity to its box, and this hand's question mark leans out of it. */
+	.reel-frame-mark {
+		margin-top: calc(var(--reel-frame-size) * 0.012);
+		color: color-mix(in srgb, var(--color-pencil) 80%, transparent);
+		font-family: var(--font-hand);
+		font-size: calc(var(--reel-frame-size) * 0.1);
+		font-weight: 700;
+		line-height: 1;
+	}
+
+	/* The photo that came, lying exactly over the frame in the ring. It is off
+	 * the strip so that putting it up does not paint the strip again. */
+	.reel-reveal {
+		position: absolute;
+		top: var(--reel-card-top);
+		left: calc(50% - var(--reel-frame-size) / 2);
+		box-sizing: border-box;
+		display: flex;
+		flex-direction: column;
+		width: var(--reel-frame-size);
+		height: var(--reel-card-height);
+		padding: var(--reel-inset) var(--reel-inset) 0;
+		border: 0;
+		background: none;
+		cursor: pointer;
+		--focus-ring-offset: 4px;
+	}
+
+	/* Fetching, while the line slows down, but not out yet. */
+	.reel-container[data-reel-state='landing'] .reel-reveal {
+		visibility: hidden;
+	}
+
+	.reel-reveal-photo {
+		position: relative;
+		display: block;
+		flex: none;
+		width: 100%;
+		aspect-ratio: 1;
+		overflow: hidden;
+		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+	}
+
+	.reel-container[data-reel-state='developing'] .reel-reveal-photo :global(.reel-frame-image) {
+		opacity: 0;
+	}
+
+	.reel-reveal-caption {
+		flex: 1;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		background: var(--nsfw-scrim, rgba(45, 36, 32, 0.68));
-		border-radius: var(--radius-panel);
+		min-width: 0;
+		padding-inline: 0.5rem;
+		background: #fbf8f2;
+		font-family: var(--font-hand);
+		line-height: 1.1;
+		text-align: center;
+		animation: reel-caption-in 400ms ease-out;
 	}
 
-	.nsfw-badge {
-		display: inline-block;
-		padding: 4px 12px;
-		border: 2px solid var(--color-paper-bright);
-		border-radius: 9999px;
-		font-size: 12px;
-		font-weight: 900;
-		color: var(--color-paper-bright);
+	.reel-container[data-reel-state='developing'] .reel-reveal-caption {
+		visibility: hidden;
 	}
 
-	.center-highlight {
+	.reel-reveal-title,
+	.reel-reveal-artist {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.reel-reveal-title {
+		color: var(--color-ink-warm);
+		font-size: max(1rem, calc(var(--reel-frame-size) * 0.056));
+		font-weight: 700;
+	}
+
+	.reel-reveal-artist {
+		color: var(--color-muted-ink);
+		font-size: max(0.875rem, calc(var(--reel-frame-size) * 0.042));
+	}
+
+	@keyframes reel-caption-in {
+		from {
+			opacity: 0;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.reel-reveal-caption {
+			animation: none;
+		}
+	}
+
+	.reel-ring {
 		position: absolute;
-		top: 50%;
+		top: calc(var(--reel-card-top) + var(--reel-card-height) / 2);
 		left: 50%;
-		width: var(--reel-highlight-size, 280px);
-		height: var(--reel-highlight-size, 280px);
-		transform: translate(-50%, -50%);
-		border-radius: 12px;
-		box-shadow:
-			0 0 30px rgba(201, 169, 110, 0.2),
-			0 0 60px rgba(201, 169, 110, 0.08);
-		border: 2px solid rgba(201, 169, 110, 0.25);
+		width: calc(var(--reel-frame-size) + 2.75rem);
+		height: calc(var(--reel-card-height) + 1.9rem);
+		translate: -50% -50%;
+		overflow: visible;
 		pointer-events: none;
-		z-index: 3;
+	}
+
+	.reel-ring path {
+		fill: none;
+		stroke: var(--color-pencil);
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		stroke-width: 4.5px;
+		vector-effect: non-scaling-stroke;
 	}
 </style>

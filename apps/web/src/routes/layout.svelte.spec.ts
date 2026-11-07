@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { page } from 'vitest/browser';
 
 import RootLayoutHarness from './RootLayoutHarness.svelte';
-import { SITE_NAME } from '$lib/features/shared-ui/site-meta';
+import { SITE_NAME } from '#lib/features/shared-ui/site-meta.js';
+import { STUDIO_DESK_IMAGE } from '#lib/features/shared-ui/studio-background-warmup.js';
 
 const idleCallbacks: IdleRequestCallback[] = [];
 
 const { imageInstances, pageState } = vi.hoisted(() => ({
-	imageInstances: [] as Array<{ decoding: string; src: string }>,
+	imageInstances: [] as Array<{ decoding: string; src: string; srcset: string }>,
 	// The layout is the only place that renders <title>, so the error page's
 	// status has to reach it through `page`.
 	pageState: {
@@ -19,10 +19,15 @@ const { imageInstances, pageState } = vi.hoisted(() => ({
 	}
 }));
 
-vi.mock('$app/state', () => ({ page: pageState }));
+// No release goes out while a spec runs.
+vi.mock('$app/state', () => ({
+	page: pageState,
+	updated: { check: async () => false, current: false }
+}));
 
 const TrackingImage = class {
 	decoding = '';
+	srcset = '';
 	#src = '';
 
 	constructor() {
@@ -47,8 +52,6 @@ const renderRootLayout = (viewer: { id: string; isBanned: boolean; role: string 
 		}
 	});
 
-const MODERATOR = { id: 'viewer-1', isBanned: false, role: 'moderator' };
-
 describe('root layout', () => {
 	beforeEach(() => {
 		idleCallbacks.length = 0;
@@ -68,20 +71,20 @@ describe('root layout', () => {
 		vi.stubGlobal('cancelIdleCallback', vi.fn());
 	});
 
-	// The /table.avif warm-up belongs to the surfaces that lead to /draw (the
+	// The studio desk's warm-up belongs to the surfaces that lead to /draw (the
 	// home page and the gallery's "Create Art" control), not to every route.
-	it('does not warm the studio background from routes that may never reach /draw', () => {
-		renderRootLayout();
+	it('does not warm the studio background from routes that may never reach /draw', async () => {
+		await renderRootLayout();
 
 		for (const callback of idleCallbacks) {
 			callback({ didTimeout: false, timeRemaining: () => 1 } as IdleDeadline);
 		}
 
-		expect(imageInstances.map((image) => image.src)).not.toContain('/table.avif');
+		expect(imageInstances.map((image) => image.srcset)).not.toContain(STUDIO_DESK_IMAGE.avif);
 	});
 
 	it('renders the shared document title and share-preview metadata', async () => {
-		renderRootLayout();
+		await renderRootLayout();
 
 		expect(document.title).toBe(SITE_NAME);
 
@@ -99,75 +102,15 @@ describe('root layout', () => {
 		pageState.error = { message: 'Not found' };
 		pageState.status = 404;
 
-		renderRootLayout();
+		await renderRootLayout();
 
 		expect(document.title).toBe(`404 · ${SITE_NAME}`);
 	});
 
-	/*
-	 * The Ops pill is `position: fixed` on the app's top overlay layer, so it
-	 * outranks the artwork detail panel and the avatar preview. Left visible it
-	 * stays clickable and tabbable over a dimmed `aria-modal="true"` dialog,
-	 * which is exactly what that attribute promises does not happen.
-	 */
-	it('takes the Ops link out of the page while a modal dialog is open', async () => {
-		renderRootLayout(MODERATOR);
+	it('declares each house typeface once per subset, across its weights', async () => {
+		await renderRootLayout();
 
-		const opsLink = document.querySelector('.ops-link');
-		expect(opsLink).not.toBeNull();
-		expect(getComputedStyle(opsLink as Element).display).not.toBe('none');
-
-		const dialog = document.createElement('div');
-		dialog.setAttribute('role', 'dialog');
-		dialog.setAttribute('aria-modal', 'true');
-		document.body.append(dialog);
-
-		try {
-			await expect
-				.poll(() => getComputedStyle(document.querySelector('.ops-link') as Element).display)
-				.toBe('none');
-		} finally {
-			dialog.remove();
-		}
-	});
-
-	/*
-	 * On a phone the gallery header owns the top-right corner — Create Art and
-	 * Refresh, two 44px stickers — and the ambient audio tab owns the bottom
-	 * right. A fixed pill at `--z-ops` outranks both, so anywhere near them it
-	 * takes the tap: Refresh navigated to /admin.
-	 */
-	it('keeps the Ops pill out of the gallery header corner on a phone', async () => {
-		const { innerHeight, innerWidth } = window;
-
-		try {
-			await page.viewport(390, 844);
-			renderRootLayout(MODERATOR);
-
-			const pill = (document.querySelector('.ops-link') as Element).getBoundingClientRect();
-
-			// Bottom-left: the one corner neither the header nor the audio tab
-			// (bottom-right) claims.
-			expect(pill.left).toBeCloseTo(16, 0);
-			expect(pill.bottom).toBeCloseTo(844 - 16, 0);
-		} finally {
-			await page.viewport(innerWidth, innerHeight);
-		}
-	});
-
-	/*
-	 * Fontsource's per-subset entry points carry no `unicode-range`, so
-	 * importing latin and latin-ext together declared two rangeless faces for
-	 * the same family/style/weight. Last one wins over the whole of U+0-10FFFF,
-	 * which made every page fetch both files — latin-ext first, ahead of the
-	 * preloaded faces it delays.
-	 */
-	it('declares one rangeless face per family and weight', () => {
-		renderRootLayout();
-
-		const rangeless = new Map<string, number>();
-		let latinExtFaces = 0;
-
+		const faces = new Map<string, { range: string; src: string; weight: string }[]>();
 		for (const sheet of Array.from(document.styleSheets)) {
 			let rules: CSSRuleList;
 			try {
@@ -178,35 +121,38 @@ describe('root layout', () => {
 
 			for (const rule of Array.from(rules)) {
 				if (!(rule instanceof CSSFontFaceRule)) continue;
-
-				const family = rule.style.getPropertyValue('font-family');
-				const weight = rule.style.getPropertyValue('font-weight');
-				const range = rule.style.getPropertyValue('unicode-range').trim();
-
-				if (range === '' || range === 'U+0-10FFFF') {
-					const key = `${family}:${weight}`;
-					rangeless.set(key, (rangeless.get(key) ?? 0) + 1);
-					continue;
-				}
-
-				latinExtFaces += 1;
-				expect(range).toContain('U+100-2BA');
-				// The hand-written faces still have to point at a real file.
-				expect(rule.style.getPropertyValue('src')).toContain('latin-ext');
+				const family = rule.style.getPropertyValue('font-family').replace(/["']/g, '');
+				faces.set(family, [
+					...(faces.get(family) ?? []),
+					{
+						range: rule.style.getPropertyValue('unicode-range').trim(),
+						src: rule.style.getPropertyValue('src'),
+						weight: rule.style.getPropertyValue('font-weight')
+					}
+				]);
 			}
 		}
 
-		expect(rangeless.size).toBeGreaterThan(0);
-		for (const [face, count] of rangeless) {
-			expect(`${face} x${count}`).toBe(`${face} x1`);
+		for (const [family, weights] of [
+			['Baloo 2', '400 800'],
+			['Caveat', '400 700'],
+			['Fredoka', '300 700']
+		] as const) {
+			const declared = faces.get(family) ?? [];
+			expect(
+				declared.map(({ weight }) => weight),
+				family
+			).toEqual([weights, weights]);
+
+			const latin = declared.find(({ src }) => /-latin-wght-/.test(src));
+			const latinExt = declared.find(({ src }) => /-latin-ext-wght-/.test(src));
+			expect(latin?.range, family).toMatch(/^U\+0-FF,/i);
+			expect(latinExt?.range, family).toMatch(/^U\+100-2BA,/i);
 		}
-		// …and the ranged half is still declared, so accented European names
-		// keep their own faces.
-		expect(latinExtFaces).toBe(11);
 	});
 
-	it('preloads the two above-the-fold font faces with crossorigin', () => {
-		renderRootLayout();
+	it('preloads the two above-the-fold font faces with crossorigin', async () => {
+		await renderRootLayout();
 
 		const preloads = Array.from(
 			document.head.querySelectorAll<HTMLLinkElement>('link[rel="preload"][as="font"]')

@@ -30,7 +30,7 @@
 
 	const resolvedHref = $derived.by(() => {
 		if (href === '/') return resolve('/');
-		if (href === '/draw') return resolve('/draw');
+		if (href === '/draw') return resolve('draw');
 		// `/gallery` and every room share one route node with an optional
 		// parameter; omitting it resolves to the bare `/gallery` entry point.
 		if (href === '/gallery') return resolve('/gallery/[[room]]', {});
@@ -50,7 +50,5 @@
 	{variant}
 	{size}
 	{className}
-	{contentClassName}
+	{contentClassName}>{@render children()}</StickerControl
 >
-	{@render children()}
-</StickerControl>

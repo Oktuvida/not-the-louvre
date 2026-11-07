@@ -6,9 +6,11 @@ import {
 	eq,
 	gt,
 	gte,
+	inArray,
 	isNotNull,
 	lt,
 	lte,
+	min,
 	or,
 	sql,
 	type AnyColumn,
@@ -16,9 +18,12 @@ import {
 	type SQLWrapper
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { db } from '$lib/server/db';
-import { artworkComments, artworks, contentReports, users } from '$lib/server/db/schema';
-import type { ArtworkVoteValue } from '$lib/shared/content/votes';
+import { db } from '#lib/server/db/index.js';
+import { artworkComments, artworks, contentReports, users, wishes } from '#lib/server/db/schema.js';
+import { resolveArtworkMediaUrl } from '#lib/shared/artwork/media-url.js';
+import type { ArtworkReportReason } from '#lib/shared/content/report-reasons.js';
+import type { ArtworkVoteValue } from '#lib/shared/content/votes.js';
+import { voteCountSql } from './vote-counts';
 import type {
 	ArtworkDiscoveryCursor,
 	ArtworkDiscoveryTopWindow,
@@ -29,7 +34,8 @@ import type {
 	ListRecentArtworksInput,
 	ListTopArtworksInput,
 	ModerationQueueCursor,
-	ModerationQueueItem
+	ModerationQueueItem,
+	ModerationQueueTargetType
 } from './types';
 
 const recentCursorWhere = (cursor: ArtworkDiscoveryCursor | null) => {
@@ -103,7 +109,6 @@ const discoverySelect = {
 	title: artworks.title,
 	storageKey: artworks.storageKey,
 	mediaContentType: artworks.mediaContentType,
-	mediaPlaceholder: artworks.mediaPlaceholder,
 	mediaSizeBytes: artworks.mediaSizeBytes,
 	isHidden: artworks.isHidden,
 	isNsfw: artworks.isNsfw,
@@ -123,8 +128,64 @@ const drawingDocumentSelect = {
 	drawingVersion: artworks.drawingVersion
 };
 
+type PendingReport = {
+	artworkId: string | null;
+	commentId: string | null;
+	details: string | null;
+	reason: ArtworkReportReason;
+	wishId: string | null;
+};
+
+/** The reports behind one page of the queue, newest first. */
+const readPendingReports = (items: ModerationQueueItem[]): Promise<PendingReport[]> => {
+	const ids = (type: ModerationQueueItem['targetType']) =>
+		items.filter((item) => item.targetType === type).map(moderationItemId);
+	const targets = [
+		[contentReports.artworkId, ids('artwork')],
+		[contentReports.commentId, ids('comment')],
+		[contentReports.wishId, ids('wish')]
+	] as const;
+	const onThisPage = targets.flatMap(([column, values]) =>
+		values.length > 0 ? [inArray(column, values)] : []
+	);
+	if (onThisPage.length === 0) return Promise.resolve([]);
+
+	return db
+		.select({
+			artworkId: contentReports.artworkId,
+			commentId: contentReports.commentId,
+			details: contentReports.details,
+			reason: contentReports.reason,
+			wishId: contentReports.wishId
+		})
+		.from(contentReports)
+		.where(and(eq(contentReports.status, 'pending'), or(...onThisPage)))
+		.orderBy(desc(contentReports.createdAt), desc(contentReports.id));
+};
+
+const reportsOn = (report: PendingReport, item: ModerationQueueItem) =>
+	(report.commentId ?? report.wishId ?? report.artworkId) === moderationItemId(item);
+
+const MODERATION_NOTES_SHOWN = 3;
+
+const summarizeReports = (reports: PendingReport[]) => {
+	const counts = new Map<ArtworkReportReason, number>();
+	for (const { reason } of reports) counts.set(reason, (counts.get(reason) ?? 0) + 1);
+
+	return {
+		notes: reports
+			.map((report) => report.details?.trim())
+			.filter((note): note is string => Boolean(note))
+			.slice(0, MODERATION_NOTES_SHOWN),
+		reasons: [...counts]
+			.map(([reason, count]) => ({ count, reason }))
+			.sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason))
+	};
+};
+
 const parentArtworks = alias(artworks, 'parent_artwork');
 const parentAuthors = alias(users, 'parent_author');
+const wishAuthors = alias(users, 'wish_author');
 
 // The fork parent rides along on the feed statement instead of a second serial
 // round trip. `is_hidden = false` belongs in the join condition, not the WHERE:
@@ -143,14 +204,6 @@ const parentSelect = {
 	parentAuthorNickname: parentAuthors.nickname,
 	parentTitle: parentArtworks.title
 };
-
-const voteCountSql = (value: ArtworkVoteValue) =>
-	sql<number>`coalesce((
-		select count(*)::int
-		from "app"."artwork_votes" vote
-		where vote.artwork_id = ${artworks.id}
-			and vote.value = ${sql.raw(`'${value}'::app.artwork_vote_value`)}
-	), 0)`;
 
 const viewerVoteSql = (viewer: { isModerator: boolean; userId: string | null }) =>
 	viewer.userId
@@ -177,8 +230,13 @@ const buildDetailSelect = (
 	options: { withDrawingDocument?: boolean } = {}
 ) => ({
 	...discoverySelect,
+	// The key is small, and says whether there is a drawing to replay at all.
+	drawingDocumentKey: artworks.drawingDocumentKey,
 	...(options.withDrawingDocument ? drawingDocumentSelect : {}),
-	...engagementSelect(viewer)
+	...engagementSelect(viewer),
+	wishAuthor: wishAuthors.nickname,
+	wishBody: wishes.body,
+	wishSlipId: wishes.id
 });
 
 const buildDiscoverySelect = (viewer: { isModerator: boolean; userId: string | null }) => ({
@@ -197,9 +255,9 @@ type ArtworkReadRow = {
 	isHidden: boolean;
 	isNsfw: boolean;
 	drawingDocument?: string | null;
+	drawingDocumentKey?: string | null;
 	drawingVersion?: number | null;
 	mediaContentType: string;
-	mediaPlaceholder?: string | null;
 	mediaSizeBytes: number;
 	commentCount: number;
 	forkCount: number;
@@ -212,6 +270,9 @@ type ArtworkReadRow = {
 	parentAuthorId?: string | null;
 	parentAuthorNickname?: string | null;
 	parentTitle?: string | null;
+	wishAuthor?: string | null;
+	wishBody?: string | null;
+	wishSlipId?: string | null;
 	downvotes?: number;
 	upvotes?: number;
 	viewerVote?: ArtworkVoteValue | null;
@@ -219,6 +280,17 @@ type ArtworkReadRow = {
 };
 
 const artworkVisibilityWhere = () => eq(artworks.isHidden, false);
+
+/**
+ * One artwork as a viewer may open it: a hidden one stays openable for its
+ * author (to see what happened to it) and for moderators (to review it).
+ */
+const artworkOpenableBy = (viewer: { isModerator: boolean; userId: string | null }) =>
+	viewer.isModerator
+		? undefined
+		: viewer.userId
+			? or(eq(artworks.isHidden, false), eq(artworks.authorId, viewer.userId))
+			: eq(artworks.isHidden, false);
 
 const commentVisibilityWhere = (
 	artworkId: string,
@@ -250,9 +322,9 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	isHidden: row.isHidden,
 	isNsfw: row.isNsfw,
 	drawingDocument: row.drawingDocument ?? null,
+	drawingDocumentKey: row.drawingDocumentKey ?? null,
 	drawingVersion: row.drawingVersion ?? null,
 	mediaContentType: row.mediaContentType,
-	mediaPlaceholder: row.mediaPlaceholder ?? null,
 	mediaSizeBytes: row.mediaSizeBytes,
 	parentAuthorAvatarUrl: row.parentAuthorAvatarUrl ?? null,
 	parentAuthorId: row.parentAuthorId ?? null,
@@ -266,7 +338,11 @@ const mapRow = (row: ArtworkReadRow): ArtworkReadRecord => ({
 	upvotes: row.upvotes,
 	viewerVote: row.viewerVote ?? null,
 	rankingValue: row.rankingValue,
-	updatedAt: row.updatedAt
+	updatedAt: row.updatedAt,
+	wish:
+		row.wishSlipId && row.wishAuthor
+			? { author: row.wishAuthor, id: row.wishSlipId, text: row.wishBody ?? '' }
+			: null
 });
 
 const buildRankedDiscoverySelect = (
@@ -279,13 +355,16 @@ const buildRankedDiscoverySelect = (
 
 const moderationQueueReportCount = () => count(contentReports.id);
 
+const moderationItemId = (item: ModerationQueueItem) =>
+	item.targetType === 'wish' ? item.wishId : (item.commentId ?? item.artworkId);
+
 // Mirrors the (report_count DESC, target_type ASC, id ASC) ordering the service's
 // cursor encodes. target_type is constant inside each aggregate, so the branch
 // that matches the cursor breaks ties on the id while the other one only has to
 // compare report counts — which is what lets both aggregates carry a LIMIT.
 const moderationQueueHaving = (
 	cursor: ModerationQueueCursor | null,
-	targetType: 'artwork' | 'comment',
+	targetType: ModerationQueueTargetType,
 	idColumn: AnyColumn
 ) => {
 	const reportCount = moderationQueueReportCount();
@@ -312,6 +391,26 @@ const moderationQueueHaving = (
 };
 
 export const artworkReadRepository: ArtworkReadRepository = {
+	async findArtistStudio(nickname: string) {
+		const [row] = await db
+			.select({
+				avatarIsHidden: users.avatarIsHidden,
+				avatarUrl: users.avatarUrl,
+				hangingSince: min(artworks.createdAt),
+				id: users.id,
+				nickname: users.nickname,
+				pieces: count(artworks.id),
+				stars: sql<number>`coalesce(sum(${artworks.score}), 0)`.mapWith(Number)
+			})
+			.from(users)
+			// In the join, so an artist with nothing up is still an artist.
+			.leftJoin(artworks, and(eq(artworks.authorId, users.id), artworkVisibilityWhere()))
+			.where(and(eq(users.nickname, nickname), eq(users.isBanned, false)))
+			.groupBy(users.id);
+
+		return row ?? null;
+	},
+
 	async listRecentArtworks(input: ListRecentArtworksInput) {
 		const viewer = defaultViewer(input.viewer);
 		const rows = await db
@@ -322,8 +421,10 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.leftJoin(parentAuthors, parentAuthorJoinCondition)
 			.where(
 				and(
-					artworkVisibilityWhere(),
+					// An author's own studio keeps their hidden work, so they can find it.
+					input.authorId && input.authorId === viewer.userId ? undefined : artworkVisibilityWhere(),
 					input.authorId ? eq(artworks.authorId, input.authorId) : undefined,
+					input.parentId ? eq(artworks.parentId, input.parentId) : undefined,
 					recentCursorWhere(input.cursor) ?? undefined
 				)
 			)
@@ -385,7 +486,12 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			.select(buildDetailSelect(activeViewer, options))
 			.from(artworks)
 			.innerJoin(users, eq(users.id, artworks.authorId))
-			.where(and(eq(artworks.id, id), artworkVisibilityWhere()))
+			.leftJoin(wishes, and(eq(wishes.id, artworks.wishId), eq(wishes.isHidden, false)))
+			.leftJoin(
+				wishAuthors,
+				and(eq(wishAuthors.id, wishes.authorId), eq(wishAuthors.isBanned, false))
+			)
+			.where(and(eq(artworks.id, id), artworkOpenableBy(activeViewer)))
 			.limit(1);
 
 		const record = row[0] ? mapRow(row[0]) : null;
@@ -414,6 +520,7 @@ export const artworkReadRepository: ArtworkReadRepository = {
 				createdAt: artworks.createdAt,
 				id: artworks.id,
 				isNsfw: artworks.isNsfw,
+				mediaContentType: artworks.mediaContentType,
 				title: artworks.title
 			})
 			.from(artworks)
@@ -430,15 +537,16 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			parentTitle: parent[0]?.title ?? null
 		};
 	},
-	async findArtworkMediaById(id) {
+	async findArtworkMediaById(id, viewer) {
 		const row = await db
 			.select({
 				id: artworks.id,
+				isHidden: artworks.isHidden,
 				mediaContentType: artworks.mediaContentType,
 				storageKey: artworks.storageKey
 			})
 			.from(artworks)
-			.where(and(eq(artworks.id, id), artworkVisibilityWhere()))
+			.where(and(eq(artworks.id, id), artworkOpenableBy(defaultViewer(viewer))))
 			.limit(1);
 
 		return row[0] ?? null;
@@ -471,14 +579,16 @@ export const artworkReadRepository: ArtworkReadRepository = {
 		return rows[0] ? mapRow(rows[0]) : null;
 	},
 	async listModerationQueue(input: ListModerationQueueInput) {
-		const [artworkRows, commentRows] = await Promise.all([
+		const [artworkRows, commentRows, wishRows] = await Promise.all([
 			db
 				.select({
 					artworkId: artworks.id,
 					authorId: artworks.authorId,
 					authorNickname: users.nickname,
 					contentSummary: artworks.title,
+					createdAt: artworks.createdAt,
 					isHidden: artworks.isHidden,
+					mediaContentType: artworks.mediaContentType,
 					reportCount: moderationQueueReportCount()
 				})
 				.from(contentReports)
@@ -493,59 +603,103 @@ export const artworkReadRepository: ArtworkReadRepository = {
 			db
 				.select({
 					artworkId: artworkComments.artworkId,
+					artworkTitle: artworks.title,
 					authorId: artworkComments.authorId,
 					authorNickname: users.nickname,
 					commentId: artworkComments.id,
 					contentSummary: artworkComments.body,
+					createdAt: artworkComments.createdAt,
 					isHidden: artworkComments.isHidden,
+					mediaContentType: artworks.mediaContentType,
 					reportCount: moderationQueueReportCount()
 				})
 				.from(contentReports)
 				.innerJoin(artworkComments, eq(artworkComments.id, contentReports.commentId))
+				.innerJoin(artworks, eq(artworks.id, artworkComments.artworkId))
 				.innerJoin(users, eq(users.id, artworkComments.authorId))
 				.where(and(isNotNull(contentReports.commentId), eq(contentReports.status, 'pending')))
-				.groupBy(artworkComments.id, users.id)
+				.groupBy(artworkComments.id, artworks.id, users.id)
 				.having(moderationQueueHaving(input.cursor, 'comment', artworkComments.id))
 				.orderBy(desc(moderationQueueReportCount()), asc(artworkComments.id))
+				.limit(input.limit),
+
+			db
+				.select({
+					authorId: wishes.authorId,
+					authorNickname: users.nickname,
+					contentSummary: wishes.body,
+					createdAt: wishes.createdAt,
+					isHidden: wishes.isHidden,
+					reportCount: moderationQueueReportCount(),
+					wishId: wishes.id
+				})
+				.from(contentReports)
+				.innerJoin(wishes, eq(wishes.id, contentReports.wishId))
+				.innerJoin(users, eq(users.id, wishes.authorId))
+				.where(and(isNotNull(contentReports.wishId), eq(contentReports.status, 'pending')))
+				.groupBy(wishes.id, users.id)
+				.having(moderationQueueHaving(input.cursor, 'wish', wishes.id))
+				.orderBy(desc(moderationQueueReportCount()), asc(wishes.id))
 				.limit(input.limit)
 		]);
 
+		const noReports = { notes: [], reasons: [] };
 		const allItems: ModerationQueueItem[] = [
-			...artworkRows.map((row) => ({
-				artworkId: row.artworkId,
-				authorId: row.authorId,
-				authorNickname: row.authorNickname,
+			...artworkRows.map(({ mediaContentType, ...row }) => ({
+				...row,
+				...noReports,
+				artworkTitle: row.contentSummary,
 				commentId: null,
-				contentSummary: row.contentSummary,
-				isHidden: row.isHidden,
-				reportCount: row.reportCount,
-				targetType: 'artwork' as const
+				mediaUrl: resolveArtworkMediaUrl(row.artworkId, mediaContentType),
+				targetType: 'artwork' as const,
+				wishId: null
 			})),
-			...commentRows.map((row) => ({
-				artworkId: row.artworkId,
-				authorId: row.authorId,
-				authorNickname: row.authorNickname,
-				commentId: row.commentId,
-				contentSummary: row.contentSummary,
-				isHidden: row.isHidden,
-				reportCount: row.reportCount,
-				targetType: 'comment' as const
+			...commentRows.map(({ mediaContentType, ...row }) => ({
+				...row,
+				...noReports,
+				mediaUrl: resolveArtworkMediaUrl(row.artworkId, mediaContentType),
+				targetType: 'comment' as const,
+				wishId: null
+			})),
+			...wishRows.map((row) => ({
+				...row,
+				...noReports,
+				artworkId: null,
+				commentId: null,
+				targetType: 'wish' as const
 			}))
 		];
 
-		// Both aggregates are already cursor-filtered and capped at the page
-		// size in SQL, and target_type only breaks ties, so the global page is
-		// contained in their union: merging at most 2 * limit rows here is
+		// The aggregates are already cursor-filtered and capped at the page size
+		// in SQL, and target_type only breaks ties, so the global page is
+		// contained in their union: merging at most 3 * limit rows here is
 		// enough to restore the exact order the service's cursor encodes.
 		allItems.sort((a, b) => {
 			if (b.reportCount !== a.reportCount) return b.reportCount - a.reportCount;
 			if (a.targetType !== b.targetType) return a.targetType < b.targetType ? -1 : 1;
-			const aId = a.commentId ?? a.artworkId;
-			const bId = b.commentId ?? b.artworkId;
+			const aId = moderationItemId(a);
+			const bId = moderationItemId(b);
 			return aId < bId ? -1 : aId > bId ? 1 : 0;
 		});
 
-		return allItems.slice(0, input.limit);
+		const page = allItems.slice(0, input.limit);
+		const reports = await readPendingReports(page);
+		return page.map((item) => ({
+			...item,
+			...summarizeReports(reports.filter((report) => reportsOn(report, item)))
+		}));
+	},
+
+	async countModerationCases() {
+		const [row] = await db
+			.select({
+				cases: sql<number>`count(distinct coalesce(
+					${contentReports.artworkId}, ${contentReports.commentId}, ${contentReports.wishId}
+				))::int`
+			})
+			.from(contentReports)
+			.where(eq(contentReports.status, 'pending'));
+		return row?.cases ?? 0;
 	},
 
 	async listArtworkCommentsByArtworkId(artworkId, viewer) {

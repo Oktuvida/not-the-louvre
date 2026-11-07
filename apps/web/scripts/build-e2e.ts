@@ -26,13 +26,10 @@ if (exitCode !== 0) {
 	throw new Error(`vite build failed with exit code ${exitCode}`);
 }
 
-// The e2e build keeps the /demo routes and is served by Node through
-// `vite preview`, so the Worker-only assertions do not apply here.
+// The e2e build keeps the /demo routes and runs on workerd through `wrangler dev`.
 await validateCloudflareBuild(projectRoot, {
 	requireDemoExclusion: false,
-	requireGsapBundled: false,
-	requireWasmExternalized: false,
-	requireWorkerOutput: false
+	requireGsapBundled: false
 });
 
-process.stdout.write('Prepared e2e server runtime assets under .svelte-kit/output\n');
+process.stdout.write('Prepared the e2e worker under .svelte-kit/cloudflare\n');

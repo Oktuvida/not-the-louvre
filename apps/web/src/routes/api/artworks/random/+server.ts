@@ -1,7 +1,6 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getRandomArtwork } from '$lib/server/artwork/read.service';
-import { toApiErrorResponse } from '$lib/server/http/errors';
+import { getRandomArtwork } from '#lib/server/artwork/read.service.js';
+import { toApiErrorResponse } from '#lib/server/http/errors.js';
 
 const RANDOM_ERROR = {
 	fallbackCode: 'RANDOM_FAILED',
@@ -12,7 +11,7 @@ const RANDOM_ERROR = {
 export const GET: RequestHandler = async (event) => {
 	try {
 		const artwork = await getRandomArtwork({ user: event.locals.user });
-		return json({ artwork });
+		return Response.json({ artwork });
 	} catch (error) {
 		return toApiErrorResponse(error, RANDOM_ERROR);
 	}

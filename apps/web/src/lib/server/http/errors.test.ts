@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
-import { AuthFlowError } from '$lib/server/auth/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
+import { AuthFlowError } from '#lib/server/auth/errors.js';
 import { toActionFailure, toApiErrorResponse } from './errors';
 
 const silenceErrorLog = () => vi.spyOn(console, 'error').mockImplementation(() => {});

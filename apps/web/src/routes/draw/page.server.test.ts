@@ -1,38 +1,41 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Actions } from './$types';
-import { ArtworkFlowError } from '$lib/server/artwork/errors';
+import { ArtworkFlowError } from '#lib/server/artwork/errors.js';
 
 type DrawPublishActionEvent = Parameters<Actions['publish']>[0];
 
+const DRAWING_DOCUMENT =
+	'{"version":1,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","strokes":[]}';
 const mocked = vi.hoisted(() => ({
-	decodeCompressedDrawingDocumentToEditableDocument: vi.fn(),
-	getIp: vi.fn(() => '127.0.0.1'),
+	openStoredDrawingDocument: vi.fn(),
+	getIP: vi.fn(() => '127.0.0.1'),
 	getArtworkDetail: vi.fn(),
+	getWish: vi.fn(),
 	publishArtwork: vi.fn()
 }));
 
-vi.mock('$lib/features/stroke-json/runtime.server', () => ({
-	decodeCompressedDrawingDocumentToEditableDocument:
-		mocked.decodeCompressedDrawingDocumentToEditableDocument
+vi.mock('#lib/server/drawing-document/document-store.js', () => ({
+	openStoredDrawingDocument: mocked.openStoredDrawingDocument
 }));
 
-vi.mock('$lib/server/artwork/service', () => ({
+vi.mock('#lib/server/artwork/service.js', () => ({
+	getWish: mocked.getWish,
 	publishArtwork: mocked.publishArtwork
 }));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	getArtworkDetail: mocked.getArtworkDetail
 }));
 
-vi.mock('$lib/server/auth', () => ({
+vi.mock('#lib/server/auth.js', () => ({
 	auth: {
 		options: {}
 	}
 }));
 
 vi.mock('better-auth/api', () => ({
-	getIp: mocked.getIp
+	getIP: mocked.getIP
 }));
 
 const authenticatedUser = {
@@ -88,11 +91,11 @@ const createLoadEvent = (
 describe('draw route page', () => {
 	beforeEach(() => {
 		vi.resetModules();
-		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockReset();
-		mocked.getIp.mockClear();
+		mocked.openStoredDrawingDocument.mockReset();
+		mocked.getIP.mockClear();
 		mocked.getArtworkDetail.mockReset();
 		mocked.publishArtwork.mockReset();
-		mocked.decodeCompressedDrawingDocumentToEditableDocument.mockResolvedValue({
+		mocked.openStoredDrawingDocument.mockResolvedValue({
 			background: '#fdfbf7',
 			base: [],
 			height: 768,
@@ -164,53 +167,15 @@ describe('draw route page', () => {
 		});
 	});
 
-	it('seeds the mobile studio layout from the client hint', async () => {
-		const { load } = await import('./+page.server');
-
-		// Without this the phone paints the desktop book stage and swaps the whole
-		// main region after mount.
-		await expect(
-			load(createLoadEvent('http://localhost/draw', { headers: { 'sec-ch-ua-mobile': '?1' } }))
-		).resolves.toMatchObject({ initialIsMobile: true });
-
-		await expect(
-			load(createLoadEvent('http://localhost/draw', { headers: { 'sec-ch-ua-mobile': '?0' } }))
-		).resolves.toMatchObject({ initialIsMobile: false });
-	});
-
-	it('falls back to the user agent when no client hint is sent', async () => {
-		const { load } = await import('./+page.server');
-
-		await expect(
-			load(
-				createLoadEvent('http://localhost/draw', {
-					headers: {
-						'user-agent':
-							'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
-					}
-				})
-			)
-		).resolves.toMatchObject({ initialIsMobile: true });
-
-		await expect(
-			load(
-				createLoadEvent('http://localhost/draw', {
-					headers: {
-						'user-agent':
-							'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
-					}
-				})
-			)
-		).resolves.toMatchObject({ initialIsMobile: false });
-	});
-
-	it('loads fork parent artwork metadata when opening the draw route for a fork', async () => {
+	it('opens a fork on its parent’s image without loading the parent’s drawing', async () => {
 		mocked.getArtworkDetail.mockResolvedValueOnce({
 			author: { avatarUrl: null, id: 'user-9', nickname: 'parent_artist' },
 			childForks: [],
 			commentCount: 0,
 			createdAt: new Date('2026-03-28T10:00:00.000Z'),
-			drawingDocument: 'persisted-parent-payload',
+			drawingDocument: null,
+			drawingDocumentKey: 'documents/parent.json.gz',
+			drawingVersion: 2,
 			forkCount: 0,
 			id: 'artwork-parent',
 			isNsfw: false,
@@ -227,23 +192,53 @@ describe('draw route page', () => {
 		await expect(
 			load(createLoadEvent('http://localhost/draw?fork=artwork-parent'))
 		).resolves.toMatchObject({
+			// A fork is drawn over its parent's image; the parent's drawing stays put.
 			forkParent: {
-				drawingDocument: {
-					kind: 'artwork',
-					version: 2
-				},
+				drawingDocument: null,
 				id: 'artwork-parent',
 				mediaUrl: '/api/artworks/artwork-parent/media',
 				title: 'Parent Artwork'
 			}
 		});
-		expect(mocked.decodeCompressedDrawingDocumentToEditableDocument).toHaveBeenCalledWith(
-			'persisted-parent-payload'
-		);
+		expect(mocked.openStoredDrawingDocument).not.toHaveBeenCalled();
 		expect(mocked.getArtworkDetail).toHaveBeenCalledWith('artwork-parent', {
-			user: authenticatedUser,
-			withDrawingDocument: true
+			user: authenticatedUser
 		});
+	});
+
+	it('lays the slip the artist took on the desk', async () => {
+		mocked.getWish.mockResolvedValueOnce({ author: 'oktuvida', id: 'wish-1', text: 'a sun' });
+		const { load } = await import('./+page.server');
+
+		await expect(load(createLoadEvent('http://localhost/draw?wish=wish-1'))).resolves.toMatchObject(
+			{ wish: { author: 'oktuvida', id: 'wish-1', text: 'a sun' } }
+		);
+	});
+
+	it('opens the studio as usual on a slip that is gone', async () => {
+		mocked.getWish.mockResolvedValueOnce(null);
+		const { load } = await import('./+page.server');
+
+		await expect(load(createLoadEvent('http://localhost/draw?wish=gone'))).resolves.toMatchObject({
+			wish: null
+		});
+	});
+
+	it('publishes a drawing for the slip it answers', async () => {
+		const { actions } = await import('./+page.server');
+
+		await actions.publish(
+			createActionEvent({
+				drawingDocument: JSON.stringify({ kind: 'artwork' }),
+				title: 'A Sun',
+				wishId: 'wish-1'
+			})
+		);
+
+		expect(mocked.publishArtwork).toHaveBeenCalledWith(
+			expect.objectContaining({ wishId: 'wish-1' }),
+			expect.anything()
+		);
 	});
 
 	it('preserves the runtime-backed drawing size contract in publish failures', async () => {
@@ -270,7 +265,7 @@ describe('draw route page', () => {
 		});
 	});
 
-	it('rejects publish attempts that omit artwork media', async () => {
+	it('rejects publish attempts that carry no drawing document', async () => {
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(createActionEvent({ title: 'No media yet' }));
 
@@ -279,27 +274,24 @@ describe('draw route page', () => {
 			data: {
 				action: 'publish',
 				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Artwork media or drawing document is required'
+				message: 'Artwork drawing document is required'
 			}
 		});
 		expect(mocked.publishArtwork).not.toHaveBeenCalled();
 	});
 
-	it('publishes a drawing document without requiring source media', async () => {
+	it('publishes the drawing document', async () => {
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(
 			createActionEvent({
-				drawingDocument:
-					'{"version":1,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","strokes":[]}',
+				drawingDocument: DRAWING_DOCUMENT,
 				title: 'Document publish'
 			})
 		);
 
 		expect(mocked.publishArtwork).toHaveBeenCalledWith(
 			expect.objectContaining({
-				drawingDocument:
-					'{"version":1,"kind":"artwork","width":768,"height":768,"background":"#fdfbf7","strokes":[]}',
-				media: null,
+				drawingDocument: DRAWING_DOCUMENT,
 				title: 'Document publish'
 			}),
 			expect.anything()
@@ -308,7 +300,7 @@ describe('draw route page', () => {
 			action: 'publish',
 			artwork: {
 				id: 'artwork-1',
-				mediaUrl: '/api/artworks/artwork-1/media',
+				mediaUrl: '/api/artworks/artwork-1/media?v=avif',
 				title: 'Untitled #0001'
 			},
 			success: true
@@ -319,14 +311,14 @@ describe('draw route page', () => {
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(
 			createActionEvent({
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
+				drawingDocument: DRAWING_DOCUMENT,
 				title: 'My First Piece'
 			})
 		);
 
 		expect(mocked.publishArtwork).toHaveBeenCalledWith(
 			expect.objectContaining({
-				media: expect.any(File),
+				drawingDocument: DRAWING_DOCUMENT,
 				title: 'My First Piece'
 			}),
 			expect.objectContaining({
@@ -338,7 +330,7 @@ describe('draw route page', () => {
 			action: 'publish',
 			artwork: {
 				id: 'artwork-1',
-				mediaUrl: '/api/artworks/artwork-1/media',
+				mediaUrl: '/api/artworks/artwork-1/media?v=avif',
 				title: 'Untitled #0001'
 			},
 			success: true
@@ -350,7 +342,7 @@ describe('draw route page', () => {
 		await actions.publish(
 			createActionEvent({
 				isNsfw: 'true',
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
+				drawingDocument: DRAWING_DOCUMENT,
 				parentArtworkId: 'artwork-parent',
 				title: 'Forked Piece'
 			})
@@ -368,18 +360,14 @@ describe('draw route page', () => {
 
 	it('preserves backend publish failure codes and messages', async () => {
 		mocked.publishArtwork.mockRejectedValue(
-			new ArtworkFlowError(
-				400,
-				'Artwork media must be AVIF, WebP, JPEG, or PNG',
-				'INVALID_MEDIA_FORMAT'
-			)
+			new ArtworkFlowError(400, 'Drawing document is invalid', 'INVALID_DRAWING_DOCUMENT')
 		);
 
 		const { actions } = await import('./+page.server');
 		const result = await actions.publish(
 			createActionEvent({
-				media: new File([new Uint8Array([1, 2, 3])], 'artwork.webp', { type: 'image/webp' }),
-				title: 'Bad upload'
+				drawingDocument: DRAWING_DOCUMENT,
+				title: 'Bad drawing'
 			})
 		);
 
@@ -387,8 +375,8 @@ describe('draw route page', () => {
 			status: 400,
 			data: {
 				action: 'publish',
-				code: 'INVALID_MEDIA_FORMAT',
-				message: 'Artwork media must be AVIF, WebP, JPEG, or PNG'
+				code: 'INVALID_DRAWING_DOCUMENT',
+				message: 'Drawing document is invalid'
 			}
 		});
 	});

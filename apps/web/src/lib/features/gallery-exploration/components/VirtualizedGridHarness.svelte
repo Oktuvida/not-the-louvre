@@ -1,19 +1,25 @@
 <script lang="ts">
-	import type { Artwork } from '$lib/features/artwork-presentation/model/artwork';
+	import type { Artwork } from '#lib/features/artwork-presentation/model/artwork.js';
 	import VirtualizedGrid from './VirtualizedGrid.svelte';
 
 	interface Props {
 		items: Artwork[];
-		minColumnWidth?: number;
+		/** Called each time a card is built, so a spec can count them. */
+		onCardBuilt?: () => void;
+		serverRendered?: boolean;
 	}
 
-	let { items, minColumnWidth }: Props = $props();
+	let { items, onCardBuilt, serverRendered }: Props = $props();
+
+	const built = () => {
+		onCardBuilt?.();
+	};
 </script>
 
 <div role="list" style="height: 800px; overflow: auto;">
-	<VirtualizedGrid {items} {minColumnWidth}>
+	<VirtualizedGrid {items} {serverRendered}>
 		{#snippet renderCard(artwork)}
-			<div role="listitem" data-testid={`grid-card-${artwork.id}`}>
+			<div role="listitem" data-testid={`grid-card-${artwork.id}`} {@attach built}>
 				{artwork.title}
 			</div>
 		{/snippet}

@@ -14,7 +14,7 @@ describe('GalleryStatusRegion', () => {
 	});
 
 	it('keeps the live region in the DOM while it has nothing to say', async () => {
-		render(GalleryStatusRegion, { message: null, onDismiss: vi.fn() });
+		await render(GalleryStatusRegion, { message: null, onDismiss: vi.fn() });
 
 		const container = region();
 		expect(container).not.toBeNull();
@@ -27,7 +27,7 @@ describe('GalleryStatusRegion', () => {
 	});
 
 	it('interrupts for a failure and waits its turn for anything else', async () => {
-		const { rerender } = render(GalleryStatusRegion, {
+		const { rerender } = await render(GalleryStatusRegion, {
 			message: 'That vote did not make it onto the ledger.',
 			onDismiss: vi.fn()
 		});
@@ -42,15 +42,17 @@ describe('GalleryStatusRegion', () => {
 	});
 
 	it('outranks the persistent pills and clears the ambient audio tab', async () => {
-		render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss: vi.fn() });
+		await render(GalleryStatusRegion, {
+			message: 'Gallery could not be refreshed.',
+			onDismiss: vi.fn()
+		});
 
 		const tokens = getComputedStyle(document.documentElement);
 		const status = Number(tokens.getPropertyValue('--z-status'));
 
-		// The gallery's only failure surface was painted under the audio tab and
-		// the Ops pill, which also swallowed the tap meant for its dismiss button.
+		// The gallery's only failure surface was painted under the audio tab,
+		// which also swallowed the tap meant for its dismiss button.
 		expect(status).toBeGreaterThan(Number(tokens.getPropertyValue('--z-ambient')));
-		expect(status).toBeGreaterThan(Number(tokens.getPropertyValue('--z-ops')));
 		expect(status).toBeLessThan(Number(tokens.getPropertyValue('--z-nav-fade')));
 
 		const styles = getComputedStyle(region() as Element);
@@ -60,9 +62,30 @@ describe('GalleryStatusRegion', () => {
 		expect(Number.parseFloat(styles.bottom)).toBeGreaterThanOrEqual(64);
 	});
 
+	it('is a note from the guard, taped up, that comes off at a tap anywhere on it', async () => {
+		const onDismiss = vi.fn();
+		await render(GalleryStatusRegion, {
+			message: "Couldn't check for new pieces just now. Try again in a moment.",
+			onDismiss
+		});
+
+		const words = page.getByText("Couldn't check for new pieces just now. Try again in a moment.");
+		await expect.element(words).toBeVisible();
+		await expect.element(page.getByText('the guard')).toBeVisible();
+
+		// A tap on the words lands on the note's own dismiss button: there is
+		// no small cross to find.
+		const box = words.element().getBoundingClientRect();
+		const tapped = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+		expect(tapped).toBe(page.getByRole('button', { name: 'Dismiss message' }).element());
+
+		(tapped as HTMLElement).click();
+		expect(onDismiss).toHaveBeenCalledTimes(1);
+	});
+
 	it('hands the message back on dismiss', async () => {
 		const onDismiss = vi.fn();
-		render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss });
+		await render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss });
 
 		await expect.element(page.getByText('Gallery could not be refreshed.')).toBeVisible();
 		await page.getByRole('button', { name: 'Dismiss message' }).click();
@@ -74,7 +97,7 @@ describe('GalleryStatusRegion', () => {
 		vi.useFakeTimers();
 		const onDismiss = vi.fn();
 
-		render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss });
+		await render(GalleryStatusRegion, { message: 'Gallery could not be refreshed.', onDismiss });
 
 		vi.advanceTimersByTime(7999);
 		expect(onDismiss).not.toHaveBeenCalled();
@@ -87,7 +110,10 @@ describe('GalleryStatusRegion', () => {
 		vi.useFakeTimers();
 		const onDismiss = vi.fn();
 
-		const { rerender } = render(GalleryStatusRegion, { message: 'First failure.', onDismiss });
+		const { rerender } = await render(GalleryStatusRegion, {
+			message: 'First failure.',
+			onDismiss
+		});
 
 		vi.advanceTimersByTime(6000);
 		await rerender({ message: 'Second failure.', onDismiss });

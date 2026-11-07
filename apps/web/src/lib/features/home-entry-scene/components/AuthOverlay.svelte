@@ -1,37 +1,38 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
-	import { deserialize, enhance } from '$app/forms';
-	import { gsap } from '$lib/client/gsap';
+	import { browser } from '$app/env';
+	import { deserialize, enhance, type SubmitFunction } from '$app/forms';
+	import { gsap } from '#lib/client/gsap.js';
 	import {
 		checkTextContent as defaultCheckTextContent,
 		type TextContentChecker
-	} from '$lib/client/content-filter';
-	import { prefersReducedMotion } from '$lib/features/home-entry-scene/reduced-motion';
-	import { parseEditableDrawingDocumentV2 } from '$lib/features/stroke-json/document';
+	} from '#lib/client/content-filter/index.js';
+	import { prefersReducedMotion } from '#lib/features/home-entry-scene/reduced-motion.js';
+	import { parseEditableDrawing } from '#lib/features/stroke-json/ink-document.js';
 	import {
 		NICKNAME_PATTERN,
 		PASSWORD_MAX_LENGTH,
 		PASSWORD_MIN_LENGTH,
 		normalizeNickname
-	} from '$lib/auth/config';
+	} from '#lib/auth/config.js';
 	import type {
 		HomeAuthActionData,
 		HomeAuthActionForm,
 		HomeAuthUser,
 		HomeAuthAvailability
-	} from '$lib/features/home-entry-scene/auth-contract';
-	import AvatarSketchpad from '$lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
-	import { focusTrap } from '$lib/features/shared-ui/actions/focus-trap';
-	import GameButton from '$lib/features/shared-ui/components/GameButton.svelte';
-	import WashiTape from '$lib/features/shared-ui/components/WashiTape.svelte';
+	} from '#lib/features/home-entry-scene/auth-contract.js';
+	import AvatarSketchpad from '#lib/features/home-entry-scene/components/AvatarSketchpad.svelte';
+	import { focusTrap } from '#lib/features/shared-ui/actions/focus-trap.js';
+	import GameButton from '#lib/features/shared-ui/components/GameButton.svelte';
+	import PencilNote from '#lib/features/shared-ui/components/PencilNote.svelte';
+	import WashiTape from '#lib/features/shared-ui/components/WashiTape.svelte';
 	import type {
 		EntryFlowEvent,
 		EntryFlowState
-	} from '$lib/features/home-entry-scene/state/entry-state.svelte';
-	import { dispatchAvatarFaviconUpdate } from '$lib/favicon';
-	import { uploadViewerAvatar } from '$lib/client/avatar-upload';
-	import { onMount } from 'svelte';
-	import { waitForPageLayoutReady } from '$lib/features/home-entry-scene/components/page-layout-ready';
+	} from '#lib/features/home-entry-scene/state/entry-state.svelte.js';
+	import { dispatchAvatarFaviconUpdate } from '#lib/favicon.js';
+	import { uploadViewerAvatar } from '#lib/client/avatar-upload.js';
+	import { onMount, tick } from 'svelte';
+	import { waitForPageLayoutReady } from '#lib/features/home-entry-scene/components/page-layout-ready.js';
 
 	type AuthView =
 		| 'login'
@@ -41,6 +42,8 @@
 		| 'signup-avatar'
 		| 'signup-success';
 	type AvailabilityState = 'available' | 'checking' | 'idle' | 'invalid' | 'taken';
+
+	const NICKNAME_TAKEN_NOTE = 'Taken! Try another nickname.';
 
 	let {
 		entryState,
@@ -60,7 +63,9 @@
 		form?: HomeAuthActionForm;
 		onAvatarDismiss?: () => void;
 		onAvatarSaved?: (payload: {
-			avatarDrawingDocument?: import('$lib/features/stroke-json/document').DrawingDocumentV2 | null;
+			avatarDrawingDocument?:
+				| import('#lib/features/stroke-json/document.js').DrawingDocumentV2
+				| null;
 			avatarOnboardingCompletedAt: Date;
 			avatarUrl: string;
 		}) => void;
@@ -76,6 +81,8 @@
 	let oneTimeKey = $state('');
 	let nicknameError = $state('');
 	let passwordError = $state('');
+	/** What to try when the password is the wrong one, pencilled after the reason. */
+	let passwordSuggestion = $state('');
 	let recoveryKeyError = $state('');
 	let newPasswordError = $state('');
 	let formError = $state('');
@@ -89,6 +96,24 @@
 	let loginFormElement = $state<HTMLFormElement | null>(null);
 	let signupFormElement = $state<HTMLFormElement | null>(null);
 	let recoveryFormElement = $state<HTMLFormElement | null>(null);
+	// One of each field is on the sheet at a time, whichever view it shows.
+	let nicknameInput = $state<HTMLInputElement | null>(null);
+	let passwordInput = $state<HTMLInputElement | null>(null);
+	let recoveryKeyInput = $state<HTMLInputElement | null>(null);
+	let newPasswordInput = $state<HTMLInputElement | null>(null);
+	/*
+	 * Each field's red-pencil note has an id its input points at, so the note is
+	 * read as the field's description. The prefix keeps two sheets on one page
+	 * (a spec renders several) from sharing ids.
+	 */
+	const noteIdPrefix = $props.id();
+	const noteIds = {
+		form: `${noteIdPrefix}-form-note`,
+		newPassword: `${noteIdPrefix}-new-password-note`,
+		nickname: `${noteIdPrefix}-nickname-note`,
+		password: `${noteIdPrefix}-password-note`,
+		recoveryKey: `${noteIdPrefix}-recovery-key-note`
+	};
 	let allowValidatedSignupSubmit = $state(false);
 	let backdropElement = $state<HTMLDivElement | null>(null);
 	let authSheetElement = $state<HTMLDivElement | null>(null);
@@ -113,7 +138,15 @@
 		view === 'signup-account' || view === 'signup-success' || view === 'signup-avatar'
 	);
 	const isAvatarView = $derived(view === 'signup-avatar');
-	const panelClassName = $derived(isAvatarView ? 'w-full max-w-[50rem]' : 'w-full max-w-[44rem]');
+	/** A nickname someone already has is marked as soon as the check says so. */
+	const signupNicknameNote = $derived(
+		nicknameError || (availabilityState === 'taken' ? NICKNAME_TAKEN_NOTE : '')
+	);
+	// The avatar step sizes its sheet to the screen and lets the sketchpad fill
+	// it (`auth-sheet-fit`), so drawing never starts with a scroll.
+	const panelClassName = $derived(
+		isAvatarView ? 'auth-sheet-fit w-full max-w-[50rem]' : 'w-full max-w-[44rem]'
+	);
 	const contentClassName = $derived(
 		isAvatarView ? 'space-y-5 p-6 md:p-8 lg:pl-16 lg:p-10' : 'min-h-[26rem] space-y-5 p-6 md:p-8'
 	);
@@ -134,6 +167,7 @@
 	const resetMessages = () => {
 		nicknameError = '';
 		passwordError = '';
+		passwordSuggestion = '';
 		recoveryKeyError = '';
 		newPasswordError = '';
 		formError = '';
@@ -170,25 +204,27 @@
 	};
 
 	const validateNickname = (value: string) => {
-		if (!value.trim()) return 'Nickname is required';
-		if (!isValidNickname(value)) return 'Use 3-20 lowercase letters, numbers, or underscores';
+		if (!value.trim()) return 'Write a nickname first.';
+		if (!isValidNickname(value)) return 'Use 3 to 20 lowercase letters, numbers or underscores.';
 		return '';
 	};
 
-	const validatePassword = (value: string, label = 'Password') => {
-		if (!value) return `${label} is required`;
+	const validatePassword = (value: string, label = 'password') => {
+		if (!value) return `Write a ${label} first.`;
 		if (value.length < PASSWORD_MIN_LENGTH) {
-			return `${label} must be at least ${PASSWORD_MIN_LENGTH} characters`;
+			return `Make it at least ${PASSWORD_MIN_LENGTH} characters.`;
 		}
 		if (value.length > PASSWORD_MAX_LENGTH) {
-			return `${label} must be at most ${PASSWORD_MAX_LENGTH} characters`;
+			return `Keep it to ${PASSWORD_MAX_LENGTH} characters or fewer.`;
 		}
 		return '';
 	};
 
 	const validateRecoveryKey = (value: string) => {
-		if (!value.trim()) return 'Recovery key is required';
-		if (value.trim().length !== 36) return 'Recovery key must be a UUIDv4 string';
+		if (!value.trim()) return 'Paste your recovery key first.';
+		if (value.trim().length !== 36) {
+			return 'A recovery key has 36 characters. Check you copied all of it.';
+		}
 		return '';
 	};
 
@@ -198,27 +234,56 @@
 			availability === 'available'
 				? 'Nickname available'
 				: availability === 'taken'
-					? 'That nickname is already taken'
+					? NICKNAME_TAKEN_NOTE
 					: 'Choose a valid nickname first';
 	};
 
+	/*
+	 * A failed answer becomes a note on the field it is about, in the sheet's
+	 * own words. Only a lockout keeps the server's sentence, which says how long
+	 * to wait; a nickname the moderation refused keeps its reason too. Anything
+	 * else (a 500, a dropped connection) is a note on the whole form.
+	 */
 	const applySubmitFailure = (result: Extract<HomeAuthActionData, { message: string }>) => {
 		if (result.code === 'RATE_LIMITED') {
-			rateLimitError = result.message ?? 'Too many attempts. Please wait a moment and try again.';
+			rateLimitError = result.message || 'Too many tries. Wait a moment, then try again.';
 			return;
 		}
 
 		if (result.code === 'NICKNAME_TAKEN') {
-			nicknameError = 'That nickname is already taken';
+			nicknameError = NICKNAME_TAKEN_NOTE;
+			return;
+		}
+
+		if (result.code === 'INVALID_NICKNAME') {
+			nicknameError = result.message || 'Choose a different nickname.';
+			return;
+		}
+
+		if (result.code === 'INVALID_CREDENTIALS') {
+			passwordError = "That nickname and password don't match. Once more?";
+			passwordSuggestion = 'Lost it? Use your recovery key.';
 			return;
 		}
 
 		if (result.code === 'RECOVERY_FAILED') {
-			formError = 'Recovery failed. Check your nickname, recovery key, and new password.';
+			recoveryKeyError = "That key doesn't open this nickname. Check both and try again.";
 			return;
 		}
 
-		formError = result.message ?? 'Network error. Please try again.';
+		formError = "That didn't go through. Try again in a moment.";
+	};
+
+	/** The first field the visitor has to fix, in the order the sheet lists them. */
+	const focusFirstMarkedField = async () => {
+		await tick();
+		const marked = [
+			[nicknameError, nicknameInput],
+			[passwordError, passwordInput],
+			[recoveryKeyError, recoveryKeyInput],
+			[newPasswordError, newPasswordInput]
+		] as const;
+		marked.find(([error, input]) => error && input)?.[1]?.focus();
 	};
 
 	const handleActionResult = (actionData: HomeAuthActionData) => {
@@ -244,6 +309,7 @@
 
 		if ('message' in actionData) {
 			applySubmitFailure(actionData);
+			void focusFirstMarkedField();
 		}
 	};
 
@@ -265,7 +331,7 @@
 		passwordError = validatePassword(password);
 
 		if (availabilityState === 'taken') {
-			nicknameError = 'That nickname is already taken';
+			nicknameError = NICKNAME_TAKEN_NOTE;
 		}
 
 		if (nicknameError || passwordError) {
@@ -286,24 +352,39 @@
 		nickname = trimmedNickname;
 		nicknameError = validateNickname(trimmedNickname);
 		recoveryKeyError = validateRecoveryKey(recoveryKey);
-		newPasswordError = validatePassword(newPassword, 'New password');
+		newPasswordError = validatePassword(newPassword, 'new password');
 
 		return !nicknameError && !recoveryKeyError && !newPasswordError;
 	};
 
-	const createEnhancer = () => {
+	const createEnhancer: SubmitFunction = () => {
 		resetMessages();
 		isSubmitting = true;
 
-		return async ({ update }: { update: () => Promise<void> }) => {
+		return async ({ result, update }) => {
+			/*
+			 * The answer is read from the submission itself. Read only from `form`,
+			 * a second attempt that failed the same way as the first (the same wrong
+			 * password, the same lockout) changed nothing there and was never shown,
+			 * after its message had been cleared above: the sheet just went blank.
+			 * Marked as handled first, so the `form` effect does not show it twice.
+			 */
+			const data =
+				result.type === 'failure' || result.type === 'success'
+					? (result.data as HomeAuthActionData | undefined)
+					: undefined;
+			if (data) lastHandledFormKey = getFormKey(data);
+
 			await update();
 			isSubmitting = false;
+			if (data) handleActionResult(data);
 		};
 	};
 
 	const handleLoginSubmit = (event: SubmitEvent) => {
 		if (!validateSignIn()) {
 			event.preventDefault();
+			void focusFirstMarkedField();
 		}
 	};
 
@@ -316,6 +397,7 @@
 		event.preventDefault();
 
 		if (!(await validateSignUp())) {
+			void focusFirstMarkedField();
 			return;
 		}
 
@@ -326,23 +408,33 @@
 	const handleRecoverySubmit = (event: SubmitEvent) => {
 		if (!validateRecovery()) {
 			event.preventDefault();
+			void focusFirstMarkedField();
 		}
 	};
 
 	const submitLogin = () => {
-		if (!validateSignIn()) return;
+		if (!validateSignIn()) {
+			void focusFirstMarkedField();
+			return;
+		}
 		loginFormElement?.requestSubmit();
 	};
 
 	const submitSignup = async () => {
 		if (isSubmitting || allowValidatedSignupSubmit) return;
-		if (!(await validateSignUp())) return;
+		if (!(await validateSignUp())) {
+			void focusFirstMarkedField();
+			return;
+		}
 		allowValidatedSignupSubmit = true;
 		signupFormElement?.requestSubmit();
 	};
 
 	const submitRecovery = () => {
-		if (!validateRecovery()) return;
+		if (!validateRecovery()) {
+			void focusFirstMarkedField();
+			return;
+		}
 		recoveryFormElement?.requestSubmit();
 	};
 
@@ -367,7 +459,7 @@
 
 	const enterStudio = () => {
 		if (!authenticatedUser) {
-			formError = 'Sign in before entering the studio.';
+			formError = 'Sign in first, then step into the studio.';
 			return;
 		}
 
@@ -422,7 +514,7 @@
 		if (result.success && userId) {
 			dispatchAvatarFaviconUpdate(userId);
 			onAvatarSaved?.({
-				avatarDrawingDocument: parseEditableDrawingDocumentV2(drawingDocument),
+				avatarDrawingDocument: parseEditableDrawing(drawingDocument),
 				avatarOnboardingCompletedAt: new Date(),
 				avatarUrl: result.avatarUrl
 			});
@@ -586,17 +678,25 @@
 	});
 </script>
 
+<!-- A word about the whole form rather than one field (a lockout, a dropped
+     connection), pencilled in the margin by the button that was pressed. -->
+{#snippet formNote()}
+	{#if rateLimitError || formError}
+		<PencilNote id={noteIds.form} message={rateLimitError || formError} underline={false} />
+	{/if}
+{/snippet}
+
 <div
 	bind:this={backdropElement}
 	data-testid="auth-overlay"
-	class={`absolute inset-0 z-40 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,240,214,0.24),rgba(24,15,8,0.58))] px-4 py-6 opacity-0 md:px-6 md:py-10 ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
+	class={`absolute inset-0 z-40 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,240,214,0.24),rgba(24,15,8,0.58))] px-4 opacity-0 md:px-6 ${isAvatarView ? 'auth-overlay-fit' : 'py-6 md:py-10'} ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
 	aria-hidden={!isInteractive}
 	inert={!isInteractive}
 >
 	<div class="flex min-h-full w-full items-center justify-center">
 		<div
 			bind:this={overlayElement}
-			class="flex w-full items-center justify-center py-2 opacity-0 md:py-0"
+			class={`flex w-full items-center justify-center opacity-0 ${isAvatarView ? '' : 'py-2 md:py-0'}`}
 			style="transform: scale(0.95);"
 		>
 			<div
@@ -615,12 +715,14 @@
 				<div class={`auth-sheet-inner paper-grain relative pl-8 md:pl-11 ${contentClassName}`}>
 					<div class="flex items-start justify-between gap-4">
 						<div class="space-y-2">
-							<p class="font-display text-xs font-semibold tracking-[0.28em] text-muted uppercase">
+							<p
+								class="auth-sheet-kicker font-display text-xs font-semibold tracking-[0.28em] text-muted uppercase"
+							>
 								Studio Access
 							</p>
 							<h2
 								id={AUTH_SHEET_TITLE_ID}
-								class="font-display text-2xl tracking-[0.06em] text-ink uppercase md:text-3xl"
+								class="auth-sheet-title font-display text-2xl tracking-[0.06em] text-ink uppercase md:text-3xl"
 							>
 								{view === 'signup-account'
 									? 'Draw yourself'
@@ -652,29 +754,10 @@
 					</div>
 
 					<div
-						class={showLiveAuthContent ? '' : 'pointer-events-none invisible'}
+						class={`auth-sheet-body ${showLiveAuthContent ? '' : 'pointer-events-none invisible'}`}
 						inert={!showLiveAuthContent}
 						aria-hidden={!showLiveAuthContent}
 					>
-						{#if rateLimitError || formError}
-							<div class="mb-4 space-y-2">
-								{#if rateLimitError}
-									<div
-										class="rounded-2xl border-2 border-danger bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-danger"
-									>
-										{rateLimitError}
-									</div>
-								{/if}
-								{#if formError}
-									<div
-										class="rounded-2xl border-2 border-danger bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] px-4 py-3 text-sm text-danger"
-									>
-										{formError}
-									</div>
-								{/if}
-							</div>
-						{/if}
-
 						{#if view === 'login' || view === 'signup-account'}
 							<div class="grid grid-cols-2 gap-3">
 								<GameButton
@@ -705,45 +788,57 @@
 								onsubmit={handleLoginSubmit}
 								class="space-y-4"
 							>
-								<label class="block space-y-2">
-									<div class="flex items-start justify-between gap-3">
+								<div>
+									<label class="block space-y-2">
 										<span
 											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>Nickname</span
 										>
-										{#if nicknameError}
-											<p class="text-right text-xs text-danger">{nicknameError}</p>
-										{/if}
-									</div>
-									<input
-										bind:value={nickname}
-										autocomplete="section-login username"
-										name="nickname"
-										type="text"
-										placeholder="artist_123"
-										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
-									/>
-								</label>
+										<input
+											bind:this={nicknameInput}
+											bind:value={nickname}
+											aria-describedby={nicknameError ? noteIds.nickname : undefined}
+											aria-invalid={nicknameError ? 'true' : undefined}
+											autocomplete="section-login username"
+											name="nickname"
+											type="text"
+											placeholder="artist_123"
+											class="sheet-field"
+										/>
+									</label>
+									{#if nicknameError}
+										<PencilNote id={noteIds.nickname} message={nicknameError} />
+									{/if}
+								</div>
 
-								<label class="block space-y-2">
-									<div class="flex items-start justify-between gap-3">
+								<div>
+									<label class="block space-y-2">
 										<span
 											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>Password</span
 										>
-										{#if passwordError}
-											<p class="text-right text-xs text-danger">{passwordError}</p>
-										{/if}
-									</div>
-									<input
-										bind:value={password}
-										autocomplete="section-login current-password"
-										name="password"
-										type="password"
-										placeholder="Enter your password"
-										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
-									/>
-								</label>
+										<input
+											bind:this={passwordInput}
+											bind:value={password}
+											aria-describedby={passwordError ? noteIds.password : undefined}
+											aria-invalid={passwordError ? 'true' : undefined}
+											autocomplete="section-login current-password"
+											name="password"
+											type="password"
+											placeholder="Enter your password"
+											class="sheet-field"
+										/>
+									</label>
+									{#if passwordError}
+										<PencilNote
+											id={noteIds.password}
+											message={passwordError}
+											suggestion={passwordSuggestion || undefined}
+										/>
+									{/if}
+								</div>
+
+								{@render formNote()}
 
 								<div
 									class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between"
@@ -778,51 +873,63 @@
 								onsubmit={handleSignupSubmit}
 								class="space-y-4"
 							>
-								<label class="block space-y-2">
-									<div class="flex items-start justify-between gap-3">
-										<span
-											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
-											>Nickname</span
-										>
-										{#if nicknameError}
-											<p class="text-right text-xs text-danger">{nicknameError}</p>
-										{:else if availabilityMessage}
-											<p
-												class={`text-right text-xs ${availabilityState === 'taken' ? 'text-danger' : availabilityState === 'available' ? 'text-secondary' : 'text-muted'}`}
+								<div>
+									<label class="block space-y-2">
+										<div class="flex items-start justify-between gap-3">
+											<span
+												class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
+												>Nickname</span
 											>
-												{availabilityMessage}
-											</p>
-										{/if}
-									</div>
-									<input
-										bind:value={nickname}
-										autocomplete="section-signup username"
-										name="nickname"
-										type="text"
-										placeholder="artist_123"
-										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
-									/>
-								</label>
+											{#if !signupNicknameNote && availabilityMessage}
+												<p
+													class="availability-note"
+													class:is-available={availabilityState === 'available'}
+												>
+													{availabilityMessage}
+												</p>
+											{/if}
+										</div>
+										<input
+											bind:this={nicknameInput}
+											bind:value={nickname}
+											aria-describedby={signupNicknameNote ? noteIds.nickname : undefined}
+											aria-invalid={signupNicknameNote ? 'true' : undefined}
+											autocomplete="section-signup username"
+											name="nickname"
+											type="text"
+											placeholder="artist_123"
+											class="sheet-field"
+										/>
+									</label>
+									{#if signupNicknameNote}
+										<PencilNote id={noteIds.nickname} message={signupNicknameNote} />
+									{/if}
+								</div>
 
-								<label class="block space-y-2">
-									<div class="flex items-start justify-between gap-3">
+								<div>
+									<label class="block space-y-2">
 										<span
 											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>Password</span
 										>
-										{#if passwordError}
-											<p class="text-right text-xs text-danger">{passwordError}</p>
-										{/if}
-									</div>
-									<input
-										bind:value={password}
-										autocomplete="section-signup new-password"
-										name="password"
-										type="password"
-										placeholder="Enter your password"
-										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
-									/>
-								</label>
+										<input
+											bind:this={passwordInput}
+											bind:value={password}
+											aria-describedby={passwordError ? noteIds.password : undefined}
+											aria-invalid={passwordError ? 'true' : undefined}
+											autocomplete="section-signup new-password"
+											name="password"
+											type="password"
+											placeholder="Enter your password"
+											class="sheet-field"
+										/>
+									</label>
+									{#if passwordError}
+										<PencilNote id={noteIds.password} message={passwordError} />
+									{/if}
+								</div>
+
+								{@render formNote()}
 
 								<div
 									class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between"
@@ -851,65 +958,76 @@
 								onsubmit={handleRecoverySubmit}
 								class="space-y-4"
 							>
-								<label class="block space-y-2">
-									<div class="flex items-start justify-between gap-3">
+								<div>
+									<label class="block space-y-2">
 										<span
 											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>Nickname</span
 										>
-										{#if nicknameError}
-											<p class="text-right text-xs text-danger">{nicknameError}</p>
-										{/if}
-									</div>
-									<input
-										bind:value={nickname}
-										autocomplete="section-recovery username"
-										name="nickname"
-										type="text"
-										placeholder="artist_123"
-										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
-									/>
-								</label>
+										<input
+											bind:this={nicknameInput}
+											bind:value={nickname}
+											aria-describedby={nicknameError ? noteIds.nickname : undefined}
+											aria-invalid={nicknameError ? 'true' : undefined}
+											autocomplete="section-recovery username"
+											name="nickname"
+											type="text"
+											placeholder="artist_123"
+											class="sheet-field"
+										/>
+									</label>
+									{#if nicknameError}
+										<PencilNote id={noteIds.nickname} message={nicknameError} />
+									{/if}
+								</div>
 
-								<label class="block space-y-2">
-									<span
-										class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
-										>Recovery Key</span
-									>
-									<input
-										bind:value={recoveryKey}
-										autocomplete="off"
-										name="recoveryKey"
-										type="text"
-										placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
-									/>
-								</label>
-								{#if recoveryKeyError}<p class="text-sm text-danger">
-										{recoveryKeyError}
-									</p>{/if}
+								<div>
+									<label class="block space-y-2">
+										<span
+											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
+											>Recovery Key</span
+										>
+										<input
+											bind:this={recoveryKeyInput}
+											bind:value={recoveryKey}
+											aria-describedby={recoveryKeyError ? noteIds.recoveryKey : undefined}
+											aria-invalid={recoveryKeyError ? 'true' : undefined}
+											autocomplete="off"
+											name="recoveryKey"
+											type="text"
+											placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+											class="sheet-field"
+										/>
+									</label>
+									{#if recoveryKeyError}
+										<PencilNote id={noteIds.recoveryKey} message={recoveryKeyError} />
+									{/if}
+								</div>
 
-								<label class="block space-y-2">
-									<div class="flex items-start justify-between gap-3">
+								<div>
+									<label class="block space-y-2">
 										<span
 											class="font-display text-xs font-semibold tracking-[0.18em] text-muted uppercase"
 											>New Password</span
 										>
-										{#if newPasswordError}
-											<p class="text-right text-xs text-danger">
-												{newPasswordError}
-											</p>
-										{/if}
-									</div>
-									<input
-										bind:value={newPassword}
-										autocomplete="section-recovery new-password"
-										name="newPassword"
-										type="password"
-										placeholder="Choose a new password"
-										class="w-full rounded-2xl border-2 border-accent bg-paper-deep px-4 py-3 font-body text-base text-ink transition outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-[rgb(212_131_74_/_0.25)]"
-									/>
-								</label>
+										<input
+											bind:this={newPasswordInput}
+											bind:value={newPassword}
+											aria-describedby={newPasswordError ? noteIds.newPassword : undefined}
+											aria-invalid={newPasswordError ? 'true' : undefined}
+											autocomplete="section-recovery new-password"
+											name="newPassword"
+											type="password"
+											placeholder="Choose a new password"
+											class="sheet-field"
+										/>
+									</label>
+									{#if newPasswordError}
+										<PencilNote id={noteIds.newPassword} message={newPasswordError} />
+									{/if}
+								</div>
+
+								{@render formNote()}
 
 								<div
 									class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between"
@@ -982,7 +1100,9 @@
 								</GameButton>
 							</div>
 						{:else}
+							{@render formNote()}
 							<AvatarSketchpad
+								fit
 								draftUserKey={authenticatedUser?.id ?? authenticatedUser?.nickname ?? null}
 								initialDrawingDocument={authenticatedUser?.avatarDrawingDocument ?? null}
 								{nickname}
@@ -998,6 +1118,87 @@
 </div>
 
 <style>
+	/*
+	 * The sheet takes focus so the keyboard starts inside it; it is paper, not
+	 * a control, so it draws no browser ring round itself. Its fields do.
+	 */
+	.paper-sheet:focus {
+		outline: none;
+	}
+
+	/*
+	 * Written on the sheet, not boxed in: the words go down in the blue ink
+	 * of the studio's bookplate, by hand, on a pencilled line. While the
+	 * visitor writes, the line is inked in and a stroke of highlighter marks
+	 * the place. A wrong field gets PencilNote's red wave under the line.
+	 */
+	.sheet-field {
+		width: 100%;
+		padding: 0.3rem 0.2rem 0.35rem;
+		border: 0;
+		border-radius: 0;
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 8' preserveAspectRatio='none'%3E%3Cpath d='M1 4.6 C 38 3.4, 76 5.2, 120 4 S 206 3.2, 244 4.4 S 284 4.9, 299 3.8' fill='none' stroke='%234a4540' stroke-opacity='0.5' stroke-width='1.4' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E")
+			left bottom / 100% 0.5rem no-repeat;
+		color: #2c4a7a;
+		font-family: var(--font-hand);
+		font-size: 1.6rem;
+		font-weight: 600;
+		line-height: 1.25;
+		outline: none;
+		/* Holds off the browser's autofill tint, which would box the line in again. */
+		transition: background-color 600000s 0s;
+	}
+
+	/* Dots in the hand font are uneven; a secret reads better as even beads. */
+	.sheet-field[type='password'] {
+		font-family: var(--font-body);
+		font-size: 1.1rem;
+		letter-spacing: 0.25em;
+		padding-block: 0.65rem 0.55rem;
+	}
+
+	.sheet-field::placeholder {
+		color: rgb(107 95 84 / 0.5);
+		font-family: var(--font-hand);
+		font-size: 1.45rem;
+		font-weight: 500;
+		letter-spacing: 0;
+	}
+
+	.sheet-field:focus {
+		background:
+			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 8' preserveAspectRatio='none'%3E%3Cpath d='M1 4.6 C 38 3.4, 76 5.2, 120 4 S 206 3.2, 244 4.4 S 284 4.9, 299 3.8' fill='none' stroke='%232d2420' stroke-opacity='0.9' stroke-width='2.2' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E")
+				left bottom / 100% 0.5rem no-repeat,
+			linear-gradient(
+				transparent 40%,
+				rgb(244 212 99 / 0.32) 40%,
+				rgb(244 212 99 / 0.32) 88%,
+				transparent 88%
+			);
+	}
+
+	.sheet-field:-webkit-autofill {
+		-webkit-text-fill-color: #2c4a7a;
+	}
+
+	/* What the gallery says of a nickname while it is typed, pencilled beside its label. */
+	.availability-note {
+		color: var(--color-muted-ink);
+		font-family: var(--font-hand);
+		font-size: 1.05rem;
+		line-height: 1;
+		text-align: right;
+		rotate: -1.5deg;
+	}
+
+	.availability-note.is-available {
+		color: #3f7a52;
+	}
+
+	.availability-note.is-available::before {
+		content: '✓ ';
+	}
+
 	/* torn-out spiral perforations along the left edge */
 	.auth-sheet-inner::after {
 		content: '';
@@ -1031,5 +1232,63 @@
 		font-weight: 600;
 		color: var(--color-bark);
 		rotate: -0.4deg;
+	}
+
+	/*
+	 * The avatar step: the sheet is as tall as the screen leaves it, up to what
+	 * a full-size canvas needs, and the sketchpad fills what the header leaves.
+	 * `--auth-fit-gap` is the overlay's padding above and below the sheet.
+	 */
+	.auth-overlay-fit {
+		--auth-fit-gap: 2.5rem;
+		padding-block: calc(var(--auth-fit-gap) / 2);
+	}
+
+	.auth-sheet-fit {
+		display: flex;
+		flex-direction: column;
+		height: min(100dvh - var(--auth-fit-gap), 50rem);
+	}
+
+	.auth-sheet-fit .auth-sheet-inner {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	.auth-sheet-fit .auth-sheet-body {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	/* On a phone or a short screen the header keeps only its title. */
+	@media (max-width: 639.98px), (max-height: 640px) {
+		.auth-sheet-fit .auth-sheet-kicker,
+		.auth-sheet-fit .auth-sheet-swipe,
+		.auth-sheet-fit .auth-sheet-subtitle {
+			display: none;
+		}
+	}
+
+	@media (max-height: 640px) {
+		.auth-overlay-fit {
+			--auth-fit-gap: 1rem;
+		}
+
+		.auth-sheet-fit .auth-sheet-inner {
+			padding-top: 0.875rem;
+			padding-bottom: 0.875rem;
+		}
+
+		.auth-sheet-fit .auth-sheet-inner > :not(:last-child) {
+			margin-block-end: 0.5rem;
+		}
+
+		.auth-sheet-fit .auth-sheet-title {
+			font-size: 1.25rem;
+		}
 	}
 </style>

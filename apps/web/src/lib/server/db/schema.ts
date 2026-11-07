@@ -10,7 +10,7 @@ import {
 	uniqueIndex
 } from 'drizzle-orm/pg-core';
 import { account, session, user, verification } from './auth.schema';
-// Relative, not `$lib`: drizzle-kit loads this file outside Vite and cannot
+// Relative, not `#lib`: drizzle-kit loads this file outside Vite and cannot
 // resolve the alias. The enums below are derived from the shared vocabularies
 // so the API, the client and the type never drift from the database.
 import { PRODUCT_ROLES } from '../../shared/viewer';
@@ -38,7 +38,8 @@ export const artworkReportReason = appSchema.enum('artwork_report_reason', ARTWO
 export const contentReportStatus = appSchema.enum('content_report_status', CONTENT_REPORT_STATUSES);
 export const engagementRateLimitKind = appSchema.enum('engagement_rate_limit_kind', [
 	'vote',
-	'comment'
+	'comment',
+	'wish'
 ]);
 export const moderationTextPolicyContext = appSchema.enum('moderation_text_policy_context', [
 	'nickname',
@@ -54,7 +55,11 @@ export const users = appSchema.table(
 			.references(() => user.id, { onDelete: 'cascade' }),
 		nickname: text('nickname').notNull(),
 		recoveryHash: text('recovery_hash').notNull(),
+		// Inline base64 gzip documents from before they moved to object storage;
+		// read until the migration copies them across, then dropped.
 		avatarDocument: text('avatar_document'),
+		// The object-storage key of the avatar drawing, written with the row.
+		avatarDocumentKey: text('avatar_document_key'),
 		avatarDocumentVersion: integer('avatar_document_version'),
 		avatarUrl: text('avatar_url'),
 		avatarOnboardingCompletedAt: timestamp('avatar_onboarding_completed_at'),
@@ -98,6 +103,21 @@ export const authRateLimits = appSchema.table(
 	]
 );
 
+export const wishes = appSchema.table(
+	'wishes',
+	{
+		id: text('id').primaryKey(),
+		authorId: text('author_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		body: text('body').notNull(),
+		isHidden: boolean('is_hidden').notNull().default(false),
+		hiddenAt: timestamp('hidden_at'),
+		createdAt: timestamp('created_at').defaultNow().notNull()
+	},
+	(table) => [index('wishes_author_id_idx').on(table.authorId)]
+);
+
 export const artworks = appSchema.table(
 	'artworks',
 	{
@@ -106,8 +126,14 @@ export const artworks = appSchema.table(
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
 		parentId: text('parent_id'),
+		// The slip from the mailbox this drawing answers.
+		wishId: text('wish_id').references(() => wishes.id, { onDelete: 'set null' }),
 		title: text('title').notNull(),
+		// Inline base64 gzip documents from before they moved to object storage;
+		// read until the migration copies them across, then dropped.
 		drawingDocument: text('drawing_document'),
+		// The object-storage key of the drawing, written with the row itself.
+		drawingDocumentKey: text('drawing_document_key'),
 		drawingVersion: integer('drawing_version'),
 		storageKey: text('storage_key').notNull(),
 		mediaContentType: text('media_content_type').notNull(),
@@ -132,6 +158,7 @@ export const artworks = appSchema.table(
 	(table) => [
 		index('artworks_author_id_idx').on(table.authorId),
 		index('artworks_parent_id_idx').on(table.parentId),
+		index('artworks_wish_id_idx').on(table.wishId),
 		uniqueIndex('artworks_storage_key_unique').on(table.storageKey),
 		// Every discovery feed filters on `is_hidden = false` and then sorts,
 		// so these partial indexes match the predicate exactly and let Postgres
@@ -184,23 +211,6 @@ export const artworkVotes = appSchema.table(
 	]
 );
 
-export const artworkVoteRealtime = appSchema.table(
-	'artwork_vote_realtime',
-	{
-		id: text('id').primaryKey(),
-		artworkId: text('artwork_id')
-			.notNull()
-			.references(() => artworks.id, { onDelete: 'cascade' }),
-		value: artworkVoteValue('value').notNull(),
-		createdAt: timestamp('created_at').defaultNow().notNull(),
-		updatedAt: timestamp('updated_at')
-			.defaultNow()
-			.$onUpdate(() => new Date())
-			.notNull()
-	},
-	(table) => [index('artwork_vote_realtime_artwork_id_idx').on(table.artworkId)]
-);
-
 export const artworkComments = appSchema.table(
 	'artwork_comments',
 	{
@@ -226,27 +236,6 @@ export const artworkComments = appSchema.table(
 	]
 );
 
-export const artworkCommentRealtime = appSchema.table(
-	'artwork_comment_realtime',
-	{
-		id: text('id').primaryKey(),
-		artworkId: text('artwork_id')
-			.notNull()
-			.references(() => artworks.id, { onDelete: 'cascade' }),
-		authorId: text('author_id')
-			.notNull()
-			.references(() => users.id, { onDelete: 'cascade' }),
-		body: text('body'),
-		isVisible: boolean('is_visible').notNull().default(true),
-		createdAt: timestamp('created_at').defaultNow().notNull(),
-		updatedAt: timestamp('updated_at')
-			.defaultNow()
-			.$onUpdate(() => new Date())
-			.notNull()
-	},
-	(table) => [index('artwork_comment_realtime_artwork_id_idx').on(table.artworkId)]
-);
-
 export const contentReports = appSchema.table(
 	'content_reports',
 	{
@@ -256,6 +245,7 @@ export const contentReports = appSchema.table(
 			.references(() => users.id, { onDelete: 'cascade' }),
 		artworkId: text('artwork_id'),
 		commentId: text('comment_id'),
+		wishId: text('wish_id'),
 		reason: artworkReportReason('reason').notNull(),
 		status: contentReportStatus('status').notNull().default('pending'),
 		reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
@@ -270,6 +260,7 @@ export const contentReports = appSchema.table(
 	(table) => [
 		index('content_reports_artwork_id_idx').on(table.artworkId),
 		index('content_reports_comment_id_idx').on(table.commentId),
+		index('content_reports_wish_id_idx').on(table.wishId),
 		index('content_reports_reporter_id_idx').on(table.reporterId),
 		index('content_reports_status_idx').on(table.status),
 		uniqueIndex('content_reports_pending_artwork_reporter_unique')
@@ -278,9 +269,12 @@ export const contentReports = appSchema.table(
 		uniqueIndex('content_reports_pending_comment_reporter_unique')
 			.on(table.reporterId, table.commentId)
 			.where(sql`${table.commentId} is not null and ${table.status} = 'pending'`),
+		uniqueIndex('content_reports_pending_wish_reporter_unique')
+			.on(table.reporterId, table.wishId)
+			.where(sql`${table.wishId} is not null and ${table.status} = 'pending'`),
 		check(
 			'content_reports_single_target_check',
-			sql`(case when ${table.artworkId} is null then 0 else 1 end + case when ${table.commentId} is null then 0 else 1 end) = 1`
+			sql`(case when ${table.artworkId} is null then 0 else 1 end + case when ${table.commentId} is null then 0 else 1 end + case when ${table.wishId} is null then 0 else 1 end) = 1`
 		),
 		check(
 			'content_reports_review_resolution_check',
@@ -387,6 +381,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 	artworks: many(artworks),
 	votes: many(artworkVotes),
 	comments: many(artworkComments),
+	wishes: many(wishes),
 	reports: many(contentReports),
 	moderationPoliciesUpdated: many(moderationTextPolicies),
 	viewerContentPreferences: one(viewerContentPreferences, {
@@ -395,10 +390,22 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 	})
 }));
 
+export const wishesRelations = relations(wishes, ({ many, one }) => ({
+	author: one(users, {
+		fields: [wishes.authorId],
+		references: [users.id]
+	}),
+	artworks: many(artworks)
+}));
+
 export const artworksRelations = relations(artworks, ({ many, one }) => ({
 	author: one(users, {
 		fields: [artworks.authorId],
 		references: [users.id]
+	}),
+	wish: one(wishes, {
+		fields: [artworks.wishId],
+		references: [wishes.id]
 	}),
 	parent: one(artworks, {
 		fields: [artworks.parentId],
@@ -421,13 +428,6 @@ export const artworkVotesRelations = relations(artworkVotes, ({ one }) => ({
 	})
 }));
 
-export const artworkVoteRealtimeRelations = relations(artworkVoteRealtime, ({ one }) => ({
-	artwork: one(artworks, {
-		fields: [artworkVoteRealtime.artworkId],
-		references: [artworks.id]
-	})
-}));
-
 export const artworkCommentsRelations = relations(artworkComments, ({ one }) => ({
 	artwork: one(artworks, {
 		fields: [artworkComments.artworkId],
@@ -435,17 +435,6 @@ export const artworkCommentsRelations = relations(artworkComments, ({ one }) => 
 	}),
 	author: one(users, {
 		fields: [artworkComments.authorId],
-		references: [users.id]
-	})
-}));
-
-export const artworkCommentRealtimeRelations = relations(artworkCommentRealtime, ({ one }) => ({
-	artwork: one(artworks, {
-		fields: [artworkCommentRealtime.artworkId],
-		references: [artworks.id]
-	}),
-	author: one(users, {
-		fields: [artworkCommentRealtime.authorId],
 		references: [users.id]
 	})
 }));

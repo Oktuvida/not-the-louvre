@@ -1,6 +1,6 @@
-import { and, eq } from 'drizzle-orm';
-import { db } from '$lib/server/db';
-import { moderationTextPolicies, viewerContentPreferences } from '$lib/server/db/schema';
+import { eq } from 'drizzle-orm';
+import { db } from '#lib/server/db/index.js';
+import { moderationTextPolicies, viewerContentPreferences } from '#lib/server/db/schema.js';
 import type {
 	ModerationRepository,
 	UpdateTextPolicyInput,
@@ -36,21 +36,23 @@ export const moderationRepository: ModerationRepository = {
 	},
 
 	async updateTextPolicy(input: UpdateTextPolicyInput) {
+		const saved = {
+			allowlist: input.allowlist,
+			blocklist: input.blocklist,
+			updatedAt: input.updatedAt,
+			updatedBy: input.updatedBy,
+			version: input.expectedVersion + 1
+		};
+		// A context nobody has saved yet has no row: the snapshot reads it as
+		// version 0, and an update alone would refuse its first save for ever.
 		const [record] = await db
-			.update(moderationTextPolicies)
-			.set({
-				allowlist: input.allowlist,
-				blocklist: input.blocklist,
-				updatedAt: input.updatedAt,
-				updatedBy: input.updatedBy,
-				version: input.expectedVersion + 1
+			.insert(moderationTextPolicies)
+			.values({ ...saved, context: input.context })
+			.onConflictDoUpdate({
+				set: saved,
+				target: moderationTextPolicies.context,
+				where: eq(moderationTextPolicies.version, input.expectedVersion)
 			})
-			.where(
-				and(
-					eq(moderationTextPolicies.context, input.context),
-					eq(moderationTextPolicies.version, input.expectedVersion)
-				)
-			)
 			.returning();
 
 		return record ?? null;

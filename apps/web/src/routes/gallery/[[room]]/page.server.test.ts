@@ -5,11 +5,11 @@ const mocked = vi.hoisted(() => ({
 	listArtworkDiscovery: vi.fn()
 }));
 
-vi.mock('$lib/server/artwork/read.service', () => ({
+vi.mock('#lib/server/artwork/read.service.js', () => ({
 	listArtworkDiscovery: mocked.listArtworkDiscovery
 }));
 
-vi.mock('$lib/server/moderation/service', () => ({
+vi.mock('#lib/server/moderation/service.js', () => ({
 	getViewerContentPreferences: mocked.getViewerContentPreferences
 }));
 
@@ -52,12 +52,33 @@ describe('gallery route', () => {
 	});
 
 	describe('without a room parameter', () => {
+		it('renders the first page into a first visit instead of streaming it', async () => {
+			mocked.listArtworkDiscovery.mockResolvedValue(makeDiscoveryPage([makeItem()], 'hot'));
+
+			const { load } = await import('./+page.server');
+
+			const result = (await load({
+				isDataRequest: false,
+				locals: {},
+				params: { room: 'hot-wall' },
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/gallery/hot-wall')
+			} as never)) as {
+				initialRoomContent: { artworks: Array<Record<string, unknown>> } | null;
+				lazy: { roomContent: unknown };
+			};
+
+			expect(result.lazy.roomContent).toBeNull();
+			expect(result.initialRoomContent?.artworks).toHaveLength(1);
+		});
+
 		it('loads the hall-of-fame room from top discovery results', async () => {
 			mocked.listArtworkDiscovery.mockResolvedValue(makeDiscoveryPage([makeItem()], 'top'));
 
 			const { load } = await import('./+page.server');
 
 			const result = (await load({
+				isDataRequest: true,
 				locals: {},
 				params: {},
 				parent: async () => ({ adultContentEnabled: false }),
@@ -79,7 +100,7 @@ describe('gallery route', () => {
 			};
 
 			expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
-				{ cursor: null, limit: 12, sort: 'top', window: 'all' },
+				{ authorId: null, cursor: null, limit: 12, sort: 'top', window: 'all' },
 				{ user: undefined }
 			);
 			expect(roomContent).toMatchObject({
@@ -102,6 +123,7 @@ describe('gallery route', () => {
 
 			const { load } = await import('./+page.server');
 			const result = (await load({
+				isDataRequest: true,
 				locals: {},
 				params: {},
 				parent: async () => ({ adultContentEnabled: false }),
@@ -128,9 +150,11 @@ describe('gallery route', () => {
 		it('loads the hot wall room from hot discovery results', async () => {
 			const { load } = await import('./+page.server');
 			const result = (await load({
+				isDataRequest: true,
 				locals: {},
 				params: { room: 'hot-wall' },
-				parent: async () => ({ adultContentEnabled: false })
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/gallery')
 			} as never)) as {
 				lazy: { roomContent: Promise<{ discovery: Record<string, unknown> }> };
 				roomId: string;
@@ -150,7 +174,7 @@ describe('gallery route', () => {
 			const roomContent = await result.lazy.roomContent;
 
 			expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
-				{ cursor: null, limit: 24, sort: 'hot', window: null },
+				{ authorId: null, cursor: null, limit: 24, sort: 'hot', window: null },
 				{ user: undefined }
 			);
 			expect(roomContent.discovery).toMatchObject({
@@ -164,12 +188,14 @@ describe('gallery route', () => {
 			});
 		});
 
-		it('loads the mystery room with continuation metadata', async () => {
+		it('asks the feed only whether the mystery room has anything to spin', async () => {
 			const { load } = await import('./+page.server');
 			const result = (await load({
+				isDataRequest: true,
 				locals: {},
 				params: { room: 'mystery' },
-				parent: async () => ({ adultContentEnabled: false })
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/gallery')
 			} as never)) as {
 				lazy: { roomContent: Promise<{ discovery: Record<string, unknown> }> };
 				roomId: string;
@@ -177,20 +203,36 @@ describe('gallery route', () => {
 
 			expect(result).toMatchObject({ roomId: 'mystery' });
 
+			await result.lazy.roomContent;
+
+			expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
+				{ authorId: null, cursor: null, limit: 1, sort: 'recent', window: null },
+				{ user: undefined }
+			);
+		});
+
+		it('loads Wet Paint newest first, a page at a time', async () => {
+			const { load } = await import('./+page.server');
+			const result = (await load({
+				isDataRequest: true,
+				locals: {},
+				params: { room: 'wet-paint' },
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/gallery')
+			} as never)) as {
+				lazy: { roomContent: Promise<{ discovery: Record<string, unknown> }> };
+				roomId: string;
+			};
+
 			const roomContent = await result.lazy.roomContent;
 
 			expect(mocked.listArtworkDiscovery).toHaveBeenCalledWith(
-				{ cursor: null, limit: 24, sort: 'recent', window: null },
+				{ authorId: null, cursor: null, limit: 24, sort: 'recent', window: null },
 				{ user: undefined }
 			);
 			expect(roomContent.discovery).toMatchObject({
 				pageInfo: { hasMore: false, nextCursor: null },
-				request: {
-					authorId: null,
-					limit: 24,
-					sort: 'recent',
-					window: null
-				}
+				request: { authorId: null, limit: 24, sort: 'recent', window: null }
 			});
 		});
 
@@ -214,9 +256,11 @@ describe('gallery route', () => {
 
 			const { load } = await import('./+page.server');
 			const result = (await load({
+				isDataRequest: true,
 				locals: { user: { id: 'user-1', role: 'user' } },
 				params: { room: 'your-studio' },
-				parent: async () => ({ adultContentEnabled: false })
+				parent: async () => ({ adultContentEnabled: false }),
+				url: new URL('http://localhost/gallery')
 			} as never)) as {
 				lazy: {
 					roomContent: Promise<{
@@ -251,9 +295,11 @@ describe('gallery route', () => {
 		it('takes the adult-content preference from the layout instead of re-reading the row', async () => {
 			const { load } = await import('./+page.server');
 			const result = (await load({
+				isDataRequest: true,
 				locals: { user: { id: 'user-1', role: 'user' } },
 				params: { room: 'hot-wall' },
-				parent: async () => ({ adultContentEnabled: true })
+				parent: async () => ({ adultContentEnabled: true }),
+				url: new URL('http://localhost/gallery')
 			} as never)) as {
 				lazy: { roomContent: Promise<{ adultContentEnabled: boolean }> };
 			};
@@ -269,7 +315,8 @@ describe('gallery route', () => {
 				load({
 					locals: {},
 					params: { room: 'your-studio' },
-					parent: async () => ({ adultContentEnabled: false })
+					parent: async () => ({ adultContentEnabled: false }),
+					url: new URL('http://localhost/gallery')
 				} as never)
 			).rejects.toMatchObject({
 				location: '/gallery',
@@ -284,7 +331,8 @@ describe('gallery route', () => {
 				load({
 					locals: {},
 					params: { room: 'unknown-room' },
-					parent: async () => ({ adultContentEnabled: false })
+					parent: async () => ({ adultContentEnabled: false }),
+					url: new URL('http://localhost/gallery')
 				} as never)
 			).rejects.toMatchObject({
 				status: 404

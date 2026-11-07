@@ -10,8 +10,8 @@
  * callback.
  */
 
-import { ApiError, apiErrorMessage, requestJson } from '$lib/client/api';
-import { resolveUserAvatarPath } from '$lib/user/avatar-url';
+import { ApiError, apiErrorMessage, requestJson } from '#lib/client/api.js';
+import { resolveUserAvatarPath } from '#lib/user/avatar-url.js';
 
 export type AvatarUploadResult =
 	| { avatarUrl: string; success: true }
@@ -20,7 +20,7 @@ export type AvatarUploadResult =
 const AVATAR_SESSION_MESSAGE = 'Your session is not ready for avatar upload. Please sign in again.';
 const AVATAR_MISSING_URL_MESSAGE = 'Avatar save succeeded but no avatar URL was returned.';
 const AVATAR_FAILURE_MESSAGE = 'Avatar save failed. Please try again.';
-const ADULT_CONTENT_FAILURE_MESSAGE = '18+ artwork preference could not be updated.';
+const ADULT_CONTENT_FAILURE_MESSAGE = "Your 18+ setting didn't save. Try again in a moment.";
 
 export const uploadViewerAvatar = async (
 	userId: string | null | undefined,

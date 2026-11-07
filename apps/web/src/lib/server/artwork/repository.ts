@@ -1,5 +1,5 @@
-import { and, asc, count, eq, sql } from 'drizzle-orm';
-import { db } from '$lib/server/db';
+import { and, asc, count, eq, inArray, ne, notExists, sql, type SQL } from 'drizzle-orm';
+import { db } from '#lib/server/db/index.js';
 import {
 	artworkComments,
 	artworkEngagementRateLimits,
@@ -7,9 +7,14 @@ import {
 	contentReports,
 	artworkVotes,
 	artworks,
+	wishes,
 	users
-} from '$lib/server/db/schema';
-import { rateLimitAttemptSet, rateLimitFirstAttemptBlockedUntil } from '$lib/server/db/rate-limit';
+} from '#lib/server/db/schema.js';
+import {
+	rateLimitAttemptSet,
+	rateLimitFirstAttemptBlockedUntil
+} from '#lib/server/db/rate-limit.js';
+import { voteCountSql } from './vote-counts';
 import type {
 	ArtworkCommentRecord,
 	ArtworkCommentView,
@@ -23,21 +28,22 @@ import type {
 	CreateArtworkCommentInput,
 	CreateContentReportInput,
 	CreateArtworkVoteInput,
+	CreateWishInput,
 	HiddenStateUpdate,
+	ListWishesInput,
 	PublishRateLimitRecord,
 	RecordEngagementRateLimitAttemptInput,
 	RecordRateLimitAttemptInput,
 	ResolveContentReportsInput
 } from './types';
 
-// Every `artworks` column except `drawing_document`. The document can be
-// hundreds of KiB and no writer's caller reads it back, so RETURNING it only
-// drags it across the pooler again — the exact traffic the chunked write
-// exists to avoid.
+// Every `artworks` column except the legacy inline `drawing_document`, which
+// can be hundreds of KiB that no writer's caller reads back.
 const artworkRecordProjection = {
 	authorId: artworks.authorId,
 	commentCount: artworks.commentCount,
 	createdAt: artworks.createdAt,
+	drawingDocumentKey: artworks.drawingDocumentKey,
 	drawingVersion: artworks.drawingVersion,
 	forkCount: artworks.forkCount,
 	hiddenAt: artworks.hiddenAt,
@@ -45,7 +51,6 @@ const artworkRecordProjection = {
 	isHidden: artworks.isHidden,
 	isNsfw: artworks.isNsfw,
 	mediaContentType: artworks.mediaContentType,
-	mediaPlaceholder: artworks.mediaPlaceholder,
 	mediaSizeBytes: artworks.mediaSizeBytes,
 	nsfwLabeledAt: artworks.nsfwLabeledAt,
 	nsfwSource: artworks.nsfwSource,
@@ -53,18 +58,47 @@ const artworkRecordProjection = {
 	score: artworks.score,
 	storageKey: artworks.storageKey,
 	title: artworks.title,
-	updatedAt: artworks.updatedAt
+	updatedAt: artworks.updatedAt,
+	wishId: artworks.wishId
 };
+
+/** What the mailbox can hand out: neither taken down nor left by a banned artist. */
+const wishInTheBox = (...conditions: (SQL | undefined)[]) =>
+	and(eq(wishes.isHidden, false), eq(users.isBanned, false), ...conditions);
+
+const notReportedBy = (reporterId: string) =>
+	notExists(
+		db
+			.select({ id: contentReports.id })
+			.from(contentReports)
+			.where(
+				and(
+					eq(contentReports.wishId, wishes.id),
+					eq(contentReports.reporterId, reporterId),
+					eq(contentReports.status, 'pending')
+				)
+			)
+	);
+
+const wishSelect = () => ({
+	author: users.nickname,
+	id: wishes.id,
+	text: wishes.body
+});
 
 // The vote routes serialise this straight to the browser and the client reads
 // only `score`, so the transaction reads back five columns instead of the
 // whole row (three times, document included, before this narrowing).
+// The totals ride along so the change can go out to everyone watching the
+// artwork without each of them reading it again.
 const artworkVoteSummaryProjection = {
 	commentCount: artworks.commentCount,
+	downvotes: voteCountSql('down'),
 	forkCount: artworks.forkCount,
 	id: artworks.id,
 	score: artworks.score,
-	updatedAt: artworks.updatedAt
+	updatedAt: artworks.updatedAt,
+	upvotes: voteCountSql('up')
 };
 
 export const artworkRepository: ArtworkRepository = {
@@ -74,45 +108,6 @@ export const artworkRepository: ArtworkRepository = {
 	async createArtwork(input) {
 		const [record] = await db.insert(artworks).values(input).returning(artworkRecordProjection);
 		return record as ArtworkRecord;
-	},
-	// The expected-length guard makes each append exactly-once under ambiguous
-	// connection failures: a reissued chunk whose first delivery committed
-	// matches zero rows instead of double-appending.
-	async appendArtworkDrawingDocumentChunk(id, chunk, expectedLength, updatedAt) {
-		const updated = await db
-			.update(artworks)
-			.set({
-				drawingDocument: sql`coalesce(${artworks.drawingDocument}, '') || ${chunk}`,
-				updatedAt
-			})
-			.where(
-				and(
-					eq(artworks.id, id),
-					sql`coalesce(length(${artworks.drawingDocument}), 0) = ${expectedLength}`
-				)
-			)
-			.returning({ id: artworks.id });
-
-		return updated.length > 0;
-	},
-	async finalizeArtworkDrawingDocument(id, version, expectedTotalLength, updatedAt) {
-		const [record] = await db
-			.update(artworks)
-			.set({ drawingVersion: version, updatedAt })
-			.where(
-				and(eq(artworks.id, id), sql`length(${artworks.drawingDocument}) = ${expectedTotalLength}`)
-			)
-			.returning(artworkRecordProjection);
-
-		return (record as ArtworkRecord | undefined) ?? null;
-	},
-	async findArtworkDrawingDocumentLength(id) {
-		const [row] = await db
-			.select({ length: sql<number>`coalesce(length(${artworks.drawingDocument}), 0)` })
-			.from(artworks)
-			.where(eq(artworks.id, id));
-
-		return row ? Number(row.length) : null;
 	},
 	async createContentReport(input: CreateContentReportInput) {
 		const [record] = await db.insert(contentReports).values(input).returning();
@@ -179,7 +174,7 @@ export const artworkRepository: ArtworkRepository = {
 				: await tx.insert(artworkVotes).values(input).returning();
 
 			// `score` is maintained by sync_artwork_score_trigger, so the count has
-			// to be re-read — but only the five columns the callers use.
+			// to be re-read — but only the columns the callers use.
 			const [updatedArtwork] = await tx
 				.select(artworkVoteSummaryProjection)
 				.from(artworks)
@@ -194,31 +189,23 @@ export const artworkRepository: ArtworkRepository = {
 	},
 	async removeVote(artworkId, userId) {
 		return db.transaction(async (tx) => {
+			// A missing artwork has no votes (they cascade with it), so the
+			// summary read after the delete is also the existence check.
+			const existing =
+				(await tx.query.artworkVotes.findFirst({
+					where: and(eq(artworkVotes.artworkId, artworkId), eq(artworkVotes.userId, userId))
+				})) ?? null;
+			if (existing) await tx.delete(artworkVotes).where(eq(artworkVotes.id, existing.id));
+
 			const [artwork] = await tx
 				.select(artworkVoteSummaryProjection)
 				.from(artworks)
 				.where(eq(artworks.id, artworkId));
 			if (!artwork) return null;
 
-			const existing =
-				(await tx.query.artworkVotes.findFirst({
-					where: and(eq(artworkVotes.artworkId, artworkId), eq(artworkVotes.userId, userId))
-				})) ?? null;
-
-			if (!existing) {
-				return { artwork: artwork as ArtworkVoteSummary, removed: null };
-			}
-
-			await tx.delete(artworkVotes).where(eq(artworkVotes.id, existing.id));
-			const [updatedArtwork] = await tx
-				.select(artworkVoteSummaryProjection)
-				.from(artworks)
-				.where(eq(artworks.id, artworkId));
-			if (!updatedArtwork) return null;
-
 			return {
-				artwork: updatedArtwork as ArtworkVoteSummary,
-				removed: existing as ArtworkVoteRecord
+				artwork: artwork as ArtworkVoteSummary,
+				removed: (existing as ArtworkVoteRecord | null) ?? null
 			};
 		});
 	},
@@ -277,6 +264,64 @@ export const artworkRepository: ArtworkRepository = {
 				updatedAt: comment.updatedAt
 			};
 		});
+	},
+	async createWish(input: CreateWishInput) {
+		await db.insert(wishes).values(input);
+	},
+	async findWish(id) {
+		const [wish] = await db
+			.select(wishSelect())
+			.from(wishes)
+			.innerJoin(users, eq(users.id, wishes.authorId))
+			.where(wishInTheBox(eq(wishes.id, id)))
+			.limit(1);
+
+		return wish ?? null;
+	},
+	async deleteWish(id) {
+		const deleted = await db.delete(wishes).where(eq(wishes.id, id)).returning({ id: wishes.id });
+		return deleted.length > 0;
+	},
+	async setWishHiddenState(id, input) {
+		const updated = await db
+			.update(wishes)
+			.set(input)
+			.where(eq(wishes.id, id))
+			.returning({ id: wishes.id });
+		return updated.length > 0;
+	},
+	async resolveWishReports(input: ResolveContentReportsInput) {
+		const records = await db
+			.update(contentReports)
+			.set({
+				reviewedAt: input.resolvedAt,
+				reviewedBy: input.resolvedBy,
+				status: input.status,
+				updatedAt: input.resolvedAt
+			})
+			.where(and(eq(contentReports.wishId, input.targetId), eq(contentReports.status, 'pending')))
+			.returning({ id: contentReports.id });
+
+		return records.length;
+	},
+	// A table of short lines, so sorting all of it at random stays cheap.
+	async listWishes(input: ListWishesInput) {
+		return db
+			.select(wishSelect())
+			.from(wishes)
+			.innerJoin(users, eq(users.id, wishes.authorId))
+			.where(
+				wishInTheBox(
+					input.viewerId ? ne(wishes.authorId, input.viewerId) : undefined,
+					input.viewerId ? notReportedBy(input.viewerId) : undefined
+				)
+			)
+			.orderBy(
+				// Postgres refuses the bare `false` an empty list turns into.
+				...(input.seen.length > 0 ? [asc(inArray(wishes.id, input.seen))] : []),
+				sql`random()`
+			)
+			.limit(input.limit);
 	},
 	async findCommentById(id) {
 		return (

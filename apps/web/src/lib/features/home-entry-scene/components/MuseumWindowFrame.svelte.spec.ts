@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { museumWindowFrameAssetUrl } from '$lib/features/shared-ui/generated-art';
+import { museumWindowFrameAssetUrl } from '#lib/features/shared-ui/generated-art.js';
 import MuseumWindowFrame from './MuseumWindowFrame.svelte';
 
 describe('MuseumWindowFrame', () => {
-	it('renders an SSR-ready image instead of a mount-only canvas', () => {
-		render(MuseumWindowFrame);
+	it('renders an SSR-ready image instead of a mount-only canvas', async () => {
+		await render(MuseumWindowFrame);
 
 		const frameImage = document.querySelector('[data-testid="museum-window-frame"]');
 
@@ -17,7 +17,7 @@ describe('MuseumWindowFrame', () => {
 	});
 
 	it('swaps the vector frame for a bitmap after mount so zooming never re-rasterizes svg', async () => {
-		render(MuseumWindowFrame);
+		await render(MuseumWindowFrame);
 
 		const frameImage = document.querySelector('[data-testid="museum-window-frame"]');
 
