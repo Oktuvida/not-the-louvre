@@ -34,26 +34,30 @@ test.beforeEach(async ({ baseURL, page, request }) => {
 	});
 });
 
-test('a best piece on the front door opens as its postcard in the Hall of Fame', async ({
-	page
-}) => {
-	await page.goto('/');
-	const runnerUp = page.getByTestId('home-preview-frame-2');
-	await expect(runnerUp).toBeVisible();
-	const title = await runnerUp.locator('img').first().getAttribute('alt');
+test(
+	'a best piece on the front door opens as its postcard in the Hall of Fame',
+	{
+		tag: '@gpu'
+	},
+	async ({ page }) => {
+		await page.goto('/');
+		const runnerUp = page.getByTestId('home-preview-frame-2');
+		await expect(runnerUp).toBeVisible();
+		const title = await runnerUp.locator('img').first().getAttribute('alt');
 
-	await runnerUp.click();
+		await runnerUp.click();
 
-	const postcard = page.getByRole('dialog', { name: `Artwork details for ${title}` });
-	await expect(postcard).toBeVisible({ timeout: 15_000 });
-	await expect(page).toHaveURL(/\/artwork\/[^/]+$/);
-	// The room behind it is the one these pieces come from.
-	await expect(page.getByTestId('podium-artwork-1')).toBeAttached();
+		const postcard = page.getByRole('dialog', { name: `Artwork details for ${title}` });
+		await expect(postcard).toBeVisible({ timeout: 15_000 });
+		await expect(page).toHaveURL(/\/artwork\/[^/]+$/);
+		// The room behind it is the one these pieces come from.
+		await expect(page.getByTestId('podium-artwork-1')).toBeAttached();
 
-	await page.keyboard.press('Escape');
-	await expect(postcard).toBeHidden();
-	await expect(page).toHaveURL(/\/gallery$/);
-});
+		await page.keyboard.press('Escape');
+		await expect(postcard).toBeHidden();
+		await expect(page).toHaveURL(/\/gallery$/);
+	}
+);
 
 test('a best piece is a link to its own page', async ({ page }) => {
 	await page.goto('/');

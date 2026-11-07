@@ -101,7 +101,7 @@ Local development must be reproducible from a clean clone:
 - **Dependencies**: `bun install` from root. Lockfile is committed.
 - **Environment**: `.env.example` documents every required variable.
 - **Schema**: Drizzle migrations define the database state (see below).
-- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check`, `test:unit:server` and `test:unit:client` on every pull request and before every deploy, plus, in its `database` job, the integration suites and the e2e suite against a Postgres service container.
+- **CI**: Same scripts locally and in CI — no hidden steps. `.github/workflows/deploy.yml` runs `lint`, `check`, `test:unit:server` and `test:unit:client` on every pull request and before every deploy, plus, in its `database` job, the integration suites and the e2e suite against a Postgres service container. E2e tests tagged `@gpu` need real frames, so CI skips them and the local gates must run them before every commit.
 
 ---
 

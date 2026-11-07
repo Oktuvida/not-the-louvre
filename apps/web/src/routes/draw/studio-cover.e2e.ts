@@ -20,7 +20,7 @@ test.describe('the sketchbook’s cover', () => {
 		expect(signUp.ok()).toBe(true);
 	});
 
-	test('carries the notes with it as it turns open', async ({ page }) => {
+	test('carries the notes with it as it turns open', { tag: '@gpu' }, async ({ page }) => {
 		await page.goto('/draw');
 		const openCover = page.getByRole('button', { name: 'Open sketchbook' });
 		await expect(openCover).toBeVisible();

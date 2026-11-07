@@ -18,6 +18,10 @@ export default defineConfig({
 	// request at once for ten seconds and more. A publish is two of those in a
 	// row, and the journeys that walk every screen load dozens of pages.
 	expect: { timeout: 15_000 },
+	// CI's runners draw WebGL and page animations on two CPU cores, where the home
+	// scene never settles. Tests tagged @gpu need real frames, so they run in the
+	// local gates before every commit, not there.
+	grepInvert: process.env.CI ? /@gpu/ : undefined,
 	timeout: 60_000,
 	use: {
 		baseURL: 'http://localhost:4173',
