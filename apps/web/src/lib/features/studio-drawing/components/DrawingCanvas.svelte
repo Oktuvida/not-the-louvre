@@ -282,13 +282,15 @@
 	const toDocumentPoint = (position: { clientX: number; clientY: number }) =>
 		strokeRect ? getDrawingPointInRect(strokeRect, position, drawingDocument) : null;
 
+	// A prediction may run past the page's edge, so it is placed without the
+	// bounds check and pinned to the edge instead. It is scaled to the page all
+	// the same: scaled to an unbounded page, every one landed in the far corner.
 	const toPredictedPoint = (position: { clientX: number; clientY: number }) => {
 		if (!strokeRect) return null;
-		const point = getDrawingPointInRect(strokeRect, position, {
-			height: Number.POSITIVE_INFINITY,
-			width: Number.POSITIVE_INFINITY
-		});
-		return point ? clampDrawingPoint(point, drawingDocument) : null;
+		const x = ((position.clientX - strokeRect.left) * drawingDocument.width) / strokeRect.width;
+		const y = ((position.clientY - strokeRect.top) * drawingDocument.height) / strokeRect.height;
+		if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+		return clampDrawingPoint([x, y], drawingDocument);
 	};
 
 	// The eraser lays down paper: the published image is painted the same way.
