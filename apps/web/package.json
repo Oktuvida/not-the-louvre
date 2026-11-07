@@ -32,6 +32,7 @@
 		"db:reset": "cd ../.. && bun run db:reset",
 		"check:bundle": "bun run scripts/check-web-worker-bundle.ts",
 		"cutover": "bun --preload ./scripts/lib-alias.ts scripts/cutover.ts",
+		"cutover:check": "bun --preload ./scripts/lib-alias.ts scripts/cutover-check.ts",
 		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes && bun run scripts/generate-auth-schema.ts && prettier --write src/lib/server/db/auth.schema.ts"
 	},
 	"dependencies": {
