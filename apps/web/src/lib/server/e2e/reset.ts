@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '#lib/server/db/index.js';
 import { sharedPageEdgeCacheKeys } from '#lib/server/http/edge-cache.js';
 import { deleteAllMediaObjects } from '#lib/server/media/object-storage.js';
+import { resetTextModerationPolicyCache } from '#lib/server/moderation/service.js';
 import { edgeCache } from '#lib/server/platform.js';
 
 const RESET_SQL = `
@@ -25,6 +26,7 @@ const RESET_SQL = `
 export const resetBackendState = async (origin: string) => {
 	await db.execute(sql.raw(RESET_SQL));
 	await deleteAllMediaObjects();
+	resetTextModerationPolicyCache();
 
 	// A wiped gallery must not go on showing signed-out visitors the last walls.
 	const cache = edgeCache();
