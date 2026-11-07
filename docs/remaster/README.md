@@ -54,7 +54,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 - [x] Cuarentena de e2e: los 3 de compactación se sustituyeron por tests de recorrido (se publica cada trazo dibujado; el borrador sobrevive a una recarga) y el de la sala misteriosa era un test desactualizado (los comentarios están en el reverso de la postal). Quedan 2 de buffering del lienzo, que se reescriben en la fase 4.
 - [x] Bug: sin WebGL no se podía entrar; la escena 3D vive ahora dentro de un `<svelte:boundary>` (`be8a92d`).
 - [x] Driver `pg` con `drizzle-orm/node-postgres`: un `Client` por petición en Workers, sin `end()`, y un pool en Node. Probado en workerd con `wrangler dev` y Hyperdrive emulado.
-- [ ] Una sola configuración de Hyperdrive, sin caché. **Bloquea el corte:** con `pg` la caché de Hyperdrive (60 s, sin invalidar al escribir) empieza a aplicar. Dos configuraciones ya no compensan: en producción casi ninguna consulta salía de esa caché (21 de 1.510 en tres días, medido el 2026-11-05) y sumarían conexiones contra la misma base. Lo compartido se cachea en el edge para quien no tiene sesión. Se desactiva en el panel de Cloudflare.
+- [x] Una sola configuración de Hyperdrive, sin caché, desactivada en el panel el 2026-11-07: con `pg` la caché de Hyperdrive (60 s, sin invalidar al escribir) empieza a aplicar. Dos configuraciones ya no compensan: en producción casi ninguna consulta salía de esa caché (21 de 1.510 en tres días, medido el 2026-11-05) y sumarían conexiones contra la misma base. Lo compartido se cachea en el edge para quien no tiene sesión.
 - [x] Los reintentos de `chunked-write.ts` y de la publicación, que detectaban códigos de postgres.js y con `pg` quedaban inertes, se fueron con los documentos a R2 (fase 2).
 - [x] Conexión directa a Supabase: Hyperdrive ya apunta al host directo, y sin el complemento de IPv4 ese host solo tiene IPv6. Aun así completó todas las consultas de esos tres días, así que el complemento no hace falta para Hyperdrive. El Mac del dueño también llega por IPv6; los contenedores de Docker no.
 - [x] Better Auth 1.7.12 (`a480b83`), sin migración de datos: desde la 1.7.3 la tabla `account` es la misma que en la 1.6. La 1.4.22 de producción carga `node:async_hooks` con una importación dinámica dentro de la primera petición; en Workers, si esa petición se cancela, el isolate deja de responder a todo lo que pase por Better Auth (issue upstream #10315). La 1.7.12 usa `process.getBuiltinModule`, síncrono en workerd, y no tiene ese fallo.
@@ -172,8 +172,8 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 
 ## Prerrequisitos pendientes
 
-- Acceso a la cuenta de Cloudflare para Workers, Hyperdrive, R2 y logs.
-- El corte, en orden: crear el bucket R2 `not-the-louvre` y un token de API de R2 con escritura; aplicar las migraciones pendientes; `bun run cutover --copy-only` con main todavía en marcha; desplegar `remaster` (primero sube el Worker de tiempo real); `bun run cutover` para copiar lo que main escribió entretanto y redibujar. Variables: ver la cabecera de `apps/web/scripts/cutover.ts`.
-- Confirmar si la migración 0016 y el backfill de placeholders están aplicados en producción.
+- Hecho en Cloudflare (2026-11-06): plan Workers Paid, bucket R2 `not-the-louvre`, token de despliegue con Workers Admin y Hyperdrive sin caché. El dominio de producción está en esa misma cuenta.
+- El corte: el guion ensayado está en [`corte.md`](corte.md).
+- La migración 0016 ya está aplicada en producción, con sus índices (comprobado en la copia del 2026-11-05).
 - Dispositivos de prueba: un iPad con Pencil y un Galaxy con S Pen.
 - Una regla de compresión de Cloudflare para `model/gltf-binary`: el JSON del modelo ahorra unos 105 KB.
