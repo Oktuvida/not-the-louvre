@@ -349,10 +349,11 @@ test.describe('the mailbox', () => {
 
 		await page.goto('/admin');
 		const slipCase = page.getByRole('article').filter({ hasText: WISH });
-		await expect(slipCase).toContainText('Slip case');
+		await expect(slipCase).toContainText('From the mailbox');
 		await expect(slipCase).toContainText('asker_artist');
 
-		await slipCase.getByRole('button', { name: 'Delete slip' }).click();
+		await slipCase.getByRole('button', { name: 'Delete' }).click();
+		await slipCase.getByRole('button', { name: 'Press again' }).click();
 
 		await expect(page.getByRole('article').filter({ hasText: WISH })).toHaveCount(0);
 		expect(await (await page.request.get('/api/wishes')).json()).toEqual({ wishes: [] });

@@ -267,7 +267,7 @@
 						href={resolve('admin')}
 						onclick={(event) => event.stopPropagation()}
 					>
-						Open in Ops ↗
+						Open the staff desk ↗
 					</a>
 				</div>
 			</div>

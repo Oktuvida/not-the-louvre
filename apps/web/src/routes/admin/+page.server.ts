@@ -28,7 +28,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	return {
 		// The root layout renders the only <title> in the document from
 		// `page.data.meta`; a page-level <svelte:head><title> would lose to it.
-		meta: { title: 'Ops' } satisfies RouteMeta,
+		meta: { title: 'Staff desk' } satisfies RouteMeta,
 		moderationPage,
 		permissions: {
 			canManageUsers,

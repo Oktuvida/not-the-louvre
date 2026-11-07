@@ -11,6 +11,8 @@ export type HomeAuthUser = {
 	name?: string;
 	nickname: string;
 	role: string;
+	/** The cases waiting on the staff desk; absent for anybody who is not staff. */
+	staffCases?: number | null;
 };
 
 export type HomeAuthBootstrap =

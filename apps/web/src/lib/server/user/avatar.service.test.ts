@@ -99,6 +99,7 @@ const createRepositoryStore = (initial: UserRecord | null = null) => {
 				: null;
 		}),
 		findUserById: vi.fn(async (id) => readById(id)),
+		countUsers: vi.fn(async () => ({ artists: 0, banned: 0, moderators: 0 })),
 		listUsers: vi.fn(async () => []),
 		updateUserAvatar: vi.fn(async (id, input) => {
 			const current = readById(id);

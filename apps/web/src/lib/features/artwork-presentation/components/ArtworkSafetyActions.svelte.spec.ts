@@ -108,7 +108,7 @@ describe('ArtworkSafetyActions', () => {
 		await page.getByRole('button', { name: 'Moderation menu' }).click();
 		await expect.element(page.getByText('Status: Hidden · NSFW')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Clear artwork NSFW' })).toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'Open in Ops ↗' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Open the staff desk ↗' })).toBeVisible();
 
 		await page.getByRole('button', { name: 'Unhide artwork' }).click();
 

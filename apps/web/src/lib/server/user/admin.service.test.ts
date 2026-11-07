@@ -55,7 +55,8 @@ const createRepository = (record = createUserRecord()): UserRepository => {
 				: null
 		),
 		findUserById: vi.fn(async (id) => (stored.id === id ? stored : null)),
-		listUsers: vi.fn(async () => [stored]),
+		countUsers: vi.fn(async () => ({ artists: 1, banned: 0, moderators: 0 })),
+		listUsers: vi.fn(async () => [{ ...stored, artworkCount: 0 }]),
 		updateAvatarModeration: vi.fn(async () => null),
 		updateBanState: vi.fn(async (id, input) => {
 			if (stored.id !== id) return null;

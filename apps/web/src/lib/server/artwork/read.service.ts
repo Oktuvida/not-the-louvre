@@ -423,11 +423,7 @@ const decodeModerationCursor = (value: string | null | undefined): ModerationQue
 const encodeModerationCursor = (cursor: ModerationQueueCursor): string =>
 	Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
 
-export const listModerationQueue = async (
-	input: ListModerationQueueInput,
-	contextAndDependencies: ReadContextAndDependencies = {}
-): Promise<ModerationQueuePage> => {
-	const user = contextAndDependencies.user;
+const assertStaff = ({ user }: ReadContextAndDependencies) => {
 	if (!user) {
 		throw new ArtworkFlowError(401, 'Authentication required', 'UNAUTHENTICATED');
 	}
@@ -439,6 +435,22 @@ export const listModerationQueue = async (
 	if (user.role !== 'moderator' && user.role !== 'admin') {
 		throw new ArtworkFlowError(403, 'Moderator access required', 'FORBIDDEN');
 	}
+};
+
+/** How many things are waiting for a moderator, however often each was reported. */
+export const countModerationCases = async (
+	contextAndDependencies: ReadContextAndDependencies = {}
+): Promise<number> => {
+	assertStaff(contextAndDependencies);
+	const repository = contextAndDependencies.repository ?? artworkReadRepository;
+	return repository.countModerationCases();
+};
+
+export const listModerationQueue = async (
+	input: ListModerationQueueInput,
+	contextAndDependencies: ReadContextAndDependencies = {}
+): Promise<ModerationQueuePage> => {
+	assertStaff(contextAndDependencies);
 
 	const repository = contextAndDependencies.repository ?? artworkReadRepository;
 

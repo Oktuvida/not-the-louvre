@@ -174,6 +174,7 @@
 				avatarUrl={user.avatarUrl ?? user.image ?? null}
 				nickname={user.nickname}
 				onEdit={openAvatarEditor}
+				staffCases={user.staffCases ?? null}
 				userId={user.id}
 			/>
 		</div>
