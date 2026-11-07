@@ -122,11 +122,13 @@ describe('validateCloudflareBuild', () => {
 			await writeFile(join(cloudflareDir, '_worker.js'), 'export default { fetch: () => {} };');
 		}
 
+		// adapter-cloudflare 8 writes the server instance the Worker imports, with
+		// the route manifest inlined, and no separate manifest.js beside it.
 		await writeFile(
-			join(cloudflareTmpDir, 'manifest.js'),
+			join(cloudflareTmpDir, 'server.js'),
 			demoRouteInManifest
-				? 'export const manifest = { routes: [{ id: "/demo" }, { id: "/gallery" }] };'
-				: 'export const manifest = { routes: [{ id: "/gallery" }] };'
+				? 'const manifest = (() => ({ routes: [{ id: "/demo" }, { id: "/gallery" }] }))();'
+				: 'const manifest = (() => ({ routes: [{ id: "/gallery" }] }))();'
 		);
 
 		if (gsapRuntimeImport) {
