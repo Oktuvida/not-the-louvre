@@ -12,6 +12,7 @@ import type {
 } from '#lib/features/gallery-exploration/model/discovery.js';
 
 import {
+	followArtworkPatches,
 	readRoomFeedSnapshot,
 	restoreRoomFeedScroll,
 	writeRoomFeedSnapshot
@@ -167,6 +168,12 @@ export function createSeededAccumulator(options: SeededAccumulatorOptions): Seed
 			accumulator.syncSeedArtworks(transformSeed(artworks));
 		});
 	});
+
+	// The page patches the first page it holds; the pages fetched below it are
+	// only here, so a vote cast on one of them has to reach it from here too.
+	$effect(() =>
+		followArtworkPatches((artworkId, patch) => accumulator.patchArtwork(artworkId, patch))
+	);
 
 	if (feedCacheKey) {
 		/*
