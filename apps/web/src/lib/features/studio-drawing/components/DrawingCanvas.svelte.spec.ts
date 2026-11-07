@@ -258,6 +258,31 @@ describe('DrawingCanvas', () => {
 		]);
 	});
 
+	// Every prediction used to land in the page's far corner, so an Apple Pencil
+	// drew a line from the pen out to it until the stroke ended.
+	it('draws the prediction just ahead of the pen, not out to the corner', async () => {
+		const { canvas, pointer } = await renderCanvas();
+		const overlay = [...canvas.parentElement!.querySelectorAll('canvas')].find(
+			(candidate) => candidate !== canvas
+		)!;
+		const inkAt = (x: number, y: number) =>
+			overlay
+				.getContext('2d')!
+				.getImageData(
+					Math.floor((x * overlay.width) / 768),
+					Math.floor((y * overlay.height) / 768),
+					1,
+					1
+				).data[3];
+
+		canvas.dispatchEvent(pointer('pointerdown', [100, 100]));
+		canvas.dispatchEvent(pointer('pointermove', [140, 140], { predicted: [[150, 150]] }));
+
+		await vi.waitFor(() => expect(inkAt(146, 146)).toBeGreaterThan(0));
+		expect(inkAt(450, 450)).toBe(0);
+		expect(inkAt(740, 740)).toBe(0);
+	});
+
 	it('ignores drawing input while interaction is disabled', async () => {
 		const { colourAt, committed, draw } = await renderCanvas({ interactive: false });
 
