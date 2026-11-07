@@ -2034,11 +2034,9 @@
 		filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
 	}
 
-	.postcard-actions :global(.sticker-btn.vote-cast .sticker-content) {
-		border-radius: var(--radius-pill);
-		box-shadow:
-			inset 0 0 0 2px rgba(45, 36, 32, 0.85),
-			inset 0 2px 5px rgba(45, 36, 32, 0.28);
+	/* A vote cast shows in the thumb itself, filled in, as a pen fills a box. */
+	.postcard-actions :global(.sticker-btn.vote-cast .vote-icon) {
+		fill: currentColor;
 	}
 
 	/* perforated edge via the scalloped background trick */
