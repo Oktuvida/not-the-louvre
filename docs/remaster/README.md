@@ -174,7 +174,7 @@ Plan vivo del remaster. El detalle técnico, con fuentes, está en [informe-stac
 ## Prerrequisitos pendientes
 
 - Hecho en Cloudflare (2026-11-06): plan Workers Paid, bucket R2 `not-the-louvre`, token de despliegue con Workers Admin y Hyperdrive sin caché. El dominio de producción está en esa misma cuenta.
-- El corte: el guion ensayado está en [`corte.md`](corte.md).
+- **El corte se hizo el 2026-11-07**, con el guion de [`corte.md`](corte.md): 0016–0022 aplicadas, 86 imágenes y 85 dibujos copiados a R2, 48 obras y 37 avatares redibujados en WebP sin pérdida. "Smile" conserva su AVIF y no tiene timelapse, porque su dibujo ya estaba truncado en producción. El primer despliegue se paró al compilar (la comprobación buscaba un archivo que adapter-cloudflare 8 ya no escribe) sin llegar a subir nada; el segundo salió bien.
 - La migración 0016 ya está aplicada en producción, con sus índices (comprobado en la copia del 2026-11-05).
 - Dispositivos de prueba: un iPad con Pencil y un Galaxy con S Pen.
 - Una regla de compresión de Cloudflare para `model/gltf-binary`: el JSON del modelo ahorra unos 105 KB.

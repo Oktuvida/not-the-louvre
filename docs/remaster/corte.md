@@ -1,5 +1,7 @@
 # El corte a producción
 
+**Hecho el 2026-11-07.** Los resultados están en el README; este guion queda como registro.
+
 El guion para pasar `remaster` a producción. Lo ejecuta el dueño en su propia terminal: las contraseñas y las claves nunca pasan por el chat.
 
 Ensayado el 2026-11-06 y el 2026-11-07 sobre una copia real de producción, sin tocarla: migraciones, redibujado, remaster sobre esos datos y el código actual de `main` sobre la base ya migrada. Falta lo que solo se puede probar de verdad: copiar las imágenes reales y desplegar en Cloudflare.

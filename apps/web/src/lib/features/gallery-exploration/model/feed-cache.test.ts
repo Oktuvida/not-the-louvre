@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeArtwork, makeArtworks } from '#lib/features/gallery-exploration/fixtures/artworks.js';
 import {
 	clearRoomFeedCache,
+	followArtworkPatches,
 	patchCachedArtwork,
 	readRoomFeedSnapshot,
 	restoreRoomFeedScroll,
@@ -16,6 +17,17 @@ const firstPageOf = (artworks: ReturnType<typeof makeArtworks>) => ({
 });
 
 describe('room feed cache', () => {
+	it('tells the room on screen about a change, until it stops listening', () => {
+		const heard = vi.fn();
+		const stop = followArtworkPatches(heard);
+
+		patchCachedArtwork('artwork-9', { score: 3 });
+		stop();
+		patchCachedArtwork('artwork-9', { score: 4 });
+
+		expect(heard).toHaveBeenCalledExactlyOnceWith('artwork-9', { score: 3 });
+	});
+
 	beforeEach(() => {
 		clearRoomFeedCache();
 	});

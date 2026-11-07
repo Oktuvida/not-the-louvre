@@ -30,6 +30,8 @@ export interface ArtworkAccumulator {
 	retry(): Promise<void>;
 	reseed(initialArtworks: Artwork[], initialPageInfo: GalleryPageInfo): void;
 	syncSeedArtworks(initialArtworks: Artwork[]): void;
+	/** A change to one artwork (a vote, a comment), wherever on the wall it hangs. */
+	patchArtwork(artworkId: string, patch: Partial<Artwork>): void;
 	mergeSeedArtworks(initialArtworks: Artwork[]): void;
 }
 
@@ -86,6 +88,13 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 		);
 	}
 
+	function patchArtwork(artworkId: string, patch: Partial<Artwork>): void {
+		const patched = (artworks: Artwork[]) =>
+			artworks.map((artwork) => (artwork.id === artworkId ? { ...artwork, ...patch } : artwork));
+		baseArtworks = patched(baseArtworks);
+		appendedArtworks = patched(appendedArtworks);
+	}
+
 	/*
 	 * The restore path: a room that came back from the feed cache already holds
 	 * the pages infinite scroll fetched, and the server's fresh first page has
@@ -124,6 +133,7 @@ export function createArtworkAccumulator(options: ArtworkAccumulatorOptions): Ar
 		retry,
 		reseed,
 		syncSeedArtworks,
+		patchArtwork,
 		mergeSeedArtworks
 	};
 }
