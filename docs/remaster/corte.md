@@ -16,13 +16,15 @@ Ensayado el 2026-11-06 y el 2026-11-07 sobre una copia real de producción, sin 
 
 1. Pasar el CI en un pull request en borrador de `remaster` a `main`. Un borrador no despliega.
 2. Crear el token de R2: R2 object storage → Overview → API Tokens → Manage → Create User API token, con Object Read & Write solo sobre `not-the-louvre`.
-3. Copiar la clave `service_role` del proyecto de Supabase.
-4. Crear `~/ntl-backups/corte.env` con permisos 600 y el host que aparece en Hyperdrive. Si la contraseña lleva símbolos, va codificada para URL.
+3. Copiar una clave secreta (`sb_secret_...`) de Supabase, en Settings → API Keys → Secret keys, y comprobar en Storage cómo se llama el bucket. **No desactives las claves antiguas:** la web actual lee las imágenes con su `service_role` hasta el despliegue. Supabase retira esas claves a finales de 2026.
+4. Crear `~/ntl-backups/corte.env` con permisos 600 y el host que aparece en Hyperdrive. La contraseña va aparte para que no haya que codificar sus símbolos.
 
    ```sh
-   DATABASE_URL='postgres://postgres:<contraseña>@<host>:5432/postgres?sslmode=no-verify'
+   PGPASSWORD='<contraseña>'
+   DATABASE_URL='postgres://postgres@<host>:5432/postgres?sslmode=no-verify'
    SUPABASE_URL='https://<proyecto>.supabase.co'
-   SUPABASE_SERVICE_KEY='<service_role>'
+   SUPABASE_BUCKET='artworks'
+   SUPABASE_SERVICE_KEY='<sb_secret_...>'
    R2_ACCOUNT_ID='<cuenta>'
    R2_ACCESS_KEY_ID='<access key>'
    R2_SECRET_ACCESS_KEY='<secret>'
@@ -32,15 +34,15 @@ Ensayado el 2026-11-06 y el 2026-11-07 sobre una copia real de producción, sin 
 
 ## El día
 
-Abre la terminal y comprueba que apunta a producción. Esto solo lee y debe responder 49 o más:
+Abre la terminal y prueba todas las claves. Esto solo lee: la base debe ser la de Supabase con 49 obras o más, Storage debe leer una imagen y R2 debe responder.
 
 ```sh
 cd apps/web
 set -a; source ~/ntl-backups/corte.env; set +a
-bun -e "import pg from 'pg'; const c = new pg.Client({ connectionString: process.env.DATABASE_URL }); await c.connect(); console.log((await c.query('select count(*) from app.artworks')).rows[0]); await c.end()"
+bun run cutover:check
 ```
 
-1. **Copia fresca.** La contraseña se escribe cuando la pide.
+1. **Copia fresca.**
 
    ```sh
    PGSSLMODE=require /opt/homebrew/opt/postgresql@17/bin/pg_dump -h <host> -p 5432 -U postgres -d postgres -n app -n better_auth -n drizzle -Fc --no-owner --no-privileges -f ~/ntl-backups/prod-dia-del-corte.dump
