@@ -104,6 +104,8 @@ export const writeRoomFeedSnapshot = (roomId: GalleryWallId, snapshot: RoomFeedS
  * Every change goes into the cached copies too.
  */
 export const patchCachedArtwork = (artworkId: string, patch: Partial<Artwork>): void => {
+	for (const listener of patchListeners) listener(artworkId, patch);
+
 	for (const [roomId, snapshot] of snapshots) {
 		const holds = (artworks: Artwork[]) => artworks.some((artwork) => artwork.id === artworkId);
 		if (!holds(snapshot.artworks) && !holds(snapshot.seed.artworks)) continue;
@@ -117,6 +119,20 @@ export const patchCachedArtwork = (artworkId: string, patch: Partial<Artwork>): 
 			seed: { ...snapshot.seed, artworks: patched(snapshot.seed.artworks) }
 		});
 	}
+};
+
+type ArtworkPatchListener = (artworkId: string, patch: Partial<Artwork>) => void;
+
+// The room on screen keeps its own copies of the pages it fetched below the
+// first, which the page never holds, so it hears each change as it happens.
+const patchListeners = new Set<ArtworkPatchListener>();
+
+/** Hears every change to an artwork until the returned function is called. */
+export const followArtworkPatches = (listener: ArtworkPatchListener): (() => void) => {
+	patchListeners.add(listener);
+	return () => {
+		patchListeners.delete(listener);
+	};
 };
 
 export const clearRoomFeedCache = (): void => {

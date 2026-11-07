@@ -15,6 +15,27 @@ const makeIndexedArtwork = (index: number): Artwork =>
 	});
 
 describe('createArtworkAccumulator', () => {
+	it('patches an artwork from a fetched page in place', async () => {
+		const acc = createArtworkAccumulator({
+			initialArtworks: [makeIndexedArtwork(1)],
+			initialPageInfo: { hasMore: true, nextCursor: 'cursor-1' },
+			fetchPage: vi.fn().mockResolvedValue({
+				artworks: [makeIndexedArtwork(2), makeIndexedArtwork(3)],
+				pageInfo: { hasMore: false, nextCursor: null }
+			})
+		});
+		await acc.loadMore();
+
+		acc.patchArtwork('artwork-3', { commentCount: 4, score: 9 });
+
+		expect(acc.allArtworks.map(({ id, score }) => [id, score])).toEqual([
+			['artwork-1', 1],
+			['artwork-2', 2],
+			['artwork-3', 9]
+		]);
+		expect(acc.allArtworks[2]?.commentCount).toBe(4);
+	});
+
 	it('initializes with artworks and pageInfo', () => {
 		const initial = Array.from({ length: 5 }, (_, i) => makeIndexedArtwork(i + 1));
 		const acc = createArtworkAccumulator({
