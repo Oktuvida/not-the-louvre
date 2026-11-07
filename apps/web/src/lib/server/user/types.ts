@@ -32,15 +32,25 @@ export type UserAvatarRef = {
 	updatedAt: Date;
 };
 
+/** Who the staff desk lists: everyone, the staff or the banned. */
+export type UserStanding = 'banned' | 'moderators';
+
 export type ListUsersInput = {
 	cursor: { createdAt: Date; id: string } | null;
 	limit: number;
+	search?: string | null;
+	standing?: UserStanding | null;
 };
+
+export type ListedUser = UserRecord & { artworkCount: number };
+
+export type UserTotals = { artists: number; banned: number; moderators: number };
 
 export type UserRepository = {
 	findUserAvatarRefById(id: string): Promise<UserAvatarRef | null>;
 	findUserById(id: string): Promise<UserRecord | null>;
-	listUsers(input: ListUsersInput): Promise<UserRecord[]>;
+	countUsers(): Promise<UserTotals>;
+	listUsers(input: ListUsersInput): Promise<ListedUser[]>;
 	updateUserAvatar(
 		id: string,
 		input: {

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { page } from 'vitest/browser';
 
 import RootLayoutHarness from './RootLayoutHarness.svelte';
 import { SITE_NAME } from '#lib/features/shared-ui/site-meta.js';
@@ -52,8 +51,6 @@ const renderRootLayout = (viewer: { id: string; isBanned: boolean; role: string 
 			viewer
 		}
 	});
-
-const MODERATOR = { id: 'viewer-1', isBanned: false, role: 'moderator' };
 
 describe('root layout', () => {
 	beforeEach(() => {
@@ -110,64 +107,6 @@ describe('root layout', () => {
 		expect(document.title).toBe(`404 · ${SITE_NAME}`);
 	});
 
-	/*
-	 * The Ops pill is `position: fixed` on the app's top overlay layer, so it
-	 * outranks the artwork detail panel and the avatar preview. Left visible it
-	 * stays clickable and tabbable over a dimmed `aria-modal="true"` dialog,
-	 * which is exactly what that attribute promises does not happen.
-	 */
-	it('takes the Ops link out of the page while a modal dialog is open', async () => {
-		await renderRootLayout(MODERATOR);
-
-		const opsLink = document.querySelector('.ops-link');
-		expect(opsLink).not.toBeNull();
-		expect(getComputedStyle(opsLink as Element).display).not.toBe('none');
-
-		const dialog = document.createElement('div');
-		dialog.setAttribute('role', 'dialog');
-		dialog.setAttribute('aria-modal', 'true');
-		document.body.append(dialog);
-
-		try {
-			await expect
-				.poll(() => getComputedStyle(document.querySelector('.ops-link') as Element).display)
-				.toBe('none');
-		} finally {
-			dialog.remove();
-		}
-	});
-
-	/*
-	 * On a phone the gallery header owns the top-right corner — Create Art and
-	 * Refresh, two 44px stickers — and the ambient audio tab owns the bottom
-	 * right. A fixed pill at `--z-ops` outranks both, so anywhere near them it
-	 * takes the tap: Refresh navigated to /admin.
-	 */
-	it('keeps the Ops pill out of the gallery header corner on a phone', async () => {
-		const { innerHeight, innerWidth } = window;
-
-		try {
-			await page.viewport(390, 844);
-			await renderRootLayout(MODERATOR);
-
-			const pill = (document.querySelector('.ops-link') as Element).getBoundingClientRect();
-
-			// Bottom-left: the one corner neither the header nor the audio tab
-			// (bottom-right) claims.
-			expect(pill.left).toBeCloseTo(16, 0);
-			expect(pill.bottom).toBeCloseTo(844 - 16, 0);
-		} finally {
-			await page.viewport(innerWidth, innerHeight);
-		}
-	});
-
-	/*
-	 * Each house typeface is one variable font per subset, so a face has to
-	 * cover the family's whole weight range (a gap would be faked by the
-	 * browser) and the latin and latin-ext halves must not overlap: two faces
-	 * of one family that both claim a glyph are last-one-wins, and that once
-	 * made every page fetch both files, latin-ext first.
-	 */
 	it('declares each house typeface once per subset, across its weights', async () => {
 		await renderRootLayout();
 

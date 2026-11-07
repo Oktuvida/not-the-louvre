@@ -208,7 +208,9 @@ const insertReport = async (
 	input: {
 		artworkId?: string | null;
 		commentId?: string | null;
+		details?: string;
 		id: string;
+		reason?: string;
 		reporterId: string;
 		wishId?: string | null;
 	}
@@ -233,8 +235,8 @@ const insertReport = async (
 			${input.artworkId ?? null},
 			${input.commentId ?? null},
 			${input.wishId ?? null},
-			'spam',
-			null,
+			${input.reason ?? 'spam'},
+			${input.details ?? null},
 			${createdAt},
 			${createdAt}
 		)
@@ -1324,13 +1326,169 @@ describeWithDatabase('artwork DB contract', () => {
 				authorNickname: 'viewer-2_nick',
 				commentId: null,
 				contentSummary: 'a rude slip',
+				createdAt: expect.any(Date),
 				isHidden: false,
+				notes: [],
+				reasons: [{ count: 1, reason: 'spam' }],
 				reportCount: 1,
 				targetType: 'wish',
 				wishId: 'wish-queued'
 			}
 		]);
 		expect(second.pageInfo).toEqual({ hasMore: false, nextCursor: null });
+	});
+
+	it('tells a moderator what a case is, why it was reported and what the reporters said', async () => {
+		const { countModerationCases, listModerationQueue } = await import('./read.service');
+		const moderator = { user: createCanonicalUser('moderator-1', 'moderator') };
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-case' });
+		await insertComment(sql, {
+			authorId: 'viewer-1',
+			artworkId: 'artwork-case',
+			id: 'comment-case'
+		});
+		await insertWish(sql, { authorId: 'viewer-2', id: 'wish-case', text: 'a rude slip' });
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-settled' });
+		await insertReport(sql, {
+			artworkId: 'artwork-case',
+			details: 'there is a slur in the corner',
+			id: 'r-1',
+			reason: 'hate',
+			reporterId: 'reporter-1'
+		});
+		await insertReport(sql, {
+			artworkId: 'artwork-case',
+			details: '   ',
+			id: 'r-2',
+			reason: 'hate',
+			reporterId: 'reporter-2'
+		});
+		await insertReport(sql, {
+			artworkId: 'artwork-case',
+			id: 'r-3',
+			reason: 'spam',
+			reporterId: 'reporter-3'
+		});
+		await insertReport(sql, {
+			commentId: 'comment-case',
+			id: 'r-4',
+			reason: 'harassment',
+			reporterId: 'reporter-1'
+		});
+		await insertReport(sql, {
+			id: 'r-5',
+			reason: 'spam',
+			reporterId: 'reporter-1',
+			wishId: 'wish-case'
+		});
+		await insertReport(sql, { artworkId: 'artwork-settled', id: 'r-6', reporterId: 'reporter-1' });
+		await sql`
+			update app.content_reports
+			set status = 'reviewed', reviewed_by = 'moderator-1', reviewed_at = now()
+			where id = 'r-6'
+		`;
+
+		const { items } = await listModerationQueue({}, moderator);
+		const [artwork, comment, wish] = items;
+
+		expect(artwork).toMatchObject({
+			artworkId: 'artwork-case',
+			artworkTitle: expect.any(String),
+			createdAt: expect.any(Date),
+			mediaUrl: expect.stringContaining('/api/artworks/artwork-case/media'),
+			notes: ['there is a slur in the corner'],
+			reasons: [
+				{ count: 2, reason: 'hate' },
+				{ count: 1, reason: 'spam' }
+			],
+			reportCount: 3,
+			targetType: 'artwork'
+		});
+		expect(comment).toMatchObject({
+			artworkId: 'artwork-case',
+			artworkTitle: artwork?.targetType === 'artwork' ? artwork.artworkTitle : '',
+			commentId: 'comment-case',
+			createdAt: expect.any(Date),
+			mediaUrl: expect.stringContaining('/api/artworks/artwork-case/media'),
+			notes: [],
+			reasons: [{ count: 1, reason: 'harassment' }],
+			targetType: 'comment'
+		});
+		expect(wish).toMatchObject({
+			createdAt: expect.any(Date),
+			notes: [],
+			reasons: [{ count: 1, reason: 'spam' }],
+			targetType: 'wish',
+			wishId: 'wish-case'
+		});
+		await expect(countModerationCases(moderator)).resolves.toBe(3);
+	});
+
+	it('counts the cases, not the reports, and only for staff', async () => {
+		const { countModerationCases } = await import('./read.service');
+		const moderator = { user: createCanonicalUser('moderator-1', 'moderator') };
+
+		await expect(countModerationCases(moderator)).resolves.toBe(0);
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-one-case' });
+		await insertReport(sql, { artworkId: 'artwork-one-case', id: 'r-1', reporterId: 'reporter-1' });
+		await insertReport(sql, { artworkId: 'artwork-one-case', id: 'r-2', reporterId: 'reporter-2' });
+
+		await expect(countModerationCases(moderator)).resolves.toBe(1);
+		await expect(
+			countModerationCases({ user: createCanonicalUser('viewer-1', 'user') })
+		).rejects.toMatchObject({ code: 'FORBIDDEN', status: 403 });
+	});
+
+	it('saves a word list for the first time, and refuses a stale one', async () => {
+		const { moderationRepository } = await import('#lib/server/moderation/repository.js');
+		await sql`delete from app.moderation_text_policies`;
+		const save = (expectedVersion: number, blocklist: string[]) =>
+			moderationRepository.updateTextPolicy({
+				allowlist: [],
+				blocklist,
+				context: 'comment',
+				expectedVersion,
+				updatedAt: new Date('2026-11-07T12:00:00.000Z'),
+				updatedBy: 'moderator-1'
+			});
+
+		await expect(save(0, ['first'])).resolves.toMatchObject({ blocklist: ['first'], version: 1 });
+		await expect(save(0, ['stale'])).resolves.toBeNull();
+		await expect(save(1, ['second'])).resolves.toMatchObject({ blocklist: ['second'], version: 2 });
+	});
+
+	it('finds artists by name or standing, and knows the real totals', async () => {
+		const { listUsers } = await import('#lib/server/user/admin.service.js');
+		const admin = { user: createCanonicalUser('admin-1', 'admin') as never };
+
+		await insertArtwork(sql, { authorId: 'author-1', id: 'artwork-by-author' });
+		await sql`update app.users set is_banned = true, banned_at = now(), ban_reason = 'spam'
+			where id = 'viewer-1'`;
+
+		const everyone = await listUsers({}, admin);
+		expect(everyone.totals).toEqual({ artists: 7, banned: 1, moderators: 1 });
+		expect(everyone.items.find((user) => user.id === 'author-1')?.artworkCount).toBe(1);
+		expect(everyone.items.find((user) => user.id === 'viewer-2')?.artworkCount).toBe(0);
+
+		const named = await listUsers({ search: 'AUTHOR-1' }, admin);
+		expect(named.items.map((user) => user.id)).toEqual(['author-1']);
+		expect(named.totals).toEqual(everyone.totals);
+
+		const literal = await listUsers({ search: '%' }, admin);
+		expect(literal.items).toEqual([]);
+
+		const moderators = await listUsers({ filter: 'moderators' }, admin);
+		expect(moderators.items.map((user) => user.id)).toEqual(['moderator-1']);
+
+		const banned = await listUsers({ filter: 'banned' }, admin);
+		expect(banned.items.map((user) => user.id)).toEqual(['viewer-1']);
+
+		const page = await listUsers({ limit: 3 }, admin);
+		const rest = await listUsers({ cursor: page.pageInfo.nextCursor, limit: 10 }, admin);
+		expect(page.items).toHaveLength(3);
+		expect(rest.items).toHaveLength(4);
 	});
 
 	it('lets a moderator restore a slip, hide it, dismiss its reports or delete it', async () => {

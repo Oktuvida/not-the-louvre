@@ -9,7 +9,6 @@
 	 */
 	import './layout.css';
 	import { beforeNavigate } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { page, updated } from '$app/state';
 	import { onMount } from 'svelte';
 	import AmbientAudioController from '#lib/features/ambient-audio/AmbientAudioController.svelte';
@@ -116,67 +115,3 @@
 {#if page.route?.id !== '/draw'}
 	<TipCup />
 {/if}
-
-{#if data.viewer && !data.viewer.isBanned && data.viewer.role !== 'user'}
-	<a class="ops-link focus-ring" href={resolve('admin')}>Ops</a>
-{/if}
-
-<style>
-	.ops-link {
-		/* The ring itself comes from the `focus-ring` utility; only the offset
-		   is local, so the stroke clears the pill's own border. */
-		--focus-ring-offset: 3px;
-		position: fixed;
-		/* Top-right from `md` up. The mobile override this replaced parked the
-		   pill in the bottom-right corner, straight on top of the ambient audio
-		   tab; the corner it moves to below is the one free corner left. */
-		top: 1rem;
-		right: 1rem;
-		z-index: var(--z-ops);
-		padding: 0.7rem 1rem;
-		border: 1px solid rgba(27, 33, 30, 0.18);
-		border-radius: var(--radius-pill);
-		background:
-			linear-gradient(135deg, rgba(253, 248, 237, 0.96), rgba(238, 224, 199, 0.94)),
-			rgba(255, 255, 255, 0.75);
-		color: #1b211e;
-		font-size: 0.78rem;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-decoration: none;
-		text-transform: uppercase;
-		backdrop-filter: blur(12px);
-		box-shadow: 0 14px 32px rgba(51, 43, 26, 0.18);
-	}
-
-	/*
-	 * On a phone the top-right corner belongs to the gallery header: its Create
-	 * Art and Refresh stickers are two 44px controls at `top-3 right-3`, and a
-	 * root-level fixed pill at `--z-ops` paints over them and swallows the tap,
-	 * so Refresh navigated to /admin instead. The bottom-right is the ambient
-	 * audio tab's, and both top corners are chrome — which leaves bottom-left.
-	 */
-	@media (max-width: 700px) {
-		.ops-link {
-			top: auto;
-			right: auto;
-			bottom: 1rem;
-			left: 1rem;
-		}
-	}
-
-	.ops-link:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 18px 36px rgba(51, 43, 26, 0.22);
-	}
-
-	/*
-	 * Same treatment as the ambient audio tab: a fixed pill above every modal
-	 * (`--z-ops` outranks the artwork panel and the avatar preview) stays
-	 * clickable and tabbable while an `aria-modal="true"` dialog claims the
-	 * screen. Global because the dialog lives elsewhere in the tree.
-	 */
-	:global(body:has([role='dialog'][aria-modal='true'])) .ops-link {
-		display: none;
-	}
-</style>

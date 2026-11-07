@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { LogOut, UserRound } from 'lucide-svelte';
+	import { resolve } from '$app/paths';
 	import { hashString } from '#lib/features/artwork-presentation/model/frame.js';
 
 	/*
 	 * The artist's visitor pass, taped up in the corner of the front door: their
 	 * avatar and name on it, a serial number, and a stub along the perforation.
 	 * Tapping the pass opens the avatar editor; tearing off the stub signs out.
+	 * Staff carry a red stamp on it that walks them to the staff desk: its own
+	 * link, lying over the pass, as the stub lies beside it.
 	 *
 	 * The paper is a masked layer under each button rather than the buttons
 	 * themselves, so the notches can be cut without cutting off the focus ring.
@@ -18,11 +21,14 @@
 		avatarUrl = null,
 		nickname,
 		onEdit,
+		staffCases = null,
 		userId
 	}: {
 		avatarUrl?: string | null;
 		nickname: string;
 		onEdit: () => void;
+		/** The cases waiting on the staff desk, or null for anybody who is not staff. */
+		staffCases?: number | null;
 		userId: string;
 	} = $props();
 
@@ -104,6 +110,16 @@
 			<span class="pass-stub-serial" aria-hidden="true">{serial}</span>
 		</button>
 	</form>
+
+	{#if staffCases !== null}
+		<a
+			class="pass-stamp focus-ring"
+			href={resolve('admin')}
+			aria-label={`Staff desk, ${staffCases} ${staffCases === 1 ? 'case' : 'cases'} waiting`}
+		>
+			Staff{staffCases > 0 ? ` · ${staffCases}` : ''}
+		</a>
+	{/if}
 </div>
 
 <style>
@@ -190,6 +206,40 @@
 		transform-origin: 0 100%;
 		rotate: var(--stub-tilt);
 		transition: var(--stub-motion);
+	}
+
+	/* Above the pass's own button, with a finger's reach around the small stamp. */
+	.pass-stamp {
+		position: absolute;
+		top: 2.6em;
+		left: calc(var(--body-width) - 5.9em);
+		z-index: 2;
+		padding: 0.05em 0.5em;
+		border: 0.13em solid #b5473c;
+		border-radius: 3px;
+		rotate: -8deg;
+		font-family: var(--font-display);
+		font-size: 0.82em;
+		font-weight: 800;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		white-space: nowrap;
+		color: #b5473c;
+		transition: rotate 180ms ease;
+	}
+
+	.pass-stamp::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: max(100%, 44px);
+		height: 44px;
+		translate: -50% -50%;
+	}
+
+	.pass-stamp:hover {
+		rotate: -4deg;
 	}
 
 	.pass-tape {
@@ -413,7 +463,8 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.pass-stub,
-		.pass-shadow-tilting {
+		.pass-shadow-tilting,
+		.pass-stamp {
 			transition: none;
 		}
 	}

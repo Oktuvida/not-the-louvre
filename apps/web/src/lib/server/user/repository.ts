@@ -1,6 +1,6 @@
-import { and, desc, eq, lt, or } from 'drizzle-orm';
+import { and, count, desc, eq, ilike, inArray, lt, or, sql } from 'drizzle-orm';
 import { db } from '#lib/server/db/index.js';
-import { users } from '#lib/server/db/schema.js';
+import { artworks, users } from '#lib/server/db/schema.js';
 import type { ListUsersInput, UserRecord, UserRepository } from './types';
 
 // Every UserRecord column except the avatar drawing document. `recovery_hash`
@@ -20,6 +20,11 @@ const userProfileColumns = {
 	role: true,
 	updatedAt: true
 } as const;
+
+const staffRoles = inArray(users.role, ['moderator', 'admin']);
+
+// What a person types is a name to find, so `%` and `_` mean themselves.
+const escapeLikePattern = (value: string) => value.replace(/[\\%_]/g, '\\$&');
 
 const userProfileProjection = {
 	avatarIsHidden: users.avatarIsHidden,
@@ -101,6 +106,17 @@ export const userRepository: UserRepository = {
 		return row ? mapRow(row) : null;
 	},
 
+	async countUsers() {
+		const [row] = await db
+			.select({
+				artists: count(),
+				banned: sql<number>`count(*) filter (where ${users.isBanned})::int`,
+				moderators: sql<number>`count(*) filter (where ${staffRoles})::int`
+			})
+			.from(users);
+		return row ?? { artists: 0, banned: 0, moderators: 0 };
+	},
+
 	async listUsers(input: ListUsersInput) {
 		const cursorWhere = input.cursor
 			? or(
@@ -108,15 +124,29 @@ export const userRepository: UserRepository = {
 					and(eq(users.createdAt, input.cursor.createdAt), lt(users.id, input.cursor.id))
 				)
 			: undefined;
+		const named = input.search
+			? ilike(users.nickname, `%${escapeLikePattern(input.search)}%`)
+			: undefined;
+		const standing =
+			input.standing === 'banned'
+				? eq(users.isBanned, true)
+				: input.standing === 'moderators'
+					? staffRoles
+					: undefined;
 
 		const rows = await db
-			.select(userProfileProjection)
+			.select({
+				...userProfileProjection,
+				artworkCount: count(artworks.id)
+			})
 			.from(users)
-			.where(cursorWhere)
+			.leftJoin(artworks, eq(artworks.authorId, users.id))
+			.where(and(cursorWhere, named, standing))
+			.groupBy(users.id)
 			.orderBy(desc(users.createdAt), desc(users.id))
 			.limit(input.limit);
 
-		return rows.map(mapProfileRow);
+		return rows.map((row) => ({ ...mapProfileRow(row), artworkCount: row.artworkCount }));
 	},
 
 	async updateUserAvatar(id, input) {

@@ -233,6 +233,7 @@ const createReadRepository = (
 	};
 
 	return {
+		countModerationCases: async () => 0,
 		findArtistStudio: async () => null,
 		async listRecentArtworks({ cursor, limit }) {
 			return Array.from(artworks.values())

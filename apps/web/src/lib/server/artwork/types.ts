@@ -388,18 +388,39 @@ export type ArtworkRepository = {
 
 export type ModerationQueueTargetType = 'artwork' | 'comment' | 'wish';
 
+export type ModerationReasonCount = { count: number; reason: ArtworkReportReason };
+
 type ModerationQueueCase = {
 	authorId: string;
 	authorNickname: string;
 	contentSummary: string;
+	createdAt: Date;
 	isHidden: boolean;
+	/** What the reporters wrote, newest first. */
+	notes: string[];
+	/** Why it was reported, the most common reason first. */
+	reasons: ModerationReasonCount[];
 	reportCount: number;
 };
 
 export type ModerationQueueItem = ModerationQueueCase &
 	(
-		| { artworkId: string; commentId: null; targetType: 'artwork'; wishId: null }
-		| { artworkId: string; commentId: string; targetType: 'comment'; wishId: null }
+		| {
+				artworkId: string;
+				artworkTitle: string;
+				commentId: null;
+				mediaUrl: string;
+				targetType: 'artwork';
+				wishId: null;
+		  }
+		| {
+				artworkId: string;
+				artworkTitle: string;
+				commentId: string;
+				mediaUrl: string;
+				targetType: 'comment';
+				wishId: null;
+		  }
 		| { artworkId: null; commentId: null; targetType: 'wish'; wishId: string }
 	);
 
@@ -445,6 +466,7 @@ export type ArtworkReadRepository = {
 		viewer?: ArtworkVisibilityActor
 	): Promise<ArtworkCommentView[]>;
 	listHotArtworks(input: ListHotArtworksInput): Promise<ArtworkReadRecord[]>;
+	countModerationCases(): Promise<number>;
 	listModerationQueue(input: ListModerationQueueInput): Promise<ModerationQueueItem[]>;
 	listRecentArtworks(input: ListRecentArtworksInput): Promise<ArtworkReadRecord[]>;
 	listTopArtworks(input: ListTopArtworksInput): Promise<ArtworkReadRecord[]>;

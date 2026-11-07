@@ -2,7 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { openStoredDrawingDocument } from '#lib/server/drawing-document/document-store.js';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '#lib/server/auth.js';
-import { listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
+import { countModerationCases, listArtworkDiscovery } from '#lib/server/artwork/read.service.js';
 import { avatarService } from '#lib/server/user/avatar.service.js';
 import { userRepository } from '#lib/server/user/repository.js';
 import { homeBestPiecesEdgeCacheKey, sharedAtTheEdge } from '#lib/server/http/edge-cache.js';
@@ -124,7 +124,11 @@ export const load: PageServerLoad = async ({ locals, parent, url }) => {
 							version: avatarUserRecord.avatarDocumentVersion ?? null
 						})
 					: null,
-				avatarUrl: resolveUserAvatarUrl(locals.user.id, locals.user.avatarUrl)
+				avatarUrl: resolveUserAvatarUrl(locals.user.id, locals.user.avatarUrl),
+				staffCases:
+					locals.user.role === 'user' || locals.user.isBanned
+						? null
+						: await countModerationCases({ user: locals.user })
 			}
 		},
 		adultContentEnabled,

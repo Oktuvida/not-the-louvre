@@ -131,7 +131,6 @@
 	 * toggle the music instead. Only the navigation veil sits above it. */
 	--z-dialog: 60;
 	--z-ambient: 80;
-	--z-ops: 85;
 	--z-status: 96;
 	--z-nav-fade: 100;
 

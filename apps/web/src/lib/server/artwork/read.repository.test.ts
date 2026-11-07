@@ -249,6 +249,7 @@ describe('artwork read repository statements', () => {
 				authorNickname: 'painter',
 				contentSummary: 'Study',
 				isHidden: false,
+				mediaContentType: 'image/webp',
 				reportCount: 2
 			}
 		]);
@@ -260,6 +261,7 @@ describe('artwork read repository statements', () => {
 				commentId: 'comment-1',
 				contentSummary: 'rude',
 				isHidden: false,
+				mediaContentType: 'image/webp',
 				reportCount: 5
 			}
 		]);

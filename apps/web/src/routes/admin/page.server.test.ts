@@ -109,7 +109,7 @@ describe('admin dashboard load', () => {
 
 		// The head is rendered once, by the root layout, from `page.data.meta`;
 		// the page's own <svelte:head><title> was a duplicate that never won.
-		expect(result.meta).toEqual({ title: 'Ops' });
+		expect(result.meta).toEqual({ title: 'Staff desk' });
 	});
 
 	it('rejects non-privileged users', async () => {

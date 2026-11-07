@@ -50,10 +50,9 @@ describe('GalleryStatusRegion', () => {
 		const tokens = getComputedStyle(document.documentElement);
 		const status = Number(tokens.getPropertyValue('--z-status'));
 
-		// The gallery's only failure surface was painted under the audio tab and
-		// the Ops pill, which also swallowed the tap meant for its dismiss button.
+		// The gallery's only failure surface was painted under the audio tab,
+		// which also swallowed the tap meant for its dismiss button.
 		expect(status).toBeGreaterThan(Number(tokens.getPropertyValue('--z-ambient')));
-		expect(status).toBeGreaterThan(Number(tokens.getPropertyValue('--z-ops')));
 		expect(status).toBeLessThan(Number(tokens.getPropertyValue('--z-nav-fade')));
 
 		const styles = getComputedStyle(region() as Element);
