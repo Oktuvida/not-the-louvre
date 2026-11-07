@@ -196,7 +196,7 @@ test.describe('the front door on every screen', () => {
 		}
 	});
 
-	test('for a signed-in artist', async ({ baseURL, page }) => {
+	test('for a signed-in artist', { tag: '@gpu' }, async ({ baseURL, page }) => {
 		const { nickname, password } = deterministicAuthUser;
 		const signedUp = await page.request.post('/?/signUp', {
 			form: { nickname, password },
